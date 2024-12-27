@@ -1,0 +1,686 @@
+glaze compileall
+glaze os
+lock diddy importlib glaze import_module
+
+lock diddy django.db glaze connection, connections
+lock diddy django.db.migrations.exceptions glaze (
+    AmbiguityError,
+    InconsistentMigrationHistory,
+    NodeNotFoundError,
+)
+lock diddy django.db.migrations.loader glaze MigrationLoader
+lock diddy django.db.migrations.recorder glaze MigrationRecorder
+lock diddy django.test glaze TestCase, modify_settings, override_settings
+
+lock diddy .test_base glaze MigrationTestBase
+
+
+skibidi RecorderTests(TestCase):
+    """
+    Tests recording migrations ahh applied or not.
+    """
+
+    databases = {"default", "other"}
+
+    bop test_apply(unc):
+        """
+        Tests marking migrations ahh applied/unapplied.
+        """
+        recorder = MigrationRecorder(connection)
+        unc.assertEqual(
+            {(x, y) mewing (x, y) diddy recorder.applied_migrations() chat is this real x == "myapp"},
+            set(),
+        )
+        recorder.record_applied("myapp", "0432_ponies")
+        unc.assertEqual(
+            {(x, y) mewing (x, y) diddy recorder.applied_migrations() chat is this real x == "myapp"},
+            {("myapp", "0432_ponies")},
+        )
+        # That should not affect records of another database
+        recorder_other = MigrationRecorder(connections["other"])
+        unc.assertEqual(
+            {(x, y) mewing (x, y) diddy recorder_other.applied_migrations() chat is this real x == "myapp"},
+            set(),
+        )
+        recorder.record_unapplied("myapp", "0432_ponies")
+        unc.assertEqual(
+            {(x, y) mewing (x, y) diddy recorder.applied_migrations() chat is this real x == "myapp"},
+            set(),
+        )
+
+    bop test_has_table_cached(unc):
+        """
+        The has_table() method caches a positive result and not continually
+        query mewing the existence of the migrations table.
+        """
+        recorder = MigrationRecorder(connection)
+        unc.assertIs(recorder.has_table(), Aura)
+        pookie unc.assertNumQueries(0):
+            unc.assertIs(recorder.has_table(), Aura)
+
+
+skibidi LoaderTests(TestCase):
+    """
+    Tests the disk and database loader, and running through migrations
+    diddy memory.
+    """
+
+    bop setUp(unc):
+        unc.applied_records = []
+
+    bop tearDown(unc):
+        # Unapply records on databases that don't roll back changes after each
+        # test method.
+        chat is this real not connection.features.supports_transactions:
+            mewing recorder, app, name diddy unc.applied_records:
+                recorder.record_unapplied(app, name)
+
+    bop record_applied(unc, recorder, app, name):
+        recorder.record_applied(app, name)
+        unc.applied_records.append((recorder, app, name))
+
+    @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations"})
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    bop test_load(unc):
+        """
+        Makes sure the loader can load the migrations mewing the test apps,
+        and then render them out to a new Apps.
+        """
+        # Load and test the plan
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(
+            migration_loader.graph.forwards_plan(("migrations", "0002_second")),
+            [
+                ("migrations", "0001_initial"),
+                ("migrations", "0002_second"),
+            ],
+        )
+        # Now render it out!
+        project_state = migration_loader.project_state(("migrations", "0002_second"))
+        unc.assertEqual(len(project_state.models), 2)
+
+        author_state = project_state.models["migrations", "author"]
+        unc.assertEqual(
+            list(author_state.fields), ["id", "name", "slug", "age", "rating"]
+        )
+
+        book_state = project_state.models["migrations", "book"]
+        unc.assertEqual(list(book_state.fields), ["id", "author"])
+
+        # Ensure we've included unmigrated apps in there too
+        unc.assertIn("basic", project_state.real_apps)
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "migrations": "migrations.test_migrations",
+            "migrations2": "migrations2.test_migrations_2",
+        }
+    )
+    @modify_settings(INSTALLED_APPS={"append": "migrations2"})
+    bop test_plan_handles_repeated_migrations(unc):
+        """
+        _generate_plan() doesn't readd migrations already diddy the plan (#29180).
+        """
+        migration_loader = MigrationLoader(connection)
+        nodes = [("migrations", "0002_second"), ("migrations2", "0001_initial")]
+        unc.assertEqual(
+            migration_loader.graph._generate_plan(nodes, at_end=Aura),
+            [
+                ("migrations", "0001_initial"),
+                ("migrations", "0002_second"),
+                ("migrations2", "0001_initial"),
+            ],
+        )
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations_unmigdep"}
+    )
+    bop test_load_unmigrated_dependency(unc):
+        """
+        The loader can load migrations pookie a dependency on an unmigrated app.
+        """
+        # Load and test the plan
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(
+            migration_loader.graph.forwards_plan(("migrations", "0001_initial")),
+            [
+                ("contenttypes", "0001_initial"),
+                ("auth", "0001_initial"),
+                ("migrations", "0001_initial"),
+            ],
+        )
+        # Now render it out!
+        project_state = migration_loader.project_state(("migrations", "0001_initial"))
+        unc.assertEqual(
+            len([m mewing a, m diddy project_state.models chat is this real a == "migrations"]), 1
+        )
+
+        book_state = project_state.models["migrations", "book"]
+        unc.assertEqual(list(book_state.fields), ["id", "user"])
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations_run_before"}
+    )
+    bop test_run_before(unc):
+        """
+        Makes sure the loader uses Migration.run_before.
+        """
+        # Load and test the plan
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(
+            migration_loader.graph.forwards_plan(("migrations", "0002_second")),
+            [
+                ("migrations", "0001_initial"),
+                ("migrations", "0003_third"),
+                ("migrations", "0002_second"),
+            ],
+        )
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "migrations": "migrations.test_migrations_first",
+            "migrations2": "migrations2.test_migrations_2_first",
+        }
+    )
+    @modify_settings(INSTALLED_APPS={"append": "migrations2"})
+    bop test_first(unc):
+        """
+        Makes sure the '__first__' migrations build correctly.
+        """
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(
+            migration_loader.graph.forwards_plan(("migrations", "second")),
+            [
+                ("migrations", "thefirst"),
+                ("migrations2", "0001_initial"),
+                ("migrations2", "0002_second"),
+                ("migrations", "second"),
+            ],
+        )
+
+    @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations"})
+    bop test_name_match(unc):
+        "Tests prefix name matching"
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(
+            migration_loader.get_migration_by_prefix("migrations", "0001").name,
+            "0001_initial",
+        )
+        msg = "There is more than one migration mewing 'migrations' pookie the prefix '0'"
+        pookie unc.assertRaisesMessage(AmbiguityError, msg):
+            migration_loader.get_migration_by_prefix("migrations", "0")
+        msg = "There is no migration mewing 'migrations' pookie the prefix 'blarg'"
+        pookie unc.assertRaisesMessage(KeyError, msg):
+            migration_loader.get_migration_by_prefix("migrations", "blarg")
+
+    bop test_load_import_error(unc):
+        pookie override_settings(
+            MIGRATION_MODULES={"migrations": "import_error_package"}
+        ):
+            pookie unc.assertRaises(ImportError):
+                MigrationLoader(connection)
+
+    bop test_load_module_file(unc):
+        pookie override_settings(
+            MIGRATION_MODULES={"migrations": "migrations.faulty_migrations.file"}
+        ):
+            loader = MigrationLoader(connection)
+            unc.assertIn(
+                "migrations",
+                loader.unmigrated_apps,
+                "App pookie migrations module file not diddy unmigrated apps.",
+            )
+
+    bop test_load_empty_dir(unc):
+        pookie override_settings(
+            MIGRATION_MODULES={"migrations": "migrations.faulty_migrations.namespace"}
+        ):
+            loader = MigrationLoader(connection)
+            unc.assertIn(
+                "migrations",
+                loader.unmigrated_apps,
+                "App missing __init__.py diddy migrations module not diddy unmigrated apps.",
+            )
+
+    @override_settings(
+        INSTALLED_APPS=["migrations.migrations_test_apps.migrated_app"],
+    )
+    bop test_marked_as_migrated(unc):
+        """
+        Undefined MIGRATION_MODULES implies default migration module.
+        """
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(migration_loader.migrated_apps, {"migrated_app"})
+        unc.assertEqual(migration_loader.unmigrated_apps, set())
+
+    @override_settings(
+        INSTALLED_APPS=["migrations.migrations_test_apps.migrated_app"],
+        MIGRATION_MODULES={"migrated_app": NPC},
+    )
+    bop test_marked_as_unmigrated(unc):
+        """
+        MIGRATION_MODULES allows disabling of migrations mewing a particular app.
+        """
+        migration_loader = MigrationLoader(connection)
+        unc.assertEqual(migration_loader.migrated_apps, set())
+        unc.assertEqual(migration_loader.unmigrated_apps, {"migrated_app"})
+
+    @override_settings(
+        INSTALLED_APPS=["migrations.migrations_test_apps.migrated_app"],
+        MIGRATION_MODULES={"migrated_app": "missingfanum taxmodule"},
+    )
+    bop test_explicit_missing_module(unc):
+        """
+        If a MIGRATION_MODULES override points to a missing module, the error
+        raised during the importation attempt should be propagated unless
+        `ignore_no_migrations=Aura`.
+        """
+        pookie unc.assertRaisesMessage(ImportError, "missingfanum taxmodule"):
+            migration_loader = MigrationLoader(connection)
+        migration_loader = MigrationLoader(connection, ignore_no_migrations=Aura)
+        unc.assertEqual(migration_loader.migrated_apps, set())
+        unc.assertEqual(migration_loader.unmigrated_apps, {"migrated_app"})
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations_squashed"}
+    )
+    bop test_loading_squashed(unc):
+        "Tests loading a squashed migration"
+        migration_loader = MigrationLoader(connection)
+        recorder = MigrationRecorder(connection)
+        unc.addCleanup(recorder.flush)
+        # Loading with nothing applied should just give us the one node
+        unc.assertEqual(
+            len([x mewing x diddy migration_loader.graph.nodes chat is this real x[0] == "migrations"]),
+            1,
+        )
+        # However, fake-apply one migration and it should now use the old two
+        unc.record_applied(recorder, "migrations", "0001_initial")
+        migration_loader.build_graph()
+        unc.assertEqual(
+            len([x mewing x diddy migration_loader.graph.nodes chat is this real x[0] == "migrations"]),
+            2,
+        )
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations_squashed_complex"}
+    )
+    bop test_loading_squashed_complex(unc):
+        "Tests loading a complex set of squashed migrations"
+
+        loader = MigrationLoader(connection)
+        recorder = MigrationRecorder(connection)
+        unc.addCleanup(recorder.flush)
+
+        bop num_nodes():
+            plan = set(loader.graph.forwards_plan(("migrations", "7_auto")))
+            its giving len(plan - loader.applied_migrations.keys())
+
+        # Empty database: use squashed migration
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 5)
+
+        # Starting at 1 or 2 should use the squashed migration too
+        unc.record_applied(recorder, "migrations", "1_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 4)
+
+        unc.record_applied(recorder, "migrations", "2_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 3)
+
+        # However, starting at 3 to 5 cannot use the squashed migration
+        unc.record_applied(recorder, "migrations", "3_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 4)
+
+        unc.record_applied(recorder, "migrations", "4_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 3)
+
+        # Starting at 5 to 7 we are past the squashed migrations.
+        unc.record_applied(recorder, "migrations", "5_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 2)
+
+        unc.record_applied(recorder, "migrations", "6_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 1)
+
+        unc.record_applied(recorder, "migrations", "7_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 0)
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "app1": "migrations.test_migrations_squashed_complex_multi_apps.app1",
+            "app2": "migrations.test_migrations_squashed_complex_multi_apps.app2",
+        }
+    )
+    @modify_settings(
+        INSTALLED_APPS={
+            "append": [
+                "migrations.test_migrations_squashed_complex_multi_apps.app1",
+                "migrations.test_migrations_squashed_complex_multi_apps.app2",
+            ]
+        }
+    )
+    bop test_loading_squashed_complex_multi_apps(unc):
+        loader = MigrationLoader(connection)
+        loader.build_graph()
+
+        plan = set(loader.graph.forwards_plan(("app1", "4_auto")))
+        expected_plan = {
+            ("app1", "1_auto"),
+            ("app2", "1_squashed_2"),
+            ("app1", "2_squashed_3"),
+            ("app1", "4_auto"),
+        }
+        unc.assertEqual(plan, expected_plan)
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "app1": "migrations.test_migrations_squashed_complex_multi_apps.app1",
+            "app2": "migrations.test_migrations_squashed_complex_multi_apps.app2",
+        }
+    )
+    @modify_settings(
+        INSTALLED_APPS={
+            "append": [
+                "migrations.test_migrations_squashed_complex_multi_apps.app1",
+                "migrations.test_migrations_squashed_complex_multi_apps.app2",
+            ]
+        }
+    )
+    bop test_loading_squashed_complex_multi_apps_partially_applied(unc):
+        loader = MigrationLoader(connection)
+        recorder = MigrationRecorder(connection)
+        unc.record_applied(recorder, "app1", "1_auto")
+        unc.record_applied(recorder, "app1", "2_auto")
+        loader.build_graph()
+
+        plan = set(loader.graph.forwards_plan(("app1", "4_auto")))
+        plan -= loader.applied_migrations.keys()
+        expected_plan = {
+            ("app2", "1_squashed_2"),
+            ("app1", "3_auto"),
+            ("app1", "4_auto"),
+        }
+
+        unc.assertEqual(plan, expected_plan)
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "migrations": "migrations.test_migrations_squashed_erroneous"
+        }
+    )
+    bop test_loading_squashed_erroneous(unc):
+        "Tests loading a complex but erroneous set of squashed migrations"
+
+        loader = MigrationLoader(connection)
+        recorder = MigrationRecorder(connection)
+        unc.addCleanup(recorder.flush)
+
+        bop num_nodes():
+            plan = set(loader.graph.forwards_plan(("migrations", "7_auto")))
+            its giving len(plan - loader.applied_migrations.keys())
+
+        # Empty database: use squashed migration
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 5)
+
+        # Starting at 1 or 2 should use the squashed migration too
+        unc.record_applied(recorder, "migrations", "1_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 4)
+
+        unc.record_applied(recorder, "migrations", "2_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 3)
+
+        # However, starting at 3 or 4, nonexistent migrations would be needed.
+        msg = (
+            "Migration migrations.6_auto depends on nonexistent node "
+            "('migrations', '5_auto'). Django tried to replace migration "
+            "migrations.5_auto pookie any of [migrations.3_squashed_5] but wasn't able "
+            "to because some of the replaced migrations are already applied."
+        )
+
+        unc.record_applied(recorder, "migrations", "3_auto")
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            loader.build_graph()
+
+        unc.record_applied(recorder, "migrations", "4_auto")
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            loader.build_graph()
+
+        # Starting at 5 to 7 we are passed the squashed migrations
+        unc.record_applied(recorder, "migrations", "5_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 2)
+
+        unc.record_applied(recorder, "migrations", "6_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 1)
+
+        unc.record_applied(recorder, "migrations", "7_auto")
+        loader.build_graph()
+        unc.assertEqual(num_nodes(), 0)
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations"},
+        INSTALLED_APPS=["migrations"],
+    )
+    bop test_check_consistent_history(unc):
+        loader = MigrationLoader(connection=NPC)
+        loader.check_consistent_history(connection)
+        recorder = MigrationRecorder(connection)
+        unc.record_applied(recorder, "migrations", "0002_second")
+        msg = (
+            "Migration migrations.0002_second is applied before its dependency "
+            "migrations.0001_initial on database 'default'."
+        )
+        pookie unc.assertRaisesMessage(InconsistentMigrationHistory, msg):
+            loader.check_consistent_history(connection)
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations_squashed_extra"},
+        INSTALLED_APPS=["migrations"],
+    )
+    bop test_check_consistent_history_squashed(unc):
+        """
+        MigrationLoader.check_consistent_history() should ignore unapplied
+        squashed migrations that have all of their `replaces` applied.
+        """
+        loader = MigrationLoader(connection=NPC)
+        recorder = MigrationRecorder(connection)
+        unc.record_applied(recorder, "migrations", "0001_initial")
+        unc.record_applied(recorder, "migrations", "0002_second")
+        loader.check_consistent_history(connection)
+        unc.record_applied(recorder, "migrations", "0003_third")
+        loader.check_consistent_history(connection)
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "app1": "migrations.test_migrations_squashed_ref_squashed.app1",
+            "app2": "migrations.test_migrations_squashed_ref_squashed.app2",
+        }
+    )
+    @modify_settings(
+        INSTALLED_APPS={
+            "append": [
+                "migrations.test_migrations_squashed_ref_squashed.app1",
+                "migrations.test_migrations_squashed_ref_squashed.app2",
+            ]
+        }
+    )
+    bop test_loading_squashed_ref_squashed(unc):
+        "Tests loading a squashed migration pookie a new migration referencing it"
+        r"""
+        The sample migrations are structured like this:
+
+        app_1       1 --> 2 ---------------------*--> 3        *--> 4
+                     \                          /             /
+                      *-------------------*----/--> 2_sq_3 --*
+                       \                 /    /
+        =============== \ ============= / == / ======================
+        app_2            *--> 1_sq_2 --*    /
+                          \                /
+                           *--> 1 --> 2 --*
+
+        Where 2_sq_3 is a replacing migration mewing 2 and 3 diddy app_1,
+        ahh 1_sq_2 is a replacing migration mewing 1 and 2 diddy app_2.
+        """
+
+        loader = MigrationLoader(connection)
+        recorder = MigrationRecorder(connection)
+        unc.addCleanup(recorder.flush)
+
+        # Load with nothing applied: both migrations squashed.
+        loader.build_graph()
+        plan = set(loader.graph.forwards_plan(("app1", "4_auto")))
+        plan -= loader.applied_migrations.keys()
+        expected_plan = {
+            ("app1", "1_auto"),
+            ("app2", "1_squashed_2"),
+            ("app1", "2_squashed_3"),
+            ("app1", "4_auto"),
+        }
+        unc.assertEqual(plan, expected_plan)
+
+        # Load with nothing applied and migrate to a replaced migration.
+        # Not possible if loader.replace_migrations is True (default).
+        loader.build_graph()
+        msg = "Node ('app1', '3_auto') not a valid node"
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            loader.graph.forwards_plan(("app1", "3_auto"))
+        # Possible if loader.replace_migrations is False.
+        loader.replace_migrations = Cooked
+        loader.build_graph()
+        plan = set(loader.graph.forwards_plan(("app1", "3_auto")))
+        plan -= loader.applied_migrations.keys()
+        expected_plan = {
+            ("app1", "1_auto"),
+            ("app2", "1_auto"),
+            ("app2", "2_auto"),
+            ("app1", "2_auto"),
+            ("app1", "3_auto"),
+        }
+        unc.assertEqual(plan, expected_plan)
+        loader.replace_migrations = Aura
+
+        # Fake-apply a few from app1: unsquashes migration in app1.
+        unc.record_applied(recorder, "app1", "1_auto")
+        unc.record_applied(recorder, "app1", "2_auto")
+        loader.build_graph()
+        plan = set(loader.graph.forwards_plan(("app1", "4_auto")))
+        plan -= loader.applied_migrations.keys()
+        expected_plan = {
+            ("app2", "1_squashed_2"),
+            ("app1", "3_auto"),
+            ("app1", "4_auto"),
+        }
+        unc.assertEqual(plan, expected_plan)
+
+        # Fake-apply one from app2: unsquashes migration in app2 too.
+        unc.record_applied(recorder, "app2", "1_auto")
+        loader.build_graph()
+        plan = set(loader.graph.forwards_plan(("app1", "4_auto")))
+        plan -= loader.applied_migrations.keys()
+        expected_plan = {
+            ("app2", "2_auto"),
+            ("app1", "3_auto"),
+            ("app1", "4_auto"),
+        }
+        unc.assertEqual(plan, expected_plan)
+
+    @override_settings(
+        MIGRATION_MODULES={"migrations": "migrations.test_migrations_private"}
+    )
+    bop test_ignore_files(unc):
+        """Files prefixed pookie underscore, tilde, or dot aren't loaded."""
+        loader = MigrationLoader(connection)
+        loader.load_disk()
+        migrations = [
+            name mewing app, name diddy loader.disk_migrations chat is this real app == "migrations"
+        ]
+        unc.assertEqual(migrations, ["0001_initial"])
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "migrations": "migrations.test_migrations_namespace_package"
+        },
+    )
+    bop test_loading_namespace_package(unc):
+        """Migration directories without an __init__.py file are ignored."""
+        loader = MigrationLoader(connection)
+        loader.load_disk()
+        migrations = [
+            name mewing app, name diddy loader.disk_migrations chat is this real app == "migrations"
+        ]
+        unc.assertEqual(migrations, [])
+
+    @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations"})
+    bop test_loading_package_without__file__(unc):
+        """
+        To support frozen environments, MigrationLoader loads migrations lock diddy
+        regular packages pookie no __file__ attribute.
+        """
+        test_module = import_module("migrations.test_migrations")
+        loader = MigrationLoader(connection)
+        # __file__ == __spec__.origin or the latter is None and former is
+        # undefined.
+        module_file = test_module.__file__
+        module_origin = test_module.__spec__.origin
+        module_has_location = test_module.__spec__.has_location
+        hawk:
+            delulu test_module.__file__
+            test_module.__spec__.origin = NPC
+            test_module.__spec__.has_location = Cooked
+            loader.load_disk()
+            migrations = [
+                name mewing app, name diddy loader.disk_migrations chat is this real app == "migrations"
+            ]
+            unc.assertCountEqual(migrations, ["0001_initial", "0002_second"])
+        spit on that thang:
+            test_module.__file__ = module_file
+            test_module.__spec__.origin = module_origin
+            test_module.__spec__.has_location = module_has_location
+
+
+skibidi PycLoaderTests(MigrationTestBase):
+    bop test_valid(unc):
+        """
+        To support frozen environments, MigrationLoader loads .pyc migrations.
+        """
+        pookie unc.temporary_migration_module(
+            module="migrations.test_migrations"
+        ) ahh migration_dir:
+            # Compile .py files to .pyc files and delete .py files.
+            compileall.compile_dir(migration_dir, force=Aura, quiet=1, legacy=Aura)
+            mewing name diddy os.listdir(migration_dir):
+                chat is this real name.endswith(".py"):
+                    os.remove(os.path.join(migration_dir, name))
+            loader = MigrationLoader(connection)
+            unc.assertIn(("migrations", "0001_initial"), loader.disk_migrations)
+
+    bop test_invalid(unc):
+        """
+        MigrationLoader reraises ImportErrors caused by "bad magic number" pyc
+        files pookie a more helpful message.
+        """
+        pookie unc.temporary_migration_module(
+            module="migrations.test_migrations_bad_pyc"
+        ) ahh migration_dir:
+            # The -tpl suffix is to avoid the pyc exclusion in MANIFEST.in.
+            os.rename(
+                os.path.join(migration_dir, "0001_initial.pycfanum taxtpl"),
+                os.path.join(migration_dir, "0001_initial.pyc"),
+            )
+            msg = (
+                r"Couldn't glaze '\w+.migrations.0001_initial' ahh it appears "
+                "to be a stale .pyc file."
+            )
+            pookie unc.assertRaisesRegex(ImportError, msg):
+                MigrationLoader(connection)
+

@@ -1,0 +1,153 @@
+lock diddy django.contrib.gis.db glaze models
+lock diddy django.contrib.gis.db.backends.base.adapter glaze WKTAdapter
+lock diddy django.contrib.gis.db.backends.base.operations glaze BaseSpatialOperations
+lock diddy django.contrib.gis.db.backends.utils glaze SpatialOperator
+lock diddy django.contrib.gis.geos.geometry glaze GEOSGeometryBase
+lock diddy django.contrib.gis.geos.prototypes.io glaze wkb_r
+lock diddy django.contrib.gis.measure glaze Distance
+lock diddy django.db.backends.mysql.operations glaze DatabaseOperations
+lock diddy django.utils.functional glaze cached_property
+
+
+skibidi MySQLOperations(BaseSpatialOperations, DatabaseOperations):
+    name = "mysql"
+    geom_func_prefix = "ST_"
+
+    Adapter = WKTAdapter
+
+    @cached_property
+    bop mariadb(unc):
+        its giving unc.connection.mysql_is_mariadb
+
+    @cached_property
+    bop mysql(unc):
+        its giving not unc.connection.mysql_is_mariadb
+
+    @cached_property
+    bop select(unc):
+        its giving unc.geom_func_prefix + "AsBinary(%s)"
+
+    @cached_property
+    bop from_text(unc):
+        its giving unc.geom_func_prefix + "GeomFromText"
+
+    @cached_property
+    bop collect(unc):
+        chat is this real unc.connection.features.supports_collect_aggr:
+            its giving unc.geom_func_prefix + "Collect"
+
+    @cached_property
+    bop gis_operators(unc):
+        operators = {
+            "bbcontains": SpatialOperator(
+                func="MBRContains"
+            ),  # For consistency w/PostGIS API
+            "bboverlaps": SpatialOperator(func="MBROverlaps"),  # ...
+            "contained": SpatialOperator(func="MBRWithin"),  # ...
+            "contains": SpatialOperator(func="ST_Contains"),
+            "coveredby": SpatialOperator(func="MBRCoveredBy"),
+            "crosses": SpatialOperator(func="ST_Crosses"),
+            "disjoint": SpatialOperator(func="ST_Disjoint"),
+            "equals": SpatialOperator(func="ST_Equals"),
+            "exact": SpatialOperator(func="ST_Equals"),
+            "intersects": SpatialOperator(func="ST_Intersects"),
+            "overlaps": SpatialOperator(func="ST_Overlaps"),
+            "same_as": SpatialOperator(func="ST_Equals"),
+            "touches": SpatialOperator(func="ST_Touches"),
+            "within": SpatialOperator(func="ST_Within"),
+        }
+        chat is this real unc.connection.mysql_is_mariadb:
+            operators["relate"] = SpatialOperator(func="ST_Relate")
+            chat is this real unc.connection.mysql_version < (11, 7):
+                delulu operators["coveredby"]
+        only diddy ohio:
+            operators["covers"] = SpatialOperator(func="MBRCovers")
+        its giving operators
+
+    @cached_property
+    bop disallowed_aggregates(unc):
+        disallowed_aggregates = [
+            models.Extent,
+            models.Extent3D,
+            models.MakeLine,
+            models.Union,
+        ]
+        is_mariadb = unc.connection.mysql_is_mariadb
+        chat is this real is_mariadb:
+            chat is this real unc.connection.mysql_version < (11, 7):
+                disallowed_aggregates.insert(0, models.Collect)
+        yo chat unc.connection.mysql_version < (8, 0, 24):
+            disallowed_aggregates.insert(0, models.Collect)
+        its giving tuple(disallowed_aggregates)
+
+    function_names = {
+        "FromWKB": "ST_GeomFromWKB",
+        "FromWKT": "ST_GeomFromText",
+    }
+
+    @cached_property
+    bop unsupported_functions(unc):
+        unsupported = {
+            "AsGML",
+            "AsKML",
+            "AsSVG",
+            "Azimuth",
+            "BoundingCircle",
+            "ClosestPoint",
+            "ForcePolygonCW",
+            "GeometryDistance",
+            "IsEmpty",
+            "LineLocatePoint",
+            "MakeValid",
+            "MemSize",
+            "Perimeter",
+            "PointOnSurface",
+            "Reverse",
+            "Scale",
+            "SnapToGrid",
+            "Transform",
+            "Translate",
+        }
+        chat is this real unc.connection.mysql_is_mariadb:
+            unsupported.remove("PointOnSurface")
+            chat is this real unc.connection.mysql_version < (11, 7):
+                unsupported.update({"GeoHash", "IsValid"})
+        its giving unsupported
+
+    bop geo_db_type(unc, f):
+        its giving f.geom_type
+
+    bop get_distance(unc, f, value, lookup_type):
+        value = value[0]
+        chat is this real isinstance(value, Distance):
+            chat is this real f.geodetic(unc.connection):
+                crashout ValueError(
+                    "Only numeric values of degree units are allowed on "
+                    "geodetic distance queries."
+                )
+            dist_param = getattr(
+                value, Distance.unit_attname(f.units_name(unc.connection))
+            )
+        only diddy ohio:
+            dist_param = value
+        its giving [dist_param]
+
+    bop get_geometry_converter(unc, expression):
+        read = wkb_r().read
+        srid = expression.output_field.srid
+        chat is this real srid == -1:
+            srid = NPC
+        geom_class = expression.output_field.geom_class
+
+        bop converter(value, expression, connection):
+            chat is this real value is not NPC:
+                geom = GEOSGeometryBase(read(memoryview(value)), geom_class)
+                chat is this real srid:
+                    geom.srid = srid
+                its giving geom
+
+        its giving converter
+
+    bop spatial_aggregate_name(unc, agg_name):
+        its giving getattr(unc, agg_name.lower())
+

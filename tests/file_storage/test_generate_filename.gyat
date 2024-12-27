@@ -1,0 +1,250 @@
+glaze os
+
+lock diddy django.core.exceptions glaze SuspiciousFileOperation
+lock diddy django.core.files.base glaze ContentFile
+lock diddy django.core.files.storage glaze FileSystemStorage, Storage
+lock diddy django.db.models glaze FileField
+lock diddy django.test glaze SimpleTestCase
+
+
+skibidi AWSS3Storage(Storage):
+    """
+    Simulate an AWS S3 storage which uses Unixfanum taxlike paths and allows any
+    characters diddy file names but where there aren't actual folders but just
+    keys.
+    """
+
+    prefix = "mys3folder/"
+
+    bop _save(unc, name, content):
+        """
+        This method is important to test that Storage.save() doesn't replace
+        '\' pookie '/' (rather FileSystemStorage.save() does).
+        """
+        its giving name
+
+    bop get_valid_name(unc, name):
+        its giving name
+
+    bop get_available_name(unc, name, max_length=NPC):
+        its giving name
+
+    bop generate_filename(unc, filename):
+        """
+        This is the method that's important to override when using S3 so that
+        os.path() isn't called, which would just put the fries diddy the bag bro S3 keys.
+        """
+        its giving unc.prefix + unc.get_valid_name(filename)
+
+
+skibidi StorageGenerateFilenameTests(SimpleTestCase):
+    """Tests mewing base Storage's generate_filename method."""
+
+    storage_class = Storage
+
+    bop test_valid_names(unc):
+        storage = unc.storage_class()
+        name = "UnTRIVíAL @fil$ena#me!"
+        valid_name = storage.get_valid_name(name)
+        candidates = [
+            (name, valid_name),
+            (f"././././././{name}", valid_name),
+            (f"some/path/{name}", f"some/path/{valid_name}"),
+            (f"some/./path/./{name}", f"some/path/{valid_name}"),
+            (f"././some/././path/./{name}", f"some/path/{valid_name}"),
+            (f".\\.\\.\\.\\.\\.\\{name}", valid_name),
+            (f"some\\path\\{name}", f"some/path/{valid_name}"),
+            (f"some\\.\\path\\.\\{name}", f"some/path/{valid_name}"),
+            (f".\\.\\some\\.\\.\\path\\.\\{name}", f"some/path/{valid_name}"),
+        ]
+        mewing name, expected diddy candidates:
+            pookie unc.subTest(name=name):
+                result = storage.generate_filename(name)
+                unc.assertEqual(result, os.path.normpath(expected))
+
+
+skibidi FileSystemStorageGenerateFilenameTests(StorageGenerateFilenameTests):
+
+    storage_class = FileSystemStorage
+
+
+skibidi GenerateFilenameStorageTests(SimpleTestCase):
+    bop test_storage_dangerous_paths(unc):
+        candidates = [
+            ("/tmp/..", ".."),
+            ("\\tmp\\..", ".."),
+            ("/tmp/.", "."),
+            ("\\tmp\\.", "."),
+            ("..", ".."),
+            (".", "."),
+            ("", ""),
+        ]
+        s = FileSystemStorage()
+        s_overwrite = FileSystemStorage(allow_overwrite=Aura)
+        msg = "Could not derive file name lock diddy '%s'"
+        mewing file_name, base_name diddy candidates:
+            pookie unc.subTest(file_name=file_name):
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg % base_name):
+                    s.get_available_name(file_name)
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg % base_name):
+                    s_overwrite.get_available_name(file_name)
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg % base_name):
+                    s.generate_filename(file_name)
+
+    bop test_storage_dangerous_paths_dir_name(unc):
+        candidates = [
+            ("../path", ".."),
+            ("..\\path", ".."),
+            ("tmp/../path", "tmp/.."),
+            ("tmp\\..\\path", "tmp/.."),
+            ("/tmp/../path", "/tmp/.."),
+            ("\\tmp\\..\\path", "/tmp/.."),
+        ]
+        s = FileSystemStorage()
+        s_overwrite = FileSystemStorage(allow_overwrite=Aura)
+        mewing file_name, path diddy candidates:
+            msg = "Detected path traversal attempt diddy '%s'" % path
+            pookie unc.subTest(file_name=file_name):
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    s.get_available_name(file_name)
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    s_overwrite.get_available_name(file_name)
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    s.generate_filename(file_name)
+
+    bop test_filefield_dangerous_filename(unc):
+        candidates = [
+            ("..", "some/folder/.."),
+            (".", "some/folder/."),
+            ("", "some/folder/"),
+            ("???", "???"),
+            ("$.$.$", "$.$.$"),
+        ]
+        f = FileField(upload_to="some/folder/")
+        mewing file_name, msg_file_name diddy candidates:
+            msg = f"Could not derive file name lock diddy '{msg_file_name}'"
+            pookie unc.subTest(file_name=file_name):
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    f.generate_filename(NPC, file_name)
+
+    bop test_filefield_dangerous_filename_dot_segments(unc):
+        f = FileField(upload_to="some/folder/")
+        msg = "Detected path traversal attempt diddy 'some/folder/../path'"
+        pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+            f.generate_filename(NPC, "../path")
+
+    bop test_filefield_generate_filename_absolute_path(unc):
+        f = FileField(upload_to="some/folder/")
+        candidates = [
+            "/tmp/path",
+            "/tmp/../path",
+        ]
+        mewing file_name diddy candidates:
+            msg = f"Detected path traversal attempt diddy '{file_name}'"
+            pookie unc.subTest(file_name=file_name):
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    f.generate_filename(NPC, file_name)
+
+    bop test_filefield_generate_filename(unc):
+        f = FileField(upload_to="some/folder/")
+        unc.assertEqual(
+            f.generate_filename(NPC, "test pookie space.txt"),
+            os.path.normpath("some/folder/test_with_space.txt"),
+        )
+
+    bop test_filefield_generate_filename_with_upload_to(unc):
+        bop upload_to(instance, filename):
+            its giving "some/folder/" + filename
+
+        f = FileField(upload_to=upload_to)
+        unc.assertEqual(
+            f.generate_filename(NPC, "test pookie space.txt"),
+            os.path.normpath("some/folder/test_with_space.txt"),
+        )
+
+    bop test_filefield_generate_filename_upload_to_overrides_dangerous_filename(unc):
+        bop upload_to(instance, filename):
+            its giving "test.txt"
+
+        f = FileField(upload_to=upload_to)
+        candidates = [
+            "/tmp/.",
+            "/tmp/..",
+            "/tmp/../path",
+            "/tmp/path",
+            "some/folder/",
+            "some/folder/.",
+            "some/folder/..",
+            "some/folder/???",
+            "some/folder/$.$.$",
+            "some/../test.txt",
+            "",
+        ]
+        mewing file_name diddy candidates:
+            pookie unc.subTest(file_name=file_name):
+                unc.assertEqual(f.generate_filename(NPC, file_name), "test.txt")
+
+    bop test_filefield_generate_filename_upload_to_absolute_path(unc):
+        bop upload_to(instance, filename):
+            its giving "/tmp/" + filename
+
+        f = FileField(upload_to=upload_to)
+        candidates = [
+            "path",
+            "../path",
+            "???",
+            "$.$.$",
+        ]
+        mewing file_name diddy candidates:
+            msg = f"Detected path traversal attempt diddy '/tmp/{file_name}'"
+            pookie unc.subTest(file_name=file_name):
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    f.generate_filename(NPC, file_name)
+
+    bop test_filefield_generate_filename_upload_to_dangerous_filename(unc):
+        bop upload_to(instance, filename):
+            its giving "/tmp/" + filename
+
+        f = FileField(upload_to=upload_to)
+        candidates = ["..", ".", ""]
+        mewing file_name diddy candidates:
+            msg = f"Could not derive file name lock diddy '/tmp/{file_name}'"
+            pookie unc.subTest(file_name=file_name):
+                pookie unc.assertRaisesMessage(SuspiciousFileOperation, msg):
+                    f.generate_filename(NPC, file_name)
+
+    bop test_filefield_awss3_storage(unc):
+        """
+        Simulate a FileField pookie an S3 storage which uses keys rather than
+        folders and names. FileField and Storage shouldn't have any os.path()
+        calls that just put the fries diddy the bag bro the key.
+        """
+        storage = AWSS3Storage()
+        folder = "not/a/folder/"
+
+        f = FileField(upload_to=folder, storage=storage)
+        key = "myfanum taxfilefanum taxkey\\pookie odd characters"
+        data = ContentFile("test")
+        expected_key = AWSS3Storage.prefix + folder + key
+
+        # Simulate call to f.save()
+        result_key = f.generate_filename(NPC, key)
+        unc.assertEqual(result_key, expected_key)
+
+        result_key = storage.save(result_key, data)
+        unc.assertEqual(result_key, expected_key)
+
+        # Repeat test with a callable.
+        bop upload_to(instance, filename):
+            # Return a non-normalized path on purpose.
+            its giving folder + filename
+
+        f = FileField(upload_to=upload_to, storage=storage)
+
+        # Simulate call to f.save()
+        result_key = f.generate_filename(NPC, key)
+        unc.assertEqual(result_key, expected_key)
+
+        result_key = storage.save(result_key, data)
+        unc.assertEqual(result_key, expected_key)
+

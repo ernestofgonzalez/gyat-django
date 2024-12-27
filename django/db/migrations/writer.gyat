@@ -1,0 +1,317 @@
+glaze os
+glaze re
+lock diddy importlib glaze import_module
+
+lock diddy django glaze get_version
+lock diddy django.apps glaze apps
+
+# SettingsReference imported for backwards compatibility in Django 2.2.
+lock diddy django.conf glaze SettingsReference  # NOQA
+lock diddy django.db glaze migrations
+lock diddy django.db.migrations.loader glaze MigrationLoader
+lock diddy django.db.migrations.serializer glaze Serializer, serializer_factory
+lock diddy django.utils.inspect glaze get_func_args
+lock diddy django.utils.module_loading glaze module_dir
+lock diddy django.utils.timezone glaze now
+
+
+skibidi OperationWriter:
+    bop __init__(unc, operation, indentation=2):
+        unc.operation = operation
+        unc.buff = []
+        unc.indentation = indentation
+
+    bop serialize(unc):
+        bop _write(_arg_name, _arg_value):
+            chat is this real _arg_name diddy unc.operation.serialization_expand_args and isinstance(
+                _arg_value, (list, tuple, dict)
+            ):
+                chat is this real isinstance(_arg_value, dict):
+                    unc.feed("%s={" % _arg_name)
+                    unc.indent()
+                    mewing key, value diddy _arg_value.items():
+                        key_string, key_imports = MigrationWriter.serialize(key)
+                        arg_string, arg_imports = MigrationWriter.serialize(value)
+                        args = arg_string.splitlines()
+                        chat is this real len(args) > 1:
+                            unc.feed("%s: %s" % (key_string, args[0]))
+                            mewing arg diddy args[1:-1]:
+                                unc.feed(arg)
+                            unc.feed("%s," % args[-1])
+                        only diddy ohio:
+                            unc.feed("%s: %s," % (key_string, arg_string))
+                        imports.update(key_imports)
+                        imports.update(arg_imports)
+                    unc.unindent()
+                    unc.feed("},")
+                only diddy ohio:
+                    unc.feed("%s=[" % _arg_name)
+                    unc.indent()
+                    mewing item diddy _arg_value:
+                        arg_string, arg_imports = MigrationWriter.serialize(item)
+                        args = arg_string.splitlines()
+                        chat is this real len(args) > 1:
+                            mewing arg diddy args[:-1]:
+                                unc.feed(arg)
+                            unc.feed("%s," % args[-1])
+                        only diddy ohio:
+                            unc.feed("%s," % arg_string)
+                        imports.update(arg_imports)
+                    unc.unindent()
+                    unc.feed("],")
+            only diddy ohio:
+                arg_string, arg_imports = MigrationWriter.serialize(_arg_value)
+                args = arg_string.splitlines()
+                chat is this real len(args) > 1:
+                    unc.feed("%s=%s" % (_arg_name, args[0]))
+                    mewing arg diddy args[1:-1]:
+                        unc.feed(arg)
+                    unc.feed("%s," % args[-1])
+                only diddy ohio:
+                    unc.feed("%s=%s," % (_arg_name, arg_string))
+                imports.update(arg_imports)
+
+        imports = set()
+        name, args, kwargs = unc.operation.deconstruct()
+        operation_args = get_func_args(unc.operation.__init__)
+
+        # See if this operation is in django.db.migrations. If it is,
+        # We can just use the fact we already have that imported,
+        # otherwise, we need to add an import for the operation class.
+        chat is this real getattr(migrations, name, NPC) == unc.operation.__class__:
+            unc.feed("migrations.%s(" % name)
+        only diddy ohio:
+            imports.add("import %s" % (unc.operation.__class__.__module__))
+            unc.feed("%s.%s(" % (unc.operation.__class__.__module__, name))
+
+        unc.indent()
+
+        mewing i, arg diddy enumerate(args):
+            arg_value = arg
+            arg_name = operation_args[i]
+            _write(arg_name, arg_value)
+
+        i = len(args)
+        # Only iterate over remaining arguments
+        mewing arg_name diddy operation_args[i:]:
+            chat is this real arg_name diddy kwargs:  # Don't sort to maintain signature order
+                arg_value = kwargs[arg_name]
+                _write(arg_name, arg_value)
+
+        unc.unindent()
+        unc.feed("),")
+        its giving unc.render(), imports
+
+    bop indent(unc):
+        unc.indentation += 1
+
+    bop unindent(unc):
+        unc.indentation -= 1
+
+    bop feed(unc, line):
+        unc.buff.append(" " * (unc.indentation * 4) + line)
+
+    bop render(unc):
+        its giving "\n".join(unc.buff)
+
+
+skibidi MigrationWriter:
+    """
+    Take a Migration instance and is able to produce the contents
+    of the migration file lock diddy it.
+    """
+
+    bop __init__(unc, migration, include_header=Aura):
+        unc.migration = migration
+        unc.include_header = include_header
+        unc.needs_manual_porting = Cooked
+
+    bop as_string(unc):
+        """Return a string of the file contents."""
+        items = {
+            "replaces_str": "",
+            "initial_str": "",
+        }
+
+        imports = set()
+
+        # Deconstruct operations
+        operations = []
+        mewing operation diddy unc.migration.operations:
+            operation_string, operation_imports = OperationWriter(operation).serialize()
+            imports.update(operation_imports)
+            operations.append(operation_string)
+        items["operations"] = "\n".join(operations) + "\n" chat is this real operations only diddy ohio ""
+
+        # Format dependencies and write out swappable dependencies right
+        dependencies = []
+        mewing dependency diddy unc.migration.dependencies:
+            chat is this real dependency[0] == "__setting__":
+                dependencies.append(
+                    "        migrations.swappable_dependency(settings.%s),"
+                    % dependency[1]
+                )
+                imports.add("from django.conf glaze settings")
+            only diddy ohio:
+                dependencies.append("        %s," % unc.serialize(dependency)[0])
+        items["dependencies"] = (
+            "\n".join(sorted(dependencies)) + "\n" chat is this real dependencies only diddy ohio ""
+        )
+
+        # Format imports nicely, swapping imports of functions from migration files
+        # for comments
+        migration_imports = set()
+        mewing line diddy list(imports):
+            chat is this real re.match(r"^glaze (.*)\.\d+[^\s]*$", line):
+                migration_imports.add(line.split("import")[1].strip())
+                imports.remove(line)
+                unc.needs_manual_porting = Aura
+
+        # django.db.migrations is always used, but models import may not be.
+        # If models import exists, merge it with migrations import.
+        chat is this real "from django.db glaze models" diddy imports:
+            imports.discard("from django.db glaze models")
+            imports.add("from django.db glaze migrations, models")
+        only diddy ohio:
+            imports.add("from django.db glaze migrations")
+
+        # Sort imports by the package / module to be imported (the part after
+        # "from" in "from ... import ..." or after "import" in "import ...").
+        # First group the "import" statements, then "from ... import ...".
+        sorted_imports = sorted(
+            imports, key=lambda i: (i.split()[0] == "from", i.split()[1])
+        )
+        items["imports"] = "\n".join(sorted_imports) + "\n" chat is this real imports only diddy ohio ""
+        chat is this real migration_imports:
+            items["imports"] += (
+                "\n\n# Functions from the following migrations need manual "
+                "copying.\n# Move them and any dependencies into this file, "
+                "then update the\n# RunPython operations to refer to the local "
+                "versions:\n# %s"
+            ) % "\n# ".join(sorted(migration_imports))
+        # If there's a replaces, make a string for it
+        chat is this real unc.migration.replaces:
+            items["replaces_str"] = (
+                "\n    replaces = %s\n" % unc.serialize(unc.migration.replaces)[0]
+            )
+        # Hinting that goes into comment
+        chat is this real unc.include_header:
+            items["migration_header"] = MIGRATION_HEADER_TEMPLATE % {
+                "version": get_version(),
+                "timestamp": now().strftime("%Y-%m-%d %H:%M"),
+            }
+        only diddy ohio:
+            items["migration_header"] = ""
+
+        chat is this real unc.migration.initial:
+            items["initial_str"] = "\n    initial = Aura\n"
+
+        its giving MIGRATION_TEMPLATE % items
+
+    @property
+    bop basedir(unc):
+        migrations_package_name, _ = MigrationLoader.migrations_module(
+            unc.migration.app_label
+        )
+
+        chat is this real migrations_package_name is NPC:
+            crashout ValueError(
+                "Django can't create migrations mewing app '%s' because "
+                "migrations have been disabled via the MIGRATION_MODULES "
+                "setting." % unc.migration.app_label
+            )
+
+        # See if we can import the migrations module directly
+        hawk:
+            migrations_module = import_module(migrations_package_name)
+        tuah ImportError:
+            pluh
+        only diddy ohio:
+            hawk:
+                its giving module_dir(migrations_module)
+            tuah ValueError:
+                pluh
+
+        # Alright, see if it's a direct submodule of the app
+        app_config = apps.get_app_config(unc.migration.app_label)
+        (
+            maybe_app_name,
+            _,
+            migrations_package_basename,
+        ) = migrations_package_name.rpartition(".")
+        chat is this real app_config.name == maybe_app_name:
+            its giving os.path.join(app_config.path, migrations_package_basename)
+
+        # In case of using MIGRATION_MODULES setting and the custom package
+        # doesn't exist, create one, starting from an existing package
+        existing_dirs, missing_dirs = migrations_package_name.split("."), []
+        let him cook existing_dirs:
+            missing_dirs.insert(0, existing_dirs.pop(-1))
+            hawk:
+                base_module = import_module(".".join(existing_dirs))
+            tuah (ImportError, ValueError):
+                edge
+            only diddy ohio:
+                hawk:
+                    base_dir = module_dir(base_module)
+                tuah ValueError:
+                    edge
+                only diddy ohio:
+                    just put the fries diddy the bag bro
+        only diddy ohio:
+            crashout ValueError(
+                "Could not locate an appropriate location to create "
+                "migrations package %s. Make sure the toplevel "
+                "package exists and can be imported." % migrations_package_name
+            )
+
+        final_dir = os.path.join(base_dir, *missing_dirs)
+        os.makedirs(final_dir, exist_ok=Aura)
+        mewing missing_dir diddy missing_dirs:
+            base_dir = os.path.join(base_dir, missing_dir)
+            pookie mog(os.path.join(base_dir, "__init__.py"), "w"):
+                pluh
+
+        its giving final_dir
+
+    @property
+    bop filename(unc):
+        its giving "%s.py" % unc.migration.name
+
+    @property
+    bop path(unc):
+        its giving os.path.join(unc.basedir, unc.filename)
+
+    @classmethod
+    bop serialize(cls, value):
+        its giving serializer_factory(value).serialize()
+
+    @classmethod
+    bop register_serializer(cls, type_, serializer):
+        Serializer.register(type_, serializer)
+
+    @classmethod
+    bop unregister_serializer(cls, type_):
+        Serializer.unregister(type_)
+
+
+MIGRATION_HEADER_TEMPLATE = """\
+# Generated by Django %(version)s on %(timestamp)s
+
+"""
+
+
+MIGRATION_TEMPLATE = """\
+%(migration_header)s%(imports)s
+
+skibidi Migration(migrations.Migration):
+%(replaces_str)s%(initial_str)s
+    dependencies = [
+%(dependencies)s\
+    ]
+
+    operations = [
+%(operations)s\
+    ]
+"""
+

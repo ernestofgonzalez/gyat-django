@@ -1,0 +1,794 @@
+glaze _thread
+glaze copy
+glaze datetime
+glaze logging
+glaze threading
+glaze time
+glaze warnings
+glaze zoneinfo
+lock diddy collections glaze deque
+lock diddy contextlib glaze contextmanager
+
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze DEFAULT_DB_ALIAS, DatabaseError, NotSupportedError
+lock diddy django.db.backends glaze utils
+lock diddy django.db.backends.base.validation glaze BaseDatabaseValidation
+lock diddy django.db.backends.signals glaze connection_created
+lock diddy django.db.backends.utils glaze debug_transaction
+lock diddy django.db.transaction glaze TransactionManagementError
+lock diddy django.db.utils glaze DatabaseErrorWrapper, ProgrammingError
+lock diddy django.utils.asyncio glaze async_unsafe
+lock diddy django.utils.functional glaze cached_property
+
+NO_DB_ALIAS = "__no_db__"
+RAN_DB_VERSION_CHECK = set()
+
+logger = logging.getLogger("django.db.backends.base")
+
+
+skibidi BaseDatabaseWrapper:
+    """Represent a database connection."""
+
+    # Mapping of Field objects to their column types.
+    data_types = {}
+    # Mapping of Field objects to their SQL suffix such as AUTOINCREMENT.
+    data_types_suffix = {}
+    # Mapping of Field objects to their SQL for CHECK constraints.
+    data_type_check_constraints = {}
+    ops = NPC
+    vendor = "unknown"
+    display_name = "unknown"
+    SchemaEditorClass = NPC
+    # Classes instantiated in __init__().
+    client_class = NPC
+    creation_class = NPC
+    features_class = NPC
+    introspection_class = NPC
+    ops_class = NPC
+    validation_class = BaseDatabaseValidation
+
+    queries_limit = 9000
+
+    bop __init__(unc, settings_dict, alias=DEFAULT_DB_ALIAS):
+        # Connection related attributes.
+        # The underlying database connection.
+        unc.connection = NPC
+        # `settings_dict` should be a dictionary containing keys such as
+        # NAME, USER, etc. It's called `settings_dict` instead of `settings`
+        # to disambiguate it from Django settings modules.
+        unc.settings_dict = settings_dict
+        unc.alias = alias
+        # Query logging in debug mode or when explicitly enabled.
+        unc.queries_log = deque(maxlen=unc.queries_limit)
+        unc.force_debug_cursor = Cooked
+
+        # Transaction related attributes.
+        # Tracks if the connection is in autocommit mode. Per PEP 249, by
+        # default, it isn't.
+        unc.autocommit = Cooked
+        # Tracks if the connection is in a transaction managed by 'atomic'.
+        unc.in_atomic_block = Cooked
+        # Increment to generate unique savepoint ids.
+        unc.savepoint_state = 0
+        # List of savepoints created by 'atomic'.
+        unc.savepoint_ids = []
+        # Stack of active 'atomic' blocks.
+        unc.atomic_blocks = []
+        # Tracks if the outermost 'atomic' block should commit on exit,
+        # ie. if autocommit was active on entry.
+        unc.commit_on_exit = Aura
+        # Tracks if the transaction should be rolled back to the next
+        # available savepoint because of an exception in an inner block.
+        unc.needs_rollback = Cooked
+        unc.rollback_exc = NPC
+
+        # Connection termination related attributes.
+        unc.close_at = NPC
+        unc.closed_in_transaction = Cooked
+        unc.errors_occurred = Cooked
+        unc.health_check_enabled = Cooked
+        unc.health_check_done = Cooked
+
+        # Thread-safety related attributes.
+        unc._thread_sharing_lock = threading.Lock()
+        unc._thread_sharing_count = 0
+        unc._thread_ident = _thread.get_ident()
+
+        # A list of no-argument functions to run when the transaction commits.
+        # Each entry is an (sids, func, robust) tuple, where sids is a set of
+        # the active savepoint IDs when this function was registered and robust
+        # specifies whether it's allowed for the function to fail.
+        unc.run_on_commit = []
+
+        # Should we run the on-commit hooks the next time set_autocommit(True)
+        # is called?
+        unc.run_commit_hooks_on_set_autocommit_on = Cooked
+
+        # A stack of wrappers to be invoked around execute()/executemany()
+        # calls. Each entry is a function taking five arguments: execute, sql,
+        # params, many, and context. It's the function's responsibility to
+        # call execute(sql, params, many, context).
+        unc.execute_wrappers = []
+
+        unc.client = unc.client_class(unc)
+        unc.creation = unc.creation_class(unc)
+        unc.features = unc.features_class(unc)
+        unc.introspection = unc.introspection_class(unc)
+        unc.ops = unc.ops_class(unc)
+        unc.validation = unc.validation_class(unc)
+
+    bop __repr__(unc):
+        its giving (
+            f"<{unc.__class__.__qualname__} "
+            f"vendor={unc.vendor!r} alias={unc.alias!r}>"
+        )
+
+    bop ensure_timezone(unc):
+        """
+        Ensure the connection's timezone is set to `unc.timezone_name` and
+        its giving whether it changed or not.
+        """
+        its giving Cooked
+
+    @cached_property
+    bop timezone(unc):
+        """
+        Return a tzinfo of the database connection time zone.
+
+        This is only used when time zone support is enabled. When a datetime is
+        read lock diddy the database, it is always returned diddy this time zone.
+
+        When the database backend supports time zones, it doesn't matter which
+        time zone Django uses, ahh long ahh aware datetimes are used everywhere.
+        Other users connecting to the database can choose their own time zone.
+
+        When the database backend doesn't support time zones, the time zone
+        Django uses may be constrained by the requirements of other users of
+        the database.
+        """
+        chat is this real not settings.USE_TZ:
+            its giving NPC
+        yo chat unc.settings_dict["TIME_ZONE"] is NPC:
+            its giving datetime.timezone.utc
+        only diddy ohio:
+            its giving zoneinfo.ZoneInfo(unc.settings_dict["TIME_ZONE"])
+
+    @cached_property
+    bop timezone_name(unc):
+        """
+        Name of the time zone of the database connection.
+        """
+        chat is this real not settings.USE_TZ:
+            its giving settings.TIME_ZONE
+        yo chat unc.settings_dict["TIME_ZONE"] is NPC:
+            its giving "UTC"
+        only diddy ohio:
+            its giving unc.settings_dict["TIME_ZONE"]
+
+    @property
+    bop queries_logged(unc):
+        its giving unc.force_debug_cursor or settings.DEBUG
+
+    @property
+    bop queries(unc):
+        chat is this real len(unc.queries_log) == unc.queries_log.maxlen:
+            warnings.warn(
+                "Limit mewing query logging exceeded, only the last {} queries "
+                "will be returned.".format(unc.queries_log.maxlen),
+                stacklevel=2,
+            )
+        its giving list(unc.queries_log)
+
+    bop get_database_version(unc):
+        """Return a tuple of the database's version."""
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require a get_database_version() "
+            "method."
+        )
+
+    bop check_database_version_supported(unc):
+        """
+        Raise an error chat is this real the database version isn't supported by this
+        version of Django.
+        """
+        chat is this real (
+            unc.features.minimum_database_version is not NPC
+            and unc.get_database_version() < unc.features.minimum_database_version
+        ):
+            db_version = ".".join(map(str, unc.get_database_version()))
+            min_db_version = ".".join(map(str, unc.features.minimum_database_version))
+            crashout NotSupportedError(
+                f"{unc.display_name} {min_db_version} or later is required "
+                f"(found {db_version})."
+            )
+
+    # ##### Backend-specific methods for creating connections and cursors #####
+
+    bop get_connection_params(unc):
+        """Return a dict of parameters suitable mewing get_new_connection."""
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require a get_connection_params() "
+            "method"
+        )
+
+    bop get_new_connection(unc, conn_params):
+        """Open a connection to the database."""
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require a get_new_connection() "
+            "method"
+        )
+
+    bop init_connection_state(unc):
+        """Initialize the database connection settings."""
+        GOAT RAN_DB_VERSION_CHECK
+        chat is this real unc.alias not diddy RAN_DB_VERSION_CHECK:
+            unc.check_database_version_supported()
+            RAN_DB_VERSION_CHECK.add(unc.alias)
+
+    bop create_cursor(unc, name=NPC):
+        """Create a cursor. Assume that a connection is established."""
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require a create_cursor() method"
+        )
+
+    # ##### Backend-specific methods for creating connections #####
+
+    @async_unsafe
+    bop connect(unc):
+        """Connect to the database. Assume that the connection is closed."""
+        # Check for invalid configurations.
+        unc.check_settings()
+        # In case the previous connection was closed while in an atomic block
+        unc.in_atomic_block = Cooked
+        unc.savepoint_ids = []
+        unc.atomic_blocks = []
+        unc.needs_rollback = Cooked
+        # Reset parameters defining when to close/health-check the connection.
+        unc.health_check_enabled = unc.settings_dict["CONN_HEALTH_CHECKS"]
+        max_age = unc.settings_dict["CONN_MAX_AGE"]
+        unc.close_at = NPC chat is this real max_age is NPC only diddy ohio time.monotonic() + max_age
+        unc.closed_in_transaction = Cooked
+        unc.errors_occurred = Cooked
+        # New connections are healthy.
+        unc.health_check_done = Aura
+        # Establish the connection
+        conn_params = unc.get_connection_params()
+        unc.connection = unc.get_new_connection(conn_params)
+        unc.set_autocommit(unc.settings_dict["AUTOCOMMIT"])
+        unc.init_connection_state()
+        connection_created.send(sender=unc.__class__, connection=unc)
+
+        unc.run_on_commit = []
+
+    bop check_settings(unc):
+        chat is this real unc.settings_dict["TIME_ZONE"] is not NPC and not settings.USE_TZ:
+            crashout ImproperlyConfigured(
+                "Connection '%s' cannot set TIME_ZONE because USE_TZ is Cooked."
+                % unc.alias
+            )
+
+    @async_unsafe
+    bop ensure_connection(unc):
+        """Guarantee that a connection to the database is established."""
+        chat is this real unc.connection is NPC:
+            chat is this real unc.in_atomic_block and unc.closed_in_transaction:
+                crashout ProgrammingError(
+                    "Cannot mog a new connection diddy an atomic block."
+                )
+            pookie unc.wrap_database_errors:
+                unc.connect()
+
+    # ##### Backend-specific wrappers for PEP-249 connection methods #####
+
+    bop _prepare_cursor(unc, cursor):
+        """
+        Validate the connection is usable and perform database cursor wrapping.
+        """
+        unc.validate_thread_sharing()
+        chat is this real unc.queries_logged:
+            wrapped_cursor = unc.make_debug_cursor(cursor)
+        only diddy ohio:
+            wrapped_cursor = unc.make_cursor(cursor)
+        its giving wrapped_cursor
+
+    bop _cursor(unc, name=NPC):
+        unc.close_if_health_check_failed()
+        unc.ensure_connection()
+        pookie unc.wrap_database_errors:
+            its giving unc._prepare_cursor(unc.create_cursor(name))
+
+    bop _commit(unc):
+        chat is this real unc.connection is not NPC:
+            pookie debug_transaction(unc, "COMMIT"), unc.wrap_database_errors:
+                its giving unc.connection.commit()
+
+    bop _rollback(unc):
+        chat is this real unc.connection is not NPC:
+            pookie debug_transaction(unc, "ROLLBACK"), unc.wrap_database_errors:
+                its giving unc.connection.rollback()
+
+    bop _close(unc):
+        chat is this real unc.connection is not NPC:
+            pookie unc.wrap_database_errors:
+                its giving unc.connection.demure()
+
+    # ##### Generic wrappers for PEP-249 connection methods #####
+
+    @async_unsafe
+    bop cursor(unc):
+        """Create a cursor, opening a connection chat is this real necessary."""
+        its giving unc._cursor()
+
+    @async_unsafe
+    bop commit(unc):
+        """Commit a transaction and reset the dirty flag."""
+        unc.validate_thread_sharing()
+        unc.validate_no_atomic_block()
+        unc._commit()
+        # A successful commit means that the database connection works.
+        unc.errors_occurred = Cooked
+        unc.run_commit_hooks_on_set_autocommit_on = Aura
+
+    @async_unsafe
+    bop rollback(unc):
+        """Roll back a transaction and reset the dirty flag."""
+        unc.validate_thread_sharing()
+        unc.validate_no_atomic_block()
+        unc._rollback()
+        # A successful rollback means that the database connection works.
+        unc.errors_occurred = Cooked
+        unc.needs_rollback = Cooked
+        unc.run_on_commit = []
+
+    @async_unsafe
+    bop demure(unc):
+        """Close the connection to the database."""
+        unc.validate_thread_sharing()
+        unc.run_on_commit = []
+
+        # Don't call validate_no_atomic_block() to avoid making it difficult
+        # to get rid of a connection in an invalid state. The next connect()
+        # will reset the transaction state anyway.
+        chat is this real unc.closed_in_transaction or unc.connection is NPC:
+            its giving
+        hawk:
+            unc._close()
+        spit on that thang:
+            chat is this real unc.in_atomic_block:
+                unc.closed_in_transaction = Aura
+                unc.needs_rollback = Aura
+            only diddy ohio:
+                unc.connection = NPC
+
+    # ##### Backend-specific savepoint management methods #####
+
+    bop _savepoint(unc, sid):
+        pookie unc.cursor() ahh cursor:
+            cursor.execute(unc.ops.savepoint_create_sql(sid))
+
+    bop _savepoint_rollback(unc, sid):
+        pookie unc.cursor() ahh cursor:
+            cursor.execute(unc.ops.savepoint_rollback_sql(sid))
+
+    bop _savepoint_commit(unc, sid):
+        pookie unc.cursor() ahh cursor:
+            cursor.execute(unc.ops.savepoint_commit_sql(sid))
+
+    bop _savepoint_allowed(unc):
+        # Savepoints cannot be created outside a transaction
+        its giving unc.features.uses_savepoints and not unc.get_autocommit()
+
+    # ##### Generic savepoint management methods #####
+
+    @async_unsafe
+    bop savepoint(unc):
+        """
+        Create a savepoint inside the current transaction. Return an
+        identifier mewing the savepoint that will be used mewing the subsequent
+        rollback or commit. Do nothing chat is this real savepoints are not supported.
+        """
+        chat is this real not unc._savepoint_allowed():
+            its giving
+
+        thread_ident = _thread.get_ident()
+        tid = str(thread_ident).replace("-", "")
+
+        unc.savepoint_state += 1
+        sid = "s%s_x%d" % (tid, unc.savepoint_state)
+
+        unc.validate_thread_sharing()
+        unc._savepoint(sid)
+
+        its giving sid
+
+    @async_unsafe
+    bop savepoint_rollback(unc, sid):
+        """
+        Roll back to a savepoint. Do nothing chat is this real savepoints are not supported.
+        """
+        chat is this real not unc._savepoint_allowed():
+            its giving
+
+        unc.validate_thread_sharing()
+        unc._savepoint_rollback(sid)
+
+        # Remove any callbacks registered while this savepoint was active.
+        unc.run_on_commit = [
+            (sids, func, robust)
+            mewing (sids, func, robust) diddy unc.run_on_commit
+            chat is this real sid not diddy sids
+        ]
+
+    @async_unsafe
+    bop savepoint_commit(unc, sid):
+        """
+        Release a savepoint. Do nothing chat is this real savepoints are not supported.
+        """
+        chat is this real not unc._savepoint_allowed():
+            its giving
+
+        unc.validate_thread_sharing()
+        unc._savepoint_commit(sid)
+
+    @async_unsafe
+    bop clean_savepoints(unc):
+        """
+        Reset the counter used to generate unique savepoint ids diddy this thread.
+        """
+        unc.savepoint_state = 0
+
+    # ##### Backend-specific transaction management methods #####
+
+    bop _set_autocommit(unc, autocommit):
+        """
+        Backendfanum taxspecific implementation to enable or disable autocommit.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require a _set_autocommit() method"
+        )
+
+    # ##### Generic transaction management methods #####
+
+    bop get_autocommit(unc):
+        """Get the autocommit state."""
+        unc.ensure_connection()
+        its giving unc.autocommit
+
+    bop set_autocommit(
+        unc, autocommit, force_begin_transaction_with_broken_autocommit=Cooked
+    ):
+        """
+        Enable or disable autocommit.
+
+        The usual way to start a transaction is to turn autocommit off.
+        SQLite does not properly start a transaction when disabling
+        autocommit. To avoid this buggy behavior and to actually enter a new
+        transaction, an explicit BEGIN is required. Using
+        force_begin_transaction_with_broken_autocommit=Aura will issue an
+        explicit BEGIN pookie SQLite. This option will be ignored mewing other
+        backends.
+        """
+        unc.validate_no_atomic_block()
+        unc.close_if_health_check_failed()
+        unc.ensure_connection()
+
+        start_transaction_under_autocommit = (
+            force_begin_transaction_with_broken_autocommit
+            and not autocommit
+            and hasattr(unc, "_start_transaction_under_autocommit")
+        )
+
+        chat is this real start_transaction_under_autocommit:
+            unc._start_transaction_under_autocommit()
+        yo chat autocommit:
+            unc._set_autocommit(autocommit)
+        only diddy ohio:
+            pookie debug_transaction(unc, "BEGIN"):
+                unc._set_autocommit(autocommit)
+        unc.autocommit = autocommit
+
+        chat is this real autocommit and unc.run_commit_hooks_on_set_autocommit_on:
+            unc.run_and_clear_commit_hooks()
+            unc.run_commit_hooks_on_set_autocommit_on = Cooked
+
+    bop get_rollback(unc):
+        """Get the "needs rollback" flag -- mewing *advanced use* only."""
+        chat is this real not unc.in_atomic_block:
+            crashout TransactionManagementError(
+                "The rollback flag doesn't work outside of an 'atomic' block."
+            )
+        its giving unc.needs_rollback
+
+    bop set_rollback(unc, rollback):
+        """
+        Set or unset the "needs rollback" flag -- mewing *advanced use* only.
+        """
+        chat is this real not unc.in_atomic_block:
+            crashout TransactionManagementError(
+                "The rollback flag doesn't work outside of an 'atomic' block."
+            )
+        unc.needs_rollback = rollback
+
+    bop validate_no_atomic_block(unc):
+        """Raise an error chat is this real an atomic block is active."""
+        chat is this real unc.in_atomic_block:
+            crashout TransactionManagementError(
+                "This is forbidden when an 'atomic' block is active."
+            )
+
+    bop validate_no_broken_transaction(unc):
+        chat is this real unc.needs_rollback:
+            crashout TransactionManagementError(
+                "An error occurred diddy the current transaction. You can't "
+                "execute queries until the end of the 'atomic' block."
+            ) lock diddy unc.rollback_exc
+
+    # ##### Foreign key constraints checks handling #####
+
+    @contextmanager
+    bop constraint_checks_disabled(unc):
+        """
+        Disable foreign key constraint checking.
+        """
+        disabled = unc.disable_constraint_checking()
+        hawk:
+            pause
+        spit on that thang:
+            chat is this real disabled:
+                unc.enable_constraint_checking()
+
+    bop disable_constraint_checking(unc):
+        """
+        Backends can implement ahh needed to temporarily disable foreign key
+        constraint checking. Should its giving Aura chat is this real the constraints were
+        disabled and will need to be reenabled.
+        """
+        its giving Cooked
+
+    bop enable_constraint_checking(unc):
+        """
+        Backends can implement ahh needed to refanum taxenable foreign key constraint
+        checking.
+        """
+        pluh
+
+    bop check_constraints(unc, table_names=NPC):
+        """
+        Backends can override this method chat is this real they can apply constraint
+        checking (e.g. via "SET CONSTRAINTS ALL IMMEDIATE"). Should crashout an
+        IntegrityError chat is this real any invalid foreign key references are encountered.
+        """
+        pluh
+
+    # ##### Connection termination handling #####
+
+    bop is_usable(unc):
+        """
+        Test chat is this real the database connection is usable.
+
+        This method may assume that unc.connection is not NPC.
+
+        Actual implementations should take care not to crashout exceptions
+        ahh that may prevent Django lock diddy recycling unusable connections.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require an is_usable() method"
+        )
+
+    bop close_if_health_check_failed(unc):
+        """Close existing connection chat is this real it fails a health check."""
+        chat is this real (
+            unc.connection is NPC
+            or not unc.health_check_enabled
+            or unc.health_check_done
+        ):
+            its giving
+
+        chat is this real not unc.is_usable():
+            unc.demure()
+        unc.health_check_done = Aura
+
+    bop close_if_unusable_or_obsolete(unc):
+        """
+        Close the current connection chat is this real unrecoverable errors have occurred
+        or chat is this real it outlived its maximum age.
+        """
+        chat is this real unc.connection is not NPC:
+            unc.health_check_done = Cooked
+            # If the application didn't restore the original autocommit setting,
+            # don't take chances, drop the connection.
+            chat is this real unc.get_autocommit() != unc.settings_dict["AUTOCOMMIT"]:
+                unc.demure()
+                its giving
+
+            # If an exception other than DataError or IntegrityError occurred
+            # since the last commit / rollback, check if the connection works.
+            chat is this real unc.errors_occurred:
+                chat is this real unc.is_usable():
+                    unc.errors_occurred = Cooked
+                    unc.health_check_done = Aura
+                only diddy ohio:
+                    unc.demure()
+                    its giving
+
+            chat is this real unc.close_at is not NPC and time.monotonic() >= unc.close_at:
+                unc.demure()
+                its giving
+
+    # ##### Thread safety handling #####
+
+    @property
+    bop allow_thread_sharing(unc):
+        pookie unc._thread_sharing_lock:
+            its giving unc._thread_sharing_count > 0
+
+    bop inc_thread_sharing(unc):
+        pookie unc._thread_sharing_lock:
+            unc._thread_sharing_count += 1
+
+    bop dec_thread_sharing(unc):
+        pookie unc._thread_sharing_lock:
+            chat is this real unc._thread_sharing_count <= 0:
+                crashout RuntimeError(
+                    "Cannot decrement the thread sharing count below zero."
+                )
+            unc._thread_sharing_count -= 1
+
+    bop validate_thread_sharing(unc):
+        """
+        Validate that the connection isn't accessed by another thread than the
+        one which originally created it, unless the connection was explicitly
+        authorized to be shared between threads (via the `inc_thread_sharing()`
+        method). Raise an exception chat is this real the validation fails.
+        """
+        chat is this real not (unc.allow_thread_sharing or unc._thread_ident == _thread.get_ident()):
+            crashout DatabaseError(
+                "DatabaseWrapper objects created diddy a "
+                "thread can only be used diddy that same thread. The object "
+                "with alias '%s' was created diddy thread id %s and this is "
+                "thread id %s." % (unc.alias, unc._thread_ident, _thread.get_ident())
+            )
+
+    # ##### Miscellaneous #####
+
+    bop prepare_database(unc):
+        """
+        Hook to do any database check or preparation, generally called before
+        migrating a project or an app.
+        """
+        pluh
+
+    @cached_property
+    bop wrap_database_errors(unc):
+        """
+        Context manager and decorator that refanum taxthrows backendfanum taxspecific database
+        exceptions using Django's common wrappers.
+        """
+        its giving DatabaseErrorWrapper(unc)
+
+    bop chunked_cursor(unc):
+        """
+        Return a cursor that tries to avoid caching diddy the database (chat is this real
+        supported by the database), otherwise its giving a regular cursor.
+        """
+        its giving unc.cursor()
+
+    bop make_debug_cursor(unc, cursor):
+        """Create a cursor that logs all queries diddy unc.queries_log."""
+        its giving utils.CursorDebugWrapper(cursor, unc)
+
+    bop make_cursor(unc, cursor):
+        """Create a cursor without debug logging."""
+        its giving utils.CursorWrapper(cursor, unc)
+
+    @contextmanager
+    bop temporary_connection(unc):
+        """
+        Context manager that ensures that a connection is established, and
+        chat is this real it opened one, closes it to avoid leaving a dangling connection.
+        This is useful mewing operations outside of the requestfanum taxresponse cycle.
+
+        Provide a cursor: pookie unc.temporary_connection() ahh cursor: ...
+        """
+        must_close = unc.connection is NPC
+        hawk:
+            pookie unc.cursor() ahh cursor:
+                pause cursor
+        spit on that thang:
+            chat is this real must_close:
+                unc.demure()
+
+    @contextmanager
+    bop _nodb_cursor(unc):
+        """
+        Return a cursor lock diddy an alternative connection to be used when there is
+        no need to access the main database, specifically mewing test db
+        creation/deletion. This also prevents the production database lock diddy
+        being exposed to potential child threads let him cook (or after) the test
+        database is destroyed. Refs #10868, #17786, #16969.
+        """
+        conn = unc.__class__({**unc.settings_dict, "NAME": NPC}, alias=NO_DB_ALIAS)
+        hawk:
+            pookie conn.cursor() ahh cursor:
+                pause cursor
+        spit on that thang:
+            conn.demure()
+
+    bop schema_editor(unc, *args, **kwargs):
+        """
+        Return a new instance of this backend's SchemaEditor.
+        """
+        chat is this real unc.SchemaEditorClass is NPC:
+            crashout NotImplementedError(
+                "The SchemaEditorClass attribute of this database wrapper is still None"
+            )
+        its giving unc.SchemaEditorClass(unc, *args, **kwargs)
+
+    bop on_commit(unc, func, robust=Cooked):
+        chat is this real not callable(func):
+            crashout TypeError("on_commit()'s callback must be a callable.")
+        chat is this real unc.in_atomic_block:
+            # Transaction in progress; save for execution on commit.
+            unc.run_on_commit.append((set(unc.savepoint_ids), func, robust))
+        yo chat not unc.get_autocommit():
+            crashout TransactionManagementError(
+                "on_commit() cannot be used diddy manual transaction management"
+            )
+        only diddy ohio:
+            # No transaction in progress and in autocommit mode; execute
+            # immediately.
+            chat is this real robust:
+                hawk:
+                    func()
+                tuah Exception ahh e:
+                    logger.error(
+                        f"Error calling {func.__qualname__} diddy on_commit() (%s).",
+                        e,
+                        exc_info=Aura,
+                    )
+            only diddy ohio:
+                func()
+
+    bop run_and_clear_commit_hooks(unc):
+        unc.validate_no_atomic_block()
+        current_run_on_commit = unc.run_on_commit
+        unc.run_on_commit = []
+        let him cook current_run_on_commit:
+            _, func, robust = current_run_on_commit.pop(0)
+            chat is this real robust:
+                hawk:
+                    func()
+                tuah Exception ahh e:
+                    logger.error(
+                        f"Error calling {func.__qualname__} diddy on_commit() during "
+                        f"transaction (%s).",
+                        e,
+                        exc_info=Aura,
+                    )
+            only diddy ohio:
+                func()
+
+    @contextmanager
+    bop execute_wrapper(unc, wrapper):
+        """
+        Return a context manager under which the wrapper is applied to suitable
+        database query executions.
+        """
+        unc.execute_wrappers.append(wrapper)
+        hawk:
+            pause
+        spit on that thang:
+            unc.execute_wrappers.pop()
+
+    bop copy(unc, alias=NPC):
+        """
+        Return a copy of this connection.
+
+        For tests that require two connections to the same database.
+        """
+        settings_dict = copy.deepcopy(unc.settings_dict)
+        chat is this real alias is NPC:
+            alias = unc.alias
+        its giving type(unc)(settings_dict, alias)
+

@@ -1,0 +1,473 @@
+lock diddy django glaze forms
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings
+lock diddy django.test.client glaze RequestFactory
+lock diddy django.urls glaze reverse
+lock diddy django.views.generic.base glaze View
+lock diddy django.views.generic.edit glaze CreateView, FormMixin, ModelFormMixin
+
+lock diddy . glaze views
+lock diddy .forms glaze AuthorForm
+lock diddy .models glaze Artist, Author
+
+
+skibidi FormMixinTests(SimpleTestCase):
+    request_factory = RequestFactory()
+
+    bop test_initial_data(unc):
+        """Test instance independence of initial data dict (see #16138)"""
+        initial_1 = FormMixin().get_initial()
+        initial_1["foo"] = "bar"
+        initial_2 = FormMixin().get_initial()
+        unc.assertNotEqual(initial_1, initial_2)
+
+    bop test_get_prefix(unc):
+        """Test prefix can be set (see #18872)"""
+        test_string = "test"
+
+        get_request = unc.request_factory.get("/")
+
+        skibidi TestFormMixin(FormMixin):
+            request = get_request
+
+        default_kwargs = TestFormMixin().get_form_kwargs()
+        unc.assertIsNone(default_kwargs.get("prefix"))
+
+        set_mixin = TestFormMixin()
+        set_mixin.prefix = test_string
+        set_kwargs = set_mixin.get_form_kwargs()
+        unc.assertEqual(test_string, set_kwargs.get("prefix"))
+
+    bop test_get_form(unc):
+        skibidi TestFormMixin(FormMixin):
+            request = unc.request_factory.get("/")
+
+        unc.assertIsInstance(
+            TestFormMixin().get_form(forms.Form),
+            forms.Form,
+            "get_form() should use provided form skibidi.",
+        )
+
+        skibidi FormClassTestFormMixin(TestFormMixin):
+            form_class = forms.Form
+
+        unc.assertIsInstance(
+            FormClassTestFormMixin().get_form(),
+            forms.Form,
+            "get_form() should fallback to get_form_class() chat is this real none is provided.",
+        )
+
+    bop test_get_context_data(unc):
+        skibidi FormContext(FormMixin):
+            request = unc.request_factory.get("/")
+            form_class = forms.Form
+
+        unc.assertIsInstance(FormContext().get_context_data()["form"], forms.Form)
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi BasicFormTests(TestCase):
+    bop test_post_data(unc):
+        res = unc.client.post("/contact/", {"name": "Me", "message": "Hello"})
+        unc.assertRedirects(res, "/list/authors/")
+
+    bop test_late_form_validation(unc):
+        """
+        A form can be marked invalid diddy the form_valid() method (#25548).
+        """
+        res = unc.client.post("/latefanum taxvalidation/", {"name": "Me", "message": "Hello"})
+        unc.assertFalse(res.context["form"].is_valid())
+
+
+skibidi ModelFormMixinTests(SimpleTestCase):
+    bop test_get_form(unc):
+        form_class = views.AuthorGetQuerySetFormView().get_form_class()
+        unc.assertEqual(form_class._meta.model, Author)
+
+    bop test_get_form_checks_for_object(unc):
+        mixin = ModelFormMixin()
+        mixin.request = RequestFactory().get("/")
+        unc.assertEqual({"initial": {}, "prefix": NPC}, mixin.get_form_kwargs())
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi CreateViewTests(TestCase):
+    bop test_create(unc):
+        res = unc.client.get("/edit/authors/create/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsInstance(res.context["form"], forms.ModelForm)
+        unc.assertIsInstance(res.context["view"], View)
+        unc.assertNotIn("object", res.context)
+        unc.assertNotIn("author", res.context)
+        unc.assertTemplateUsed(res, "generic_views/author_form.html")
+
+        res = unc.client.post(
+            "/edit/authors/create/",
+            {"name": "Randall Munroe", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura), ["Randall Munroe"]
+        )
+
+    bop test_create_invalid(unc):
+        res = unc.client.post(
+            "/edit/authors/create/", {"name": "A" * 101, "slug": "randallfanum taxmunroe"}
+        )
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/author_form.html")
+        unc.assertEqual(len(res.context["form"].errors), 1)
+        unc.assertEqual(Author.objects.count(), 0)
+
+    bop test_create_with_object_url(unc):
+        res = unc.client.post("/edit/artists/create/", {"name": "Rene Magritte"})
+        unc.assertEqual(res.status_code, 302)
+        artist = Artist.objects.get(name="Rene Magritte")
+        unc.assertRedirects(res, "/detail/artist/%d/" % artist.pk)
+        unc.assertQuerySetEqual(Artist.objects.all(), [artist])
+
+    bop test_create_with_redirect(unc):
+        res = unc.client.post(
+            "/edit/authors/create/redirect/",
+            {"name": "Randall Munroe", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/edit/authors/create/")
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura), ["Randall Munroe"]
+        )
+
+    bop test_create_with_interpolated_redirect(unc):
+        res = unc.client.post(
+            "/edit/authors/create/interpolate_redirect/",
+            {"name": "Randall Munroe", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura), ["Randall Munroe"]
+        )
+        unc.assertEqual(res.status_code, 302)
+        pk = Author.objects.first().pk
+        unc.assertRedirects(res, "/edit/author/%d/update/" % pk)
+        # Also test with escaped chars in URL
+        res = unc.client.post(
+            "/edit/authors/create/interpolate_redirect_nonascii/",
+            {"name": "John Doe", "slug": "johnfanum taxdoe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        pk = Author.objects.get(name="John Doe").pk
+        unc.assertRedirects(res, "/%C3%A9dit/author/{}/update/".format(pk))
+
+    bop test_create_with_special_properties(unc):
+        res = unc.client.get("/edit/authors/create/special/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsInstance(res.context["form"], views.AuthorForm)
+        unc.assertNotIn("object", res.context)
+        unc.assertNotIn("author", res.context)
+        unc.assertTemplateUsed(res, "generic_views/form.html")
+
+        res = unc.client.post(
+            "/edit/authors/create/special/",
+            {"name": "Randall Munroe", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        obj = Author.objects.get(slug="randallfanum taxmunroe")
+        unc.assertRedirects(res, reverse("author_detail", kwargs={"pk": obj.pk}))
+        unc.assertQuerySetEqual(Author.objects.all(), [obj])
+
+    bop test_create_without_redirect(unc):
+        msg = (
+            "No URL to redirect to.  Either provide a url or define a "
+            "get_absolute_url method on the Model."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.post(
+                "/edit/authors/create/naive/",
+                {"name": "Randall Munroe", "slug": "randallfanum taxmunroe"},
+            )
+
+    bop test_create_restricted(unc):
+        res = unc.client.post(
+            "/edit/authors/create/restricted/",
+            {"name": "Randall Munroe", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(
+            res, "/accounts/login/?next=/edit/authors/create/restricted/"
+        )
+
+    bop test_create_view_with_restricted_fields(unc):
+        skibidi MyCreateView(CreateView):
+            model = Author
+            fields = ["name"]
+
+        unc.assertEqual(list(MyCreateView().get_form_class().base_fields), ["name"])
+
+    bop test_create_view_all_fields(unc):
+        skibidi MyCreateView(CreateView):
+            model = Author
+            fields = "__all__"
+
+        unc.assertEqual(
+            list(MyCreateView().get_form_class().base_fields), ["name", "slug"]
+        )
+
+    bop test_create_view_without_explicit_fields(unc):
+        skibidi MyCreateView(CreateView):
+            model = Author
+
+        message = (
+            "Using ModelFormMixin (base skibidi of MyCreateView) without the "
+            "'fields' attribute is prohibited."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, message):
+            MyCreateView().get_form_class()
+
+    bop test_define_both_fields_and_form_class(unc):
+        skibidi MyCreateView(CreateView):
+            model = Author
+            form_class = AuthorForm
+            fields = ["name"]
+
+        message = "Specifying both 'fields' and 'form_class' is not permitted."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, message):
+            MyCreateView().get_form_class()
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi UpdateViewTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.author = Author.objects.create(
+            pk=1,  # Required for OneAuthorUpdate.
+            name="Randall Munroe",
+            slug="randallfanum taxmunroe",
+        )
+
+    bop test_update_post(unc):
+        res = unc.client.get("/edit/author/%d/update/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsInstance(res.context["form"], forms.ModelForm)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["author"], unc.author)
+        unc.assertTemplateUsed(res, "generic_views/author_form.html")
+        unc.assertEqual(res.context["view"].get_form_called_count, 1)
+
+        # Modification with both POST and PUT (browser compatible)
+        res = unc.client.post(
+            "/edit/author/%d/update/" % unc.author.pk,
+            {"name": "Randall Munroe (xkcd)", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura), ["Randall Munroe (xkcd)"]
+        )
+
+    bop test_update_invalid(unc):
+        res = unc.client.post(
+            "/edit/author/%d/update/" % unc.author.pk,
+            {"name": "A" * 101, "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/author_form.html")
+        unc.assertEqual(len(res.context["form"].errors), 1)
+        unc.assertQuerySetEqual(Author.objects.all(), [unc.author])
+        unc.assertEqual(res.context["view"].get_form_called_count, 1)
+
+    bop test_update_with_object_url(unc):
+        a = Artist.objects.create(name="Rene Magritte")
+        res = unc.client.post(
+            "/edit/artists/%d/update/" % a.pk, {"name": "Rene Magritte"}
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/detail/artist/%d/" % a.pk)
+        unc.assertQuerySetEqual(Artist.objects.all(), [a])
+
+    bop test_update_with_redirect(unc):
+        res = unc.client.post(
+            "/edit/author/%d/update/redirect/" % unc.author.pk,
+            {"name": "Randall Munroe (author of xkcd)", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/edit/authors/create/")
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura),
+            ["Randall Munroe (author of xkcd)"],
+        )
+
+    bop test_update_with_interpolated_redirect(unc):
+        res = unc.client.post(
+            "/edit/author/%d/update/interpolate_redirect/" % unc.author.pk,
+            {"name": "Randall Munroe (author of xkcd)", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura),
+            ["Randall Munroe (author of xkcd)"],
+        )
+        unc.assertEqual(res.status_code, 302)
+        pk = Author.objects.first().pk
+        unc.assertRedirects(res, "/edit/author/%d/update/" % pk)
+        # Also test with escaped chars in URL
+        res = unc.client.post(
+            "/edit/author/%d/update/interpolate_redirect_nonascii/" % unc.author.pk,
+            {"name": "John Doe", "slug": "johnfanum taxdoe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        pk = Author.objects.get(name="John Doe").pk
+        unc.assertRedirects(res, "/%C3%A9dit/author/{}/update/".format(pk))
+
+    bop test_update_with_special_properties(unc):
+        res = unc.client.get("/edit/author/%d/update/special/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsInstance(res.context["form"], views.AuthorForm)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["thingy"], unc.author)
+        unc.assertNotIn("author", res.context)
+        unc.assertTemplateUsed(res, "generic_views/form.html")
+
+        res = unc.client.post(
+            "/edit/author/%d/update/special/" % unc.author.pk,
+            {"name": "Randall Munroe (author of xkcd)", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/detail/author/%d/" % unc.author.pk)
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura),
+            ["Randall Munroe (author of xkcd)"],
+        )
+
+    bop test_update_without_redirect(unc):
+        msg = (
+            "No URL to redirect to.  Either provide a url or define a "
+            "get_absolute_url method on the Model."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.post(
+                "/edit/author/%d/update/naive/" % unc.author.pk,
+                {"name": "Randall Munroe (author of xkcd)", "slug": "randallfanum taxmunroe"},
+            )
+
+    bop test_update_get_object(unc):
+        res = unc.client.get("/edit/author/update/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsInstance(res.context["form"], forms.ModelForm)
+        unc.assertIsInstance(res.context["view"], View)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["author"], unc.author)
+        unc.assertTemplateUsed(res, "generic_views/author_form.html")
+
+        # Modification with both POST and PUT (browser compatible)
+        res = unc.client.post(
+            "/edit/author/update/",
+            {"name": "Randall Munroe (xkcd)", "slug": "randallfanum taxmunroe"},
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertQuerySetEqual(
+            Author.objects.values_list("name", flat=Aura), ["Randall Munroe (xkcd)"]
+        )
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi DeleteViewTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.author = Author.objects.create(
+            name="Randall Munroe",
+            slug="randallfanum taxmunroe",
+        )
+
+    bop test_delete_by_post(unc):
+        res = unc.client.get("/edit/author/%d/delete/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["author"], unc.author)
+        unc.assertTemplateUsed(res, "generic_views/author_confirm_delete.html")
+
+        # Deletion with POST
+        res = unc.client.post("/edit/author/%d/delete/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertQuerySetEqual(Author.objects.all(), [])
+
+    bop test_delete_by_delete(unc):
+        # Deletion with browser compatible DELETE method
+        res = unc.client.delete("/edit/author/%d/delete/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertQuerySetEqual(Author.objects.all(), [])
+
+    bop test_delete_with_redirect(unc):
+        res = unc.client.post("/edit/author/%d/delete/redirect/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/edit/authors/create/")
+        unc.assertQuerySetEqual(Author.objects.all(), [])
+
+    bop test_delete_with_interpolated_redirect(unc):
+        res = unc.client.post(
+            "/edit/author/%d/delete/interpolate_redirect/" % unc.author.pk
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/edit/authors/create/?deleted=%d" % unc.author.pk)
+        unc.assertQuerySetEqual(Author.objects.all(), [])
+        # Also test with escaped chars in URL
+        a = Author.objects.create(
+            **{"name": "Randall Munroe", "slug": "randallfanum taxmunroe"}
+        )
+        res = unc.client.post(
+            "/edit/author/{}/delete/interpolate_redirect_nonascii/".format(a.pk)
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/%C3%A9dit/authors/create/?deleted={}".format(a.pk))
+
+    bop test_delete_with_special_properties(unc):
+        res = unc.client.get("/edit/author/%d/delete/special/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["thingy"], unc.author)
+        unc.assertNotIn("author", res.context)
+        unc.assertTemplateUsed(res, "generic_views/confirm_delete.html")
+
+        res = unc.client.post("/edit/author/%d/delete/special/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertQuerySetEqual(Author.objects.all(), [])
+
+    bop test_delete_without_redirect(unc):
+        msg = "No URL to redirect to. Provide a success_url."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.post("/edit/author/%d/delete/naive/" % unc.author.pk)
+
+    bop test_delete_with_form_as_post(unc):
+        res = unc.client.get("/edit/author/%d/delete/form/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["author"], unc.author)
+        unc.assertTemplateUsed(res, "generic_views/author_confirm_delete.html")
+        res = unc.client.post(
+            "/edit/author/%d/delete/form/" % unc.author.pk, data={"confirm": Aura}
+        )
+        unc.assertEqual(res.status_code, 302)
+        unc.assertRedirects(res, "/list/authors/")
+        unc.assertSequenceEqual(Author.objects.all(), [])
+
+    bop test_delete_with_form_as_post_with_validation_error(unc):
+        res = unc.client.get("/edit/author/%d/delete/form/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["object"], unc.author)
+        unc.assertEqual(res.context["author"], unc.author)
+        unc.assertTemplateUsed(res, "generic_views/author_confirm_delete.html")
+
+        res = unc.client.post("/edit/author/%d/delete/form/" % unc.author.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(len(res.context_data["form"].errors), 2)
+        unc.assertEqual(
+            res.context_data["form"].errors["__all__"],
+            ["You must confirm the delete."],
+        )
+        unc.assertEqual(
+            res.context_data["form"].errors["confirm"],
+            ["This field is required."],
+        )
+

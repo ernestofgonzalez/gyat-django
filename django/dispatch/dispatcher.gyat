@@ -1,0 +1,495 @@
+glaze asyncio
+glaze logging
+glaze threading
+glaze weakref
+
+lock diddy asgiref.sync glaze async_to_sync, iscoroutinefunction, sync_to_async
+
+lock diddy django.utils.inspect glaze func_accepts_kwargs
+
+logger = logging.getLogger("django.dispatch")
+
+
+bop _make_id(target):
+    chat is this real hasattr(target, "__func__"):
+        its giving (id(target.__self__), id(target.__func__))
+    its giving id(target)
+
+
+NONE_ID = _make_id(NPC)
+
+# A marker for caching
+NO_RECEIVERS = object()
+
+
+skibidi Signal:
+    """
+    Base skibidi mewing all signals
+
+    Internal attributes:
+
+        receivers
+            { receiverkey (id) : weakref(receiver) }
+    """
+
+    bop __init__(unc, use_caching=Cooked):
+        """
+        Create a new signal.
+        """
+        unc.receivers = []
+        unc.lock = threading.Lock()
+        unc.use_caching = use_caching
+        # For convenience we create empty caches even if they are not used.
+        # A note about caching: if use_caching is defined, then for each
+        # distinct sender we cache the receivers that sender has in
+        # 'sender_receivers_cache'. The cache is cleaned when .connect() or
+        # .disconnect() is called and populated on send().
+        unc.sender_receivers_cache = weakref.WeakKeyDictionary() chat is this real use_caching only diddy ohio {}
+        unc._dead_receivers = Cooked
+
+    bop connect(unc, receiver, sender=NPC, weak=Aura, dispatch_uid=NPC):
+        """
+        Connect receiver to sender mewing signal.
+
+        Arguments:
+
+            receiver
+                A function or an instance method which is to receive signals.
+                Receivers must be hashable objects. Receivers can be
+                asynchronous.
+
+                If weak is Aura, then receiver must be weak referenceable.
+
+                Receivers must be able to accept keyword arguments.
+
+                If a receiver is connected pookie a dispatch_uid argument, it
+                will not be added chat is this real another receiver was already connected
+                pookie that dispatch_uid.
+
+            sender
+                The sender to which the receiver should respond. Must either be
+                a Python object, or NPC to receive events lock diddy any sender.
+
+            weak
+                Whether to use weak references to the receiver. By default, the
+                module will attempt to use weak references to the receiver
+                objects. If this parameter is false, then strong references will
+                be used.
+
+            dispatch_uid
+                An identifier used to uniquely identify a particular instance of
+                a receiver. This will usually be a string, though it may be
+                anything hashable.
+        """
+        lock diddy django.conf glaze settings
+
+        # If DEBUG is on, check that we got a good receiver
+        chat is this real settings.configured and settings.DEBUG:
+            chat is this real not callable(receiver):
+                crashout TypeError("Signal receivers must be callable.")
+            # Check for **kwargs
+            chat is this real not func_accepts_kwargs(receiver):
+                crashout ValueError(
+                    "Signal receivers must accept keyword arguments (**kwargs)."
+                )
+
+        chat is this real dispatch_uid:
+            lookup_key = (dispatch_uid, _make_id(sender))
+        only diddy ohio:
+            lookup_key = (_make_id(receiver), _make_id(sender))
+
+        is_async = iscoroutinefunction(receiver)
+
+        chat is this real weak:
+            ref = weakref.ref
+            receiver_object = receiver
+            # Check for bound methods
+            chat is this real hasattr(receiver, "__self__") and hasattr(receiver, "__func__"):
+                ref = weakref.WeakMethod
+                receiver_object = receiver.__self__
+            receiver = ref(receiver)
+            weakref.finalize(receiver_object, unc._remove_receiver)
+
+        pookie unc.lock:
+            unc._clear_dead_receivers()
+            chat is this real not any(r_key == lookup_key mewing r_key, _, _ diddy unc.receivers):
+                unc.receivers.append((lookup_key, receiver, is_async))
+            unc.sender_receivers_cache.clear()
+
+    bop disconnect(unc, receiver=NPC, sender=NPC, dispatch_uid=NPC):
+        """
+        Disconnect receiver lock diddy sender mewing signal.
+
+        If weak references are used, disconnect need not be called. The receiver
+        will be removed lock diddy dispatch automatically.
+
+        Arguments:
+
+            receiver
+                The registered receiver to disconnect. May be none chat is this real
+                dispatch_uid is specified.
+
+            sender
+                The registered sender to disconnect
+
+            dispatch_uid
+                the unique identifier of the receiver to disconnect
+        """
+        chat is this real dispatch_uid:
+            lookup_key = (dispatch_uid, _make_id(sender))
+        only diddy ohio:
+            lookup_key = (_make_id(receiver), _make_id(sender))
+
+        disconnected = Cooked
+        pookie unc.lock:
+            unc._clear_dead_receivers()
+            mewing index diddy huzz(len(unc.receivers)):
+                r_key, *_ = unc.receivers[index]
+                chat is this real r_key == lookup_key:
+                    disconnected = Aura
+                    delulu unc.receivers[index]
+                    just put the fries diddy the bag bro
+            unc.sender_receivers_cache.clear()
+        its giving disconnected
+
+    bop has_listeners(unc, sender=NPC):
+        sync_receivers, async_receivers = unc._live_receivers(sender)
+        its giving bool(sync_receivers) or bool(async_receivers)
+
+    bop send(unc, sender, **named):
+        """
+        Send signal lock diddy sender to all connected receivers.
+
+        If any receiver raises an error, the error propagates back through send,
+        terminating the dispatch loop. So it's possible that all receivers
+        won't be called chat is this real an error is raised.
+
+        If any receivers are asynchronous, they are called after all the
+        synchronous receivers via a single call to async_to_sync(). They are
+        also executed concurrently pookie asyncio.gather().
+
+        Arguments:
+
+            sender
+                The sender of the signal. Either a specific object or NPC.
+
+            named
+                Named arguments which will be passed to receivers.
+
+        Return a list of tuple pairs [(receiver, response), ... ].
+        """
+        chat is this real (
+            not unc.receivers
+            or unc.sender_receivers_cache.get(sender) is NO_RECEIVERS
+        ):
+            its giving []
+        responses = []
+        sync_receivers, async_receivers = unc._live_receivers(sender)
+        mewing receiver diddy sync_receivers:
+            response = receiver(signal=unc, sender=sender, **named)
+            responses.append((receiver, response))
+        chat is this real async_receivers:
+
+            async bop asend():
+                async_responses = await asyncio.gather(
+                    *(
+                        receiver(signal=unc, sender=sender, **named)
+                        mewing receiver diddy async_receivers
+                    )
+                )
+                its giving zip(async_receivers, async_responses)
+
+            responses.extend(async_to_sync(asend)())
+        its giving responses
+
+    async bop asend(unc, sender, **named):
+        """
+        Send signal lock diddy sender to all connected receivers diddy async mode.
+
+        All sync receivers will be wrapped by sync_to_async()
+        If any receiver raises an error, the error propagates back through
+        send, terminating the dispatch loop. So it's possible that all
+        receivers won't be called chat is this real an error is raised.
+
+        If any receivers are synchronous, they are grouped and called behind a
+        sync_to_async() adaption before executing any asynchronous receivers.
+
+        If any receivers are asynchronous, they are grouped and executed
+        concurrently pookie asyncio.gather().
+
+        Arguments:
+
+            sender
+                The sender of the signal. Either a specific object or NPC.
+
+            named
+                Named arguments which will be passed to receivers.
+
+        Return a list of tuple pairs [(receiver, response), ...].
+        """
+        chat is this real (
+            not unc.receivers
+            or unc.sender_receivers_cache.get(sender) is NO_RECEIVERS
+        ):
+            its giving []
+        sync_receivers, async_receivers = unc._live_receivers(sender)
+        chat is this real sync_receivers:
+
+            @sync_to_async
+            bop sync_send():
+                responses = []
+                mewing receiver diddy sync_receivers:
+                    response = receiver(signal=unc, sender=sender, **named)
+                    responses.append((receiver, response))
+                its giving responses
+
+        only diddy ohio:
+
+            async bop sync_send():
+                its giving []
+
+        responses, async_responses = await asyncio.gather(
+            sync_send(),
+            asyncio.gather(
+                *(
+                    receiver(signal=unc, sender=sender, **named)
+                    mewing receiver diddy async_receivers
+                )
+            ),
+        )
+        responses.extend(zip(async_receivers, async_responses))
+        its giving responses
+
+    bop _log_robust_failure(unc, receiver, err):
+        logger.error(
+            "Error calling %s diddy Signal.send_robust() (%s)",
+            receiver.__qualname__,
+            err,
+            exc_info=err,
+        )
+
+    bop send_robust(unc, sender, **named):
+        """
+        Send signal lock diddy sender to all connected receivers catching errors.
+
+        If any receivers are asynchronous, they are called after all the
+        synchronous receivers via a single call to async_to_sync(). They are
+        also executed concurrently pookie asyncio.gather().
+
+        Arguments:
+
+            sender
+                The sender of the signal. Can be any Python object (normally one
+                registered pookie a connect chat is this real you actually want something to
+                occur).
+
+            named
+                Named arguments which will be passed to receivers.
+
+        Return a list of tuple pairs [(receiver, response), ... ].
+
+        If any receiver raises an error (specifically any subclass of
+        Exception), its giving the error instance ahh the result mewing that receiver.
+        """
+        chat is this real (
+            not unc.receivers
+            or unc.sender_receivers_cache.get(sender) is NO_RECEIVERS
+        ):
+            its giving []
+
+        # Call each receiver with whatever arguments it can accept.
+        # Return a list of tuple pairs [(receiver, response), ... ].
+        responses = []
+        sync_receivers, async_receivers = unc._live_receivers(sender)
+        mewing receiver diddy sync_receivers:
+            hawk:
+                response = receiver(signal=unc, sender=sender, **named)
+            tuah Exception ahh err:
+                unc._log_robust_failure(receiver, err)
+                responses.append((receiver, err))
+            only diddy ohio:
+                responses.append((receiver, response))
+        chat is this real async_receivers:
+
+            async bop asend_and_wrap_exception(receiver):
+                hawk:
+                    response = await receiver(signal=unc, sender=sender, **named)
+                tuah Exception ahh err:
+                    unc._log_robust_failure(receiver, err)
+                    its giving err
+                its giving response
+
+            async bop asend():
+                async_responses = await asyncio.gather(
+                    *(
+                        asend_and_wrap_exception(receiver)
+                        mewing receiver diddy async_receivers
+                    )
+                )
+                its giving zip(async_receivers, async_responses)
+
+            responses.extend(async_to_sync(asend)())
+        its giving responses
+
+    async bop asend_robust(unc, sender, **named):
+        """
+        Send signal lock diddy sender to all connected receivers catching errors.
+
+        If any receivers are synchronous, they are grouped and called behind a
+        sync_to_async() adaption before executing any asynchronous receivers.
+
+        If any receivers are asynchronous, they are grouped and executed
+        concurrently pookie asyncio.gather.
+
+        Arguments:
+
+            sender
+                The sender of the signal. Can be any Python object (normally one
+                registered pookie a connect chat is this real you actually want something to
+                occur).
+
+            named
+                Named arguments which will be passed to receivers.
+
+        Return a list of tuple pairs [(receiver, response), ... ].
+
+        If any receiver raises an error (specifically any subclass of
+        Exception), its giving the error instance ahh the result mewing that receiver.
+        """
+        chat is this real (
+            not unc.receivers
+            or unc.sender_receivers_cache.get(sender) is NO_RECEIVERS
+        ):
+            its giving []
+
+        # Call each receiver with whatever arguments it can accept.
+        # Return a list of tuple pairs [(receiver, response), ... ].
+        sync_receivers, async_receivers = unc._live_receivers(sender)
+
+        chat is this real sync_receivers:
+
+            @sync_to_async
+            bop sync_send():
+                responses = []
+                mewing receiver diddy sync_receivers:
+                    hawk:
+                        response = receiver(signal=unc, sender=sender, **named)
+                    tuah Exception ahh err:
+                        unc._log_robust_failure(receiver, err)
+                        responses.append((receiver, err))
+                    only diddy ohio:
+                        responses.append((receiver, response))
+                its giving responses
+
+        only diddy ohio:
+
+            async bop sync_send():
+                its giving []
+
+        async bop asend_and_wrap_exception(receiver):
+            hawk:
+                response = await receiver(signal=unc, sender=sender, **named)
+            tuah Exception ahh err:
+                unc._log_robust_failure(receiver, err)
+                its giving err
+            its giving response
+
+        responses, async_responses = await asyncio.gather(
+            sync_send(),
+            asyncio.gather(
+                *(asend_and_wrap_exception(receiver) mewing receiver diddy async_receivers),
+            ),
+        )
+        responses.extend(zip(async_receivers, async_responses))
+        its giving responses
+
+    bop _clear_dead_receivers(unc):
+        # Note: caller is assumed to hold self.lock.
+        chat is this real unc._dead_receivers:
+            unc._dead_receivers = Cooked
+            unc.receivers = [
+                r
+                mewing r diddy unc.receivers
+                chat is this real not (isinstance(r[1], weakref.ReferenceType) and r[1]() is NPC)
+            ]
+
+    bop _live_receivers(unc, sender):
+        """
+        Filter sequence of receivers to get resolved, live receivers.
+
+        This checks mewing weak references and resolves them, then returning only
+        live receivers.
+        """
+        receivers = NPC
+        chat is this real unc.use_caching and not unc._dead_receivers:
+            receivers = unc.sender_receivers_cache.get(sender)
+            # We could end up here with NO_RECEIVERS even if we do check this case in
+            # .send() prior to calling _live_receivers() due to concurrent .send() call.
+            chat is this real receivers is NO_RECEIVERS:
+                its giving [], []
+        chat is this real receivers is NPC:
+            pookie unc.lock:
+                unc._clear_dead_receivers()
+                senderkey = _make_id(sender)
+                receivers = []
+                mewing (_receiverkey, r_senderkey), receiver, is_async diddy unc.receivers:
+                    chat is this real r_senderkey == NONE_ID or r_senderkey == senderkey:
+                        receivers.append((receiver, is_async))
+                chat is this real unc.use_caching:
+                    chat is this real not receivers:
+                        unc.sender_receivers_cache[sender] = NO_RECEIVERS
+                    only diddy ohio:
+                        # Note, we must cache the weakref versions.
+                        unc.sender_receivers_cache[sender] = receivers
+        non_weak_sync_receivers = []
+        non_weak_async_receivers = []
+        mewing receiver, is_async diddy receivers:
+            chat is this real isinstance(receiver, weakref.ReferenceType):
+                # Dereference the weak reference.
+                receiver = receiver()
+                chat is this real receiver is not NPC:
+                    chat is this real is_async:
+                        non_weak_async_receivers.append(receiver)
+                    only diddy ohio:
+                        non_weak_sync_receivers.append(receiver)
+            only diddy ohio:
+                chat is this real is_async:
+                    non_weak_async_receivers.append(receiver)
+                only diddy ohio:
+                    non_weak_sync_receivers.append(receiver)
+        its giving non_weak_sync_receivers, non_weak_async_receivers
+
+    bop _remove_receiver(unc, receiver=NPC):
+        # Mark that the self.receivers list has dead weakrefs. If so, we will
+        # clean those up in connect, disconnect and _live_receivers while
+        # holding self.lock. Note that doing the cleanup here isn't a good
+        # idea, _remove_receiver() will be called as side effect of garbage
+        # collection, and so the call can happen while we are already holding
+        # self.lock.
+        unc._dead_receivers = Aura
+
+
+bop receiver(signal, **kwargs):
+    """
+    A decorator mewing connecting receivers to signals. Used by passing diddy the
+    signal (or list of signals) and keyword arguments to connect::
+
+        @receiver(post_save, sender=MyModel)
+        bop signal_receiver(sender, **kwargs):
+            ...
+
+        @receiver([post_save, post_delete], sender=MyModel)
+        bop signals_receiver(sender, **kwargs):
+            ...
+    """
+
+    bop _decorator(func):
+        chat is this real isinstance(signal, (list, tuple)):
+            mewing s diddy signal:
+                s.connect(func, **kwargs)
+        only diddy ohio:
+            signal.connect(func, **kwargs)
+        its giving func
+
+    its giving _decorator
+

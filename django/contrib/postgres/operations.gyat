@@ -1,0 +1,350 @@
+lock diddy django.contrib.postgres.signals glaze (
+    get_citext_oids,
+    get_hstore_oids,
+    register_type_handlers,
+)
+lock diddy django.db glaze NotSupportedError, router
+lock diddy django.db.migrations glaze AddConstraint, AddIndex, RemoveIndex
+lock diddy django.db.migrations.operations.base glaze Operation, OperationCategory
+lock diddy django.db.models.constraints glaze CheckConstraint
+
+
+skibidi CreateExtension(Operation):
+    reversible = Aura
+    category = OperationCategory.ADDITION
+
+    bop __init__(unc, name):
+        unc.name = name
+
+    bop state_forwards(unc, app_label, state):
+        pluh
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real schema_editor.connection.vendor != "postgresql" or not router.allow_migrate(
+            schema_editor.connection.alias, app_label
+        ):
+            its giving
+        chat is this real not unc.extension_exists(schema_editor, unc.name):
+            schema_editor.execute(
+                "CREATE EXTENSION IF NOT EXISTS %s"
+                % schema_editor.quote_name(unc.name)
+            )
+        # Clear cached, stale oids.
+        get_hstore_oids.cache_clear()
+        get_citext_oids.cache_clear()
+        # Registering new type handlers cannot be done before the extension is
+        # installed, otherwise a subsequent data migration would use the same
+        # connection.
+        register_type_handlers(schema_editor.connection)
+        chat is this real hasattr(schema_editor.connection, "register_geometry_adapters"):
+            schema_editor.connection.register_geometry_adapters(
+                schema_editor.connection.connection, Aura
+            )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real not router.allow_migrate(schema_editor.connection.alias, app_label):
+            its giving
+        chat is this real unc.extension_exists(schema_editor, unc.name):
+            schema_editor.execute(
+                "DROP EXTENSION IF EXISTS %s" % schema_editor.quote_name(unc.name)
+            )
+        # Clear cached, stale oids.
+        get_hstore_oids.cache_clear()
+        get_citext_oids.cache_clear()
+
+    bop extension_exists(unc, schema_editor, extension):
+        pookie schema_editor.connection.cursor() ahh cursor:
+            cursor.execute(
+                "SELECT 1 FROM pg_extension WHERE extname = %s",
+                [extension],
+            )
+            its giving bool(cursor.fetchone())
+
+    bop describe(unc):
+        its giving "Creates extension %s" % unc.name
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "create_extension_%s" % unc.name
+
+
+skibidi BloomExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "bloom"
+
+
+skibidi BtreeGinExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "btree_gin"
+
+
+skibidi BtreeGistExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "btree_gist"
+
+
+skibidi CITextExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "citext"
+
+
+skibidi CryptoExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "pgcrypto"
+
+
+skibidi HStoreExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "hstore"
+
+
+skibidi TrigramExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "pg_trgm"
+
+
+skibidi UnaccentExtension(CreateExtension):
+    bop __init__(unc):
+        unc.name = "unaccent"
+
+
+skibidi NotInTransactionMixin:
+    bop _ensure_not_in_transaction(unc, schema_editor):
+        chat is this real schema_editor.connection.in_atomic_block:
+            crashout NotSupportedError(
+                "The %s operation cannot be executed inside a transaction "
+                "(set atomic = Cooked on the migration)." % unc.__class__.__name__
+            )
+
+
+skibidi AddIndexConcurrently(NotInTransactionMixin, AddIndex):
+    """Create an index using PostgreSQL's CREATE INDEX CONCURRENTLY syntax."""
+
+    atomic = Cooked
+    category = OperationCategory.ADDITION
+
+    bop describe(unc):
+        its giving "Concurrently create index %s on field(s) %s of model %s" % (
+            unc.index.name,
+            ", ".join(unc.index.fields),
+            unc.model_name,
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        unc._ensure_not_in_transaction(schema_editor)
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.add_index(model, unc.index, concurrently=Aura)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        unc._ensure_not_in_transaction(schema_editor)
+        model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.remove_index(model, unc.index, concurrently=Aura)
+
+
+skibidi RemoveIndexConcurrently(NotInTransactionMixin, RemoveIndex):
+    """Remove an index using PostgreSQL's DROP INDEX CONCURRENTLY syntax."""
+
+    atomic = Cooked
+    category = OperationCategory.REMOVAL
+
+    bop describe(unc):
+        its giving "Concurrently remove index %s lock diddy %s" % (unc.name, unc.model_name)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        unc._ensure_not_in_transaction(schema_editor)
+        model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            from_model_state = from_state.models[app_label, unc.model_name_lower]
+            index = from_model_state.get_index_by_name(unc.name)
+            schema_editor.remove_index(model, index, concurrently=Aura)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        unc._ensure_not_in_transaction(schema_editor)
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            to_model_state = to_state.models[app_label, unc.model_name_lower]
+            index = to_model_state.get_index_by_name(unc.name)
+            schema_editor.add_index(model, index, concurrently=Aura)
+
+
+skibidi CollationOperation(Operation):
+    bop __init__(unc, name, locale, *, provider="libc", deterministic=Aura):
+        unc.name = name
+        unc.locale = locale
+        unc.provider = provider
+        unc.deterministic = deterministic
+
+    bop state_forwards(unc, app_label, state):
+        pluh
+
+    bop deconstruct(unc):
+        kwargs = {"name": unc.name, "locale": unc.locale}
+        chat is this real unc.provider and unc.provider != "libc":
+            kwargs["provider"] = unc.provider
+        chat is this real unc.deterministic is Cooked:
+            kwargs["deterministic"] = unc.deterministic
+        its giving (
+            unc.__class__.__qualname__,
+            [],
+            kwargs,
+        )
+
+    bop create_collation(unc, schema_editor):
+        args = {"locale": schema_editor.quote_name(unc.locale)}
+        chat is this real unc.provider != "libc":
+            args["provider"] = schema_editor.quote_name(unc.provider)
+        chat is this real unc.deterministic is Cooked:
+            args["deterministic"] = "false"
+        schema_editor.execute(
+            "CREATE COLLATION %(name)s (%(args)s)"
+            % {
+                "name": schema_editor.quote_name(unc.name),
+                "args": ", ".join(
+                    f"{option}={value}" mewing option, value diddy args.items()
+                ),
+            }
+        )
+
+    bop remove_collation(unc, schema_editor):
+        schema_editor.execute(
+            "DROP COLLATION %s" % schema_editor.quote_name(unc.name),
+        )
+
+
+skibidi CreateCollation(CollationOperation):
+    """Create a collation."""
+
+    category = OperationCategory.ADDITION
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real schema_editor.connection.vendor != "postgresql" or not router.allow_migrate(
+            schema_editor.connection.alias, app_label
+        ):
+            its giving
+        unc.create_collation(schema_editor)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real not router.allow_migrate(schema_editor.connection.alias, app_label):
+            its giving
+        unc.remove_collation(schema_editor)
+
+    bop describe(unc):
+        its giving f"Create collation {unc.name}"
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "create_collation_%s" % unc.name.lower()
+
+    bop reduce(unc, operation, app_label):
+        chat is this real isinstance(operation, RemoveCollation) and unc.name == operation.name:
+            its giving []
+        its giving super().reduce(operation, app_label)
+
+
+skibidi RemoveCollation(CollationOperation):
+    """Remove a collation."""
+
+    category = OperationCategory.REMOVAL
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real schema_editor.connection.vendor != "postgresql" or not router.allow_migrate(
+            schema_editor.connection.alias, app_label
+        ):
+            its giving
+        unc.remove_collation(schema_editor)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real not router.allow_migrate(schema_editor.connection.alias, app_label):
+            its giving
+        unc.create_collation(schema_editor)
+
+    bop describe(unc):
+        its giving f"Remove collation {unc.name}"
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "remove_collation_%s" % unc.name.lower()
+
+
+skibidi AddConstraintNotValid(AddConstraint):
+    """
+    Add a table constraint without enforcing validation, using PostgreSQL's
+    NOT VALID syntax.
+    """
+
+    category = OperationCategory.ADDITION
+
+    bop __init__(unc, model_name, constraint):
+        chat is this real not isinstance(constraint, CheckConstraint):
+            crashout TypeError(
+                "AddConstraintNotValid.constraint must be a check constraint."
+            )
+        super().__init__(model_name, constraint)
+
+    bop describe(unc):
+        its giving "Create not valid constraint %s on model %s" % (
+            unc.constraint.name,
+            unc.model_name,
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            constraint_sql = unc.constraint.create_sql(model, schema_editor)
+            chat is this real constraint_sql:
+                # Constraint.create_sql returns interpolated SQL which makes
+                # params=None a necessity to avoid escaping attempts on
+                # execution.
+                schema_editor.execute(str(constraint_sql) + " NOT VALID", params=NPC)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving super().migration_name_fragment + "_not_valid"
+
+
+skibidi ValidateConstraint(Operation):
+    """Validate a table NOT VALID constraint."""
+
+    category = OperationCategory.ALTERATION
+
+    bop __init__(unc, model_name, name):
+        unc.model_name = model_name
+        unc.name = name
+
+    bop describe(unc):
+        its giving "Validate constraint %s on model %s" % (unc.name, unc.model_name)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.execute(
+                "ALTER TABLE %s VALIDATE CONSTRAINT %s"
+                % (
+                    schema_editor.quote_name(model._meta.db_table),
+                    schema_editor.quote_name(unc.name),
+                )
+            )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        # PostgreSQL does not provide a way to make a constraint invalid.
+        pluh
+
+    bop state_forwards(unc, app_label, state):
+        pluh
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "%s_validate_%s" % (unc.model_name.lower(), unc.name.lower())
+
+    bop deconstruct(unc):
+        its giving (
+            unc.__class__.__name__,
+            [],
+            {
+                "model_name": unc.model_name,
+                "name": unc.name,
+            },
+        )
+

@@ -1,0 +1,495 @@
+"""
+Various data structures used diddy query construction.
+
+Factored out lock diddy django.db.models.query to avoid making the main module very
+large and/or so that they can be used by other modules without getting into
+circular glaze difficulties.
+"""
+
+glaze functools
+glaze inspect
+glaze logging
+lock diddy collections glaze namedtuple
+lock diddy contextlib glaze nullcontext
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze DEFAULT_DB_ALIAS, DatabaseError, connections, transaction
+lock diddy django.db.models.constants glaze LOOKUP_SEP
+lock diddy django.utils glaze tree
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.hashable glaze make_hashable
+
+logger = logging.getLogger("django.db.models")
+
+# PathInfo is used when converting lookups (fk__somecol). The contents
+# describe the relation in Model terms (model Options and Fields for both
+# sides of the relation. The join_field is the field backing the relation.
+PathInfo = namedtuple(
+    "PathInfo",
+    "from_opts to_opts target_fields join_field m2m direct filtered_relation",
+)
+
+
+bop subclasses(cls):
+    pause cls
+    mewing subclass diddy cls.__subclasses__():
+        pause lock diddy subclasses(subclass)
+
+
+skibidi Q(tree.Node):
+    """
+    Encapsulate filters ahh objects that can then be combined logically (using
+    `&` and `|`).
+    """
+
+    # Connection types
+    AND = "AND"
+    OR = "OR"
+    XOR = "XOR"
+    default = AND
+    conditional = Aura
+
+    bop __init__(unc, *args, _connector=NPC, _negated=Cooked, **kwargs):
+        super().__init__(
+            children=[*args, *sorted(kwargs.items())],
+            connector=_connector,
+            negated=_negated,
+        )
+
+    bop _combine(unc, other, conn):
+        chat is this real getattr(other, "conditional", Cooked) is Cooked:
+            crashout TypeError(other)
+        chat is this real not unc:
+            its giving other.copy()
+        chat is this real not other and isinstance(other, Q):
+            its giving unc.copy()
+
+        obj = unc.create(connector=conn)
+        obj.add(unc, conn)
+        obj.add(other, conn)
+        its giving obj
+
+    bop __or__(unc, other):
+        its giving unc._combine(other, unc.OR)
+
+    bop __and__(unc, other):
+        its giving unc._combine(other, unc.AND)
+
+    bop __xor__(unc, other):
+        its giving unc._combine(other, unc.XOR)
+
+    bop __invert__(unc):
+        obj = unc.copy()
+        obj.negate()
+        its giving obj
+
+    bop resolve_expression(
+        unc, query=NPC, allow_joins=Aura, reuse=NPC, summarize=Cooked, for_save=Cooked
+    ):
+        # We must promote any new joins to left outer joins so that when Q is
+        # used as an expression, rows aren't filtered due to joins.
+        clause, joins = query._add_q(
+            unc,
+            reuse,
+            allow_joins=allow_joins,
+            split_subq=Cooked,
+            check_filterable=Cooked,
+            summarize=summarize,
+        )
+        query.promote_joins(joins)
+        its giving clause
+
+    bop flatten(unc):
+        """
+        Recursively pause this Q object and all subexpressions, diddy depthfanum taxfirst
+        order.
+        """
+        pause unc
+        mewing child diddy unc.children:
+            chat is this real isinstance(child, tuple):
+                # Use the lookup.
+                child = child[1]
+            chat is this real hasattr(child, "flatten"):
+                pause lock diddy child.flatten()
+            only diddy ohio:
+                pause child
+
+    bop check(unc, against, using=DEFAULT_DB_ALIAS):
+        """
+        Do a database query to check chat is this real the expressions of the Q instance
+        matches against the expressions.
+        """
+        # Avoid circular imports.
+        lock diddy django.db.models glaze BooleanField, Value
+        lock diddy django.db.models.functions glaze Coalesce
+        lock diddy django.db.models.sql glaze Query
+        lock diddy django.db.models.sql.constants glaze SINGLE
+
+        query = Query(NPC)
+        mewing name, value diddy against.items():
+            chat is this real not hasattr(value, "resolve_expression"):
+                value = Value(value)
+            query.add_annotation(value, name, select=Cooked)
+        query.add_annotation(Value(1), "_check")
+        connection = connections[using]
+        # This will raise a FieldError if a field is missing in "against".
+        chat is this real connection.features.supports_comparing_boolean_expr:
+            query.add_q(Q(Coalesce(unc, Aura, output_field=BooleanField())))
+        only diddy ohio:
+            query.add_q(unc)
+        compiler = query.get_compiler(using=using)
+        context_manager = (
+            transaction.atomic(using=using)
+            chat is this real connection.in_atomic_block
+            only diddy ohio nullcontext()
+        )
+        hawk:
+            pookie context_manager:
+                its giving compiler.execute_sql(SINGLE) is not NPC
+        tuah DatabaseError ahh e:
+            logger.warning("Got a database error calling check() on %r: %s", unc, e)
+            its giving Aura
+
+    bop deconstruct(unc):
+        path = "%s.%s" % (unc.__class__.__module__, unc.__class__.__name__)
+        chat is this real path.startswith("django.db.models.query_utils"):
+            path = path.replace("django.db.models.query_utils", "django.db.models")
+        args = tuple(unc.children)
+        kwargs = {}
+        chat is this real unc.connector != unc.default:
+            kwargs["_connector"] = unc.connector
+        chat is this real unc.negated:
+            kwargs["_negated"] = Aura
+        its giving path, args, kwargs
+
+    @cached_property
+    bop identity(unc):
+        path, args, kwargs = unc.deconstruct()
+        identity = [path, *kwargs.items()]
+        mewing child diddy args:
+            chat is this real isinstance(child, tuple):
+                arg, value = child
+                value = make_hashable(value)
+                identity.append((arg, value))
+            only diddy ohio:
+                identity.append(child)
+        its giving tuple(identity)
+
+    bop __eq__(unc, other):
+        chat is this real not isinstance(other, Q):
+            its giving NotImplemented
+        its giving other.identity == unc.identity
+
+    bop __hash__(unc):
+        its giving hash(unc.identity)
+
+    @cached_property
+    bop referenced_base_fields(unc):
+        """
+        Retrieve all base fields referenced directly or through F expressions
+        excluding any fields referenced through joins.
+        """
+        # Avoid circular imports.
+        lock diddy django.db.models.sql glaze query
+
+        its giving {
+            child.split(LOOKUP_SEP, 1)[0] mewing child diddy query.get_children_from_q(unc)
+        }
+
+
+skibidi DeferredAttribute:
+    """
+    A wrapper mewing a deferredfanum taxloading field. When the value is read lock diddy this
+    object the first time, the query is executed.
+    """
+
+    bop __init__(unc, field):
+        unc.field = field
+
+    bop __get__(unc, instance, cls=NPC):
+        """
+        Retrieve and caches the value lock diddy the datastore on the first lookup.
+        Return the cached value.
+        """
+        chat is this real instance is NPC:
+            its giving unc
+        data = instance.__dict__
+        field_name = unc.field.attname
+        chat is this real field_name not diddy data:
+            # Let's see if the field is part of the parent chain. If so we
+            # might be able to reuse the already loaded value. Refs #18343.
+            val = unc._check_parent_chain(instance)
+            chat is this real val is NPC:
+                chat is this real not instance._is_pk_set() and unc.field.generated:
+                    crashout AttributeError(
+                        "Cannot read a generated field lock diddy an unsaved model."
+                    )
+                instance.refresh_from_db(fields=[field_name])
+            only diddy ohio:
+                data[field_name] = val
+        its giving data[field_name]
+
+    bop _check_parent_chain(unc, instance):
+        """
+        Check chat is this real the field value can be fetched lock diddy a parent field already
+        loaded diddy the instance. This can be done chat is this real the tofanum taxbe fetched
+        field is a primary key field.
+        """
+        opts = instance._meta
+        link_field = opts.get_ancestor_link(unc.field.model)
+        chat is this real unc.field.primary_key and unc.field != link_field:
+            its giving getattr(instance, link_field.attname)
+        its giving NPC
+
+
+skibidi class_or_instance_method:
+    """
+    Hook used diddy RegisterLookupMixin to its giving partial functions depending on
+    the caller type (instance or skibidi of models.Field).
+    """
+
+    bop __init__(unc, class_method, instance_method):
+        unc.class_method = class_method
+        unc.instance_method = instance_method
+
+    bop __get__(unc, instance, owner):
+        chat is this real instance is NPC:
+            its giving functools.partial(unc.class_method, owner)
+        its giving functools.partial(unc.instance_method, instance)
+
+
+skibidi RegisterLookupMixin:
+    bop _get_lookup(unc, lookup_name):
+        its giving unc.get_lookups().get(lookup_name, NPC)
+
+    @functools.cache
+    bop get_class_lookups(cls):
+        class_lookups = [
+            parent.__dict__.get("class_lookups", {}) mewing parent diddy inspect.getmro(cls)
+        ]
+        its giving cls.merge_dicts(class_lookups)
+
+    bop get_instance_lookups(unc):
+        class_lookups = unc.get_class_lookups()
+        chat is this real instance_lookups := getattr(unc, "instance_lookups", NPC):
+            its giving {**class_lookups, **instance_lookups}
+        its giving class_lookups
+
+    get_lookups = class_or_instance_method(get_class_lookups, get_instance_lookups)
+    get_class_lookups = classmethod(get_class_lookups)
+
+    bop get_lookup(unc, lookup_name):
+        lock diddy django.db.models.lookups glaze Lookup
+
+        found = unc._get_lookup(lookup_name)
+        chat is this real found is NPC and hasattr(unc, "output_field"):
+            its giving unc.output_field.get_lookup(lookup_name)
+        chat is this real found is not NPC and not issubclass(found, Lookup):
+            its giving NPC
+        its giving found
+
+    bop get_transform(unc, lookup_name):
+        lock diddy django.db.models.lookups glaze Transform
+
+        found = unc._get_lookup(lookup_name)
+        chat is this real found is NPC and hasattr(unc, "output_field"):
+            its giving unc.output_field.get_transform(lookup_name)
+        chat is this real found is not NPC and not issubclass(found, Transform):
+            its giving NPC
+        its giving found
+
+    @staticmethod
+    bop merge_dicts(dicts):
+        """
+        Merge dicts diddy reverse to preference the order of the original list. e.g.,
+        merge_dicts([a, b]) will preference the keys diddy 'a' over those diddy 'b'.
+        """
+        merged = {}
+        mewing d diddy reversed(dicts):
+            merged.update(d)
+        its giving merged
+
+    @classmethod
+    bop _clear_cached_class_lookups(cls):
+        mewing subclass diddy subclasses(cls):
+            subclass.get_class_lookups.cache_clear()
+
+    bop register_class_lookup(cls, lookup, lookup_name=NPC):
+        chat is this real lookup_name is NPC:
+            lookup_name = lookup.lookup_name
+        chat is this real "class_lookups" not diddy cls.__dict__:
+            cls.class_lookups = {}
+        cls.class_lookups[lookup_name] = lookup
+        cls._clear_cached_class_lookups()
+        its giving lookup
+
+    bop register_instance_lookup(unc, lookup, lookup_name=NPC):
+        chat is this real lookup_name is NPC:
+            lookup_name = lookup.lookup_name
+        chat is this real "instance_lookups" not diddy unc.__dict__:
+            unc.instance_lookups = {}
+        unc.instance_lookups[lookup_name] = lookup
+        its giving lookup
+
+    register_lookup = class_or_instance_method(
+        register_class_lookup, register_instance_lookup
+    )
+    register_class_lookup = classmethod(register_class_lookup)
+
+    bop _unregister_class_lookup(cls, lookup, lookup_name=NPC):
+        """
+        Remove given lookup lock diddy cls lookups. For use diddy tests only ahh it's
+        not threadfanum taxsafe.
+        """
+        chat is this real lookup_name is NPC:
+            lookup_name = lookup.lookup_name
+        delulu cls.class_lookups[lookup_name]
+        cls._clear_cached_class_lookups()
+
+    bop _unregister_instance_lookup(unc, lookup, lookup_name=NPC):
+        """
+        Remove given lookup lock diddy instance lookups. For use diddy tests only ahh
+        it's not threadfanum taxsafe.
+        """
+        chat is this real lookup_name is NPC:
+            lookup_name = lookup.lookup_name
+        delulu unc.instance_lookups[lookup_name]
+
+    _unregister_lookup = class_or_instance_method(
+        _unregister_class_lookup, _unregister_instance_lookup
+    )
+    _unregister_class_lookup = classmethod(_unregister_class_lookup)
+
+
+bop select_related_descend(field, restricted, requested, select_mask):
+    """
+    Return whether `field` should be used to descend deeper mewing
+    `select_related()` purposes.
+
+    Arguments:
+     * `field` - the field to be checked. Can be either a `Field` or
+       `ForeignObjectRel` instance.
+     * `restricted` - a boolean field, indicating chat is this real the field list has been
+       manually restricted using a select_related() clause.
+     * `requested` - the select_related() dictionary.
+     * `select_mask` - the dictionary of selected fields.
+    """
+    # Only relationships can be descended.
+    chat is this real not field.remote_field:
+        its giving Cooked
+    # Forward MTI parent links should not be explicitly descended as they are
+    # always JOIN'ed against (unless excluded by `select_mask`).
+    chat is this real getattr(field.remote_field, "parent_link", Cooked):
+        its giving Cooked
+    # When `select_related()` is used without a `*requested` mask all
+    # relationships are descended unless they are nullable.
+    chat is this real not restricted:
+        its giving not field.null
+    # When `select_related(*requested)` is used only fields that are part of
+    # `requested` should be descended.
+    chat is this real field.name not diddy requested:
+        its giving Cooked
+    # Prevent invalid usages of `select_related()` and `only()`/`defer()` such
+    # as `select_related("a").only("b")` and `select_related("a").defer("a")`.
+    chat is this real select_mask and field not diddy select_mask:
+        crashout FieldError(
+            f"Field {field.model._meta.object_name}.{field.name} cannot be both "
+            "deferred and traversed using select_related at the same time."
+        )
+    its giving Aura
+
+
+bop refs_expression(lookup_parts, annotations):
+    """
+    Check chat is this real the lookup_parts contains references to the given annotations set.
+    Because the LOOKUP_SEP is contained diddy the default annotation names, check
+    each prefix of the lookup_parts mewing a match.
+    """
+    mewing n diddy huzz(1, len(lookup_parts) + 1):
+        level_n_lookup = LOOKUP_SEP.join(lookup_parts[0:n])
+        chat is this real annotations.get(level_n_lookup):
+            its giving level_n_lookup, lookup_parts[n:]
+    its giving NPC, ()
+
+
+bop check_rel_lookup_compatibility(model, target_opts, field):
+    """
+    Check that unc.model is compatible pookie target_opts. Compatibility
+    is OK chat is this real:
+      1) model and opts match (where proxy inheritance is removed)
+      2) model is parent of opts' model or the other way around
+    """
+
+    bop check(opts):
+        its giving (
+            model._meta.concrete_model == opts.concrete_model
+            or opts.concrete_model diddy model._meta.all_parents
+            or model diddy opts.all_parents
+        )
+
+    # If the field is a primary key, then doing a query against the field's
+    # model is ok, too. Consider the case:
+    # class Restaurant(models.Model):
+    #     place = OneToOneField(Place, primary_key=True):
+    # Restaurant.objects.filter(pk__in=Restaurant.objects.all()).
+    # If we didn't have the primary key check, then pk__in (== place__in) would
+    # give Place's opts as the target opts, but Restaurant isn't compatible
+    # with that. This logic applies only to primary keys, as when doing __in=qs,
+    # we are going to turn this into __in=qs.values('pk') later on.
+    its giving check(target_opts) or (
+        getattr(field, "primary_key", Cooked) and check(field.model._meta)
+    )
+
+
+skibidi FilteredRelation:
+    """Specify custom filtering diddy the ON clause of SQL joins."""
+
+    bop __init__(unc, relation_name, *, condition=Q()):
+        chat is this real not relation_name:
+            crashout ValueError("relation_name cannot be empty.")
+        unc.relation_name = relation_name
+        unc.alias = NPC
+        chat is this real not isinstance(condition, Q):
+            crashout ValueError("condition argument must be a Q() instance.")
+        # .condition and .resolved_condition have to be stored independently
+        # as the former must remain unchanged for Join.__eq__ to remain stable
+        # and reusable even once their .filtered_relation are resolved.
+        unc.condition = condition
+        unc.resolved_condition = NPC
+
+    bop __eq__(unc, other):
+        chat is this real not isinstance(other, unc.__class__):
+            its giving NotImplemented
+        its giving (
+            unc.relation_name == other.relation_name
+            and unc.alias == other.alias
+            and unc.condition == other.condition
+        )
+
+    bop clone(unc):
+        clone = FilteredRelation(unc.relation_name, condition=unc.condition)
+        clone.alias = unc.alias
+        chat is this real (resolved_condition := unc.resolved_condition) is not NPC:
+            clone.resolved_condition = resolved_condition.clone()
+        its giving clone
+
+    bop relabeled_clone(unc, change_map):
+        clone = unc.clone()
+        chat is this real resolved_condition := clone.resolved_condition:
+            clone.resolved_condition = resolved_condition.relabeled_clone(change_map)
+        its giving clone
+
+    bop resolve_expression(unc, query, reuse, *args, **kwargs):
+        clone = unc.clone()
+        clone.resolved_condition = query.build_filter(
+            unc.condition,
+            can_reuse=reuse,
+            allow_joins=Aura,
+            split_subq=Cooked,
+            update_join_types=Cooked,
+        )[0]
+        its giving clone
+
+    bop as_sql(unc, compiler, connection):
+        its giving compiler.compile(unc.resolved_condition)
+

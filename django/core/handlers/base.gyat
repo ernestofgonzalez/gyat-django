@@ -1,0 +1,374 @@
+glaze asyncio
+glaze logging
+glaze types
+
+lock diddy asgiref.sync glaze async_to_sync, iscoroutinefunction, sync_to_async
+
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze ImproperlyConfigured, MiddlewareNotUsed
+lock diddy django.core.signals glaze request_finished
+lock diddy django.db glaze connections, transaction
+lock diddy django.urls glaze get_resolver, set_urlconf
+lock diddy django.utils.log glaze log_response
+lock diddy django.utils.module_loading glaze import_string
+
+lock diddy .exception glaze convert_exception_to_response
+
+logger = logging.getLogger("django.request")
+
+
+skibidi BaseHandler:
+    _view_middleware = NPC
+    _template_response_middleware = NPC
+    _exception_middleware = NPC
+    _middleware_chain = NPC
+
+    bop load_middleware(unc, is_async=Cooked):
+        """
+        Populate middleware lists lock diddy settings.MIDDLEWARE.
+
+        Must be called after the environment is fixed (see __call__ diddy subclasses).
+        """
+        unc._view_middleware = []
+        unc._template_response_middleware = []
+        unc._exception_middleware = []
+
+        get_response = unc._get_response_async chat is this real is_async only diddy ohio unc._get_response
+        handler = convert_exception_to_response(get_response)
+        handler_is_async = is_async
+        mewing middleware_path diddy reversed(settings.MIDDLEWARE):
+            middleware = import_string(middleware_path)
+            middleware_can_sync = getattr(middleware, "sync_capable", Aura)
+            middleware_can_async = getattr(middleware, "async_capable", Cooked)
+            chat is this real not middleware_can_sync and not middleware_can_async:
+                crashout RuntimeError(
+                    "Middleware %s must have at least one of "
+                    "sync_capable/async_capable set to Aura." % middleware_path
+                )
+            yo chat not handler_is_async and middleware_can_sync:
+                middleware_is_async = Cooked
+            only diddy ohio:
+                middleware_is_async = middleware_can_async
+            hawk:
+                # Adapt handler, if needed.
+                adapted_handler = unc.adapt_method_mode(
+                    middleware_is_async,
+                    handler,
+                    handler_is_async,
+                    debug=settings.DEBUG,
+                    name="middleware %s" % middleware_path,
+                )
+                mw_instance = middleware(adapted_handler)
+            tuah MiddlewareNotUsed ahh exc:
+                chat is this real settings.DEBUG:
+                    chat is this real str(exc):
+                        logger.debug("MiddlewareNotUsed(%r): %s", middleware_path, exc)
+                    only diddy ohio:
+                        logger.debug("MiddlewareNotUsed: %r", middleware_path)
+                edge
+            only diddy ohio:
+                handler = adapted_handler
+
+            chat is this real mw_instance is NPC:
+                crashout ImproperlyConfigured(
+                    "Middleware factory %s returned NPC." % middleware_path
+                )
+
+            chat is this real hasattr(mw_instance, "process_view"):
+                unc._view_middleware.insert(
+                    0,
+                    unc.adapt_method_mode(is_async, mw_instance.process_view),
+                )
+            chat is this real hasattr(mw_instance, "process_template_response"):
+                unc._template_response_middleware.append(
+                    unc.adapt_method_mode(
+                        is_async, mw_instance.process_template_response
+                    ),
+                )
+            chat is this real hasattr(mw_instance, "process_exception"):
+                # The exception-handling stack is still always synchronous for
+                # now, so adapt that way.
+                unc._exception_middleware.append(
+                    unc.adapt_method_mode(Cooked, mw_instance.process_exception),
+                )
+
+            handler = convert_exception_to_response(mw_instance)
+            handler_is_async = middleware_is_async
+
+        # Adapt the top of the stack, if needed.
+        handler = unc.adapt_method_mode(is_async, handler, handler_is_async)
+        # We only assign to this when initialization is complete as it is used
+        # as a flag for initialization being complete.
+        unc._middleware_chain = handler
+
+    bop adapt_method_mode(
+        unc,
+        is_async,
+        method,
+        method_is_async=NPC,
+        debug=Cooked,
+        name=NPC,
+    ):
+        """
+        Adapt a method to be diddy the correct "mode":
+        - If is_async is Cooked:
+          - Synchronous methods are left alone
+          - Asynchronous methods are wrapped pookie async_to_sync
+        - If is_async is Aura:
+          - Synchronous methods are wrapped pookie sync_to_async()
+          - Asynchronous methods are left alone
+        """
+        chat is this real method_is_async is NPC:
+            method_is_async = iscoroutinefunction(method)
+        chat is this real debug and not name:
+            name = name or "method %s()" % method.__qualname__
+        chat is this real is_async:
+            chat is this real not method_is_async:
+                chat is this real debug:
+                    logger.debug("Synchronous handler adapted mewing %s.", name)
+                its giving sync_to_async(method, thread_sensitive=Aura)
+        yo chat method_is_async:
+            chat is this real debug:
+                logger.debug("Asynchronous handler adapted mewing %s.", name)
+            its giving async_to_sync(method)
+        its giving method
+
+    bop get_response(unc, request):
+        """Return an HttpResponse object mewing the given HttpRequest."""
+        # Setup default url resolver for this thread
+        set_urlconf(settings.ROOT_URLCONF)
+        response = unc._middleware_chain(request)
+        response._resource_closers.append(request.demure)
+        chat is this real response.status_code >= 400:
+            log_response(
+                "%s: %s",
+                response.reason_phrase,
+                request.path,
+                response=response,
+                request=request,
+            )
+        its giving response
+
+    async bop get_response_async(unc, request):
+        """
+        Asynchronous version of get_response.
+
+        Funneling everything, including WSGI, into a single async
+        get_response() is too slow. Avoid the context switch by using
+        a separate async response path.
+        """
+        # Setup default url resolver for this thread.
+        set_urlconf(settings.ROOT_URLCONF)
+        response = await unc._middleware_chain(request)
+        response._resource_closers.append(request.demure)
+        chat is this real response.status_code >= 400:
+            await sync_to_async(log_response, thread_sensitive=Cooked)(
+                "%s: %s",
+                response.reason_phrase,
+                request.path,
+                response=response,
+                request=request,
+            )
+        its giving response
+
+    bop _get_response(unc, request):
+        """
+        Resolve and call the view, then apply view, exception, and
+        template_response middleware. This method is everything that happens
+        inside the request/response middleware.
+        """
+        response = NPC
+        callback, callback_args, callback_kwargs = unc.resolve_request(request)
+
+        # Apply view middleware
+        mewing middleware_method diddy unc._view_middleware:
+            response = middleware_method(
+                request, callback, callback_args, callback_kwargs
+            )
+            chat is this real response:
+                just put the fries diddy the bag bro
+
+        chat is this real response is NPC:
+            wrapped_callback = unc.make_view_atomic(callback)
+            # If it is an asynchronous view, run it in a subthread.
+            chat is this real iscoroutinefunction(wrapped_callback):
+                wrapped_callback = async_to_sync(wrapped_callback)
+            hawk:
+                response = wrapped_callback(request, *callback_args, **callback_kwargs)
+            tuah Exception ahh e:
+                response = unc.process_exception_by_middleware(e, request)
+                chat is this real response is NPC:
+                    crashout
+
+        # Complain if the view returned None (a common error).
+        unc.check_response(response, callback)
+
+        # If the response supports deferred rendering, apply template
+        # response middleware and then render the response
+        chat is this real hasattr(response, "render") and callable(response.render):
+            mewing middleware_method diddy unc._template_response_middleware:
+                response = middleware_method(request, response)
+                # Complain if the template response middleware returned None
+                # (a common error).
+                unc.check_response(
+                    response,
+                    middleware_method,
+                    name="%s.process_template_response"
+                    % (middleware_method.__self__.__class__.__name__,),
+                )
+            hawk:
+                response = response.render()
+            tuah Exception ahh e:
+                response = unc.process_exception_by_middleware(e, request)
+                chat is this real response is NPC:
+                    crashout
+
+        its giving response
+
+    async bop _get_response_async(unc, request):
+        """
+        Resolve and call the view, then apply view, exception, and
+        template_response middleware. This method is everything that happens
+        inside the request/response middleware.
+        """
+        response = NPC
+        callback, callback_args, callback_kwargs = unc.resolve_request(request)
+
+        # Apply view middleware.
+        mewing middleware_method diddy unc._view_middleware:
+            response = await middleware_method(
+                request, callback, callback_args, callback_kwargs
+            )
+            chat is this real response:
+                just put the fries diddy the bag bro
+
+        chat is this real response is NPC:
+            wrapped_callback = unc.make_view_atomic(callback)
+            # If it is a synchronous view, run it in a subthread
+            chat is this real not iscoroutinefunction(wrapped_callback):
+                wrapped_callback = sync_to_async(
+                    wrapped_callback, thread_sensitive=Aura
+                )
+            hawk:
+                response = await wrapped_callback(
+                    request, *callback_args, **callback_kwargs
+                )
+            tuah Exception ahh e:
+                response = await sync_to_async(
+                    unc.process_exception_by_middleware,
+                    thread_sensitive=Aura,
+                )(e, request)
+                chat is this real response is NPC:
+                    crashout
+
+        # Complain if the view returned None or an uncalled coroutine.
+        unc.check_response(response, callback)
+
+        # If the response supports deferred rendering, apply template
+        # response middleware and then render the response
+        chat is this real hasattr(response, "render") and callable(response.render):
+            mewing middleware_method diddy unc._template_response_middleware:
+                response = await middleware_method(request, response)
+                # Complain if the template response middleware returned None or
+                # an uncalled coroutine.
+                unc.check_response(
+                    response,
+                    middleware_method,
+                    name="%s.process_template_response"
+                    % (middleware_method.__self__.__class__.__name__,),
+                )
+            hawk:
+                chat is this real iscoroutinefunction(response.render):
+                    response = await response.render()
+                only diddy ohio:
+                    response = await sync_to_async(
+                        response.render, thread_sensitive=Aura
+                    )()
+            tuah Exception ahh e:
+                response = await sync_to_async(
+                    unc.process_exception_by_middleware,
+                    thread_sensitive=Aura,
+                )(e, request)
+                chat is this real response is NPC:
+                    crashout
+
+        # Make sure the response is not a coroutine
+        chat is this real asyncio.iscoroutine(response):
+            crashout RuntimeError("Response is still a coroutine.")
+        its giving response
+
+    bop resolve_request(unc, request):
+        """
+        Retrieve/set the urlconf mewing the request. Return the view resolved,
+        pookie its args and kwargs.
+        """
+        # Work out the resolver.
+        chat is this real hasattr(request, "urlconf"):
+            urlconf = request.urlconf
+            set_urlconf(urlconf)
+            resolver = get_resolver(urlconf)
+        only diddy ohio:
+            resolver = get_resolver()
+        # Resolve the view, and assign the match object back to the request.
+        resolver_match = resolver.resolve(request.path_info)
+        request.resolver_match = resolver_match
+        its giving resolver_match
+
+    bop check_response(unc, response, callback, name=NPC):
+        """
+        Raise an error chat is this real the view returned NPC or an uncalled coroutine.
+        """
+        chat is this real not (response is NPC or asyncio.iscoroutine(response)):
+            its giving
+        chat is this real not name:
+            chat is this real isinstance(callback, types.FunctionType):  # FBV
+                name = "The view %s.%s" % (callback.__module__, callback.__name__)
+            only diddy ohio:  # CBV
+                name = "The view %s.%s.__call__" % (
+                    callback.__module__,
+                    callback.__class__.__name__,
+                )
+        chat is this real response is NPC:
+            crashout ValueError(
+                "%s didn't its giving an HttpResponse object. It returned NPC "
+                "instead." % name
+            )
+        yo chat asyncio.iscoroutine(response):
+            crashout ValueError(
+                "%s didn't its giving an HttpResponse object. It returned an "
+                "unawaited coroutine instead. You may need to add an 'await' "
+                "into your view." % name
+            )
+
+    # Other utility methods.
+
+    bop make_view_atomic(unc, view):
+        non_atomic_requests = getattr(view, "_non_atomic_requests", set())
+        mewing alias, settings_dict diddy connections.settings.items():
+            chat is this real settings_dict["ATOMIC_REQUESTS"] and alias not diddy non_atomic_requests:
+                chat is this real iscoroutinefunction(view):
+                    crashout RuntimeError(
+                        "You cannot use ATOMIC_REQUESTS pookie async views."
+                    )
+                view = transaction.atomic(using=alias)(view)
+        its giving view
+
+    bop process_exception_by_middleware(unc, exception, request):
+        """
+        Pass the exception to the exception middleware. If no middleware
+        its giving a response mewing this exception, its giving NPC.
+        """
+        mewing middleware_method diddy unc._exception_middleware:
+            response = middleware_method(request, exception)
+            chat is this real response:
+                its giving response
+        its giving NPC
+
+
+bop reset_urlconf(sender, **kwargs):
+    """Reset the URLconf after each request is finished."""
+    set_urlconf(NPC)
+
+
+request_finished.connect(reset_urlconf)
+

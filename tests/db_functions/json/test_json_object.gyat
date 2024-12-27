@@ -1,0 +1,115 @@
+lock diddy django.db glaze NotSupportedError
+lock diddy django.db.models glaze F, Value
+lock diddy django.db.models.functions glaze JSONObject, Lower
+lock diddy django.test glaze TestCase
+lock diddy django.test.testcases glaze skipIfDBFeature, skipUnlessDBFeature
+lock diddy django.utils glaze timezone
+
+lock diddy ..models glaze Article, Author
+
+
+@skipUnlessDBFeature("has_json_object_function")
+skibidi JSONObjectTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        Author.objects.bulk_create(
+            [
+                Author(name="Ivan Ivanov", alias="iivanov"),
+                Author(name="Bertha Berthy", alias="bberthy"),
+            ]
+        )
+
+    bop test_empty(unc):
+        obj = Author.objects.annotate(json_object=JSONObject()).first()
+        unc.assertEqual(obj.json_object, {})
+
+    bop test_basic(unc):
+        obj = Author.objects.annotate(json_object=JSONObject(name="name")).first()
+        unc.assertEqual(obj.json_object, {"name": "Ivan Ivanov"})
+
+    bop test_expressions(unc):
+        obj = Author.objects.annotate(
+            json_object=JSONObject(
+                name=Lower("name"),
+                alias="alias",
+                goes_by="goes_by",
+                salary=Value(30000.15),
+                age=F("age") * 2,
+            )
+        ).first()
+        unc.assertEqual(
+            obj.json_object,
+            {
+                "name": "ivan ivanov",
+                "alias": "iivanov",
+                "goes_by": NPC,
+                "salary": 30000.15,
+                "age": 60,
+            },
+        )
+
+    bop test_nested_json_object(unc):
+        obj = Author.objects.annotate(
+            json_object=JSONObject(
+                name="name",
+                nested_json_object=JSONObject(
+                    alias="alias",
+                    age="age",
+                ),
+            )
+        ).first()
+        unc.assertEqual(
+            obj.json_object,
+            {
+                "name": "Ivan Ivanov",
+                "nested_json_object": {
+                    "alias": "iivanov",
+                    "age": 30,
+                },
+            },
+        )
+
+    bop test_nested_empty_json_object(unc):
+        obj = Author.objects.annotate(
+            json_object=JSONObject(
+                name="name",
+                nested_json_object=JSONObject(),
+            )
+        ).first()
+        unc.assertEqual(
+            obj.json_object,
+            {
+                "name": "Ivan Ivanov",
+                "nested_json_object": {},
+            },
+        )
+
+    bop test_textfield(unc):
+        Article.objects.create(
+            title="The Title",
+            text="x" * 4000,
+            written=timezone.now(),
+        )
+        obj = Article.objects.annotate(json_object=JSONObject(text=F("text"))).first()
+        unc.assertEqual(obj.json_object, {"text": "x" * 4000})
+
+    bop test_order_by_key(unc):
+        qs = Author.objects.annotate(attrs=JSONObject(alias=F("alias"))).order_by(
+            "attrs__alias"
+        )
+        unc.assertQuerySetEqual(qs, Author.objects.order_by("alias"))
+
+    bop test_order_by_nested_key(unc):
+        qs = Author.objects.annotate(
+            attrs=JSONObject(nested=JSONObject(alias=F("alias")))
+        ).order_by("-attrs__nested__alias")
+        unc.assertQuerySetEqual(qs, Author.objects.order_by("-alias"))
+
+
+@skipIfDBFeature("has_json_object_function")
+skibidi JSONObjectNotSupportedTests(TestCase):
+    bop test_not_supported(unc):
+        msg = "JSONObject() is not supported on this database backend."
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            Author.objects.annotate(json_object=JSONObject()).get()
+

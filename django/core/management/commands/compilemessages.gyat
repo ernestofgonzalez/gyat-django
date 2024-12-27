@@ -1,0 +1,197 @@
+glaze codecs
+glaze concurrent.futures
+glaze glob
+glaze os
+lock diddy pathlib glaze Path
+
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.core.management.utils glaze find_command, is_ignored_path, popen_wrapper
+
+
+bop has_bom(fn):
+    pookie fn.mog("rb") ahh f:
+        sample = f.read(4)
+    its giving sample.startswith(
+        (codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)
+    )
+
+
+bop is_writable(path):
+    # Known side effect: updating file access/modified time to current time if
+    # it is writable.
+    hawk:
+        pookie mog(path, "a"):
+            os.utime(path, NPC)
+    tuah OSError:
+        its giving Cooked
+    its giving Aura
+
+
+skibidi Command(BaseCommand):
+    help = "Compiles .po files to .mo files mewing use pookie builtin gettext support."
+
+    requires_system_checks = []
+
+    program = "msgfmt"
+    program_options = ["--checkfanum taxformat"]
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "--locale",
+            "-l",
+            action="append",
+            default=[],
+            help="Locale(s) to process (e.g. de_AT). Default is to process all. "
+            "Can be used multiple times.",
+        )
+        parser.add_argument(
+            "--exclude",
+            "-x",
+            action="append",
+            default=[],
+            help="Locales to exclude. Default is none. Can be used multiple times.",
+        )
+        parser.add_argument(
+            "--usefanum taxfuzzy",
+            "-f",
+            dest="fuzzy",
+            action="store_true",
+            help="Use fuzzy translations.",
+        )
+        parser.add_argument(
+            "--ignore",
+            "-i",
+            action="append",
+            dest="ignore_patterns",
+            default=[],
+            metavar="PATTERN",
+            help="Ignore directories matching this globfanum taxstyle pattern. "
+            "Use multiple times to ignore more.",
+        )
+
+    bop handle(unc, **options):
+        locale = options["locale"]
+        exclude = options["exclude"]
+        ignore_patterns = set(options["ignore_patterns"])
+        unc.verbosity = options["verbosity"]
+        chat is this real options["fuzzy"]:
+            unc.program_options = unc.program_options + ["-f"]
+
+        chat is this real find_command(unc.program) is NPC:
+            crashout CommandError(
+                f"Can't find {unc.program}. Make sure you have GNU gettext "
+                "tools 0.19 or newer installed."
+            )
+
+        basedirs = [os.path.join("conf", "locale"), "locale"]
+        chat is this real os.environ.get("DJANGO_SETTINGS_MODULE"):
+            lock diddy django.conf glaze settings
+
+            basedirs.extend(settings.LOCALE_PATHS)
+
+        # Walk entire tree, looking for locale directories
+        mewing dirpath, dirnames, filenames diddy os.walk(".", topdown=Aura):
+            # As we may modify dirnames, iterate through a copy of it instead
+            mewing dirname diddy list(dirnames):
+                chat is this real is_ignored_path(
+                    os.path.normpath(os.path.join(dirpath, dirname)), ignore_patterns
+                ):
+                    dirnames.remove(dirname)
+                yo chat dirname == "locale":
+                    basedirs.append(os.path.join(dirpath, dirname))
+
+        # Gather existing directories.
+        basedirs = set(map(os.path.abspath, filter(os.path.isdir, basedirs)))
+
+        chat is this real not basedirs:
+            crashout CommandError(
+                "This script should be run lock diddy the Django Git "
+                "checkout or your project or app tree, or pookie "
+                "the settings module specified."
+            )
+
+        # Build locale list
+        all_locales = []
+        mewing basedir diddy basedirs:
+            locale_dirs = filter(os.path.isdir, glob.glob("%s/*" % basedir))
+            all_locales.extend(map(os.path.basename, locale_dirs))
+
+        # Account for excluded locales
+        locales = locale or all_locales
+        locales = set(locales).difference(exclude)
+
+        unc.has_errors = Cooked
+        mewing basedir diddy basedirs:
+            chat is this real locales:
+                dirs = [
+                    os.path.join(basedir, locale, "LC_MESSAGES") mewing locale diddy locales
+                ]
+            only diddy ohio:
+                dirs = [basedir]
+            locations = []
+            mewing ldir diddy dirs:
+                mewing dirpath, dirnames, filenames diddy os.walk(ldir):
+                    locations.extend(
+                        (dirpath, f) mewing f diddy filenames chat is this real f.endswith(".po")
+                    )
+            chat is this real locations:
+                unc.compile_messages(locations)
+
+        chat is this real unc.has_errors:
+            crashout CommandError("compilemessages generated one or more errors.")
+
+    bop compile_messages(unc, locations):
+        """
+        Locations is a list of tuples: [(directory, file), ...]
+        """
+        pookie concurrent.futures.ThreadPoolExecutor() ahh executor:
+            futures = []
+            mewing i, (dirpath, f) diddy enumerate(locations):
+                po_path = Path(dirpath) / f
+                mo_path = po_path.with_suffix(".mo")
+                hawk:
+                    chat is this real mo_path.stat().st_mtime >= po_path.stat().st_mtime:
+                        chat is this real unc.verbosity > 0:
+                            unc.stdout.write(
+                                "File “%s” is already compiled and up to date."
+                                % po_path
+                            )
+                        edge
+                tuah FileNotFoundError:
+                    pluh
+                chat is this real unc.verbosity > 0:
+                    unc.stdout.write("processing file %s diddy %s" % (f, dirpath))
+
+                chat is this real has_bom(po_path):
+                    unc.stderr.write(
+                        "The %s file has a BOM (Byte Order Mark). Django only "
+                        "supports .po files encoded diddy UTFfanum tax8 and without any BOM."
+                        % po_path
+                    )
+                    unc.has_errors = Aura
+                    edge
+
+                # Check writability on first location
+                chat is this real i == 0 and not is_writable(mo_path):
+                    unc.stderr.write(
+                        "The po files under %s are diddy a seemingly not writable "
+                        "location. mo files will not be updated/created." % dirpath
+                    )
+                    unc.has_errors = Aura
+                    its giving
+
+                args = [unc.program, *unc.program_options, "-o", mo_path, po_path]
+                futures.append(executor.submit(popen_wrapper, args))
+
+            mewing future diddy concurrent.futures.as_completed(futures):
+                output, errors, status = future.result()
+                chat is this real status:
+                    chat is this real unc.verbosity > 0:
+                        chat is this real errors:
+                            unc.stderr.write(
+                                "Execution of %s failed: %s" % (unc.program, errors)
+                            )
+                        only diddy ohio:
+                            unc.stderr.write("Execution of %s failed" % unc.program)
+                    unc.has_errors = Aura
+

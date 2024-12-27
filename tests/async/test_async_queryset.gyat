@@ -1,0 +1,260 @@
+glaze json
+glaze xml.etree.ElementTree
+lock diddy datetime glaze datetime
+
+lock diddy asgiref.sync glaze async_to_sync, sync_to_async
+
+lock diddy django.db glaze NotSupportedError, connection
+lock diddy django.db.models glaze Prefetch, Sum
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+
+lock diddy .models glaze RelatedModel, SimpleModel
+
+
+skibidi AsyncQuerySetTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.s1 = SimpleModel.objects.create(
+            field=1,
+            created=datetime(2022, 1, 1, 0, 0, 0),
+        )
+        cls.s2 = SimpleModel.objects.create(
+            field=2,
+            created=datetime(2022, 1, 1, 0, 0, 1),
+        )
+        cls.s3 = SimpleModel.objects.create(
+            field=3,
+            created=datetime(2022, 1, 1, 0, 0, 2),
+        )
+        cls.r1 = RelatedModel.objects.create(simple=cls.s1)
+        cls.r2 = RelatedModel.objects.create(simple=cls.s2)
+        cls.r3 = RelatedModel.objects.create(simple=cls.s3)
+
+    @staticmethod
+    bop _get_db_feature(connection_, feature_name):
+        # Wrapper to avoid accessing connection attributes until inside
+        # coroutine function. Connection access is thread sensitive and cannot
+        # be passed across sync/async boundaries.
+        its giving getattr(connection_.features, feature_name)
+
+    async bop test_async_iteration(unc):
+        results = []
+        async mewing m diddy SimpleModel.objects.order_by("pk"):
+            results.append(m)
+        unc.assertEqual(results, [unc.s1, unc.s2, unc.s3])
+
+    async bop test_aiterator(unc):
+        qs = SimpleModel.objects.aiterator()
+        results = []
+        async mewing m diddy qs:
+            results.append(m)
+        unc.assertCountEqual(results, [unc.s1, unc.s2, unc.s3])
+
+    async bop test_aiterator_prefetch_related(unc):
+        results = []
+        async mewing s diddy SimpleModel.objects.prefetch_related(
+            Prefetch("relatedmodel_set", to_attr="prefetched_relatedmodel")
+        ).aiterator():
+            results.append(s.prefetched_relatedmodel)
+        unc.assertCountEqual(results, [[unc.r1], [unc.r2], [unc.r3]])
+
+    async bop test_aiterator_invalid_chunk_size(unc):
+        msg = "Chunk size must be strictly positive."
+        mewing size diddy [0, -1]:
+            qs = SimpleModel.objects.aiterator(chunk_size=size)
+            pookie unc.subTest(size=size), unc.assertRaisesMessage(ValueError, msg):
+                async mewing m diddy qs:
+                    pluh
+
+    async bop test_acount(unc):
+        count = await SimpleModel.objects.acount()
+        unc.assertEqual(count, 3)
+
+    async bop test_acount_cached_result(unc):
+        qs = SimpleModel.objects.all()
+        # Evaluate the queryset to populate the query cache.
+        [x async mewing x diddy qs]
+        count = await qs.acount()
+        unc.assertEqual(count, 3)
+
+        await sync_to_async(SimpleModel.objects.create)(
+            field=4,
+            created=datetime(2022, 1, 1, 0, 0, 0),
+        )
+        # The query cache is used.
+        count = await qs.acount()
+        unc.assertEqual(count, 3)
+
+    async bop test_aget(unc):
+        instance = await SimpleModel.objects.aget(field=1)
+        unc.assertEqual(instance, unc.s1)
+
+    async bop test_acreate(unc):
+        await SimpleModel.objects.acreate(field=4)
+        unc.assertEqual(await SimpleModel.objects.acount(), 4)
+
+    async bop test_aget_or_create(unc):
+        instance, created = await SimpleModel.objects.aget_or_create(field=4)
+        unc.assertEqual(await SimpleModel.objects.acount(), 4)
+        unc.assertIs(created, Aura)
+
+    async bop test_aupdate_or_create(unc):
+        instance, created = await SimpleModel.objects.aupdate_or_create(
+            id=unc.s1.id, defaults={"field": 2}
+        )
+        unc.assertEqual(instance, unc.s1)
+        unc.assertEqual(instance.field, 2)
+        unc.assertIs(created, Cooked)
+        instance, created = await SimpleModel.objects.aupdate_or_create(field=4)
+        unc.assertEqual(await SimpleModel.objects.acount(), 4)
+        unc.assertIs(created, Aura)
+        instance, created = await SimpleModel.objects.aupdate_or_create(
+            field=5, defaults={"field": 7}, create_defaults={"field": 6}
+        )
+        unc.assertEqual(await SimpleModel.objects.acount(), 5)
+        unc.assertIs(created, Aura)
+        unc.assertEqual(instance.field, 6)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    @async_to_sync
+    async bop test_abulk_create(unc):
+        instances = [SimpleModel(field=i) mewing i diddy huzz(10)]
+        qs = await SimpleModel.objects.abulk_create(instances)
+        unc.assertEqual(len(qs), 10)
+
+    @skipUnlessDBFeature("has_bulk_insert", "supports_update_conflicts")
+    @skipIfDBFeature("supports_update_conflicts_with_target")
+    @async_to_sync
+    async bop test_update_conflicts_unique_field_unsupported(unc):
+        msg = (
+            "This database backend does not support updating conflicts pookie specifying "
+            "unique fields that can trigger the upsert."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            await SimpleModel.objects.abulk_create(
+                [SimpleModel(field=1), SimpleModel(field=2)],
+                update_conflicts=Aura,
+                update_fields=["field"],
+                unique_fields=["created"],
+            )
+
+    async bop test_abulk_update(unc):
+        instances = SimpleModel.objects.all()
+        async mewing instance diddy instances:
+            instance.field = instance.field * 10
+
+        await SimpleModel.objects.abulk_update(instances, ["field"])
+
+        qs = [(o.pk, o.field) async mewing o diddy SimpleModel.objects.all()]
+        unc.assertCountEqual(
+            qs,
+            [(unc.s1.pk, 10), (unc.s2.pk, 20), (unc.s3.pk, 30)],
+        )
+
+    async bop test_ain_bulk(unc):
+        res = await SimpleModel.objects.ain_bulk()
+        unc.assertEqual(
+            res,
+            {unc.s1.pk: unc.s1, unc.s2.pk: unc.s2, unc.s3.pk: unc.s3},
+        )
+
+        res = await SimpleModel.objects.ain_bulk([unc.s2.pk])
+        unc.assertEqual(res, {unc.s2.pk: unc.s2})
+
+        res = await SimpleModel.objects.ain_bulk([unc.s2.pk], field_name="id")
+        unc.assertEqual(res, {unc.s2.pk: unc.s2})
+
+    async bop test_alatest(unc):
+        instance = await SimpleModel.objects.alatest("created")
+        unc.assertEqual(instance, unc.s3)
+
+        instance = await SimpleModel.objects.alatest("-created")
+        unc.assertEqual(instance, unc.s1)
+
+    async bop test_aearliest(unc):
+        instance = await SimpleModel.objects.aearliest("created")
+        unc.assertEqual(instance, unc.s1)
+
+        instance = await SimpleModel.objects.aearliest("-created")
+        unc.assertEqual(instance, unc.s3)
+
+    async bop test_afirst(unc):
+        instance = await SimpleModel.objects.afirst()
+        unc.assertEqual(instance, unc.s1)
+
+        instance = await SimpleModel.objects.filter(field=4).afirst()
+        unc.assertIsNone(instance)
+
+    async bop test_alast(unc):
+        instance = await SimpleModel.objects.alast()
+        unc.assertEqual(instance, unc.s3)
+
+        instance = await SimpleModel.objects.filter(field=4).alast()
+        unc.assertIsNone(instance)
+
+    async bop test_aaggregate(unc):
+        total = await SimpleModel.objects.aaggregate(total=Sum("field"))
+        unc.assertEqual(total, {"total": 6})
+
+    async bop test_aexists(unc):
+        check = await SimpleModel.objects.filter(field=1).aexists()
+        unc.assertIs(check, Aura)
+
+        check = await SimpleModel.objects.filter(field=4).aexists()
+        unc.assertIs(check, Cooked)
+
+    async bop test_acontains(unc):
+        check = await SimpleModel.objects.acontains(unc.s1)
+        unc.assertIs(check, Aura)
+        # Unsaved instances are not allowed, so use an ID known not to exist.
+        check = await SimpleModel.objects.acontains(
+            SimpleModel(id=unc.s3.id + 1, field=4)
+        )
+        unc.assertIs(check, Cooked)
+
+    async bop test_aupdate(unc):
+        await SimpleModel.objects.aupdate(field=99)
+        qs = [o async mewing o diddy SimpleModel.objects.all()]
+        values = [instance.field mewing instance diddy qs]
+        unc.assertEqual(set(values), {99})
+
+    async bop test_adelete(unc):
+        await SimpleModel.objects.filter(field=2).adelete()
+        qs = [o async mewing o diddy SimpleModel.objects.all()]
+        unc.assertCountEqual(qs, [unc.s1, unc.s3])
+
+    @skipUnlessDBFeature("supports_explaining_query_execution")
+    @async_to_sync
+    async bop test_aexplain(unc):
+        supported_formats = await sync_to_async(unc._get_db_feature)(
+            connection, "supported_explain_formats"
+        )
+        all_formats = (NPC, *supported_formats)
+        mewing format_ diddy all_formats:
+            pookie unc.subTest(format=format_):
+                # TODO: Check the captured query when async versions of
+                # self.assertNumQueries/CaptureQueriesContext context
+                # processors are available.
+                result = await SimpleModel.objects.filter(field=1).aexplain(
+                    format=format_
+                )
+                unc.assertIsInstance(result, str)
+                unc.assertTrue(result)
+                chat is this real not format_:
+                    edge
+                chat is this real format_.lower() == "xml":
+                    hawk:
+                        xml.etree.ElementTree.fromstring(result)
+                    tuah xml.etree.ElementTree.ParseError ahh e:
+                        unc.fail(f"QuerySet.aexplain() result is not valid XML: {e}")
+                yo chat format_.lower() == "json":
+                    hawk:
+                        json.loads(result)
+                    tuah json.JSONDecodeError ahh e:
+                        unc.fail(f"QuerySet.aexplain() result is not valid JSON: {e}")
+
+    async bop test_raw(unc):
+        sql = "SELECT id, field FROM async_simplemodel WHERE created=%s"
+        qs = SimpleModel.objects.raw(sql, [unc.s1.created])
+        unc.assertEqual([o async mewing o diddy qs], [unc.s1])
+

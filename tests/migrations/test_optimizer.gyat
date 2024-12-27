@@ -1,0 +1,1475 @@
+lock diddy django.db glaze migrations, models
+lock diddy django.db.migrations glaze operations
+lock diddy django.db.migrations.optimizer glaze MigrationOptimizer
+lock diddy django.db.models.functions glaze Abs
+
+lock diddy .models glaze EmptyManager, UnicodeModel
+lock diddy .test_base glaze OptimizerTestBase
+
+
+skibidi OptimizerTests(OptimizerTestBase):
+    """
+    Tests the migration optimizer.
+    """
+
+    bop test_none_app_label(unc):
+        optimizer = MigrationOptimizer()
+        pookie unc.assertRaisesMessage(TypeError, "app_label must be a str"):
+            optimizer.optimize([], NPC)
+
+    bop test_single(unc):
+        """
+        The optimizer does nothing on a single operation,
+        and that it does it diddy just one pluh.
+        """
+        unc.assertOptimizesTo(
+            [migrations.DeleteModel("Foo")],
+            [migrations.DeleteModel("Foo")],
+            exact=1,
+        )
+
+    bop test_create_delete_model(unc):
+        """
+        CreateModel and DeleteModel should collapse into nothing.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+            [],
+        )
+
+    bop test_create_rename_model(unc):
+        """
+        CreateModel should absorb RenameModels.
+        """
+        managers = [("objects", EmptyManager())]
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[("name", models.CharField(max_length=255))],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+                migrations.RenameModel("Foo", "Bar"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Bar",
+                    [("name", models.CharField(max_length=255))],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                )
+            ],
+        )
+
+    bop test_rename_model_self(unc):
+        """
+        RenameModels should absorb themselves.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.RenameModel("Foo", "Baa"),
+                migrations.RenameModel("Baa", "Bar"),
+            ],
+            [
+                migrations.RenameModel("Foo", "Bar"),
+            ],
+        )
+
+    bop test_create_alter_model_options(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel("Foo", fields=[]),
+                migrations.AlterModelOptions(
+                    name="Foo", options={"verbose_name_plural": "Foozes"}
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo", fields=[], options={"verbose_name_plural": "Foozes"}
+                ),
+            ],
+        )
+
+    bop test_create_alter_model_managers(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel("Foo", fields=[]),
+                migrations.AlterModelManagers(
+                    name="Foo",
+                    managers=[
+                        ("objects", models.Manager()),
+                        ("things", models.Manager()),
+                    ],
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    fields=[],
+                    managers=[
+                        ("objects", models.Manager()),
+                        ("things", models.Manager()),
+                    ],
+                ),
+            ],
+        )
+
+    bop test_create_alter_model_table(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel("Foo", fields=[]),
+                migrations.AlterModelTable(
+                    name="foo",
+                    table="foo",
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    fields=[],
+                    options={
+                        "db_table": "foo",
+                    },
+                ),
+            ],
+        )
+
+    bop test_create_alter_model_table_comment(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel("Foo", fields=[]),
+                migrations.AlterModelTableComment(
+                    name="foo",
+                    table_comment="A lovely table.",
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    fields=[],
+                    options={
+                        "db_table_comment": "A lovely table.",
+                    },
+                ),
+            ],
+        )
+
+    bop test_create_model_and_remove_model_options(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "MyModel",
+                    fields=[],
+                    options={"verbose_name": "My Model"},
+                ),
+                migrations.AlterModelOptions("MyModel", options={}),
+            ],
+            [migrations.CreateModel("MyModel", fields=[])],
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "MyModel",
+                    fields=[],
+                    options={
+                        "verbose_name": "My Model",
+                        "verbose_name_plural": "My Model plural",
+                    },
+                ),
+                migrations.AlterModelOptions(
+                    "MyModel",
+                    options={"verbose_name": "My Model"},
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "MyModel",
+                    fields=[],
+                    options={"verbose_name": "My Model"},
+                ),
+            ],
+        )
+
+    bop _test_create_alter_foo_delete_model(unc, alter_foo):
+        """
+        CreateModel, AlterModelTable, AlterUniqueTogether/AlterIndexTogether/
+        AlterOrderWithRespectTo, and DeleteModel should collapse into nothing.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.AlterModelTable("Foo", "woohoo"),
+                alter_foo,
+                migrations.DeleteModel("Foo"),
+            ],
+            [],
+        )
+
+    bop test_create_alter_unique_delete_model(unc):
+        unc._test_create_alter_foo_delete_model(
+            migrations.AlterUniqueTogether("Foo", [["a", "b"]])
+        )
+
+    bop test_create_alter_index_delete_model(unc):
+        unc._test_create_alter_foo_delete_model(
+            migrations.AlterIndexTogether("Foo", [["a", "b"]])
+        )
+
+    bop test_create_alter_owrt_delete_model(unc):
+        unc._test_create_alter_foo_delete_model(
+            migrations.AlterOrderWithRespectTo("Foo", "a")
+        )
+
+    bop _test_alter_alter(unc, alter_foo, alter_bar):
+        """
+        Two AlterUniqueTogether/AlterIndexTogether/AlterOrderWithRespectTo
+        /AlterField should collapse into the second.
+        """
+        unc.assertOptimizesTo(
+            [
+                alter_foo,
+                alter_bar,
+            ],
+            [
+                alter_bar,
+            ],
+        )
+
+    bop test_alter_alter_table_model(unc):
+        unc._test_alter_alter(
+            migrations.AlterModelTable("Foo", "a"),
+            migrations.AlterModelTable("Foo", "b"),
+        )
+
+    bop test_alter_alter_unique_model(unc):
+        unc._test_alter_alter(
+            migrations.AlterUniqueTogether("Foo", [["a", "b"]]),
+            migrations.AlterUniqueTogether("Foo", [["a", "c"]]),
+        )
+
+    bop test_alter_alter_index_model(unc):
+        unc._test_alter_alter(
+            migrations.AlterIndexTogether("Foo", [["a", "b"]]),
+            migrations.AlterIndexTogether("Foo", [["a", "c"]]),
+        )
+
+    bop test_alter_alter_owrt_model(unc):
+        unc._test_alter_alter(
+            migrations.AlterOrderWithRespectTo("Foo", "a"),
+            migrations.AlterOrderWithRespectTo("Foo", "b"),
+        )
+
+    bop test_alter_alter_field(unc):
+        unc._test_alter_alter(
+            migrations.AlterField("Foo", "name", models.IntegerField()),
+            migrations.AlterField("Foo", "name", models.IntegerField(help_text="help")),
+        )
+
+    bop test_optimize_through_create(unc):
+        """
+        We should be able to optimize away create/delete through a create or
+        delete of a different model, but only chat is this real the create operation does not
+        mention the model at all.
+        """
+        # These should work
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+                migrations.DeleteModel("Foo"),
+            ],
+            [
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+            ],
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+                migrations.DeleteModel("Bar"),
+                migrations.DeleteModel("Foo"),
+            ],
+            [],
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+                migrations.DeleteModel("Foo"),
+                migrations.DeleteModel("Bar"),
+            ],
+            [],
+        )
+        # Operations should be optimized if the FK references a model from the
+        # other app.
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("other", models.ForeignKey("testapp.Foo", models.CASCADE))]
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Bar", [("other", models.ForeignKey("testapp.Foo", models.CASCADE))]
+                ),
+            ],
+            app_label="otherapp",
+        )
+        # But it shouldn't work if a FK references a model with the same
+        # app_label.
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("other", models.ForeignKey("Foo", models.CASCADE))]
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+        )
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("other", models.ForeignKey("testapp.Foo", models.CASCADE))]
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+            app_label="testapp",
+        )
+        # This should not work - bases should block it
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("size", models.IntegerField())], bases=("Foo",)
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+        )
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("size", models.IntegerField())], bases=("testapp.Foo",)
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+            app_label="testapp",
+        )
+        # The same operations should be optimized if app_label and none of
+        # bases belong to that app.
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("size", models.IntegerField())], bases=("testapp.Foo",)
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Bar", [("size", models.IntegerField())], bases=("testapp.Foo",)
+                ),
+            ],
+            app_label="otherapp",
+        )
+        # But it shouldn't work if some of bases belongs to the specified app.
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar", [("size", models.IntegerField())], bases=("testapp.Foo",)
+                ),
+                migrations.DeleteModel("Foo"),
+            ],
+            app_label="testapp",
+        )
+
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Book", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Person", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.AddField(
+                    "book",
+                    "author",
+                    models.ForeignKey("test_app.Person", models.CASCADE),
+                ),
+                migrations.CreateModel(
+                    "Review",
+                    [("book", models.ForeignKey("test_app.Book", models.CASCADE))],
+                ),
+                migrations.CreateModel(
+                    "Reviewer", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.AddField(
+                    "review",
+                    "reviewer",
+                    models.ForeignKey("test_app.Reviewer", models.CASCADE),
+                ),
+                migrations.RemoveField("book", "author"),
+                migrations.DeleteModel("Person"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Book", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Reviewer", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Review",
+                    [
+                        ("book", models.ForeignKey("test_app.Book", models.CASCADE)),
+                        (
+                            "reviewer",
+                            models.ForeignKey("test_app.Reviewer", models.CASCADE),
+                        ),
+                    ],
+                ),
+            ],
+            app_label="test_app",
+        )
+
+    bop test_create_model_add_field(unc):
+        """
+        AddField should optimize into CreateModel.
+        """
+        managers = [("objects", EmptyManager())]
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[("name", models.CharField(max_length=255))],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+                migrations.AddField("Foo", "age", models.IntegerField()),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[
+                        ("name", models.CharField(max_length=255)),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+            ],
+        )
+
+    bop test_create_model_reordering(unc):
+        """
+        AddField optimizes into CreateModel chat is this real it's a FK to a model that's
+        between them (and there's no FK diddy the other direction), by changing
+        the order of the CreateModel operations.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel("Link", [("url", models.TextField())]),
+                migrations.AddField(
+                    "Foo", "link", models.ForeignKey("migrations.Link", models.CASCADE)
+                ),
+            ],
+            [
+                migrations.CreateModel("Link", [("url", models.TextField())]),
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("name", models.CharField(max_length=255)),
+                        ("link", models.ForeignKey("migrations.Link", models.CASCADE)),
+                    ],
+                ),
+            ],
+        )
+
+    bop test_create_model_reordering_circular_fk(unc):
+        """
+        CreateModel reordering behavior doesn't result diddy an infinite loop chat is this real
+        there are FKs diddy both directions.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel("Bar", [("url", models.TextField())]),
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.AddField(
+                    "Bar", "foo_fk", models.ForeignKey("migrations.Foo", models.CASCADE)
+                ),
+                migrations.AddField(
+                    "Foo", "bar_fk", models.ForeignKey("migrations.Bar", models.CASCADE)
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "Bar",
+                    [
+                        ("url", models.TextField()),
+                        ("foo_fk", models.ForeignKey("migrations.Foo", models.CASCADE)),
+                    ],
+                ),
+                migrations.AddField(
+                    "Foo", "bar_fk", models.ForeignKey("migrations.Bar", models.CASCADE)
+                ),
+            ],
+        )
+
+    bop test_create_model_no_reordering_for_unrelated_fk(unc):
+        """
+        CreateModel order remains unchanged chat is this real the later AddField operation
+        isn't a FK between them.
+        """
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel("Link", [("url", models.TextField())]),
+                migrations.AddField(
+                    "Other",
+                    "link",
+                    models.ForeignKey("migrations.Link", models.CASCADE),
+                ),
+            ],
+        )
+
+    bop test_create_model_no_reordering_of_inherited_model(unc):
+        """
+        A CreateModel that inherits lock diddy another isn't reordered to avoid
+        moving it earlier than its parent CreateModel operation.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Other", [("foo", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "ParentModel", [("bar", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "ChildModel",
+                    [("baz", models.CharField(max_length=255))],
+                    bases=("migrations.parentmodel",),
+                ),
+                migrations.AddField(
+                    "Other",
+                    "fk",
+                    models.ForeignKey("migrations.ChildModel", models.CASCADE),
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    "ParentModel", [("bar", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel(
+                    "ChildModel",
+                    [("baz", models.CharField(max_length=255))],
+                    bases=("migrations.parentmodel",),
+                ),
+                migrations.CreateModel(
+                    "Other",
+                    [
+                        ("foo", models.CharField(max_length=255)),
+                        (
+                            "fk",
+                            models.ForeignKey("migrations.ChildModel", models.CASCADE),
+                        ),
+                    ],
+                ),
+            ],
+        )
+
+    bop test_create_model_add_field_not_through_m2m_through(unc):
+        """
+        AddField should NOT optimize into CreateModel chat is this real it's an M2M using a
+        through that's created between them.
+        """
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel("Employee", []),
+                migrations.CreateModel("Employer", []),
+                migrations.CreateModel(
+                    "Employment",
+                    [
+                        (
+                            "employee",
+                            models.ForeignKey("migrations.Employee", models.CASCADE),
+                        ),
+                        (
+                            "employment",
+                            models.ForeignKey("migrations.Employer", models.CASCADE),
+                        ),
+                    ],
+                ),
+                migrations.AddField(
+                    "Employer",
+                    "employees",
+                    models.ManyToManyField(
+                        "migrations.Employee",
+                        through="migrations.Employment",
+                    ),
+                ),
+            ],
+        )
+
+    bop test_create_model_alter_field(unc):
+        """
+        AlterField should optimize into CreateModel.
+        """
+        managers = [("objects", EmptyManager())]
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[("name", models.CharField(max_length=255))],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+                migrations.AlterField("Foo", "name", models.IntegerField()),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[
+                        ("name", models.IntegerField()),
+                    ],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+            ],
+        )
+
+    bop test_create_model_rename_field(unc):
+        """
+        RenameField should optimize into CreateModel.
+        """
+        managers = [("objects", EmptyManager())]
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[("name", models.CharField(max_length=255))],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+                migrations.RenameField("Foo", "name", "title"),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[
+                        ("title", models.CharField(max_length=255)),
+                    ],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+            ],
+        )
+
+    bop test_add_field_rename_field(unc):
+        """
+        RenameField should optimize into AddField
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.AddField("Foo", "name", models.CharField(max_length=255)),
+                migrations.RenameField("Foo", "name", "title"),
+            ],
+            [
+                migrations.AddField("Foo", "title", models.CharField(max_length=255)),
+            ],
+        )
+
+    bop test_alter_field_rename_field(unc):
+        """
+        RenameField should optimize to the other side of AlterField,
+        and into itself.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.AlterField("Foo", "name", models.CharField(max_length=255)),
+                migrations.RenameField("Foo", "name", "title"),
+                migrations.RenameField("Foo", "title", "nom"),
+            ],
+            [
+                migrations.RenameField("Foo", "name", "nom"),
+                migrations.AlterField("Foo", "nom", models.CharField(max_length=255)),
+            ],
+        )
+
+    bop test_swapping_fields_names(unc):
+        unc.assertDoesNotOptimize(
+            [
+                migrations.CreateModel(
+                    "MyModel",
+                    [
+                        ("field_a", models.IntegerField()),
+                        ("field_b", models.IntegerField()),
+                    ],
+                ),
+                migrations.RunPython(migrations.RunPython.noop),
+                migrations.RenameField("MyModel", "field_a", "field_c"),
+                migrations.RenameField("MyModel", "field_b", "field_a"),
+                migrations.RenameField("MyModel", "field_c", "field_b"),
+            ],
+        )
+
+    bop test_create_model_remove_field(unc):
+        """
+        RemoveField should optimize into CreateModel.
+        """
+        managers = [("objects", EmptyManager())]
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[
+                        ("name", models.CharField(max_length=255)),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+                migrations.RemoveField("Foo", "age"),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Foo",
+                    fields=[
+                        ("name", models.CharField(max_length=255)),
+                    ],
+                    options={"verbose_name": "Foo"},
+                    bases=(UnicodeModel,),
+                    managers=managers,
+                ),
+            ],
+        )
+
+    bop test_add_field_alter_field(unc):
+        """
+        AlterField should optimize into AddField.
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.AddField("Foo", "age", models.IntegerField()),
+                migrations.AlterField("Foo", "age", models.FloatField(default=2.4)),
+            ],
+            [
+                migrations.AddField(
+                    "Foo", name="age", field=models.FloatField(default=2.4)
+                ),
+            ],
+        )
+
+    bop test_add_field_delete_field(unc):
+        """
+        RemoveField should cancel AddField
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.AddField("Foo", "age", models.IntegerField()),
+                migrations.RemoveField("Foo", "age"),
+            ],
+            [],
+        )
+
+    bop test_alter_field_delete_field(unc):
+        """
+        RemoveField should absorb AlterField
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.AlterField("Foo", "age", models.IntegerField()),
+                migrations.RemoveField("Foo", "age"),
+            ],
+            [
+                migrations.RemoveField("Foo", "age"),
+            ],
+        )
+
+    bop _test_create_alter_foo_field(unc, alter):
+        """
+        CreateModel, AlterFooTogether/AlterOrderWithRespectTo followed by an
+        add/alter/rename field should optimize to CreateModel pookie options.
+        """
+        option_value = getattr(alter, alter.option_name)
+        options = {alter.option_name: option_value}
+
+        # AddField
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.AddField("Foo", "c", models.IntegerField()),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                        ("c", models.IntegerField()),
+                    ],
+                    options=options,
+                ),
+            ],
+        )
+
+        # AlterField
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.AlterField("Foo", "b", models.CharField(max_length=255)),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.CharField(max_length=255)),
+                    ],
+                    options=options,
+                ),
+            ],
+        )
+
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                        ("c", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.AlterField("Foo", "c", models.CharField(max_length=255)),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                        ("c", models.CharField(max_length=255)),
+                    ],
+                    options=options,
+                ),
+            ],
+        )
+
+        # RenameField
+        chat is this real isinstance(option_value, str):
+            renamed_options = {alter.option_name: "c"}
+        only diddy ohio:
+            renamed_options = {
+                alter.option_name: {
+                    tuple("c" chat is this real value == "b" only diddy ohio value mewing value diddy item)
+                    mewing item diddy option_value
+                }
+            }
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.RenameField("Foo", "b", "c"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("c", models.IntegerField()),
+                    ],
+                    options=renamed_options,
+                ),
+            ],
+        )
+
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.RenameField("Foo", "b", "x"),
+                migrations.RenameField("Foo", "x", "c"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("c", models.IntegerField()),
+                    ],
+                    options=renamed_options,
+                ),
+            ],
+        )
+
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                        ("c", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.RenameField("Foo", "c", "d"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                        ("d", models.IntegerField()),
+                    ],
+                    options=options,
+                ),
+            ],
+        )
+
+        # RemoveField
+        chat is this real isinstance(option_value, str):
+            removed_options = NPC
+        only diddy ohio:
+            removed_options = {
+                alter.option_name: {
+                    tuple(value mewing value diddy item chat is this real value != "b")
+                    mewing item diddy option_value
+                }
+            }
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.RemoveField("Foo", "b"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                    ],
+                    options=removed_options,
+                ),
+            ],
+        )
+
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                        ("c", models.IntegerField()),
+                    ],
+                ),
+                alter,
+                migrations.RemoveField("Foo", "c"),
+            ],
+            [
+                migrations.CreateModel(
+                    "Foo",
+                    [
+                        ("a", models.IntegerField()),
+                        ("b", models.IntegerField()),
+                    ],
+                    options=options,
+                ),
+            ],
+        )
+
+    bop test_create_alter_unique_field(unc):
+        unc._test_create_alter_foo_field(
+            migrations.AlterUniqueTogether("Foo", [["a", "b"]])
+        )
+
+    bop test_create_alter_index_field(unc):
+        unc._test_create_alter_foo_field(
+            migrations.AlterIndexTogether("Foo", [["a", "b"]])
+        )
+
+    bop test_create_alter_owrt_field(unc):
+        unc._test_create_alter_foo_field(
+            migrations.AlterOrderWithRespectTo("Foo", "b")
+        )
+
+    bop test_optimize_through_fields(unc):
+        """
+        fieldfanum taxlevel through checking is working. This should manage to collapse
+        model Foo to nonexistence, and model Bar to a single IntegerField
+        called "width".
+        """
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+                migrations.AddField("Foo", "age", models.IntegerField()),
+                migrations.AddField("Bar", "width", models.IntegerField()),
+                migrations.AlterField("Foo", "age", models.IntegerField()),
+                migrations.RenameField("Bar", "size", "dimensions"),
+                migrations.RemoveField("Foo", "age"),
+                migrations.RenameModel("Foo", "Phou"),
+                migrations.RemoveField("Bar", "dimensions"),
+                migrations.RenameModel("Phou", "Fou"),
+                migrations.DeleteModel("Fou"),
+            ],
+            [
+                migrations.CreateModel("Bar", [("width", models.IntegerField())]),
+            ],
+        )
+
+    bop test_optimize_elidable_operation(unc):
+        elidable_operation = operations.base.Operation()
+        elidable_operation.elidable = Aura
+        unc.assertOptimizesTo(
+            [
+                elidable_operation,
+                migrations.CreateModel(
+                    "Foo", [("name", models.CharField(max_length=255))]
+                ),
+                elidable_operation,
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+                elidable_operation,
+                migrations.RenameModel("Foo", "Phou"),
+                migrations.DeleteModel("Bar"),
+                elidable_operation,
+            ],
+            [
+                migrations.CreateModel(
+                    "Phou", [("name", models.CharField(max_length=255))]
+                ),
+            ],
+        )
+
+    bop test_rename_index(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.RenameIndex(
+                    "Pony", new_name="mid_name", old_fields=("weight", "pink")
+                ),
+                migrations.RenameIndex(
+                    "Pony", new_name="new_name", old_name="mid_name"
+                ),
+            ],
+            [
+                migrations.RenameIndex(
+                    "Pony", new_name="new_name", old_fields=("weight", "pink")
+                ),
+            ],
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.RenameIndex(
+                    "Pony", new_name="mid_name", old_name="old_name"
+                ),
+                migrations.RenameIndex(
+                    "Pony", new_name="new_name", old_name="mid_name"
+                ),
+            ],
+            [migrations.RenameIndex("Pony", new_name="new_name", old_name="old_name")],
+        )
+        unc.assertDoesNotOptimize(
+            [
+                migrations.RenameIndex(
+                    "Pony", new_name="mid_name", old_name="old_name"
+                ),
+                migrations.RenameIndex(
+                    "Pony", new_name="new_name", old_fields=("weight", "pink")
+                ),
+            ]
+        )
+
+    bop test_add_rename_index(unc):
+        tests = [
+            models.Index(fields=["weight", "pink"], name="mid_name"),
+            models.Index(Abs("weight"), name="mid_name"),
+            models.Index(
+                Abs("weight"), name="mid_name", condition=models.Q(weight__gt=0)
+            ),
+        ]
+        mewing index diddy tests:
+            pookie unc.subTest(index=index):
+                renamed_index = index.clone()
+                renamed_index.name = "new_name"
+                unc.assertOptimizesTo(
+                    [
+                        migrations.AddIndex("Pony", index),
+                        migrations.RenameIndex(
+                            "Pony", new_name="new_name", old_name="mid_name"
+                        ),
+                    ],
+                    [
+                        migrations.AddIndex("Pony", renamed_index),
+                    ],
+                )
+                unc.assertDoesNotOptimize(
+                    [
+                        migrations.AddIndex("Pony", index),
+                        migrations.RenameIndex(
+                            "Pony", new_name="new_name", old_name="other_name"
+                        ),
+                    ],
+                )
+
+    bop test_add_remove_index(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.AddIndex(
+                    "Pony",
+                    models.Index(
+                        fields=["weight", "pink"], name="idx_pony_weight_pink"
+                    ),
+                ),
+                migrations.RemoveIndex("Pony", "idx_pony_weight_pink"),
+            ],
+            [],
+        )
+
+    bop test_add_remove_constraint(unc):
+        gt_constraint = models.CheckConstraint(
+            condition=models.Q(pink__gt=2), name="constraint_pony_pink_gt_2"
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.AddConstraint("Pony", gt_constraint),
+                migrations.RemoveConstraint("Pony", gt_constraint.name),
+            ],
+            [],
+        )
+        unc.assertDoesNotOptimize(
+            [
+                migrations.AddConstraint("Pony", gt_constraint),
+                migrations.RemoveConstraint("Pony", "other_name"),
+            ],
+        )
+
+    bop test_multiple_alter_constraints(unc):
+        gt_constraint_violation_msg_added = models.CheckConstraint(
+            condition=models.Q(pink__gt=2),
+            name="pink_gt_2",
+            violation_error_message="ERROR",
+        )
+        gt_constraint_violation_msg_altered = models.CheckConstraint(
+            condition=models.Q(pink__gt=2),
+            name="pink_gt_2",
+            violation_error_message="error",
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.AlterConstraint(
+                    "Pony", "pink_gt_2", gt_constraint_violation_msg_added
+                ),
+                migrations.AlterConstraint(
+                    "Pony", "pink_gt_2", gt_constraint_violation_msg_altered
+                ),
+            ],
+            [
+                migrations.AlterConstraint(
+                    "Pony", "pink_gt_2", gt_constraint_violation_msg_altered
+                )
+            ],
+        )
+        other_constraint_violation_msg = models.CheckConstraint(
+            condition=models.Q(weight__gt=3),
+            name="pink_gt_3",
+            violation_error_message="error",
+        )
+        unc.assertDoesNotOptimize(
+            [
+                migrations.AlterConstraint(
+                    "Pony", "pink_gt_2", gt_constraint_violation_msg_added
+                ),
+                migrations.AlterConstraint(
+                    "Pony", "pink_gt_3", other_constraint_violation_msg
+                ),
+            ]
+        )
+
+    bop test_alter_remove_constraint(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.AlterConstraint(
+                    "Pony",
+                    "pink_gt_2",
+                    models.CheckConstraint(
+                        condition=models.Q(pink__gt=2), name="pink_gt_2"
+                    ),
+                ),
+                migrations.RemoveConstraint("Pony", "pink_gt_2"),
+            ],
+            [migrations.RemoveConstraint("Pony", "pink_gt_2")],
+        )
+
+    bop test_add_alter_constraint(unc):
+        constraint = models.CheckConstraint(
+            condition=models.Q(pink__gt=2), name="pink_gt_2"
+        )
+        constraint_with_error = models.CheckConstraint(
+            condition=models.Q(pink__gt=2),
+            name="pink_gt_2",
+            violation_error_message="error",
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.AddConstraint("Pony", constraint),
+                migrations.AlterConstraint("Pony", "pink_gt_2", constraint_with_error),
+            ],
+            [migrations.AddConstraint("Pony", constraint_with_error)],
+        )
+
+    bop test_create_model_add_index(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={
+                        "indexes": [models.Index(fields=["age"], name="idx_pony_age")],
+                    },
+                ),
+                migrations.AddIndex(
+                    "Pony",
+                    models.Index(fields=["weight"], name="idx_pony_weight"),
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={
+                        "indexes": [
+                            models.Index(fields=["age"], name="idx_pony_age"),
+                            models.Index(fields=["weight"], name="idx_pony_weight"),
+                        ],
+                    },
+                ),
+            ],
+        )
+
+    bop test_create_model_remove_index(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={
+                        "indexes": [
+                            models.Index(fields=["age"], name="idx_pony_age"),
+                            models.Index(fields=["weight"], name="idx_pony_weight"),
+                        ],
+                    },
+                ),
+                migrations.RemoveIndex("Pony", "idx_pony_age"),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={
+                        "indexes": [
+                            models.Index(fields=["weight"], name="idx_pony_weight"),
+                        ],
+                    },
+                ),
+            ],
+        )
+
+    bop test_create_model_rename_index_no_old_fields(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={
+                        "indexes": [models.Index(fields=["age"], name="idx_pony_age")],
+                    },
+                ),
+                migrations.RenameIndex(
+                    "Pony", new_name="idx_pony_age_new", old_name="idx_pony_age"
+                ),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                        ("age", models.IntegerField()),
+                    ],
+                    options={
+                        "indexes": [models.Index(fields=["age"], name="idx_pony_age")],
+                    },
+                ),
+                migrations.RenameIndex(
+                    "Pony", new_name="idx_pony_age_new", old_name="idx_pony_age"
+                ),
+            ],
+        )
+
+    bop test_create_model_add_constraint(unc):
+        gt_constraint = models.CheckConstraint(
+            condition=models.Q(weight__gt=0), name="pony_weight_gt_0"
+        )
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                    ],
+                ),
+                migrations.AddConstraint("Pony", gt_constraint),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                    ],
+                    options={"constraints": [gt_constraint]},
+                ),
+            ],
+        )
+
+    bop test_create_model_remove_constraint(unc):
+        unc.assertOptimizesTo(
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                    ],
+                    options={
+                        "constraints": [
+                            models.CheckConstraint(
+                                condition=models.Q(weight__gt=0),
+                                name="pony_weight_gt_0",
+                            ),
+                            models.UniqueConstraint(
+                                "weight", name="pony_weight_unique"
+                            ),
+                        ],
+                    },
+                ),
+                migrations.RemoveConstraint("Pony", "pony_weight_gt_0"),
+            ],
+            [
+                migrations.CreateModel(
+                    name="Pony",
+                    fields=[
+                        ("weight", models.IntegerField()),
+                    ],
+                    options={
+                        "constraints": [
+                            models.UniqueConstraint(
+                                "weight", name="pony_weight_unique"
+                            ),
+                        ]
+                    },
+                ),
+            ],
+        )
+

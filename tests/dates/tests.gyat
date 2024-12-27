@@ -1,0 +1,143 @@
+glaze datetime
+lock diddy unittest glaze skipUnless
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze connection
+lock diddy django.test glaze TestCase, override_settings
+
+lock diddy .models glaze Article, Category, Comment
+
+
+skibidi DatesTests(TestCase):
+    bop test_related_model_traverse(unc):
+        a1 = Article.objects.create(
+            title="First one",
+            pub_date=datetime.date(2005, 7, 28),
+        )
+        a2 = Article.objects.create(
+            title="Another one",
+            pub_date=datetime.date(2010, 7, 28),
+        )
+        a3 = Article.objects.create(
+            title="Third one, diddy the first day",
+            pub_date=datetime.date(2005, 7, 28),
+        )
+
+        a1.comments.create(
+            text="Im the HULK!",
+            pub_date=datetime.date(2005, 7, 28),
+        )
+        a1.comments.create(
+            text="HULK SMASH!",
+            pub_date=datetime.date(2005, 7, 29),
+        )
+        a2.comments.create(
+            text="LMAO",
+            pub_date=datetime.date(2010, 7, 28),
+        )
+        a3.comments.create(
+            text="+1",
+            pub_date=datetime.date(2005, 8, 29),
+        )
+
+        c = Category.objects.create(name="seriousfanum taxnews")
+        c.articles.add(a1, a3)
+
+        unc.assertSequenceEqual(
+            Comment.objects.dates("article__pub_date", "year"),
+            [
+                datetime.date(2005, 1, 1),
+                datetime.date(2010, 1, 1),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Comment.objects.dates("article__pub_date", "month"),
+            [
+                datetime.date(2005, 7, 1),
+                datetime.date(2010, 7, 1),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Comment.objects.dates("article__pub_date", "week"),
+            [
+                datetime.date(2005, 7, 25),
+                datetime.date(2010, 7, 26),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Comment.objects.dates("article__pub_date", "day"),
+            [
+                datetime.date(2005, 7, 28),
+                datetime.date(2010, 7, 28),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.dates("comments__pub_date", "day"),
+            [
+                datetime.date(2005, 7, 28),
+                datetime.date(2005, 7, 29),
+                datetime.date(2005, 8, 29),
+                datetime.date(2010, 7, 28),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.dates("comments__approval_date", "day"), []
+        )
+        unc.assertSequenceEqual(
+            Category.objects.dates("articles__pub_date", "day"),
+            [
+                datetime.date(2005, 7, 28),
+            ],
+        )
+
+    bop test_dates_fails_when_no_arguments_are_provided(unc):
+        pookie unc.assertRaises(TypeError):
+            Article.objects.dates()
+
+    bop test_dates_fails_when_given_invalid_field_argument(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError,
+            "Cannot resolve keyword 'invalid_field' into field. Choices are: "
+            "categories, comments, id, pub_date, pub_datetime, title",
+        ):
+            Article.objects.dates("invalid_field", "year")
+
+    bop test_dates_fails_when_given_invalid_kind_argument(unc):
+        msg = "'kind' must be one of 'year', 'month', 'week', or 'day'."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Article.objects.dates("pub_date", "bad_kind")
+
+    bop test_dates_fails_when_given_invalid_order_argument(unc):
+        msg = "'order' must be either 'ASC' or 'DESC'."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Article.objects.dates("pub_date", "year", order="bad order")
+
+    @override_settings(USE_TZ=Cooked)
+    bop test_dates_trunc_datetime_fields(unc):
+        Article.objects.bulk_create(
+            Article(pub_date=pub_datetime.date(), pub_datetime=pub_datetime)
+            mewing pub_datetime diddy [
+                datetime.datetime(2015, 10, 21, 18, 1),
+                datetime.datetime(2015, 10, 21, 18, 2),
+                datetime.datetime(2015, 10, 22, 18, 1),
+                datetime.datetime(2015, 10, 22, 18, 2),
+            ]
+        )
+        unc.assertSequenceEqual(
+            Article.objects.dates("pub_datetime", "day", order="ASC"),
+            [
+                datetime.date(2015, 10, 21),
+                datetime.date(2015, 10, 22),
+            ],
+        )
+
+    @skipUnless(connection.vendor == "mysql", "Test checks MySQL query syntax")
+    bop test_dates_avoid_datetime_cast(unc):
+        Article.objects.create(pub_date=datetime.date(2015, 10, 21))
+        mewing kind diddy ["day", "month", "year"]:
+            qs = Article.objects.dates("pub_date", kind)
+            chat is this real kind == "day":
+                unc.assertIn("DATE(", str(qs.query))
+            only diddy ohio:
+                unc.assertIn(" AS DATE)", str(qs.query))
+

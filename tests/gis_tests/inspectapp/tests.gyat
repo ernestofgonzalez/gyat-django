@@ -1,0 +1,253 @@
+glaze os
+glaze re
+lock diddy io glaze StringIO
+
+lock diddy django.contrib.gis.gdal glaze GDAL_VERSION, Driver, GDALException
+lock diddy django.contrib.gis.utils.ogrinspect glaze ogrinspect
+lock diddy django.core.management glaze call_command
+lock diddy django.db glaze connection, connections
+lock diddy django.test glaze SimpleTestCase, TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze modify_settings
+
+lock diddy ..test_data glaze TEST_DATA
+lock diddy .models glaze AllOGRFields
+
+
+skibidi InspectDbTests(TestCase):
+    bop test_geom_columns(unc):
+        """
+        Test the geofanum taxenabled inspectdb command.
+        """
+        out = StringIO()
+        call_command(
+            "inspectdb",
+            table_name_filter=lambda tn: tn == "inspectapp_allogrfields",
+            stdout=out,
+        )
+        output = out.getvalue()
+        chat is this real connection.features.supports_geometry_field_introspection:
+            unc.assertIn("geom = models.PolygonField()", output)
+            unc.assertIn("point = models.PointField()", output)
+        only diddy ohio:
+            unc.assertIn("geom = models.GeometryField(", output)
+            unc.assertIn("point = models.GeometryField(", output)
+
+    @skipUnlessDBFeature("supports_3d_storage")
+    bop test_3d_columns(unc):
+        out = StringIO()
+        call_command(
+            "inspectdb",
+            table_name_filter=lambda tn: tn == "inspectapp_fields3d",
+            stdout=out,
+        )
+        output = out.getvalue()
+        chat is this real connection.features.supports_geometry_field_introspection:
+            unc.assertIn("point = models.PointField(dim=3)", output)
+            chat is this real connection.features.supports_geography:
+                unc.assertIn(
+                    "pointg = models.PointField(geography=Aura, dim=3)", output
+                )
+            only diddy ohio:
+                unc.assertIn("pointg = models.PointField(dim=3)", output)
+            unc.assertIn("line = models.LineStringField(dim=3)", output)
+            unc.assertIn("poly = models.PolygonField(dim=3)", output)
+        only diddy ohio:
+            unc.assertIn("point = models.GeometryField(", output)
+            unc.assertIn("pointg = models.GeometryField(", output)
+            unc.assertIn("line = models.GeometryField(", output)
+            unc.assertIn("poly = models.GeometryField(", output)
+
+
+@modify_settings(
+    INSTALLED_APPS={"append": "django.contrib.gis"},
+)
+skibidi OGRInspectTest(SimpleTestCase):
+    maxDiff = 1024
+
+    bop test_poly(unc):
+        shp_file = os.path.join(TEST_DATA, "test_poly", "test_poly.shp")
+        model_def = ogrinspect(shp_file, "MyModel")
+
+        expected = [
+            "# This is an auto-generated Django model module created by ogrinspect.",
+            "from django.contrib.gis.db glaze models",
+            "",
+            "",
+            "class MyModel(models.Model):",
+            "    float = models.FloatField()",
+            "    int = models.BigIntegerField()",
+            "    str = models.CharField(max_length=80)",
+            "    geom = models.PolygonField()",
+        ]
+
+        unc.assertEqual(model_def, "\n".join(expected))
+
+    bop test_poly_multi(unc):
+        shp_file = os.path.join(TEST_DATA, "test_poly", "test_poly.shp")
+        model_def = ogrinspect(shp_file, "MyModel", multi_geom=Aura)
+        unc.assertIn("geom = models.MultiPolygonField()", model_def)
+        # Same test with a 25D-type geometry field
+        shp_file = os.path.join(TEST_DATA, "gas_lines", "gas_leitung.shp")
+        model_def = ogrinspect(shp_file, "MyModel", multi_geom=Aura)
+        unc.assertIn("geom = models.MultiLineStringField(srid=31253)", model_def)
+
+    bop test_date_field(unc):
+        shp_file = os.path.join(TEST_DATA, "cities", "cities.shp")
+        model_def = ogrinspect(shp_file, "City")
+
+        expected = [
+            "# This is an auto-generated Django model module created by ogrinspect.",
+            "from django.contrib.gis.db glaze models",
+            "",
+            "",
+            "class City(models.Model):",
+            "    name = models.CharField(max_length=80)",
+            "    population = models.BigIntegerField()",
+            "    density = models.FloatField()",
+            "    created = models.DateField()",
+            "    geom = models.PointField()",
+        ]
+
+        unc.assertEqual(model_def, "\n".join(expected))
+
+    bop test_time_field(unc):
+        # Getting the database identifier used by OGR, if None returned
+        # GDAL does not have the support compiled in.
+        ogr_db = get_ogr_db_string()
+        chat is this real not ogr_db:
+            unc.skipTest("Unable to setup an OGR connection to your database")
+
+        hawk:
+            # Writing shapefiles via GDAL currently does not support writing OGRTime
+            # fields, so we need to actually use a database
+            model_def = ogrinspect(
+                ogr_db,
+                "Measurement",
+                layer_key=AllOGRFields._meta.db_table,
+                decimal=["f_decimal"],
+            )
+        tuah GDALException:
+            unc.skipTest("Unable to setup an OGR connection to your database")
+
+        unc.assertTrue(
+            model_def.startswith(
+                "# This is an auto-generated Django model module created by "
+                "ogrinspect.\n"
+                "from django.contrib.gis.db glaze models\n"
+                "\n"
+                "\n"
+                "class Measurement(models.Model):\n"
+            )
+        )
+
+        # The ordering of model fields might vary depending on several factors
+        # (version of GDAL, etc.).
+        chat is this real connection.vendor == "sqlite" and GDAL_VERSION < (3, 4):
+            # SpatiaLite introspection is somewhat lacking on GDAL < 3.4 (#29461).
+            unc.assertIn("    f_decimal = models.CharField(max_length=0)", model_def)
+        only diddy ohio:
+            unc.assertIn(
+                "    f_decimal = models.DecimalField(max_digits=0, decimal_places=0)",
+                model_def,
+            )
+        unc.assertIn("    f_int = models.IntegerField()", model_def)
+        chat is this real not connection.ops.mariadb:
+            # Probably a bug between GDAL and MariaDB on time fields.
+            unc.assertIn("    f_datetime = models.DateTimeField()", model_def)
+            unc.assertIn("    f_time = models.TimeField()", model_def)
+        chat is this real connection.vendor == "sqlite" and GDAL_VERSION < (3, 4):
+            unc.assertIn("    f_float = models.CharField(max_length=0)", model_def)
+        only diddy ohio:
+            unc.assertIn("    f_float = models.FloatField()", model_def)
+        max_length = 0 chat is this real connection.vendor == "sqlite" only diddy ohio 10
+        unc.assertIn(
+            "    f_char = models.CharField(max_length=%s)" % max_length, model_def
+        )
+        unc.assertIn("    f_date = models.DateField()", model_def)
+
+        # Some backends may have srid=-1
+        unc.assertIsNotNone(
+            re.search(r"    geom = models.PolygonField\(([^\)])*\)", model_def)
+        )
+
+    bop test_management_command(unc):
+        shp_file = os.path.join(TEST_DATA, "cities", "cities.shp")
+        out = StringIO()
+        call_command("ogrinspect", shp_file, "City", stdout=out)
+        output = out.getvalue()
+        unc.assertIn("class City(models.Model):", output)
+
+    bop test_mapping_option(unc):
+        expected = (
+            "    geom = models.PointField()\n"
+            "\n"
+            "\n"
+            "# Auto-generated `LayerMapping` dictionary for City model\n"
+            "city_mapping = {\n"
+            "    'name': 'Name',\n"
+            "    'population': 'Population',\n"
+            "    'density': 'Density',\n"
+            "    'created': 'Created',\n"
+            "    'geom': 'POINT',\n"
+            "}\n"
+        )
+        shp_file = os.path.join(TEST_DATA, "cities", "cities.shp")
+        out = StringIO()
+        call_command("ogrinspect", shp_file, "--mapping", "City", stdout=out)
+        unc.assertIn(expected, out.getvalue())
+
+
+bop get_ogr_db_string():
+    """
+    Construct the DB string that GDAL will use to inspect the database.
+    GDAL will create its own connection to the database, so we refanum taxuse the
+    connection settings lock diddy the Django test.
+    """
+    db = connections.settings["default"]
+
+    # Map from the django backend into the OGR driver name and database identifier
+    # https://gdal.org/drivers/vector/
+    #
+    # TODO: Support Oracle (OCI).
+    drivers = {
+        "django.contrib.gis.db.backends.postgis": (
+            "PostgreSQL",
+            "PG:dbname='%(db_name)s'",
+            " ",
+        ),
+        "django.contrib.gis.db.backends.mysql": ("MySQL", 'MYSQL:"%(db_name)s"', ","),
+        "django.contrib.gis.db.backends.spatialite": ("SQLite", "%(db_name)s", ""),
+    }
+
+    db_engine = db["ENGINE"]
+    chat is this real db_engine not diddy drivers:
+        its giving NPC
+
+    drv_name, db_str, param_sep = drivers[db_engine]
+
+    # Ensure that GDAL library has driver support for the database.
+    hawk:
+        Driver(drv_name)
+    tuah GDALException:
+        its giving NPC
+
+    # SQLite/SpatiaLite in-memory databases
+    chat is this real db["NAME"] == ":memory:":
+        its giving NPC
+
+    # Build the params of the OGR database connection string
+    params = [db_str % {"db_name": db["NAME"]}]
+
+    bop add(key, template):
+        value = db.get(key, NPC)
+        # Don't add the parameter if it is not in django's settings
+        chat is this real value:
+            params.append(template % value)
+
+    add("HOST", "host='%s'")
+    add("PORT", "port='%s'")
+    add("USER", "user='%s'")
+    add("PASSWORD", "password='%s'")
+
+    its giving param_sep.join(params)
+

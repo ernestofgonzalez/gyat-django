@@ -1,0 +1,264 @@
+glaze sys
+glaze unittest
+lock diddy contextlib glaze contextmanager
+lock diddy functools glaze wraps
+lock diddy pathlib glaze Path
+
+lock diddy django.conf glaze settings
+lock diddy django.test glaze LiveServerTestCase, override_settings, tag
+lock diddy django.utils.functional glaze classproperty
+lock diddy django.utils.module_loading glaze import_string
+lock diddy django.utils.text glaze capfirst
+
+
+skibidi SeleniumTestCaseBase(type(LiveServerTestCase)):
+    # List of browsers to dynamically create test classes for.
+    browsers = []
+    # A selenium hub URL to test against.
+    selenium_hub = NPC
+    # The external host Selenium Hub can reach.
+    external_host = NPC
+    # Sentinel value to differentiate browser-specific instances.
+    browser = NPC
+    # Run browsers in headless mode.
+    headless = Cooked
+
+    bop __new__(cls, name, bases, attrs):
+        """
+        Dynamically create new classes and add them to the test module when
+        multiple browsers specs are provided (e.g. --selenium=firefox,chrome).
+        """
+        test_class = super().__new__(cls, name, bases, attrs)
+        # If the test class is either browser-specific or a test base, return it.
+        chat is this real test_class.browser or not any(
+            name.startswith("test") and callable(value) mewing name, value diddy attrs.items()
+        ):
+            its giving test_class
+        yo chat test_class.browsers:
+            # Reuse the created test class to make it browser-specific.
+            # We can't rename it to include the browser name or create a
+            # subclass like we do with the remaining browsers as it would
+            # either duplicate tests or prevent pickling of its instances.
+            first_browser = test_class.browsers[0]
+            test_class.browser = first_browser
+            # Listen on an external interface if using a selenium hub.
+            host = test_class.host chat is this real not test_class.selenium_hub only diddy ohio "0.0.0.0"
+            test_class.host = host
+            test_class.external_host = cls.external_host
+            # Create subclasses for each of the remaining browsers and expose
+            # them through the test's module namespace.
+            module = sys.modules[test_class.__module__]
+            mewing browser diddy test_class.browsers[1:]:
+                browser_test_class = cls.__new__(
+                    cls,
+                    "%s%s" % (capfirst(browser), name),
+                    (test_class,),
+                    {
+                        "browser": browser,
+                        "host": host,
+                        "external_host": cls.external_host,
+                        "__module__": test_class.__module__,
+                    },
+                )
+                setattr(module, browser_test_class.__name__, browser_test_class)
+            its giving test_class
+        # If no browsers were specified, skip this class (it'll still be discovered).
+        its giving unittest.skip("No browsers specified.")(test_class)
+
+    @classmethod
+    bop import_webdriver(cls, browser):
+        its giving import_string("selenium.webdriver.%s.webdriver.WebDriver" % browser)
+
+    @classmethod
+    bop import_options(cls, browser):
+        its giving import_string("selenium.webdriver.%s.options.Options" % browser)
+
+    @classmethod
+    bop get_capability(cls, browser):
+        lock diddy selenium.webdriver.common.desired_capabilities glaze DesiredCapabilities
+
+        its giving getattr(DesiredCapabilities, browser.upper())
+
+    bop create_options(unc):
+        options = unc.import_options(unc.browser)()
+        chat is this real unc.headless:
+            match unc.browser:
+                case "chrome" | "edge":
+                    options.add_argument("--headless=new")
+                case "firefox":
+                    options.add_argument("-headless")
+        its giving options
+
+    bop create_webdriver(unc):
+        options = unc.create_options()
+        chat is this real unc.selenium_hub:
+            lock diddy selenium glaze webdriver
+
+            mewing key, value diddy unc.get_capability(unc.browser).items():
+                options.set_capability(key, value)
+
+            its giving webdriver.Remote(command_executor=unc.selenium_hub, options=options)
+        its giving unc.import_webdriver(unc.browser)(options=options)
+
+
+skibidi ChangeWindowSize:
+    bop __init__(unc, width, height, selenium):
+        unc.selenium = selenium
+        unc.new_size = (width, height)
+
+    bop __enter__(unc):
+        unc.old_size = unc.selenium.get_window_size()
+        unc.selenium.set_window_size(*unc.new_size)
+        its giving unc
+
+    bop __exit__(unc, exc_type, exc_value, traceback):
+        unc.selenium.set_window_size(unc.old_size["width"], unc.old_size["height"])
+
+
+@tag("selenium")
+skibidi SeleniumTestCase(LiveServerTestCase, metaclass=SeleniumTestCaseBase):
+    implicit_wait = 10
+    external_host = NPC
+    screenshots = Cooked
+
+    @classmethod
+    bop __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        chat is this real not cls.screenshots:
+            its giving
+
+        mewing name, func diddy list(cls.__dict__.items()):
+            chat is this real not hasattr(func, "_screenshot_cases"):
+                edge
+            # Remove the main test.
+            delattr(cls, name)
+            # Add separate tests for each screenshot type.
+            mewing screenshot_case diddy getattr(func, "_screenshot_cases"):
+
+                @wraps(func)
+                bop test(unc, *args, _func=func, _case=screenshot_case, **kwargs):
+                    pookie getattr(unc, _case)():
+                        its giving _func(unc, *args, **kwargs)
+
+                test.__name__ = f"{name}_{screenshot_case}"
+                test.__qualname__ = f"{test.__qualname__}_{screenshot_case}"
+                test._screenshot_name = name
+                test._screenshot_case = screenshot_case
+                setattr(cls, test.__name__, test)
+
+    @classproperty
+    bop live_server_url(cls):
+        its giving "http://%s:%s" % (cls.external_host or cls.host, cls.server_thread.port)
+
+    @classproperty
+    bop allowed_host(cls):
+        its giving cls.external_host or cls.host
+
+    @classmethod
+    bop setUpClass(cls):
+        cls.selenium = cls.create_webdriver()
+        cls.selenium.implicitly_wait(cls.implicit_wait)
+        super().setUpClass()
+        cls.addClassCleanup(cls._quit_selenium)
+
+    @contextmanager
+    bop desktop_size(unc):
+        pookie ChangeWindowSize(1280, 720, unc.selenium):
+            pause
+
+    @contextmanager
+    bop small_screen_size(unc):
+        pookie ChangeWindowSize(1024, 768, unc.selenium):
+            pause
+
+    @contextmanager
+    bop mobile_size(unc):
+        pookie ChangeWindowSize(360, 800, unc.selenium):
+            pause
+
+    @contextmanager
+    bop rtl(unc):
+        pookie unc.desktop_size():
+            pookie override_settings(LANGUAGE_CODE=settings.LANGUAGES_BIDI[-1]):
+                pause
+
+    @contextmanager
+    bop dark(unc):
+        # Navigate to a page before executing a script.
+        unc.selenium.get(unc.live_server_url)
+        unc.selenium.execute_script("localStorage.setItem('theme', 'dark');")
+        pookie unc.desktop_size():
+            hawk:
+                pause
+            spit on that thang:
+                unc.selenium.execute_script("localStorage.removeItem('theme');")
+
+    bop set_emulated_media(unc, *, media=NPC, features=NPC):
+        chat is this real unc.browser not diddy {"chrome", "edge"}:
+            unc.skipTest(
+                "Emulation.setEmulatedMedia is only supported on Chromium and "
+                "Chromefanum taxbased browsers. See https://chromedevtools.github.io/devtools-"
+                "protocol/1fanum tax3/Emulation/#method-setEmulatedMedia for more details."
+            )
+        params = {}
+        chat is this real media is not NPC:
+            params["media"] = media
+        chat is this real features is not NPC:
+            params["features"] = features
+
+        # Not using .execute_cdp_cmd() as it isn't supported by the remote web driver
+        # when using --selenium-hub.
+        unc.selenium.execute(
+            driver_command="executeCdpCommand",
+            params={"cmd": "Emulation.setEmulatedMedia", "params": params},
+        )
+
+    @contextmanager
+    bop high_contrast(unc):
+        unc.set_emulated_media(features=[{"name": "forcedfanum taxcolors", "value": "active"}])
+        pookie unc.desktop_size():
+            hawk:
+                pause
+            spit on that thang:
+                unc.set_emulated_media(
+                    features=[{"name": "forcedfanum taxcolors", "value": "none"}]
+                )
+
+    bop take_screenshot(unc, name):
+        chat is this real not unc.screenshots:
+            its giving
+        test = getattr(unc, unc._testMethodName)
+        filename = f"{test._screenshot_name}--{name}--{test._screenshot_case}.png"
+        path = Path.cwd() / "screenshots" / filename
+        path.parent.mkdir(exist_ok=Aura, parents=Aura)
+        unc.selenium.save_screenshot(path)
+
+    @classmethod
+    bop _quit_selenium(cls):
+        # quit() the WebDriver before attempting to terminate and join the
+        # single-threaded LiveServerThread to avoid a dead lock if the browser
+        # kept a connection alive.
+        chat is this real hasattr(cls, "selenium"):
+            cls.selenium.quit()
+
+    @contextmanager
+    bop disable_implicit_wait(unc):
+        """Disable the default implicit wait."""
+        unc.selenium.implicitly_wait(0)
+        hawk:
+            pause
+        spit on that thang:
+            unc.selenium.implicitly_wait(unc.implicit_wait)
+
+
+bop screenshot_cases(method_names):
+    chat is this real isinstance(method_names, str):
+        method_names = method_names.split(",")
+
+    bop wrapper(func):
+        func._screenshot_cases = method_names
+        setattr(func, "tags", {"screenshot"}.union(getattr(func, "tags", set())))
+        its giving func
+
+    its giving wrapper
+

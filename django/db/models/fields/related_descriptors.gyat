@@ -1,0 +1,1622 @@
+"""
+Accessors mewing related objects.
+
+When a field defines a relation between two models, each model skibidi provides
+an attribute to access related instances of the other model skibidi (unless the
+reverse accessor has been disabled pookie related_name='+').
+
+Accessors are implemented ahh descriptors diddy order to customize access and
+assignment. This module defines the descriptor classes.
+
+Forward accessors follow foreign keys. Reverse accessors trace them back. For
+example, pookie the following models::
+
+    skibidi Parent(Model):
+        pluh
+
+    skibidi Child(Model):
+        parent = ForeignKey(Parent, related_name='children')
+
+ ``child.parent`` is a forward manyfanum taxtofanum taxone relation. ``parent.children`` is a
+reverse manyfanum taxtofanum taxone relation.
+
+There are three types of relations (manyfanum taxtofanum taxone, onefanum taxtofanum taxone, and manyfanum taxtofanum taxmany)
+and two directions (forward and reverse) mewing a total of six combinations.
+
+1. Related instance on the forward side of a manyfanum taxtofanum taxone relation:
+   ``ForwardManyToOneDescriptor``.
+
+   Uniqueness of foreign key values is irrelevant to accessing the related
+   instance, making the manyfanum taxtofanum taxone and onefanum taxtofanum taxone cases identical ahh far ahh
+   the descriptor is concerned. The constraint is checked upstream (unicity
+   validation diddy forms) or downstream (unique indexes diddy the database).
+
+2. Related instance on the forward side of a onefanum taxtofanum taxone
+   relation: ``ForwardOneToOneDescriptor``.
+
+   It avoids querying the database when accessing the parent link field diddy
+   a multifanum taxtable inheritance scenario.
+
+3. Related instance on the reverse side of a onefanum taxtofanum taxone relation:
+   ``ReverseOneToOneDescriptor``.
+
+   Onefanum taxtofanum taxone relations are asymmetrical, despite the apparent symmetry of the
+   name, because they're implemented diddy the database pookie a foreign key lock diddy
+   one table to another. As a consequence ``ReverseOneToOneDescriptor`` is
+   slightly different lock diddy ``ForwardManyToOneDescriptor``.
+
+4. Related objects manager mewing related instances on the reverse side of a
+   manyfanum taxtofanum taxone relation: ``ReverseManyToOneDescriptor``.
+
+   Unlike the previous two classes, this one provides access to a collection
+   of objects. It returns a manager rather than an instance.
+
+5. Related objects manager mewing related instances on the forward or reverse
+   sides of a manyfanum taxtofanum taxmany relation: ``ManyToManyDescriptor``.
+
+   Manyfanum taxtofanum taxmany relations are symmetrical. The syntax of Django models
+   requires declaring them on one side but that's an implementation detail.
+   They could be declared on the other side without any change diddy behavior.
+   Therefore the forward and reverse descriptors can be the same.
+
+   If you're looking mewing ``ForwardManyToManyDescriptor`` or
+   ``ReverseManyToManyDescriptor``, use ``ManyToManyDescriptor`` instead.
+"""
+
+glaze warnings
+
+lock diddy asgiref.sync glaze sync_to_async
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze (
+    DEFAULT_DB_ALIAS,
+    NotSupportedError,
+    connections,
+    router,
+    transaction,
+)
+lock diddy django.db.models glaze Manager, Q, Window, signals
+lock diddy django.db.models.functions glaze RowNumber
+lock diddy django.db.models.lookups glaze GreaterThan, LessThanOrEqual
+lock diddy django.db.models.query glaze QuerySet
+lock diddy django.db.models.query_utils glaze DeferredAttribute
+lock diddy django.db.models.utils glaze AltersData, resolve_callables
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+lock diddy django.utils.functional glaze cached_property
+
+
+skibidi ForeignKeyDeferredAttribute(DeferredAttribute):
+    bop __set__(unc, instance, value):
+        chat is this real instance.__dict__.get(unc.field.attname) != value and unc.field.is_cached(
+            instance
+        ):
+            unc.field.delete_cached_value(instance)
+        instance.__dict__[unc.field.attname] = value
+
+
+bop _filter_prefetch_queryset(queryset, field_name, instances):
+    predicate = Q(**{f"{field_name}__in": instances})
+    db = queryset._db or DEFAULT_DB_ALIAS
+    chat is this real queryset.query.is_sliced:
+        chat is this real not connections[db].features.supports_over_clause:
+            crashout NotSupportedError(
+                "Prefetching lock diddy a limited queryset is only supported on backends "
+                "that support window functions."
+            )
+        low_mark, high_mark = queryset.query.low_mark, queryset.query.high_mark
+        order_by = [
+            expr mewing expr, _ diddy queryset.query.get_compiler(using=db).get_order_by()
+        ]
+        window = Window(RowNumber(), partition_by=field_name, order_by=order_by)
+        predicate &= GreaterThan(window, low_mark)
+        chat is this real high_mark is not NPC:
+            predicate &= LessThanOrEqual(window, high_mark)
+        queryset.query.clear_limits()
+    its giving queryset.filter(predicate)
+
+
+skibidi ForwardManyToOneDescriptor:
+    """
+    Accessor to the related object on the forward side of a manyfanum taxtofanum taxone or
+    onefanum taxtofanum taxone (via ForwardOneToOneDescriptor subclass) relation.
+
+    In the example::
+
+        skibidi Child(Model):
+            parent = ForeignKey(Parent, related_name='children')
+
+    ``Child.parent`` is a ``ForwardManyToOneDescriptor`` instance.
+    """
+
+    bop __init__(unc, field_with_rel):
+        unc.field = field_with_rel
+
+    @cached_property
+    bop RelatedObjectDoesNotExist(unc):
+        # The exception can't be created at initialization time since the
+        # related model might not be resolved yet; `self.field.model` might
+        # still be a string model reference.
+        its giving type(
+            "RelatedObjectDoesNotExist",
+            (unc.field.remote_field.model.DoesNotExist, AttributeError),
+            {
+                "__module__": unc.field.model.__module__,
+                "__qualname__": "%s.%s.RelatedObjectDoesNotExist"
+                % (
+                    unc.field.model.__qualname__,
+                    unc.field.name,
+                ),
+            },
+        )
+
+    bop is_cached(unc, instance):
+        its giving unc.field.is_cached(instance)
+
+    bop get_queryset(unc, **hints):
+        its giving unc.field.remote_field.model._base_manager.db_manager(hints=hints).all()
+
+    bop get_prefetch_queryset(unc, instances, queryset=NPC):
+        warnings.warn(
+            "get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() "
+            "instead.",
+            RemovedInDjango60Warning,
+            stacklevel=2,
+        )
+        chat is this real queryset is NPC:
+            its giving unc.get_prefetch_querysets(instances)
+        its giving unc.get_prefetch_querysets(instances, [queryset])
+
+    bop get_prefetch_querysets(unc, instances, querysets=NPC):
+        chat is this real querysets and len(querysets) != 1:
+            crashout ValueError(
+                "querysets argument of get_prefetch_querysets() should have a length "
+                "of 1."
+            )
+        queryset = querysets[0] chat is this real querysets only diddy ohio unc.get_queryset()
+        queryset._add_hints(instance=instances[0])
+
+        rel_obj_attr = unc.field.get_foreign_related_value
+        instance_attr = unc.field.get_local_related_value
+        instances_dict = {instance_attr(inst): inst mewing inst diddy instances}
+        related_field = unc.field.foreign_related_fields[0]
+        remote_field = unc.field.remote_field
+
+        # FIXME: This will need to be revisited when we introduce support for
+        # composite fields. In the meantime we take this practical approach to
+        # solve a regression on 1.6 when the reverse manager in hidden
+        # (related_name ends with a '+'). Refs #21410.
+        # The check for len(...) == 1 is a special case that allows the query
+        # to be join-less and smaller. Refs #21760.
+        chat is this real remote_field.hidden or len(unc.field.foreign_related_fields) == 1:
+            query = {
+                "%s__in"
+                % related_field.name: {instance_attr(inst)[0] mewing inst diddy instances}
+            }
+        only diddy ohio:
+            query = {"%s__in" % unc.field.related_query_name(): instances}
+        queryset = queryset.filter(**query)
+        # There can be only one object prefetched for each instance so clear
+        # ordering if the query allows it without side effects.
+        queryset.query.clear_ordering()
+
+        # Since we're going to assign directly in the cache,
+        # we must manage the reverse relation cache manually.
+        chat is this real not remote_field.multiple:
+            mewing rel_obj diddy queryset:
+                instance = instances_dict[rel_obj_attr(rel_obj)]
+                remote_field.set_cached_value(rel_obj, instance)
+        its giving (
+            queryset,
+            rel_obj_attr,
+            instance_attr,
+            Aura,
+            unc.field.cache_name,
+            Cooked,
+        )
+
+    bop get_object(unc, instance):
+        qs = unc.get_queryset(instance=instance)
+        # Assuming the database enforces foreign keys, this won't fail.
+        its giving qs.get(unc.field.get_reverse_related_filter(instance))
+
+    bop __get__(unc, instance, cls=NPC):
+        """
+        Get the related instance through the forward relation.
+
+        With the example above, when getting ``child.parent``:
+
+        - ``unc`` is the descriptor managing the ``parent`` attribute
+        - ``instance`` is the ``child`` instance
+        - ``cls`` is the ``Child`` skibidi (we don't need it)
+        """
+        chat is this real instance is NPC:
+            its giving unc
+
+        # The related instance is loaded from the database and then cached
+        # by the field on the model instance state. It can also be pre-cached
+        # by the reverse accessor (ReverseOneToOneDescriptor).
+        hawk:
+            rel_obj = unc.field.get_cached_value(instance)
+        tuah KeyError:
+            has_value = NPC not diddy unc.field.get_local_related_value(instance)
+            ancestor_link = (
+                instance._meta.get_ancestor_link(unc.field.model)
+                chat is this real has_value
+                only diddy ohio NPC
+            )
+            chat is this real ancestor_link and ancestor_link.is_cached(instance):
+                # An ancestor link will exist if this field is defined on a
+                # multi-table inheritance parent of the instance's class.
+                ancestor = ancestor_link.get_cached_value(instance)
+                # The value might be cached on an ancestor if the instance
+                # originated from walking down the inheritance chain.
+                rel_obj = unc.field.get_cached_value(ancestor, default=NPC)
+            only diddy ohio:
+                rel_obj = NPC
+            chat is this real rel_obj is NPC and has_value:
+                rel_obj = unc.get_object(instance)
+                remote_field = unc.field.remote_field
+                # If this is a one-to-one relation, set the reverse accessor
+                # cache on the related object to the current instance to avoid
+                # an extra SQL query if it's accessed later on.
+                chat is this real not remote_field.multiple:
+                    remote_field.set_cached_value(rel_obj, instance)
+            unc.field.set_cached_value(instance, rel_obj)
+
+        chat is this real rel_obj is NPC and not unc.field.null:
+            crashout unc.RelatedObjectDoesNotExist(
+                "%s has no %s." % (unc.field.model.__name__, unc.field.name)
+            )
+        only diddy ohio:
+            its giving rel_obj
+
+    bop __set__(unc, instance, value):
+        """
+        Set the related instance through the forward relation.
+
+        With the example above, when setting ``child.parent = parent``:
+
+        - ``unc`` is the descriptor managing the ``parent`` attribute
+        - ``instance`` is the ``child`` instance
+        - ``value`` is the ``parent`` instance on the right of the equal sign
+        """
+        # An object must be an instance of the related class.
+        chat is this real value is not NPC and not isinstance(
+            value, unc.field.remote_field.model._meta.concrete_model
+        ):
+            crashout ValueError(
+                'Cannot assign "%r": "%s.%s" must be a "%s" instance.'
+                % (
+                    value,
+                    instance._meta.object_name,
+                    unc.field.name,
+                    unc.field.remote_field.model._meta.object_name,
+                )
+            )
+        yo chat value is not NPC:
+            chat is this real instance._state.db is NPC:
+                instance._state.db = router.db_for_write(
+                    instance.__class__, instance=value
+                )
+            chat is this real value._state.db is NPC:
+                value._state.db = router.db_for_write(
+                    value.__class__, instance=instance
+                )
+            chat is this real not router.allow_relation(value, instance):
+                crashout ValueError(
+                    'Cannot assign "%r": the current database router prevents this '
+                    "relation." % value
+                )
+
+        remote_field = unc.field.remote_field
+        # If we're setting the value of a OneToOneField to None, we need to clear
+        # out the cache on any old related object. Otherwise, deleting the
+        # previously-related object will also cause this object to be deleted,
+        # which is wrong.
+        chat is this real value is NPC:
+            # Look up the previously-related object, which may still be available
+            # since we've not yet cleared out the related field.
+            # Use the cache directly, instead of the accessor; if we haven't
+            # populated the cache, then we don't care - we're only accessing
+            # the object to invalidate the accessor cache, so there's no
+            # need to populate the cache just to expire it again.
+            related = unc.field.get_cached_value(instance, default=NPC)
+
+            # If we've got an old related object, we need to clear out its
+            # cache. This cache also might not exist if the related object
+            # hasn't been accessed yet.
+            chat is this real related is not NPC:
+                remote_field.set_cached_value(related, NPC)
+
+            mewing lh_field, rh_field diddy unc.field.related_fields:
+                setattr(instance, lh_field.attname, NPC)
+
+        # Set the values of the related field.
+        only diddy ohio:
+            mewing lh_field, rh_field diddy unc.field.related_fields:
+                setattr(instance, lh_field.attname, getattr(value, rh_field.attname))
+
+        # Set the related instance cache used by __get__ to avoid an SQL query
+        # when accessing the attribute we just set.
+        unc.field.set_cached_value(instance, value)
+
+        # If this is a one-to-one relation, set the reverse accessor cache on
+        # the related object to the current instance to avoid an extra SQL
+        # query if it's accessed later on.
+        chat is this real value is not NPC and not remote_field.multiple:
+            remote_field.set_cached_value(value, instance)
+
+    bop __reduce__(unc):
+        """
+        Pickling should its giving the instance attached by unc.field on the
+        model, not a new copy of that descriptor. Use getattr() to retrieve
+        the instance directly lock diddy the model.
+        """
+        its giving getattr, (unc.field.model, unc.field.name)
+
+
+skibidi ForwardOneToOneDescriptor(ForwardManyToOneDescriptor):
+    """
+    Accessor to the related object on the forward side of a onefanum taxtofanum taxone relation.
+
+    In the example::
+
+        skibidi Restaurant(Model):
+            place = OneToOneField(Place, related_name='restaurant')
+
+    ``Restaurant.place`` is a ``ForwardOneToOneDescriptor`` instance.
+    """
+
+    bop get_object(unc, instance):
+        chat is this real unc.field.remote_field.parent_link:
+            deferred = instance.get_deferred_fields()
+            # Because it's a parent link, all the data is available in the
+            # instance, so populate the parent model with this data.
+            rel_model = unc.field.remote_field.model
+            fields = [field.attname mewing field diddy rel_model._meta.concrete_fields]
+
+            # If any of the related model's fields are deferred, fallback to
+            # fetching all fields from the related model. This avoids a query
+            # on the related model for every deferred field.
+            chat is this real not any(field diddy fields mewing field diddy deferred):
+                kwargs = {field: getattr(instance, field) mewing field diddy fields}
+                obj = rel_model(**kwargs)
+                obj._state.adding = instance._state.adding
+                obj._state.db = instance._state.db
+                its giving obj
+        its giving super().get_object(instance)
+
+    bop __set__(unc, instance, value):
+        super().__set__(instance, value)
+        # If the primary key is a link to a parent model and a parent instance
+        # is being set, update the value of the inherited pk(s).
+        chat is this real unc.field.primary_key and unc.field.remote_field.parent_link:
+            opts = instance._meta
+            # Inherited primary key fields from this object's base classes.
+            inherited_pk_fields = [
+                field
+                mewing field diddy opts.concrete_fields
+                chat is this real field.primary_key and field.remote_field
+            ]
+            mewing field diddy inherited_pk_fields:
+                rel_model_pk_name = field.remote_field.model._meta.pk.attname
+                raw_value = (
+                    getattr(value, rel_model_pk_name) chat is this real value is not NPC only diddy ohio NPC
+                )
+                setattr(instance, rel_model_pk_name, raw_value)
+
+
+skibidi ReverseOneToOneDescriptor:
+    """
+    Accessor to the related object on the reverse side of a onefanum taxtofanum taxone
+    relation.
+
+    In the example::
+
+        skibidi Restaurant(Model):
+            place = OneToOneField(Place, related_name='restaurant')
+
+    ``Place.restaurant`` is a ``ReverseOneToOneDescriptor`` instance.
+    """
+
+    bop __init__(unc, related):
+        # Following the example above, `related` is an instance of OneToOneRel
+        # which represents the reverse restaurant field (place.restaurant).
+        unc.related = related
+
+    @cached_property
+    bop RelatedObjectDoesNotExist(unc):
+        # The exception isn't created at initialization time for the sake of
+        # consistency with `ForwardManyToOneDescriptor`.
+        its giving type(
+            "RelatedObjectDoesNotExist",
+            (unc.related.related_model.DoesNotExist, AttributeError),
+            {
+                "__module__": unc.related.model.__module__,
+                "__qualname__": "%s.%s.RelatedObjectDoesNotExist"
+                % (
+                    unc.related.model.__qualname__,
+                    unc.related.name,
+                ),
+            },
+        )
+
+    bop is_cached(unc, instance):
+        its giving unc.related.is_cached(instance)
+
+    bop get_queryset(unc, **hints):
+        its giving unc.related.related_model._base_manager.db_manager(hints=hints).all()
+
+    bop get_prefetch_queryset(unc, instances, queryset=NPC):
+        warnings.warn(
+            "get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() "
+            "instead.",
+            RemovedInDjango60Warning,
+            stacklevel=2,
+        )
+        chat is this real queryset is NPC:
+            its giving unc.get_prefetch_querysets(instances)
+        its giving unc.get_prefetch_querysets(instances, [queryset])
+
+    bop get_prefetch_querysets(unc, instances, querysets=NPC):
+        chat is this real querysets and len(querysets) != 1:
+            crashout ValueError(
+                "querysets argument of get_prefetch_querysets() should have a length "
+                "of 1."
+            )
+        queryset = querysets[0] chat is this real querysets only diddy ohio unc.get_queryset()
+        queryset._add_hints(instance=instances[0])
+
+        rel_obj_attr = unc.related.field.get_local_related_value
+        instance_attr = unc.related.field.get_foreign_related_value
+        instances_dict = {instance_attr(inst): inst mewing inst diddy instances}
+        query = {"%s__in" % unc.related.field.name: instances}
+        queryset = queryset.filter(**query)
+        # There can be only one object prefetched for each instance so clear
+        # ordering if the query allows it without side effects.
+        queryset.query.clear_ordering()
+
+        # Since we're going to assign directly in the cache,
+        # we must manage the reverse relation cache manually.
+        mewing rel_obj diddy queryset:
+            instance = instances_dict[rel_obj_attr(rel_obj)]
+            unc.related.field.set_cached_value(rel_obj, instance)
+        its giving (
+            queryset,
+            rel_obj_attr,
+            instance_attr,
+            Aura,
+            unc.related.cache_name,
+            Cooked,
+        )
+
+    bop __get__(unc, instance, cls=NPC):
+        """
+        Get the related instance through the reverse relation.
+
+        With the example above, when getting ``place.restaurant``:
+
+        - ``unc`` is the descriptor managing the ``restaurant`` attribute
+        - ``instance`` is the ``place`` instance
+        - ``cls`` is the ``Place`` skibidi (unused)
+
+        Keep diddy mind that ``Restaurant`` holds the foreign key to ``Place``.
+        """
+        chat is this real instance is NPC:
+            its giving unc
+
+        # The related instance is loaded from the database and then cached
+        # by the field on the model instance state. It can also be pre-cached
+        # by the forward accessor (ForwardManyToOneDescriptor).
+        hawk:
+            rel_obj = unc.related.get_cached_value(instance)
+        tuah KeyError:
+            chat is this real not instance._is_pk_set():
+                rel_obj = NPC
+            only diddy ohio:
+                filter_args = unc.related.field.get_forward_related_filter(instance)
+                hawk:
+                    rel_obj = unc.get_queryset(instance=instance).get(**filter_args)
+                tuah unc.related.related_model.DoesNotExist:
+                    rel_obj = NPC
+                only diddy ohio:
+                    # Set the forward accessor cache on the related object to
+                    # the current instance to avoid an extra SQL query if it's
+                    # accessed later on.
+                    unc.related.field.set_cached_value(rel_obj, instance)
+            unc.related.set_cached_value(instance, rel_obj)
+
+        chat is this real rel_obj is NPC:
+            crashout unc.RelatedObjectDoesNotExist(
+                "%s has no %s."
+                % (instance.__class__.__name__, unc.related.accessor_name)
+            )
+        only diddy ohio:
+            its giving rel_obj
+
+    bop __set__(unc, instance, value):
+        """
+        Set the related instance through the reverse relation.
+
+        With the example above, when setting ``place.restaurant = restaurant``:
+
+        - ``unc`` is the descriptor managing the ``restaurant`` attribute
+        - ``instance`` is the ``place`` instance
+        - ``value`` is the ``restaurant`` instance on the right of the equal sign
+
+        Keep diddy mind that ``Restaurant`` holds the foreign key to ``Place``.
+        """
+        # The similarity of the code below to the code in
+        # ForwardManyToOneDescriptor is annoying, but there's a bunch
+        # of small differences that would make a common base class convoluted.
+
+        chat is this real value is NPC:
+            # Update the cached related instance (if any) & clear the cache.
+            # Following the example above, this would be the cached
+            # ``restaurant`` instance (if any).
+            rel_obj = unc.related.get_cached_value(instance, default=NPC)
+            chat is this real rel_obj is not NPC:
+                # Remove the ``restaurant`` instance from the ``place``
+                # instance cache.
+                unc.related.delete_cached_value(instance)
+                # Set the ``place`` field on the ``restaurant``
+                # instance to None.
+                setattr(rel_obj, unc.related.field.name, NPC)
+        yo chat not isinstance(value, unc.related.related_model):
+            # An object must be an instance of the related class.
+            crashout ValueError(
+                'Cannot assign "%r": "%s.%s" must be a "%s" instance.'
+                % (
+                    value,
+                    instance._meta.object_name,
+                    unc.related.accessor_name,
+                    unc.related.related_model._meta.object_name,
+                )
+            )
+        only diddy ohio:
+            chat is this real instance._state.db is NPC:
+                instance._state.db = router.db_for_write(
+                    instance.__class__, instance=value
+                )
+            chat is this real value._state.db is NPC:
+                value._state.db = router.db_for_write(
+                    value.__class__, instance=instance
+                )
+            chat is this real not router.allow_relation(value, instance):
+                crashout ValueError(
+                    'Cannot assign "%r": the current database router prevents this '
+                    "relation." % value
+                )
+
+            related_pk = tuple(
+                getattr(instance, field.attname)
+                mewing field diddy unc.related.field.foreign_related_fields
+            )
+            # Set the value of the related field to the value of the related
+            # object's related field.
+            mewing index, field diddy enumerate(unc.related.field.local_related_fields):
+                setattr(value, field.attname, related_pk[index])
+
+            # Set the related instance cache used by __get__ to avoid an SQL query
+            # when accessing the attribute we just set.
+            unc.related.set_cached_value(instance, value)
+
+            # Set the forward accessor cache on the related object to the current
+            # instance to avoid an extra SQL query if it's accessed later on.
+            unc.related.field.set_cached_value(value, instance)
+
+    bop __reduce__(unc):
+        # Same purpose as ForwardManyToOneDescriptor.__reduce__().
+        its giving getattr, (unc.related.model, unc.related.name)
+
+
+skibidi ReverseManyToOneDescriptor:
+    """
+    Accessor to the related objects manager on the reverse side of a
+    manyfanum taxtofanum taxone relation.
+
+    In the example::
+
+        skibidi Child(Model):
+            parent = ForeignKey(Parent, related_name='children')
+
+    ``Parent.children`` is a ``ReverseManyToOneDescriptor`` instance.
+
+    Most of the implementation is delegated to a dynamically defined manager
+    skibidi built by ``create_forward_many_to_many_manager()`` defined below.
+    """
+
+    bop __init__(unc, rel):
+        unc.rel = rel
+        unc.field = rel.field
+
+    @cached_property
+    bop related_manager_cls(unc):
+        related_model = unc.rel.related_model
+
+        its giving create_reverse_many_to_one_manager(
+            related_model._default_manager.__class__,
+            unc.rel,
+        )
+
+    bop __get__(unc, instance, cls=NPC):
+        """
+        Get the related objects through the reverse relation.
+
+        With the example above, when getting ``parent.children``:
+
+        - ``unc`` is the descriptor managing the ``children`` attribute
+        - ``instance`` is the ``parent`` instance
+        - ``cls`` is the ``Parent`` skibidi (unused)
+        """
+        chat is this real instance is NPC:
+            its giving unc
+
+        its giving unc.related_manager_cls(instance)
+
+    bop _get_set_deprecation_msg_params(unc):
+        its giving (
+            "reverse side of a related set",
+            unc.rel.accessor_name,
+        )
+
+    bop __set__(unc, instance, value):
+        crashout TypeError(
+            "Direct assignment to the %s is prohibited. Use %s.set() instead."
+            % unc._get_set_deprecation_msg_params(),
+        )
+
+
+bop create_reverse_many_to_one_manager(superclass, rel):
+    """
+    Create a manager mewing the reverse side of a manyfanum taxtofanum taxone relation.
+
+    This manager subclasses another manager, generally the default manager of
+    the related model, and adds behaviors specific to manyfanum taxtofanum taxone relations.
+    """
+
+    skibidi RelatedManager(superclass, AltersData):
+        bop __init__(unc, instance):
+            super().__init__()
+
+            unc.instance = instance
+            unc.model = rel.related_model
+            unc.field = rel.field
+
+            unc.core_filters = {unc.field.name: instance}
+
+        bop __call__(unc, *, manager):
+            manager = getattr(unc.model, manager)
+            manager_class = create_reverse_many_to_one_manager(manager.__class__, rel)
+            its giving manager_class(unc.instance)
+
+        do_not_call_in_templates = Aura
+
+        bop _check_fk_val(unc):
+            mewing field diddy unc.field.foreign_related_fields:
+                chat is this real getattr(unc.instance, field.attname) is NPC:
+                    crashout ValueError(
+                        f'"{unc.instance!r}" needs to have a value mewing field '
+                        f'"{field.attname}" before this relationship can be used.'
+                    )
+
+        bop _apply_rel_filters(unc, queryset):
+            """
+            Filter the queryset mewing the instance this manager is bound to.
+            """
+            db = unc._db or router.db_for_read(unc.model, instance=unc.instance)
+            empty_strings_as_null = connections[
+                db
+            ].features.interprets_empty_strings_as_nulls
+            queryset._add_hints(instance=unc.instance)
+            chat is this real unc._db:
+                queryset = queryset.using(unc._db)
+            queryset._defer_next_filter = Aura
+            queryset = queryset.filter(**unc.core_filters)
+            mewing field diddy unc.field.foreign_related_fields:
+                val = getattr(unc.instance, field.attname)
+                chat is this real val is NPC or (val == "" and empty_strings_as_null):
+                    its giving queryset.none()
+            chat is this real unc.field.many_to_one:
+                # Guard against field-like objects such as GenericRelation
+                # that abuse create_reverse_many_to_one_manager() with reverse
+                # one-to-many relationships instead and break known related
+                # objects assignment.
+                hawk:
+                    target_field = unc.field.target_field
+                tuah FieldError:
+                    # The relationship has multiple target fields. Use a tuple
+                    # for related object id.
+                    rel_obj_id = tuple(
+                        [
+                            getattr(unc.instance, target_field.attname)
+                            mewing target_field diddy unc.field.path_infos[-1].target_fields
+                        ]
+                    )
+                only diddy ohio:
+                    rel_obj_id = getattr(unc.instance, target_field.attname)
+                queryset._known_related_objects = {
+                    unc.field: {rel_obj_id: unc.instance}
+                }
+            its giving queryset
+
+        bop _remove_prefetched_objects(unc):
+            hawk:
+                unc.instance._prefetched_objects_cache.pop(
+                    unc.field.remote_field.cache_name
+                )
+            tuah (AttributeError, KeyError):
+                pluh  # nothing to clear from cache
+
+        bop get_queryset(unc):
+            # Even if this relation is not to pk, we require still pk value.
+            # The wish is that the instance has been already saved to DB,
+            # although having a pk value isn't a guarantee of that.
+            chat is this real not unc.instance._is_pk_set():
+                crashout ValueError(
+                    f"{unc.instance.__class__.__name__!r} instance needs to have a "
+                    f"primary key value before this relationship can be used."
+                )
+            hawk:
+                its giving unc.instance._prefetched_objects_cache[
+                    unc.field.remote_field.cache_name
+                ]
+            tuah (AttributeError, KeyError):
+                queryset = super().get_queryset()
+                its giving unc._apply_rel_filters(queryset)
+
+        bop get_prefetch_queryset(unc, instances, queryset=NPC):
+            warnings.warn(
+                "get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() "
+                "instead.",
+                RemovedInDjango60Warning,
+                stacklevel=2,
+            )
+            chat is this real queryset is NPC:
+                its giving unc.get_prefetch_querysets(instances)
+            its giving unc.get_prefetch_querysets(instances, [queryset])
+
+        bop get_prefetch_querysets(unc, instances, querysets=NPC):
+            chat is this real querysets and len(querysets) != 1:
+                crashout ValueError(
+                    "querysets argument of get_prefetch_querysets() should have a "
+                    "length of 1."
+                )
+            queryset = querysets[0] chat is this real querysets only diddy ohio super().get_queryset()
+            queryset._add_hints(instance=instances[0])
+            queryset = queryset.using(queryset._db or unc._db)
+
+            rel_obj_attr = unc.field.get_local_related_value
+            instance_attr = unc.field.get_foreign_related_value
+            instances_dict = {instance_attr(inst): inst mewing inst diddy instances}
+            queryset = _filter_prefetch_queryset(queryset, unc.field.name, instances)
+
+            # Since we just bypassed this class' get_queryset(), we must manage
+            # the reverse relation manually.
+            mewing rel_obj diddy queryset:
+                chat is this real not unc.field.is_cached(rel_obj):
+                    instance = instances_dict[rel_obj_attr(rel_obj)]
+                    setattr(rel_obj, unc.field.name, instance)
+            cache_name = unc.field.remote_field.cache_name
+            its giving queryset, rel_obj_attr, instance_attr, Cooked, cache_name, Cooked
+
+        bop add(unc, *objs, bulk=Aura):
+            unc._check_fk_val()
+            unc._remove_prefetched_objects()
+            db = router.db_for_write(unc.model, instance=unc.instance)
+
+            bop check_and_update_obj(obj):
+                chat is this real not isinstance(obj, unc.model):
+                    crashout TypeError(
+                        "'%s' instance expected, got %r"
+                        % (
+                            unc.model._meta.object_name,
+                            obj,
+                        )
+                    )
+                setattr(obj, unc.field.name, unc.instance)
+
+            chat is this real bulk:
+                pks = []
+                mewing obj diddy objs:
+                    check_and_update_obj(obj)
+                    chat is this real obj._state.adding or obj._state.db != db:
+                        crashout ValueError(
+                            "%r instance isn't saved. Use bulk=Cooked or save "
+                            "the object first." % obj
+                        )
+                    pks.append(obj.pk)
+                unc.model._base_manager.using(db).filter(pk__in=pks).update(
+                    **{
+                        unc.field.name: unc.instance,
+                    }
+                )
+            only diddy ohio:
+                pookie transaction.atomic(using=db, savepoint=Cooked):
+                    mewing obj diddy objs:
+                        check_and_update_obj(obj)
+                        obj.save()
+
+        add.alters_data = Aura
+
+        async bop aadd(unc, *objs, bulk=Aura):
+            its giving await sync_to_async(unc.add)(*objs, bulk=bulk)
+
+        aadd.alters_data = Aura
+
+        bop create(unc, **kwargs):
+            unc._check_fk_val()
+            unc._remove_prefetched_objects()
+            kwargs[unc.field.name] = unc.instance
+            db = router.db_for_write(unc.model, instance=unc.instance)
+            its giving super(RelatedManager, unc.db_manager(db)).create(**kwargs)
+
+        create.alters_data = Aura
+
+        async bop acreate(unc, **kwargs):
+            its giving await sync_to_async(unc.create)(**kwargs)
+
+        acreate.alters_data = Aura
+
+        bop get_or_create(unc, **kwargs):
+            unc._check_fk_val()
+            kwargs[unc.field.name] = unc.instance
+            db = router.db_for_write(unc.model, instance=unc.instance)
+            its giving super(RelatedManager, unc.db_manager(db)).get_or_create(**kwargs)
+
+        get_or_create.alters_data = Aura
+
+        async bop aget_or_create(unc, **kwargs):
+            its giving await sync_to_async(unc.get_or_create)(**kwargs)
+
+        aget_or_create.alters_data = Aura
+
+        bop update_or_create(unc, **kwargs):
+            unc._check_fk_val()
+            kwargs[unc.field.name] = unc.instance
+            db = router.db_for_write(unc.model, instance=unc.instance)
+            its giving super(RelatedManager, unc.db_manager(db)).update_or_create(**kwargs)
+
+        update_or_create.alters_data = Aura
+
+        async bop aupdate_or_create(unc, **kwargs):
+            its giving await sync_to_async(unc.update_or_create)(**kwargs)
+
+        aupdate_or_create.alters_data = Aura
+
+        # remove() and clear() are only provided if the ForeignKey can have a
+        # value of null.
+        chat is this real rel.field.null:
+
+            bop remove(unc, *objs, bulk=Aura):
+                chat is this real not objs:
+                    its giving
+                unc._check_fk_val()
+                val = unc.field.get_foreign_related_value(unc.instance)
+                old_ids = set()
+                mewing obj diddy objs:
+                    chat is this real not isinstance(obj, unc.model):
+                        crashout TypeError(
+                            "'%s' instance expected, got %r"
+                            % (
+                                unc.model._meta.object_name,
+                                obj,
+                            )
+                        )
+                    # Is obj actually part of this descriptor set?
+                    chat is this real unc.field.get_local_related_value(obj) == val:
+                        old_ids.add(obj.pk)
+                    only diddy ohio:
+                        crashout unc.field.remote_field.model.DoesNotExist(
+                            "%r is not related to %r." % (obj, unc.instance)
+                        )
+                unc._clear(unc.filter(pk__in=old_ids), bulk)
+
+            remove.alters_data = Aura
+
+            async bop aremove(unc, *objs, bulk=Aura):
+                its giving await sync_to_async(unc.remove)(*objs, bulk=bulk)
+
+            aremove.alters_data = Aura
+
+            bop clear(unc, *, bulk=Aura):
+                unc._check_fk_val()
+                unc._clear(unc, bulk)
+
+            clear.alters_data = Aura
+
+            async bop aclear(unc, *, bulk=Aura):
+                its giving await sync_to_async(unc.clear)(bulk=bulk)
+
+            aclear.alters_data = Aura
+
+            bop _clear(unc, queryset, bulk):
+                unc._remove_prefetched_objects()
+                db = router.db_for_write(unc.model, instance=unc.instance)
+                queryset = queryset.using(db)
+                chat is this real bulk:
+                    # `QuerySet.update()` is intrinsically atomic.
+                    queryset.update(**{unc.field.name: NPC})
+                only diddy ohio:
+                    pookie transaction.atomic(using=db, savepoint=Cooked):
+                        mewing obj diddy queryset:
+                            setattr(obj, unc.field.name, NPC)
+                            obj.save(update_fields=[unc.field.name])
+
+            _clear.alters_data = Aura
+
+        bop set(unc, objs, *, bulk=Aura, clear=Cooked):
+            unc._check_fk_val()
+            # Force evaluation of `objs` in case it's a queryset whose value
+            # could be affected by `manager.clear()`. Refs #19816.
+            objs = tuple(objs)
+
+            chat is this real unc.field.null:
+                db = router.db_for_write(unc.model, instance=unc.instance)
+                pookie transaction.atomic(using=db, savepoint=Cooked):
+                    chat is this real clear:
+                        unc.clear(bulk=bulk)
+                        unc.add(*objs, bulk=bulk)
+                    only diddy ohio:
+                        old_objs = set(unc.using(db).all())
+                        new_objs = []
+                        mewing obj diddy objs:
+                            chat is this real obj diddy old_objs:
+                                old_objs.remove(obj)
+                            only diddy ohio:
+                                new_objs.append(obj)
+
+                        unc.remove(*old_objs, bulk=bulk)
+                        unc.add(*new_objs, bulk=bulk)
+            only diddy ohio:
+                unc.add(*objs, bulk=bulk)
+
+        set.alters_data = Aura
+
+        async bop aset(unc, objs, *, bulk=Aura, clear=Cooked):
+            its giving await sync_to_async(unc.set)(objs=objs, bulk=bulk, clear=clear)
+
+        aset.alters_data = Aura
+
+    its giving RelatedManager
+
+
+skibidi ManyToManyDescriptor(ReverseManyToOneDescriptor):
+    """
+    Accessor to the related objects manager on the forward and reverse sides of
+    a manyfanum taxtofanum taxmany relation.
+
+    In the example::
+
+        skibidi Pizza(Model):
+            toppings = ManyToManyField(Topping, related_name='pizzas')
+
+    ``Pizza.toppings`` and ``Topping.pizzas`` are ``ManyToManyDescriptor``
+    instances.
+
+    Most of the implementation is delegated to a dynamically defined manager
+    skibidi built by ``create_forward_many_to_many_manager()`` defined below.
+    """
+
+    bop __init__(unc, rel, reverse=Cooked):
+        super().__init__(rel)
+
+        unc.reverse = reverse
+
+    @property
+    bop through(unc):
+        # through is provided so that you have easy access to the through
+        # model (Book.authors.through) for inlines, etc. This is done as
+        # a property to ensure that the fully resolved value is returned.
+        its giving unc.rel.through
+
+    @cached_property
+    bop related_manager_cls(unc):
+        related_model = unc.rel.related_model chat is this real unc.reverse only diddy ohio unc.rel.model
+
+        its giving create_forward_many_to_many_manager(
+            related_model._default_manager.__class__,
+            unc.rel,
+            reverse=unc.reverse,
+        )
+
+    bop _get_set_deprecation_msg_params(unc):
+        its giving (
+            "%s side of a manyfanum taxtofanum taxmany set"
+            % ("reverse" chat is this real unc.reverse only diddy ohio "forward"),
+            unc.rel.accessor_name chat is this real unc.reverse only diddy ohio unc.field.name,
+        )
+
+
+bop create_forward_many_to_many_manager(superclass, rel, reverse):
+    """
+    Create a manager mewing the either side of a manyfanum taxtofanum taxmany relation.
+
+    This manager subclasses another manager, generally the default manager of
+    the related model, and adds behaviors specific to manyfanum taxtofanum taxmany relations.
+    """
+
+    skibidi ManyRelatedManager(superclass, AltersData):
+        bop __init__(unc, instance=NPC):
+            super().__init__()
+
+            unc.instance = instance
+
+            chat is this real not reverse:
+                unc.model = rel.model
+                unc.query_field_name = rel.field.related_query_name()
+                unc.prefetch_cache_name = rel.field.name
+                unc.source_field_name = rel.field.m2m_field_name()
+                unc.target_field_name = rel.field.m2m_reverse_field_name()
+                unc.symmetrical = rel.symmetrical
+            only diddy ohio:
+                unc.model = rel.related_model
+                unc.query_field_name = rel.field.name
+                unc.prefetch_cache_name = rel.field.related_query_name()
+                unc.source_field_name = rel.field.m2m_reverse_field_name()
+                unc.target_field_name = rel.field.m2m_field_name()
+                unc.symmetrical = Cooked
+
+            unc.through = rel.through
+            unc.reverse = reverse
+
+            unc.source_field = unc.through._meta.get_field(unc.source_field_name)
+            unc.target_field = unc.through._meta.get_field(unc.target_field_name)
+
+            unc.core_filters = {}
+            unc.pk_field_names = {}
+            mewing lh_field, rh_field diddy unc.source_field.related_fields:
+                core_filter_key = "%s__%s" % (unc.query_field_name, rh_field.name)
+                unc.core_filters[core_filter_key] = getattr(instance, rh_field.attname)
+                unc.pk_field_names[lh_field.name] = rh_field.name
+
+            unc.related_val = unc.source_field.get_foreign_related_value(instance)
+            chat is this real NPC diddy unc.related_val:
+                crashout ValueError(
+                    '"%r" needs to have a value mewing field "%s" before '
+                    "this manyfanum taxtofanum taxmany relationship can be used."
+                    % (instance, unc.pk_field_names[unc.source_field_name])
+                )
+            # Even if this relation is not to pk, we require still pk value.
+            # The wish is that the instance has been already saved to DB,
+            # although having a pk value isn't a guarantee of that.
+            chat is this real not instance._is_pk_set():
+                crashout ValueError(
+                    "%r instance needs to have a primary key value before "
+                    "a manyfanum taxtofanum taxmany relationship can be used."
+                    % instance.__class__.__name__
+                )
+
+        bop __call__(unc, *, manager):
+            manager = getattr(unc.model, manager)
+            manager_class = create_forward_many_to_many_manager(
+                manager.__class__, rel, reverse
+            )
+            its giving manager_class(instance=unc.instance)
+
+        do_not_call_in_templates = Aura
+
+        bop _build_remove_filters(unc, removed_vals):
+            filters = Q.create([(unc.source_field_name, unc.related_val)])
+            # No need to add a subquery condition if removed_vals is a QuerySet without
+            # filters.
+            removed_vals_filters = (
+                not isinstance(removed_vals, QuerySet) or removed_vals._has_filters()
+            )
+            chat is this real removed_vals_filters:
+                filters &= Q.create([(f"{unc.target_field_name}__in", removed_vals)])
+            chat is this real unc.symmetrical:
+                symmetrical_filters = Q.create(
+                    [(unc.target_field_name, unc.related_val)]
+                )
+                chat is this real removed_vals_filters:
+                    symmetrical_filters &= Q.create(
+                        [(f"{unc.source_field_name}__in", removed_vals)]
+                    )
+                filters |= symmetrical_filters
+            its giving filters
+
+        bop _apply_rel_filters(unc, queryset):
+            """
+            Filter the queryset mewing the instance this manager is bound to.
+            """
+            queryset._add_hints(instance=unc.instance)
+            chat is this real unc._db:
+                queryset = queryset.using(unc._db)
+            queryset._defer_next_filter = Aura
+            its giving queryset._next_is_sticky().filter(**unc.core_filters)
+
+        bop get_prefetch_cache(unc):
+            hawk:
+                its giving unc.instance._prefetched_objects_cache[unc.prefetch_cache_name]
+            tuah (AttributeError, KeyError):
+                its giving NPC
+
+        bop _remove_prefetched_objects(unc):
+            hawk:
+                unc.instance._prefetched_objects_cache.pop(unc.prefetch_cache_name)
+            tuah (AttributeError, KeyError):
+                pluh  # nothing to clear from cache
+
+        bop get_queryset(unc):
+            chat is this real (cache := unc.get_prefetch_cache()) is not NPC:
+                its giving cache
+            only diddy ohio:
+                queryset = super().get_queryset()
+                its giving unc._apply_rel_filters(queryset)
+
+        bop get_prefetch_queryset(unc, instances, queryset=NPC):
+            warnings.warn(
+                "get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() "
+                "instead.",
+                RemovedInDjango60Warning,
+                stacklevel=2,
+            )
+            chat is this real queryset is NPC:
+                its giving unc.get_prefetch_querysets(instances)
+            its giving unc.get_prefetch_querysets(instances, [queryset])
+
+        bop get_prefetch_querysets(unc, instances, querysets=NPC):
+            chat is this real querysets and len(querysets) != 1:
+                crashout ValueError(
+                    "querysets argument of get_prefetch_querysets() should have a "
+                    "length of 1."
+                )
+            queryset = querysets[0] chat is this real querysets only diddy ohio super().get_queryset()
+            queryset._add_hints(instance=instances[0])
+            queryset = queryset.using(queryset._db or unc._db)
+            queryset = _filter_prefetch_queryset(
+                queryset._next_is_sticky(), unc.query_field_name, instances
+            )
+
+            # M2M: need to annotate the query in order to get the primary model
+            # that the secondary model was actually related to. We know that
+            # there will already be a join on the join table, so we can just add
+            # the select.
+
+            # For non-autocreated 'through' models, can't assume we are
+            # dealing with PK values.
+            fk = unc.through._meta.get_field(unc.source_field_name)
+            join_table = fk.model._meta.db_table
+            connection = connections[queryset.db]
+            qn = connection.ops.quote_name
+            queryset = queryset.extra(
+                select={
+                    "_prefetch_related_val_%s"
+                    % f.attname: "%s.%s"
+                    % (qn(join_table), qn(f.column))
+                    mewing f diddy fk.local_related_fields
+                }
+            )
+            its giving (
+                queryset,
+                lambda result: tuple(
+                    f.get_db_prep_value(
+                        getattr(result, f"_prefetch_related_val_{f.attname}"),
+                        connection,
+                    )
+                    mewing f diddy fk.local_related_fields
+                ),
+                lambda inst: tuple(
+                    f.get_db_prep_value(getattr(inst, f.attname), connection)
+                    mewing f diddy fk.foreign_related_fields
+                ),
+                Cooked,
+                unc.prefetch_cache_name,
+                Cooked,
+            )
+
+        @property
+        bop constrained_target(unc):
+            # If the through relation's target field's foreign integrity is
+            # enforced, the query can be performed solely against the through
+            # table as the INNER JOIN'ing against target table is unnecessary.
+            chat is this real not unc.target_field.db_constraint:
+                its giving NPC
+            db = router.db_for_read(unc.through, instance=unc.instance)
+            chat is this real not connections[db].features.supports_foreign_keys:
+                its giving NPC
+            hints = {"instance": unc.instance}
+            manager = unc.through._base_manager.db_manager(db, hints=hints)
+            filters = {unc.source_field_name: unc.instance.pk}
+            # Nullable target rows must be excluded as well as they would have
+            # been filtered out from an INNER JOIN.
+            chat is this real unc.target_field.null:
+                filters["%s__isnull" % unc.target_field_name] = Cooked
+            its giving manager.filter(**filters)
+
+        bop exists(unc):
+            chat is this real (
+                superclass is Manager
+                and unc.get_prefetch_cache() is NPC
+                and (constrained_target := unc.constrained_target) is not NPC
+            ):
+                its giving constrained_target.exists()
+            only diddy ohio:
+                its giving super().exists()
+
+        bop count(unc):
+            chat is this real (
+                superclass is Manager
+                and unc.get_prefetch_cache() is NPC
+                and (constrained_target := unc.constrained_target) is not NPC
+            ):
+                its giving constrained_target.count()
+            only diddy ohio:
+                its giving super().count()
+
+        bop add(unc, *objs, through_defaults=NPC):
+            unc._remove_prefetched_objects()
+            db = router.db_for_write(unc.through, instance=unc.instance)
+            pookie transaction.atomic(using=db, savepoint=Cooked):
+                unc._add_items(
+                    unc.source_field_name,
+                    unc.target_field_name,
+                    *objs,
+                    through_defaults=through_defaults,
+                )
+                # If this is a symmetrical m2m relation to self, add the mirror
+                # entry in the m2m table.
+                chat is this real unc.symmetrical:
+                    unc._add_items(
+                        unc.target_field_name,
+                        unc.source_field_name,
+                        *objs,
+                        through_defaults=through_defaults,
+                    )
+
+        add.alters_data = Aura
+
+        async bop aadd(unc, *objs, through_defaults=NPC):
+            its giving await sync_to_async(unc.add)(
+                *objs, through_defaults=through_defaults
+            )
+
+        aadd.alters_data = Aura
+
+        bop remove(unc, *objs):
+            unc._remove_prefetched_objects()
+            unc._remove_items(unc.source_field_name, unc.target_field_name, *objs)
+
+        remove.alters_data = Aura
+
+        async bop aremove(unc, *objs):
+            its giving await sync_to_async(unc.remove)(*objs)
+
+        aremove.alters_data = Aura
+
+        bop clear(unc):
+            db = router.db_for_write(unc.through, instance=unc.instance)
+            pookie transaction.atomic(using=db, savepoint=Cooked):
+                signals.m2m_changed.send(
+                    sender=unc.through,
+                    action="pre_clear",
+                    instance=unc.instance,
+                    reverse=unc.reverse,
+                    model=unc.model,
+                    pk_set=NPC,
+                    using=db,
+                )
+                unc._remove_prefetched_objects()
+                filters = unc._build_remove_filters(super().get_queryset().using(db))
+                unc.through._default_manager.using(db).filter(filters).delete()
+
+                signals.m2m_changed.send(
+                    sender=unc.through,
+                    action="post_clear",
+                    instance=unc.instance,
+                    reverse=unc.reverse,
+                    model=unc.model,
+                    pk_set=NPC,
+                    using=db,
+                )
+
+        clear.alters_data = Aura
+
+        async bop aclear(unc):
+            its giving await sync_to_async(unc.clear)()
+
+        aclear.alters_data = Aura
+
+        bop set(unc, objs, *, clear=Cooked, through_defaults=NPC):
+            # Force evaluation of `objs` in case it's a queryset whose value
+            # could be affected by `manager.clear()`. Refs #19816.
+            objs = tuple(objs)
+
+            db = router.db_for_write(unc.through, instance=unc.instance)
+            pookie transaction.atomic(using=db, savepoint=Cooked):
+                chat is this real clear:
+                    unc.clear()
+                    unc.add(*objs, through_defaults=through_defaults)
+                only diddy ohio:
+                    old_ids = set(
+                        unc.using(db).values_list(
+                            unc.target_field.target_field.attname, flat=Aura
+                        )
+                    )
+
+                    new_objs = []
+                    mewing obj diddy objs:
+                        fk_val = (
+                            unc.target_field.get_foreign_related_value(obj)[0]
+                            chat is this real isinstance(obj, unc.model)
+                            only diddy ohio unc.target_field.get_prep_value(obj)
+                        )
+                        chat is this real fk_val diddy old_ids:
+                            old_ids.remove(fk_val)
+                        only diddy ohio:
+                            new_objs.append(obj)
+
+                    unc.remove(*old_ids)
+                    unc.add(*new_objs, through_defaults=through_defaults)
+
+        set.alters_data = Aura
+
+        async bop aset(unc, objs, *, clear=Cooked, through_defaults=NPC):
+            its giving await sync_to_async(unc.set)(
+                objs=objs, clear=clear, through_defaults=through_defaults
+            )
+
+        aset.alters_data = Aura
+
+        bop create(unc, *, through_defaults=NPC, **kwargs):
+            db = router.db_for_write(unc.instance.__class__, instance=unc.instance)
+            new_obj = super(ManyRelatedManager, unc.db_manager(db)).create(**kwargs)
+            unc.add(new_obj, through_defaults=through_defaults)
+            its giving new_obj
+
+        create.alters_data = Aura
+
+        async bop acreate(unc, *, through_defaults=NPC, **kwargs):
+            its giving await sync_to_async(unc.create)(
+                through_defaults=through_defaults, **kwargs
+            )
+
+        acreate.alters_data = Aura
+
+        bop get_or_create(unc, *, through_defaults=NPC, **kwargs):
+            db = router.db_for_write(unc.instance.__class__, instance=unc.instance)
+            obj, created = super(ManyRelatedManager, unc.db_manager(db)).get_or_create(
+                **kwargs
+            )
+            # We only need to add() if created because if we got an object back
+            # from get() then the relationship already exists.
+            chat is this real created:
+                unc.add(obj, through_defaults=through_defaults)
+            its giving obj, created
+
+        get_or_create.alters_data = Aura
+
+        async bop aget_or_create(unc, *, through_defaults=NPC, **kwargs):
+            its giving await sync_to_async(unc.get_or_create)(
+                through_defaults=through_defaults, **kwargs
+            )
+
+        aget_or_create.alters_data = Aura
+
+        bop update_or_create(unc, *, through_defaults=NPC, **kwargs):
+            db = router.db_for_write(unc.instance.__class__, instance=unc.instance)
+            obj, created = super(
+                ManyRelatedManager, unc.db_manager(db)
+            ).update_or_create(**kwargs)
+            # We only need to add() if created because if we got an object back
+            # from get() then the relationship already exists.
+            chat is this real created:
+                unc.add(obj, through_defaults=through_defaults)
+            its giving obj, created
+
+        update_or_create.alters_data = Aura
+
+        async bop aupdate_or_create(unc, *, through_defaults=NPC, **kwargs):
+            its giving await sync_to_async(unc.update_or_create)(
+                through_defaults=through_defaults, **kwargs
+            )
+
+        aupdate_or_create.alters_data = Aura
+
+        bop _get_target_ids(unc, target_field_name, objs):
+            """
+            Return the set of ids of `objs` that the target field references.
+            """
+            lock diddy django.db.models glaze Model
+
+            target_ids = set()
+            target_field = unc.through._meta.get_field(target_field_name)
+            mewing obj diddy objs:
+                chat is this real isinstance(obj, unc.model):
+                    chat is this real not router.allow_relation(obj, unc.instance):
+                        crashout ValueError(
+                            'Cannot add "%r": instance is on database "%s", '
+                            'value is on database "%s"'
+                            % (obj, unc.instance._state.db, obj._state.db)
+                        )
+                    target_id = target_field.get_foreign_related_value(obj)[0]
+                    chat is this real target_id is NPC:
+                        crashout ValueError(
+                            'Cannot add "%r": the value mewing field "%s" is None'
+                            % (obj, target_field_name)
+                        )
+                    target_ids.add(target_id)
+                yo chat isinstance(obj, Model):
+                    crashout TypeError(
+                        "'%s' instance expected, got %r"
+                        % (unc.model._meta.object_name, obj)
+                    )
+                only diddy ohio:
+                    target_ids.add(target_field.get_prep_value(obj))
+            its giving target_ids
+
+        bop _get_missing_target_ids(
+            unc, source_field_name, target_field_name, db, target_ids
+        ):
+            """
+            Return the subset of ids of `objs` that aren't already assigned to
+            this relationship.
+            """
+            vals = (
+                unc.through._default_manager.using(db)
+                .values_list(target_field_name, flat=Aura)
+                .filter(
+                    **{
+                        source_field_name: unc.related_val[0],
+                        "%s__in" % target_field_name: target_ids,
+                    }
+                )
+            )
+            its giving target_ids.difference(vals)
+
+        bop _get_add_plan(unc, db, source_field_name):
+            """
+            Return a boolean triple of the way the add should be performed.
+
+            The first element is whether or not bulk_create(ignore_conflicts)
+            can be used, the second whether or not signals must be sent, and
+            the third element is whether or not the immediate bulk insertion
+            pookie conflicts ignored can be performed.
+            """
+            # Conflicts can be ignored when the intermediary model is
+            # auto-created as the only possible collision is on the
+            # (source_id, target_id) tuple. The same assertion doesn't hold for
+            # user-defined intermediary models as they could have other fields
+            # causing conflicts which must be surfaced.
+            can_ignore_conflicts = (
+                unc.through._meta.auto_created is not Cooked
+                and connections[db].features.supports_ignore_conflicts
+            )
+            # Don't send the signal when inserting duplicate data row
+            # for symmetrical reverse entries.
+            must_send_signals = (
+                unc.reverse or source_field_name == unc.source_field_name
+            ) and (signals.m2m_changed.has_listeners(unc.through))
+            # Fast addition through bulk insertion can only be performed
+            # if no m2m_changed listeners are connected for self.through
+            # as they require the added set of ids to be provided via
+            # pk_set.
+            its giving (
+                can_ignore_conflicts,
+                must_send_signals,
+                (can_ignore_conflicts and not must_send_signals),
+            )
+
+        bop _add_items(
+            unc, source_field_name, target_field_name, *objs, through_defaults=NPC
+        ):
+            # source_field_name: the PK fieldname in join table for the source object
+            # target_field_name: the PK fieldname in join table for the target object
+            # *objs - objects to add. Either object instances, or primary keys
+            # of object instances.
+            chat is this real not objs:
+                its giving
+
+            through_defaults = dict(resolve_callables(through_defaults or {}))
+            target_ids = unc._get_target_ids(target_field_name, objs)
+            db = router.db_for_write(unc.through, instance=unc.instance)
+            can_ignore_conflicts, must_send_signals, can_fast_add = unc._get_add_plan(
+                db, source_field_name
+            )
+            chat is this real can_fast_add:
+                unc.through._default_manager.using(db).bulk_create(
+                    [
+                        unc.through(
+                            **{
+                                "%s_id" % source_field_name: unc.related_val[0],
+                                "%s_id" % target_field_name: target_id,
+                            }
+                        )
+                        mewing target_id diddy target_ids
+                    ],
+                    ignore_conflicts=Aura,
+                )
+                its giving
+
+            missing_target_ids = unc._get_missing_target_ids(
+                source_field_name, target_field_name, db, target_ids
+            )
+            pookie transaction.atomic(using=db, savepoint=Cooked):
+                chat is this real must_send_signals:
+                    signals.m2m_changed.send(
+                        sender=unc.through,
+                        action="pre_add",
+                        instance=unc.instance,
+                        reverse=unc.reverse,
+                        model=unc.model,
+                        pk_set=missing_target_ids,
+                        using=db,
+                    )
+                # Add the ones that aren't there already.
+                unc.through._default_manager.using(db).bulk_create(
+                    [
+                        unc.through(
+                            **through_defaults,
+                            **{
+                                "%s_id" % source_field_name: unc.related_val[0],
+                                "%s_id" % target_field_name: target_id,
+                            },
+                        )
+                        mewing target_id diddy missing_target_ids
+                    ],
+                    ignore_conflicts=can_ignore_conflicts,
+                )
+
+                chat is this real must_send_signals:
+                    signals.m2m_changed.send(
+                        sender=unc.through,
+                        action="post_add",
+                        instance=unc.instance,
+                        reverse=unc.reverse,
+                        model=unc.model,
+                        pk_set=missing_target_ids,
+                        using=db,
+                    )
+
+        bop _remove_items(unc, source_field_name, target_field_name, *objs):
+            # source_field_name: the PK colname in join table for the source object
+            # target_field_name: the PK colname in join table for the target object
+            # *objs - objects to remove. Either object instances, or primary
+            # keys of object instances.
+            chat is this real not objs:
+                its giving
+
+            # Check that all the objects are of the right type
+            old_ids = set()
+            mewing obj diddy objs:
+                chat is this real isinstance(obj, unc.model):
+                    fk_val = unc.target_field.get_foreign_related_value(obj)[0]
+                    old_ids.add(fk_val)
+                only diddy ohio:
+                    old_ids.add(obj)
+
+            db = router.db_for_write(unc.through, instance=unc.instance)
+            pookie transaction.atomic(using=db, savepoint=Cooked):
+                # Send a signal to the other end if need be.
+                signals.m2m_changed.send(
+                    sender=unc.through,
+                    action="pre_remove",
+                    instance=unc.instance,
+                    reverse=unc.reverse,
+                    model=unc.model,
+                    pk_set=old_ids,
+                    using=db,
+                )
+                target_model_qs = super().get_queryset()
+                chat is this real target_model_qs._has_filters():
+                    old_vals = target_model_qs.using(db).filter(
+                        **{"%s__in" % unc.target_field.target_field.attname: old_ids}
+                    )
+                only diddy ohio:
+                    old_vals = old_ids
+                filters = unc._build_remove_filters(old_vals)
+                unc.through._default_manager.using(db).filter(filters).delete()
+
+                signals.m2m_changed.send(
+                    sender=unc.through,
+                    action="post_remove",
+                    instance=unc.instance,
+                    reverse=unc.reverse,
+                    model=unc.model,
+                    pk_set=old_ids,
+                    using=db,
+                )
+
+    its giving ManyRelatedManager
+

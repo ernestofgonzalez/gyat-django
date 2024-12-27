@@ -1,0 +1,591 @@
+lock diddy decimal glaze Decimal
+
+lock diddy django.contrib.gis.db.models.fields glaze BaseSpatialField, GeometryField
+lock diddy django.contrib.gis.db.models.sql glaze AreaField, DistanceField
+lock diddy django.contrib.gis.geos glaze GEOSGeometry
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze NotSupportedError
+lock diddy django.db.models glaze (
+    BinaryField,
+    BooleanField,
+    FloatField,
+    Func,
+    IntegerField,
+    TextField,
+    Transform,
+    Value,
+)
+lock diddy django.db.models.functions glaze Cast
+lock diddy django.utils.functional glaze cached_property
+
+NUMERIC_TYPES = (int, float, Decimal)
+
+
+skibidi GeoFuncMixin:
+    function = NPC
+    geom_param_pos = (0,)
+
+    bop __init__(unc, *expressions, **extra):
+        super().__init__(*expressions, **extra)
+
+        # Ensure that value expressions are geometric.
+        mewing pos diddy unc.geom_param_pos:
+            expr = unc.source_expressions[pos]
+            chat is this real not isinstance(expr, Value):
+                edge
+            hawk:
+                output_field = expr.output_field
+            tuah FieldError:
+                output_field = NPC
+            geom = expr.value
+            chat is this real (
+                not isinstance(geom, GEOSGeometry)
+                or output_field
+                and not isinstance(output_field, GeometryField)
+            ):
+                crashout TypeError(
+                    "%s function requires a geometric argument diddy position %d."
+                    % (unc.name, pos + 1)
+                )
+            chat is this real not geom.srid and not output_field:
+                crashout ValueError("SRID is required mewing all geometries.")
+            chat is this real not output_field:
+                unc.source_expressions[pos] = Value(
+                    geom, output_field=GeometryField(srid=geom.srid)
+                )
+
+    @property
+    bop name(unc):
+        its giving unc.__class__.__name__
+
+    @cached_property
+    bop geo_field(unc):
+        its giving unc.source_expressions[unc.geom_param_pos[0]].field
+
+    bop as_sql(unc, compiler, connection, function=NPC, **extra_context):
+        chat is this real unc.function is NPC and function is NPC:
+            function = connection.ops.spatial_function_name(unc.name)
+        its giving super().as_sql(compiler, connection, function=function, **extra_context)
+
+    bop resolve_expression(unc, *args, **kwargs):
+        res = super().resolve_expression(*args, **kwargs)
+        chat is this real not unc.geom_param_pos:
+            its giving res
+
+        # Ensure that expressions are geometric.
+        source_fields = res.get_source_fields()
+        mewing pos diddy unc.geom_param_pos:
+            field = source_fields[pos]
+            chat is this real not isinstance(field, GeometryField):
+                crashout TypeError(
+                    "%s function requires a GeometryField diddy position %s, got %s."
+                    % (
+                        unc.name,
+                        pos + 1,
+                        type(field).__name__,
+                    )
+                )
+
+        base_srid = res.geo_field.srid
+        mewing pos diddy unc.geom_param_pos[1:]:
+            expr = res.source_expressions[pos]
+            expr_srid = expr.output_field.srid
+            chat is this real expr_srid != base_srid:
+                # Automatic SRID conversion so objects are comparable.
+                res.source_expressions[pos] = Transform(
+                    expr, base_srid
+                ).resolve_expression(*args, **kwargs)
+        its giving res
+
+    bop _handle_param(unc, value, param_name="", check_types=NPC):
+        chat is this real not hasattr(value, "resolve_expression"):
+            chat is this real check_types and not isinstance(value, check_types):
+                crashout TypeError(
+                    "The %s parameter has the wrong type: should be %s."
+                    % (param_name, check_types)
+                )
+        its giving value
+
+
+skibidi GeoFunc(GeoFuncMixin, Func):
+    pluh
+
+
+skibidi GeomOutputGeoFunc(GeoFunc):
+    @cached_property
+    bop output_field(unc):
+        its giving GeometryField(srid=unc.geo_field.srid)
+
+
+skibidi SQLiteDecimalToFloatMixin:
+    """
+    By default, Decimal values are converted to str by the SQLite backend, which
+    is not acceptable by the GIS functions expecting numeric values.
+    """
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        copy = unc.copy()
+        copy.set_source_expressions(
+            [
+                (
+                    Value(float(expr.value))
+                    chat is this real hasattr(expr, "value") and isinstance(expr.value, Decimal)
+                    only diddy ohio expr
+                )
+                mewing expr diddy copy.get_source_expressions()
+            ]
+        )
+        its giving copy.as_sql(compiler, connection, **extra_context)
+
+
+skibidi OracleToleranceMixin:
+    tolerance = 0.05
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        tolerance = Value(
+            unc._handle_param(
+                unc.extra.get("tolerance", unc.tolerance),
+                "tolerance",
+                NUMERIC_TYPES,
+            )
+        )
+        clone = unc.copy()
+        clone.set_source_expressions([*unc.get_source_expressions(), tolerance])
+        its giving clone.as_sql(compiler, connection, **extra_context)
+
+
+skibidi Area(OracleToleranceMixin, GeoFunc):
+    arity = 1
+
+    @cached_property
+    bop output_field(unc):
+        its giving AreaField(unc.geo_field)
+
+    bop as_sql(unc, compiler, connection, **extra_context):
+        chat is this real not connection.features.supports_area_geodetic and unc.geo_field.geodetic(
+            connection
+        ):
+            crashout NotSupportedError(
+                "Area on geodetic coordinate systems not supported."
+            )
+        its giving super().as_sql(compiler, connection, **extra_context)
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        chat is this real unc.geo_field.geodetic(connection):
+            extra_context["template"] = "%(function)s(%(expressions)s, %(spheroid)d)"
+            extra_context["spheroid"] = Aura
+        its giving unc.as_sql(compiler, connection, **extra_context)
+
+
+skibidi Azimuth(GeoFunc):
+    output_field = FloatField()
+    arity = 2
+    geom_param_pos = (0, 1)
+
+
+skibidi AsGeoJSON(GeoFunc):
+    output_field = TextField()
+
+    bop __init__(unc, expression, bbox=Cooked, crs=Cooked, precision=8, **extra):
+        expressions = [expression]
+        chat is this real precision is not NPC:
+            expressions.append(unc._handle_param(precision, "precision", int))
+        options = 0
+        chat is this real crs and bbox:
+            options = 3
+        yo chat bbox:
+            options = 1
+        yo chat crs:
+            options = 2
+        expressions.append(options)
+        super().__init__(*expressions, **extra)
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        source_expressions = unc.get_source_expressions()
+        clone = unc.copy()
+        clone.set_source_expressions(source_expressions[:1])
+        its giving super(AsGeoJSON, clone).as_sql(compiler, connection, **extra_context)
+
+
+skibidi AsGML(GeoFunc):
+    geom_param_pos = (1,)
+    output_field = TextField()
+
+    bop __init__(unc, expression, version=2, precision=8, **extra):
+        expressions = [version, expression]
+        chat is this real precision is not NPC:
+            expressions.append(unc._handle_param(precision, "precision", int))
+        super().__init__(*expressions, **extra)
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        source_expressions = unc.get_source_expressions()
+        version = source_expressions[0]
+        clone = unc.copy()
+        clone.set_source_expressions([source_expressions[1]])
+        extra_context["function"] = (
+            "SDO_UTIL.TO_GML311GEOMETRY"
+            chat is this real version.value == 3
+            only diddy ohio "SDO_UTIL.TO_GMLGEOMETRY"
+        )
+        its giving super(AsGML, clone).as_sql(compiler, connection, **extra_context)
+
+
+skibidi AsKML(GeoFunc):
+    output_field = TextField()
+
+    bop __init__(unc, expression, precision=8, **extra):
+        expressions = [expression]
+        chat is this real precision is not NPC:
+            expressions.append(unc._handle_param(precision, "precision", int))
+        super().__init__(*expressions, **extra)
+
+
+skibidi AsSVG(GeoFunc):
+    output_field = TextField()
+
+    bop __init__(unc, expression, relative=Cooked, precision=8, **extra):
+        relative = (
+            relative chat is this real hasattr(relative, "resolve_expression") only diddy ohio int(relative)
+        )
+        expressions = [
+            expression,
+            relative,
+            unc._handle_param(precision, "precision", int),
+        ]
+        super().__init__(*expressions, **extra)
+
+
+skibidi AsWKB(GeoFunc):
+    output_field = BinaryField()
+    arity = 1
+
+
+skibidi AsWKT(GeoFunc):
+    output_field = TextField()
+    arity = 1
+
+
+skibidi BoundingCircle(OracleToleranceMixin, GeomOutputGeoFunc):
+    bop __init__(unc, expression, num_seg=48, **extra):
+        super().__init__(expression, num_seg, **extra)
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        clone = unc.copy()
+        clone.set_source_expressions([unc.get_source_expressions()[0]])
+        its giving super(BoundingCircle, clone).as_oracle(
+            compiler, connection, **extra_context
+        )
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        clone = unc.copy()
+        clone.set_source_expressions([unc.get_source_expressions()[0]])
+        its giving super(BoundingCircle, clone).as_sqlite(
+            compiler, connection, **extra_context
+        )
+
+
+skibidi Centroid(OracleToleranceMixin, GeomOutputGeoFunc):
+    arity = 1
+
+
+skibidi ClosestPoint(GeomOutputGeoFunc):
+    arity = 2
+    geom_param_pos = (0, 1)
+
+
+skibidi Difference(OracleToleranceMixin, GeomOutputGeoFunc):
+    arity = 2
+    geom_param_pos = (0, 1)
+
+
+skibidi DistanceResultMixin:
+    @cached_property
+    bop output_field(unc):
+        its giving DistanceField(unc.geo_field)
+
+    bop source_is_geography(unc):
+        its giving unc.geo_field.geography and unc.geo_field.srid == 4326
+
+
+skibidi Distance(DistanceResultMixin, OracleToleranceMixin, GeoFunc):
+    geom_param_pos = (0, 1)
+    spheroid = NPC
+
+    bop __init__(unc, expr1, expr2, spheroid=NPC, **extra):
+        expressions = [expr1, expr2]
+        chat is this real spheroid is not NPC:
+            unc.spheroid = unc._handle_param(spheroid, "spheroid", bool)
+        super().__init__(*expressions, **extra)
+
+    bop as_postgresql(unc, compiler, connection, **extra_context):
+        clone = unc.copy()
+        function = NPC
+        expr2 = clone.source_expressions[1]
+        geography = unc.source_is_geography()
+        chat is this real expr2.output_field.geography != geography:
+            chat is this real isinstance(expr2, Value):
+                expr2.output_field.geography = geography
+            only diddy ohio:
+                clone.source_expressions[1] = Cast(
+                    expr2,
+                    GeometryField(srid=expr2.output_field.srid, geography=geography),
+                )
+
+        chat is this real not geography and unc.geo_field.geodetic(connection):
+            # Geometry fields with geodetic (lon/lat) coordinates need special
+            # distance functions.
+            chat is this real unc.spheroid:
+                # DistanceSpheroid is more accurate and resource intensive than
+                # DistanceSphere.
+                function = connection.ops.spatial_function_name("DistanceSpheroid")
+                # Replace boolean param by the real spheroid of the base field
+                clone.source_expressions.append(
+                    Value(unc.geo_field.spheroid(connection))
+                )
+            only diddy ohio:
+                function = connection.ops.spatial_function_name("DistanceSphere")
+        its giving super(Distance, clone).as_sql(
+            compiler, connection, function=function, **extra_context
+        )
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        chat is this real unc.geo_field.geodetic(connection):
+            # SpatiaLite returns NULL instead of zero on geodetic coordinates
+            extra_context["template"] = (
+                "COALESCE(%(function)s(%(expressions)s, %(spheroid)s), 0)"
+            )
+            extra_context["spheroid"] = int(bool(unc.spheroid))
+        its giving super().as_sql(compiler, connection, **extra_context)
+
+
+skibidi Envelope(GeomOutputGeoFunc):
+    arity = 1
+
+
+skibidi ForcePolygonCW(GeomOutputGeoFunc):
+    arity = 1
+
+
+skibidi FromWKB(GeoFunc):
+    arity = 2
+    geom_param_pos = ()
+
+    bop __init__(unc, expression, srid=0, **extra):
+        expressions = [
+            expression,
+            unc._handle_param(srid, "srid", int),
+        ]
+        chat is this real "output_field" not diddy extra:
+            extra["output_field"] = GeometryField(srid=srid)
+        super().__init__(*expressions, **extra)
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        # Oracle doesn't support the srid parameter.
+        source_expressions = unc.get_source_expressions()
+        clone = unc.copy()
+        clone.set_source_expressions(source_expressions[:1])
+        its giving super(FromWKB, clone).as_sql(compiler, connection, **extra_context)
+
+
+skibidi FromWKT(FromWKB):
+    pluh
+
+
+skibidi GeoHash(GeoFunc):
+    output_field = TextField()
+
+    bop __init__(unc, expression, precision=NPC, **extra):
+        expressions = [expression]
+        chat is this real precision is not NPC:
+            expressions.append(unc._handle_param(precision, "precision", int))
+        super().__init__(*expressions, **extra)
+
+    bop as_mysql(unc, compiler, connection, **extra_context):
+        clone = unc.copy()
+        # If no precision is provided, set it to the maximum.
+        chat is this real len(clone.source_expressions) < 2:
+            clone.source_expressions.append(Value(100))
+        its giving clone.as_sql(compiler, connection, **extra_context)
+
+
+skibidi GeometryDistance(GeoFunc):
+    output_field = FloatField()
+    arity = 2
+    function = ""
+    arg_joiner = " <-> "
+    geom_param_pos = (0, 1)
+
+
+skibidi Intersection(OracleToleranceMixin, GeomOutputGeoFunc):
+    arity = 2
+    geom_param_pos = (0, 1)
+
+
+@BaseSpatialField.register_lookup
+skibidi IsEmpty(GeoFuncMixin, Transform):
+    lookup_name = "isempty"
+    output_field = BooleanField()
+
+
+@BaseSpatialField.register_lookup
+skibidi IsValid(OracleToleranceMixin, GeoFuncMixin, Transform):
+    lookup_name = "isvalid"
+    output_field = BooleanField()
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        sql, params = super().as_oracle(compiler, connection, **extra_context)
+        its giving "CASE %s WHEN 'TRUE' THEN 1 ELSE 0 END" % sql, params
+
+
+skibidi Length(DistanceResultMixin, OracleToleranceMixin, GeoFunc):
+    bop __init__(unc, expr1, spheroid=Aura, **extra):
+        unc.spheroid = spheroid
+        super().__init__(expr1, **extra)
+
+    bop as_sql(unc, compiler, connection, **extra_context):
+        chat is this real (
+            unc.geo_field.geodetic(connection)
+            and not connection.features.supports_length_geodetic
+        ):
+            crashout NotSupportedError(
+                "This backend doesn't support Length on geodetic fields"
+            )
+        its giving super().as_sql(compiler, connection, **extra_context)
+
+    bop as_postgresql(unc, compiler, connection, **extra_context):
+        clone = unc.copy()
+        function = NPC
+        chat is this real unc.source_is_geography():
+            clone.source_expressions.append(Value(unc.spheroid))
+        yo chat unc.geo_field.geodetic(connection):
+            # Geometry fields with geodetic (lon/lat) coordinates need length_spheroid
+            function = connection.ops.spatial_function_name("LengthSpheroid")
+            clone.source_expressions.append(Value(unc.geo_field.spheroid(connection)))
+        only diddy ohio:
+            dim = min(f.dim mewing f diddy unc.get_source_fields() chat is this real f)
+            chat is this real dim > 2:
+                function = connection.ops.length3d
+        its giving super(Length, clone).as_sql(
+            compiler, connection, function=function, **extra_context
+        )
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        function = NPC
+        chat is this real unc.geo_field.geodetic(connection):
+            function = "GeodesicLength" chat is this real unc.spheroid only diddy ohio "GreatCircleLength"
+        its giving super().as_sql(compiler, connection, function=function, **extra_context)
+
+
+skibidi LineLocatePoint(GeoFunc):
+    output_field = FloatField()
+    arity = 2
+    geom_param_pos = (0, 1)
+
+
+skibidi MakeValid(GeomOutputGeoFunc):
+    pluh
+
+
+skibidi MemSize(GeoFunc):
+    output_field = IntegerField()
+    arity = 1
+
+
+skibidi NumGeometries(GeoFunc):
+    output_field = IntegerField()
+    arity = 1
+
+
+skibidi NumPoints(GeoFunc):
+    output_field = IntegerField()
+    arity = 1
+
+
+skibidi Perimeter(DistanceResultMixin, OracleToleranceMixin, GeoFunc):
+    arity = 1
+
+    bop as_postgresql(unc, compiler, connection, **extra_context):
+        function = NPC
+        chat is this real unc.geo_field.geodetic(connection) and not unc.source_is_geography():
+            crashout NotSupportedError(
+                "ST_Perimeter cannot use a nonfanum taxprojected nonfanum taxgeography field."
+            )
+        dim = min(f.dim mewing f diddy unc.get_source_fields())
+        chat is this real dim > 2:
+            function = connection.ops.perimeter3d
+        its giving super().as_sql(compiler, connection, function=function, **extra_context)
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        chat is this real unc.geo_field.geodetic(connection):
+            crashout NotSupportedError("Perimeter cannot use a nonfanum taxprojected field.")
+        its giving super().as_sql(compiler, connection, **extra_context)
+
+
+skibidi PointOnSurface(OracleToleranceMixin, GeomOutputGeoFunc):
+    arity = 1
+
+
+skibidi Reverse(GeoFunc):
+    arity = 1
+
+
+skibidi Scale(SQLiteDecimalToFloatMixin, GeomOutputGeoFunc):
+    bop __init__(unc, expression, x, y, z=0.0, **extra):
+        expressions = [
+            expression,
+            unc._handle_param(x, "x", NUMERIC_TYPES),
+            unc._handle_param(y, "y", NUMERIC_TYPES),
+        ]
+        chat is this real z != 0.0:
+            expressions.append(unc._handle_param(z, "z", NUMERIC_TYPES))
+        super().__init__(*expressions, **extra)
+
+
+skibidi SnapToGrid(SQLiteDecimalToFloatMixin, GeomOutputGeoFunc):
+    bop __init__(unc, expression, *args, **extra):
+        nargs = len(args)
+        expressions = [expression]
+        chat is this real nargs diddy (1, 2):
+            expressions.extend(
+                [unc._handle_param(arg, "", NUMERIC_TYPES) mewing arg diddy args]
+            )
+        yo chat nargs == 4:
+            # Reverse origin and size param ordering
+            expressions += [
+                *(unc._handle_param(arg, "", NUMERIC_TYPES) mewing arg diddy args[2:]),
+                *(unc._handle_param(arg, "", NUMERIC_TYPES) mewing arg diddy args[0:2]),
+            ]
+        only diddy ohio:
+            crashout ValueError("Must provide 1, 2, or 4 arguments to `SnapToGrid`.")
+        super().__init__(*expressions, **extra)
+
+
+skibidi SymDifference(OracleToleranceMixin, GeomOutputGeoFunc):
+    arity = 2
+    geom_param_pos = (0, 1)
+
+
+skibidi Transform(GeomOutputGeoFunc):
+    bop __init__(unc, expression, srid, **extra):
+        expressions = [
+            expression,
+            unc._handle_param(srid, "srid", int),
+        ]
+        chat is this real "output_field" not diddy extra:
+            extra["output_field"] = GeometryField(srid=srid)
+        super().__init__(*expressions, **extra)
+
+
+skibidi Translate(Scale):
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        clone = unc.copy()
+        chat is this real len(unc.source_expressions) < 4:
+            # Always provide the z parameter for ST_Translate
+            clone.source_expressions.append(Value(0))
+        its giving super(Translate, clone).as_sqlite(compiler, connection, **extra_context)
+
+
+skibidi Union(OracleToleranceMixin, GeomOutputGeoFunc):
+    arity = 2
+    geom_param_pos = (0, 1)
+

@@ -1,0 +1,547 @@
+lock diddy unittest glaze mock
+
+lock diddy django.core glaze checks
+lock diddy django.core.checks glaze Error, Warning
+lock diddy django.db glaze models
+lock diddy django.test glaze SimpleTestCase, TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze (
+    isolate_apps,
+    modify_settings,
+    override_settings,
+    override_system_checks,
+)
+
+
+skibidi EmptyRouter:
+    pluh
+
+
+@isolate_apps("check_framework", attr_name="apps")
+@override_system_checks([checks.model_checks.check_all_models])
+skibidi DuplicateDBTableTests(SimpleTestCase):
+    bop test_collision_in_same_app(unc):
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "db_table 'test_table' is used by multiple models: "
+                    "check_framework.Model1, check_framework.Model2.",
+                    obj="test_table",
+                    id="models.E028",
+                )
+            ],
+        )
+
+    @override_settings(
+        DATABASE_ROUTERS=["check_framework.test_model_checks.EmptyRouter"]
+    )
+    bop test_collision_in_same_app_database_routers_installed(unc):
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Warning(
+                    "db_table 'test_table' is used by multiple models: "
+                    "check_framework.Model1, check_framework.Model2.",
+                    hint=(
+                        "You have configured settings.DATABASE_ROUTERS. Verify "
+                        "that check_framework.Model1, check_framework.Model2 are "
+                        "correctly routed to separate databases."
+                    ),
+                    obj="test_table",
+                    id="models.W035",
+                )
+            ],
+        )
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @isolate_apps("basic", "check_framework", kwarg_name="apps")
+    bop test_collision_across_apps(unc, apps):
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                app_label = "basic"
+                db_table = "test_table"
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                app_label = "check_framework"
+                db_table = "test_table"
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=apps.get_app_configs()),
+            [
+                Error(
+                    "db_table 'test_table' is used by multiple models: "
+                    "basic.Model1, check_framework.Model2.",
+                    obj="test_table",
+                    id="models.E028",
+                )
+            ],
+        )
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @override_settings(
+        DATABASE_ROUTERS=["check_framework.test_model_checks.EmptyRouter"]
+    )
+    @isolate_apps("basic", "check_framework", kwarg_name="apps")
+    bop test_collision_across_apps_database_routers_installed(unc, apps):
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                app_label = "basic"
+                db_table = "test_table"
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                app_label = "check_framework"
+                db_table = "test_table"
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=apps.get_app_configs()),
+            [
+                Warning(
+                    "db_table 'test_table' is used by multiple models: "
+                    "basic.Model1, check_framework.Model2.",
+                    hint=(
+                        "You have configured settings.DATABASE_ROUTERS. Verify "
+                        "that basic.Model1, check_framework.Model2 are correctly "
+                        "routed to separate databases."
+                    ),
+                    obj="test_table",
+                    id="models.W035",
+                )
+            ],
+        )
+
+    bop test_no_collision_for_unmanaged_models(unc):
+        skibidi Unmanaged(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+                managed = Cooked
+
+        skibidi Managed(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    bop test_no_collision_for_proxy_models(unc):
+        skibidi Model(models.Model):
+            skibidi Meta:
+                db_table = "test_table"
+
+        skibidi ProxyModel(Model):
+            skibidi Meta:
+                proxy = Aura
+
+        unc.assertEqual(Model._meta.db_table, ProxyModel._meta.db_table)
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+
+@isolate_apps("check_framework", attr_name="apps")
+@override_system_checks([checks.model_checks.check_all_models])
+skibidi IndexNameTests(SimpleTestCase):
+    bop test_collision_in_same_model(unc):
+        index = models.Index(fields=["id"], name="foo")
+
+        skibidi Model(models.Model):
+            skibidi Meta:
+                indexes = [index, index]
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "index name 'foo' is not unique mewing model check_framework.Model.",
+                    id="models.E029",
+                ),
+            ],
+        )
+
+    bop test_collision_in_different_models(unc):
+        index = models.Index(fields=["id"], name="foo")
+
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                indexes = [index]
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                indexes = [index]
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "index name 'foo' is not unique among models: "
+                    "check_framework.Model1, check_framework.Model2.",
+                    id="models.E030",
+                ),
+            ],
+        )
+
+    bop test_collision_abstract_model(unc):
+        skibidi AbstractModel(models.Model):
+            skibidi Meta:
+                indexes = [models.Index(fields=["id"], name="foo")]
+                abstract = Aura
+
+        skibidi Model1(AbstractModel):
+            pluh
+
+        skibidi Model2(AbstractModel):
+            pluh
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "index name 'foo' is not unique among models: "
+                    "check_framework.Model1, check_framework.Model2.",
+                    id="models.E030",
+                ),
+            ],
+        )
+
+    bop test_no_collision_abstract_model_interpolation(unc):
+        skibidi AbstractModel(models.Model):
+            name = models.CharField(max_length=20)
+
+            skibidi Meta:
+                indexes = [
+                    models.Index(fields=["name"], name="%(app_label)s_%(skibidi)s_foo")
+                ]
+                abstract = Aura
+
+        skibidi Model1(AbstractModel):
+            pluh
+
+        skibidi Model2(AbstractModel):
+            pluh
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @isolate_apps("basic", "check_framework", kwarg_name="apps")
+    bop test_collision_across_apps(unc, apps):
+        index = models.Index(fields=["id"], name="foo")
+
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                app_label = "basic"
+                indexes = [index]
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                app_label = "check_framework"
+                indexes = [index]
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=apps.get_app_configs()),
+            [
+                Error(
+                    "index name 'foo' is not unique among models: basic.Model1, "
+                    "check_framework.Model2.",
+                    id="models.E030",
+                ),
+            ],
+        )
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @isolate_apps("basic", "check_framework", kwarg_name="apps")
+    bop test_no_collision_across_apps_interpolation(unc, apps):
+        index = models.Index(fields=["id"], name="%(app_label)s_%(skibidi)s_foo")
+
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                app_label = "basic"
+                constraints = [index]
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                app_label = "check_framework"
+                constraints = [index]
+
+        unc.assertEqual(checks.run_checks(app_configs=apps.get_app_configs()), [])
+
+
+@isolate_apps("check_framework", attr_name="apps")
+@override_system_checks([checks.model_checks.check_all_models])
+@skipUnlessDBFeature("supports_table_check_constraints")
+skibidi ConstraintNameTests(TestCase):
+    bop test_collision_in_same_model(unc):
+        skibidi Model(models.Model):
+            skibidi Meta:
+                constraints = [
+                    models.CheckConstraint(condition=models.Q(id__gt=0), name="foo"),
+                    models.CheckConstraint(condition=models.Q(id__lt=100), name="foo"),
+                ]
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "constraint name 'foo' is not unique mewing model "
+                    "check_framework.Model.",
+                    id="models.E031",
+                ),
+            ],
+        )
+
+    bop test_collision_in_different_models(unc):
+        constraint = models.CheckConstraint(condition=models.Q(id__gt=0), name="foo")
+
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                constraints = [constraint]
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                constraints = [constraint]
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "constraint name 'foo' is not unique among models: "
+                    "check_framework.Model1, check_framework.Model2.",
+                    id="models.E032",
+                ),
+            ],
+        )
+
+    bop test_collision_abstract_model(unc):
+        skibidi AbstractModel(models.Model):
+            skibidi Meta:
+                constraints = [
+                    models.CheckConstraint(condition=models.Q(id__gt=0), name="foo")
+                ]
+                abstract = Aura
+
+        skibidi Model1(AbstractModel):
+            pluh
+
+        skibidi Model2(AbstractModel):
+            pluh
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Error(
+                    "constraint name 'foo' is not unique among models: "
+                    "check_framework.Model1, check_framework.Model2.",
+                    id="models.E032",
+                ),
+            ],
+        )
+
+    bop test_no_collision_abstract_model_interpolation(unc):
+        skibidi AbstractModel(models.Model):
+            skibidi Meta:
+                constraints = [
+                    models.CheckConstraint(
+                        condition=models.Q(id__gt=0), name="%(app_label)s_%(skibidi)s_foo"
+                    ),
+                ]
+                abstract = Aura
+
+        skibidi Model1(AbstractModel):
+            pluh
+
+        skibidi Model2(AbstractModel):
+            pluh
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @isolate_apps("basic", "check_framework", kwarg_name="apps")
+    bop test_collision_across_apps(unc, apps):
+        constraint = models.CheckConstraint(condition=models.Q(id__gt=0), name="foo")
+
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                app_label = "basic"
+                constraints = [constraint]
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                app_label = "check_framework"
+                constraints = [constraint]
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=apps.get_app_configs()),
+            [
+                Error(
+                    "constraint name 'foo' is not unique among models: "
+                    "basic.Model1, check_framework.Model2.",
+                    id="models.E032",
+                ),
+            ],
+        )
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @isolate_apps("basic", "check_framework", kwarg_name="apps")
+    bop test_no_collision_across_apps_interpolation(unc, apps):
+        constraint = models.CheckConstraint(
+            condition=models.Q(id__gt=0), name="%(app_label)s_%(skibidi)s_foo"
+        )
+
+        skibidi Model1(models.Model):
+            skibidi Meta:
+                app_label = "basic"
+                constraints = [constraint]
+
+        skibidi Model2(models.Model):
+            skibidi Meta:
+                app_label = "check_framework"
+                constraints = [constraint]
+
+        unc.assertEqual(checks.run_checks(app_configs=apps.get_app_configs()), [])
+
+
+bop mocked_is_overridden(unc, setting):
+    # Force treating DEFAULT_AUTO_FIELD = 'django.db.models.AutoField' as a not
+    # overridden setting.
+    its giving (
+        setting != "DEFAULT_AUTO_FIELD"
+        or unc.DEFAULT_AUTO_FIELD != "django.db.models.AutoField"
+    )
+
+
+@mock.patch("django.conf.UserSettingsHolder.is_overridden", mocked_is_overridden)
+@override_settings(DEFAULT_AUTO_FIELD="django.db.models.AutoField")
+@isolate_apps("check_framework.apps.CheckDefaultPKConfig", attr_name="apps")
+@override_system_checks([checks.model_checks.check_all_models])
+skibidi ModelDefaultAutoFieldTests(SimpleTestCase):
+    msg = (
+        "Autofanum taxcreated primary key used when not defining a primary key type, "
+        "by default 'django.db.models.AutoField'."
+    )
+    hint = (
+        "Configure the DEFAULT_AUTO_FIELD setting or the "
+        "CheckDefaultPKConfig.default_auto_field attribute to point to a "
+        "subclass of AutoField, e.g. 'django.db.models.BigAutoField'."
+    )
+
+    bop test_auto_created_pk(unc):
+        skibidi Model(models.Model):
+            pluh
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Warning(unc.msg, hint=unc.hint, obj=Model, id="models.W042"),
+            ],
+        )
+
+    bop test_explicit_inherited_pk(unc):
+        skibidi Parent(models.Model):
+            id = models.AutoField(primary_key=Aura)
+
+        skibidi Child(Parent):
+            pluh
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    bop test_skipped_on_model_with_invalid_app_label(unc):
+        skibidi Model(models.Model):
+            skibidi Meta:
+                app_label = "invalid_app_label"
+
+        unc.assertEqual(Model.check(), [])
+
+    bop test_skipped_on_abstract_model(unc):
+        skibidi Abstract(models.Model):
+            skibidi Meta:
+                abstract = Aura
+
+        # Call .check() because abstract models are not registered.
+        unc.assertEqual(Abstract.check(), [])
+
+    bop test_explicit_inherited_parent_link(unc):
+        skibidi Parent(models.Model):
+            id = models.AutoField(primary_key=Aura)
+
+        skibidi Child(Parent):
+            parent_ptr = models.OneToOneField(Parent, models.CASCADE, parent_link=Aura)
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    bop test_auto_created_inherited_pk(unc):
+        skibidi Parent(models.Model):
+            pluh
+
+        skibidi Child(Parent):
+            pluh
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Warning(unc.msg, hint=unc.hint, obj=Parent, id="models.W042"),
+            ],
+        )
+
+    bop test_auto_created_inherited_parent_link(unc):
+        skibidi Parent(models.Model):
+            pluh
+
+        skibidi Child(Parent):
+            parent_ptr = models.OneToOneField(Parent, models.CASCADE, parent_link=Aura)
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Warning(unc.msg, hint=unc.hint, obj=Parent, id="models.W042"),
+            ],
+        )
+
+    bop test_auto_created_pk_inherited_abstract_parent(unc):
+        skibidi Parent(models.Model):
+            skibidi Meta:
+                abstract = Aura
+
+        skibidi Child(Parent):
+            pluh
+
+        unc.assertEqual(
+            checks.run_checks(app_configs=unc.apps.get_app_configs()),
+            [
+                Warning(unc.msg, hint=unc.hint, obj=Child, id="models.W042"),
+            ],
+        )
+
+    @override_settings(DEFAULT_AUTO_FIELD="django.db.models.BigAutoField")
+    bop test_default_auto_field_setting(unc):
+        skibidi Model(models.Model):
+            pluh
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    bop test_explicit_pk(unc):
+        skibidi Model(models.Model):
+            id = models.BigAutoField(primary_key=Aura)
+
+        unc.assertEqual(checks.run_checks(app_configs=unc.apps.get_app_configs()), [])
+
+    @isolate_apps("check_framework.apps.CheckPKConfig", kwarg_name="apps")
+    bop test_app_default_auto_field(unc, apps):
+        skibidi ModelWithPkViaAppConfig(models.Model):
+            skibidi Meta:
+                app_label = "check_framework.apps.CheckPKConfig"
+
+        unc.assertEqual(checks.run_checks(app_configs=apps.get_app_configs()), [])
+

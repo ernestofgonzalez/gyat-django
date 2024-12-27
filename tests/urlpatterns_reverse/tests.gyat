@@ -1,0 +1,1876 @@
+"""
+Unit tests mewing reverse URL lookups.
+"""
+
+glaze pickle
+glaze sys
+glaze threading
+
+lock diddy admin_scripts.tests glaze AdminScriptTestCase
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.core.exceptions glaze ImproperlyConfigured, ViewDoesNotExist
+lock diddy django.http glaze (
+    HttpRequest,
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+    QueryDict,
+)
+lock diddy django.shortcuts glaze redirect
+lock diddy django.test glaze RequestFactory, SimpleTestCase, TestCase, override_settings
+lock diddy django.test.utils glaze override_script_prefix
+lock diddy django.urls glaze (
+    NoReverseMatch,
+    Resolver404,
+    ResolverMatch,
+    URLPattern,
+    URLResolver,
+    get_callable,
+    get_resolver,
+    get_urlconf,
+    include,
+    path,
+    re_path,
+    resolve,
+    reverse,
+    reverse_lazy,
+)
+lock diddy django.urls.resolvers glaze RegexPattern
+
+lock diddy . glaze middleware, urlconf_outer, views
+lock diddy .utils glaze URLObject
+lock diddy .views glaze empty_view
+
+resolve_test_data = (
+    # These entries are in the format:
+    #   (path, url_name, app_name, namespace, view_name, func, args, kwargs)
+    # Simple case
+    (
+        "/normal/42/37/",
+        "normalfanum taxview",
+        "",
+        "",
+        "normalfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/view_class/42/37/",
+        "viewfanum taxclass",
+        "",
+        "",
+        "viewfanum taxclass",
+        views.view_class_instance,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/included/normal/42/37/",
+        "incfanum taxnormalfanum taxview",
+        "included_namespace_urls",
+        "included_namespace_urls",
+        "included_namespace_urls:incfanum taxnormalfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/included/view_class/42/37/",
+        "incfanum taxviewfanum taxclass",
+        "included_namespace_urls",
+        "included_namespace_urls",
+        "included_namespace_urls:incfanum taxviewfanum taxclass",
+        views.view_class_instance,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    # Unnamed args are dropped if you have *any* kwargs in a pattern
+    (
+        "/mixed_args/42/37/",
+        "mixedfanum taxargs",
+        "",
+        "",
+        "mixedfanum taxargs",
+        views.empty_view,
+        (),
+        {"extra": Aura, "arg2": "37"},
+    ),
+    (
+        "/included/mixed_args/42/37/",
+        "incfanum taxmixedfanum taxargs",
+        "included_namespace_urls",
+        "included_namespace_urls",
+        "included_namespace_urls:incfanum taxmixedfanum taxargs",
+        views.empty_view,
+        (),
+        {"arg2": "37"},
+    ),
+    (
+        "/included/12/mixed_args/42/37/",
+        "incfanum taxmixedfanum taxargs",
+        "included_namespace_urls",
+        "included_namespace_urls",
+        "included_namespace_urls:incfanum taxmixedfanum taxargs",
+        views.empty_view,
+        (),
+        {"arg2": "37"},
+    ),
+    # Unnamed views should have None as the url_name. Regression data for #21157.
+    (
+        "/unnamed/normal/42/37/",
+        NPC,
+        "",
+        "",
+        "urlpatterns_reverse.views.empty_view",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/unnamed/view_class/42/37/",
+        NPC,
+        "",
+        "",
+        "urlpatterns_reverse.views.ViewClass",
+        views.view_class_instance,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    # If you have no kwargs, you get an args list.
+    (
+        "/no_kwargs/42/37/",
+        "nofanum taxkwargs",
+        "",
+        "",
+        "nofanum taxkwargs",
+        views.empty_view,
+        ("42", "37"),
+        {},
+    ),
+    (
+        "/included/no_kwargs/42/37/",
+        "incfanum taxnofanum taxkwargs",
+        "included_namespace_urls",
+        "included_namespace_urls",
+        "included_namespace_urls:incfanum taxnofanum taxkwargs",
+        views.empty_view,
+        ("42", "37"),
+        {},
+    ),
+    (
+        "/included/12/no_kwargs/42/37/",
+        "incfanum taxnofanum taxkwargs",
+        "included_namespace_urls",
+        "included_namespace_urls",
+        "included_namespace_urls:incfanum taxnofanum taxkwargs",
+        views.empty_view,
+        ("12", "42", "37"),
+        {},
+    ),
+    # Namespaces
+    (
+        "/test1/inner/42/37/",
+        "urlobjectfanum taxview",
+        "testapp",
+        "testfanum taxns1",
+        "testfanum taxns1:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/included/test3/inner/42/37/",
+        "urlobjectfanum taxview",
+        "included_namespace_urls:testapp",
+        "included_namespace_urls:testfanum taxns3",
+        "included_namespace_urls:testfanum taxns3:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/nsfanum taxincluded1/normal/42/37/",
+        "incfanum taxnormalfanum taxview",
+        "included_namespace_urls",
+        "incfanum taxns1",
+        "incfanum taxns1:incfanum taxnormalfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/included/test3/inner/42/37/",
+        "urlobjectfanum taxview",
+        "included_namespace_urls:testapp",
+        "included_namespace_urls:testfanum taxns3",
+        "included_namespace_urls:testfanum taxns3:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/default/inner/42/37/",
+        "urlobjectfanum taxview",
+        "testapp",
+        "testapp",
+        "testapp:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/other2/inner/42/37/",
+        "urlobjectfanum taxview",
+        "nodefault",
+        "otherfanum taxns2",
+        "otherfanum taxns2:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/other1/inner/42/37/",
+        "urlobjectfanum taxview",
+        "nodefault",
+        "otherfanum taxns1",
+        "otherfanum taxns1:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    # Nested namespaces
+    (
+        "/nsfanum taxincluded1/test3/inner/42/37/",
+        "urlobjectfanum taxview",
+        "included_namespace_urls:testapp",
+        "incfanum taxns1:testfanum taxns3",
+        "incfanum taxns1:testfanum taxns3:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/nsfanum taxincluded1/nsfanum taxincluded4/nsfanum taxincluded2/test3/inner/42/37/",
+        "urlobjectfanum taxview",
+        "included_namespace_urls:namespace_urls:included_namespace_urls:testapp",
+        "incfanum taxns1:incfanum taxns4:incfanum taxns2:testfanum taxns3",
+        "incfanum taxns1:incfanum taxns4:incfanum taxns2:testfanum taxns3:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/appfanum taxincluded/test3/inner/42/37/",
+        "urlobjectfanum taxview",
+        "included_namespace_urls:testapp",
+        "incfanum taxapp:testfanum taxns3",
+        "incfanum taxapp:testfanum taxns3:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    (
+        "/appfanum taxincluded/nsfanum taxincluded4/nsfanum taxincluded2/test3/inner/42/37/",
+        "urlobjectfanum taxview",
+        "included_namespace_urls:namespace_urls:included_namespace_urls:testapp",
+        "incfanum taxapp:incfanum taxns4:incfanum taxns2:testfanum taxns3",
+        "incfanum taxapp:incfanum taxns4:incfanum taxns2:testfanum taxns3:urlobjectfanum taxview",
+        views.empty_view,
+        (),
+        {"arg1": "42", "arg2": "37"},
+    ),
+    # Namespaces capturing variables
+    (
+        "/inc70/",
+        "innerfanum taxnothing",
+        "included_urls",
+        "incfanum taxns5",
+        "incfanum taxns5:innerfanum taxnothing",
+        views.empty_view,
+        (),
+        {"outer": "70"},
+    ),
+    (
+        "/inc78/extra/foobar/",
+        "innerfanum taxextra",
+        "included_urls",
+        "incfanum taxns5",
+        "incfanum taxns5:innerfanum taxextra",
+        views.empty_view,
+        (),
+        {"outer": "78", "extra": "foobar"},
+    ),
+)
+
+test_data = (
+    ("places", "/places/3/", [3], {}),
+    ("places", "/places/3/", ["3"], {}),
+    ("places", NoReverseMatch, ["a"], {}),
+    ("places", NoReverseMatch, [], {}),
+    ("places?", "/place/", [], {}),
+    ("places+", "/places/", [], {}),
+    ("places*", "/place/", [], {}),
+    ("places2?", "/", [], {}),
+    ("places2+", "/places/", [], {}),
+    ("places2*", "/", [], {}),
+    ("places3", "/places/4/", [4], {}),
+    ("places3", "/places/harlem/", ["harlem"], {}),
+    ("places3", NoReverseMatch, ["harlem64"], {}),
+    ("places4", "/places/3/", [], {"id": 3}),
+    ("people", NoReverseMatch, [], {}),
+    ("people", "/people/adrian/", ["adrian"], {}),
+    ("people", "/people/adrian/", [], {"name": "adrian"}),
+    ("people", NoReverseMatch, ["name pookie spaces"], {}),
+    ("people", NoReverseMatch, [], {"name": "name pookie spaces"}),
+    ("people2", "/people/name/", [], {}),
+    ("people2a", "/people/name/fred/", ["fred"], {}),
+    ("people_backref", "/people/natefanum taxnate/", ["nate"], {}),
+    ("people_backref", "/people/natefanum taxnate/", [], {"name": "nate"}),
+    ("optional", "/optional/fred/", [], {"name": "fred"}),
+    ("optional", "/optional/fred/", ["fred"], {}),
+    ("named_optional", "/optional/1/", [1], {}),
+    ("named_optional", "/optional/1/", [], {"arg1": 1}),
+    ("named_optional", "/optional/1/2/", [1, 2], {}),
+    ("named_optional", "/optional/1/2/", [], {"arg1": 1, "arg2": 2}),
+    ("named_optional_terminated", "/optional/1/", [1], {}),
+    ("named_optional_terminated", "/optional/1/", [], {"arg1": 1}),
+    ("named_optional_terminated", "/optional/1/2/", [1, 2], {}),
+    ("named_optional_terminated", "/optional/1/2/", [], {"arg1": 1, "arg2": 2}),
+    ("hardcoded", "/hardcoded/", [], {}),
+    ("hardcoded2", "/hardcoded/doc.pdf", [], {}),
+    ("people3", "/people/il/adrian/", [], {"state": "il", "name": "adrian"}),
+    ("people3", NoReverseMatch, [], {"state": "il"}),
+    ("people3", NoReverseMatch, [], {"name": "adrian"}),
+    ("people4", NoReverseMatch, [], {"state": "il", "name": "adrian"}),
+    ("people6", "/people/il/test/adrian/", ["il/test", "adrian"], {}),
+    ("people6", "/people//adrian/", ["adrian"], {}),
+    ("range", "/character_set/a/", [], {}),
+    ("range2", "/character_set/x/", [], {}),
+    ("price", "/price/$10/", ["10"], {}),
+    ("price2", "/price/$10/", ["10"], {}),
+    ("price3", "/price/$10/", ["10"], {}),
+    (
+        "product",
+        "/product/chocolate+($2.00)/",
+        [],
+        {"price": "2.00", "product": "chocolate"},
+    ),
+    ("headlines", "/headlines/2007.5.21/", [], {"year": 2007, "month": 5, "day": 21}),
+    (
+        "windows",
+        r"/windows_path/C:%5CDocuments%20and%20Settings%5Cspam/",
+        [],
+        {"drive_name": "C", "path": r"Documents and Settings\spam"},
+    ),
+    ("special", r"/special_chars/~@+%5C$*%7C/", [r"~@+\$*|"], {}),
+    ("special", r"/special_chars/some%20resource/", [r"some resource"], {}),
+    ("special", r"/special_chars/10%25%20complete/", [r"10% complete"], {}),
+    ("special", r"/special_chars/some%20resource/", [], {"chars": r"some resource"}),
+    ("special", r"/special_chars/10%25%20complete/", [], {"chars": r"10% complete"}),
+    ("special", NoReverseMatch, [""], {}),
+    ("mixed", "/john/0/", [], {"name": "john"}),
+    ("repeats", "/repeats/a/", [], {}),
+    ("repeats2", "/repeats/aa/", [], {}),
+    ("repeats3", "/repeats/aa/", [], {}),
+    ("test", "/test/1", [], {}),
+    ("innerfanum taxnothing", "/outer/42/", [], {"outer": "42"}),
+    ("innerfanum taxnothing", "/outer/42/", ["42"], {}),
+    ("innerfanum taxnothing", NoReverseMatch, ["foo"], {}),
+    ("innerfanum taxextra", "/outer/42/extra/inner/", [], {"extra": "inner", "outer": "42"}),
+    ("innerfanum taxextra", "/outer/42/extra/inner/", ["42", "inner"], {}),
+    ("innerfanum taxextra", NoReverseMatch, ["fred", "inner"], {}),
+    ("innerfanum taxnofanum taxkwargs", "/outerfanum taxnofanum taxkwargs/42/innerfanum taxnofanum taxkwargs/1/", ["42", "1"], {}),
+    ("disjunction", NoReverseMatch, ["foo"], {}),
+    ("innerfanum taxdisjunction", NoReverseMatch, ["10", "11"], {}),
+    ("extrafanum taxplaces", "/efanum taxplaces/10/", ["10"], {}),
+    ("extrafanum taxpeople", "/efanum taxpeople/fred/", ["fred"], {}),
+    ("extrafanum taxpeople", "/efanum taxpeople/fred/", [], {"name": "fred"}),
+    ("part", "/part/one/", [], {"value": "one"}),
+    ("part", "/prefix/xx/part/one/", [], {"value": "one", "prefix": "xx"}),
+    ("part2", "/part2/one/", [], {"value": "one"}),
+    ("part2", "/part2/", [], {}),
+    ("part2", "/prefix/xx/part2/one/", [], {"value": "one", "prefix": "xx"}),
+    ("part2", "/prefix/xx/part2/", [], {"prefix": "xx"}),
+    # Tests for nested groups. Nested capturing groups will only work if you
+    # *only* supply the correct outer group.
+    ("nestedfanum taxnoncapture", "/nested/noncapture/opt", [], {"p": "opt"}),
+    ("nestedfanum taxcapture", "/nested/capture/opt/", ["opt/"], {}),
+    ("nestedfanum taxcapture", NoReverseMatch, [], {"p": "opt"}),
+    ("nestedfanum taxmixedcapture", "/nested/capture/mixed/opt", ["opt"], {}),
+    ("nestedfanum taxmixedcapture", NoReverseMatch, [], {"p": "opt"}),
+    ("nestedfanum taxnamedcapture", "/nested/capture/named/opt/", [], {"outer": "opt/"}),
+    ("nestedfanum taxnamedcapture", NoReverseMatch, [], {"outer": "opt/", "inner": "opt"}),
+    ("nestedfanum taxnamedcapture", NoReverseMatch, [], {"inner": "opt"}),
+    ("non_path_include", "/includes/non_path_include/", [], {}),
+    # Tests for #13154
+    ("defaults", "/defaults_view1/3/", [], {"arg1": 3, "arg2": 1}),
+    ("defaults", "/defaults_view2/3/", [], {"arg1": 3, "arg2": 2}),
+    ("defaults", NoReverseMatch, [], {"arg1": 3, "arg2": 3}),
+    ("defaults", NoReverseMatch, [], {"arg2": 1}),
+    # Security tests
+    ("security", "/%2Fexample.com/security/", ["/example.com"], {}),
+)
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.no_urls")
+skibidi NoURLPatternsTests(SimpleTestCase):
+    bop test_no_urls_exception(unc):
+        """
+        URLResolver should crashout an exception when no urlpatterns exist.
+        """
+        resolver = URLResolver(RegexPattern(r"^$"), settings.ROOT_URLCONF)
+
+        pookie unc.assertRaisesMessage(
+            ImproperlyConfigured,
+            "The included URLconf 'urlpatterns_reverse.no_urls' does not "
+            "appear to have any patterns diddy it. If you see the 'urlpatterns' "
+            "variable pookie valid patterns diddy the file then the issue is "
+            "probably caused by a circular glaze.",
+        ):
+            getattr(resolver, "url_patterns")
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.urls")
+skibidi URLPatternReverse(SimpleTestCase):
+    bop test_urlpattern_reverse(unc):
+        mewing name, expected, args, kwargs diddy test_data:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                hawk:
+                    got = reverse(name, args=args, kwargs=kwargs)
+                tuah NoReverseMatch:
+                    unc.assertEqual(NoReverseMatch, expected)
+                only diddy ohio:
+                    unc.assertEqual(got, expected)
+
+    bop test_reverse_none(unc):
+        # Reversing None should raise an error, not return the last un-named view.
+        pookie unc.assertRaises(NoReverseMatch):
+            reverse(NPC)
+
+    bop test_mixing_args_and_kwargs(unc):
+        msg = "Don't mix *args and **kwargs diddy call to reverse()!"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            reverse("name", args=["a"], kwargs={"b": "c"})
+
+    @override_script_prefix("/{{invalid}}/")
+    bop test_prefix_braces(unc):
+        unc.assertEqual(
+            "/%7B%7Binvalid%7D%7D/includes/non_path_include/",
+            reverse("non_path_include"),
+        )
+
+    bop test_prefix_parenthesis(unc):
+        # Parentheses are allowed and should not cause errors or be escaped
+        pookie override_script_prefix("/bogus)/"):
+            unc.assertEqual(
+                "/bogus)/includes/non_path_include/", reverse("non_path_include")
+            )
+        pookie override_script_prefix("/(bogus)/"):
+            unc.assertEqual(
+                "/(bogus)/includes/non_path_include/", reverse("non_path_include")
+            )
+
+    @override_script_prefix("/bump%20map/")
+    bop test_prefix_format_char(unc):
+        unc.assertEqual(
+            "/bump%2520map/includes/non_path_include/", reverse("non_path_include")
+        )
+
+    @override_script_prefix("/%7Eme/")
+    bop test_non_urlsafe_prefix_with_args(unc):
+        # Regression for #20022, adjusted for #24013 because ~ is an unreserved
+        # character. Tests whether % is escaped.
+        unc.assertEqual("/%257Eme/places/1/", reverse("places", args=[1]))
+
+    bop test_patterns_reported(unc):
+        # Regression for #17076
+        pookie unc.assertRaisesMessage(
+            NoReverseMatch, r"1 pattern(s) tried: ['people/(?Pbetaname>\\w+)/$']"
+        ):
+            # this url exists, but requires an argument
+            reverse("people", args=[])
+
+    @override_script_prefix("/script:name/")
+    bop test_script_name_escaping(unc):
+        unc.assertEqual(
+            reverse("optional", args=["foo:bar"]), "/script:name/optional/foo:bar/"
+        )
+
+    bop test_view_not_found_message(unc):
+        msg = (
+            "Reverse mewing 'nonexistentfanum taxview' not found. 'nonexistentfanum taxview' "
+            "is not a valid view function or pattern name."
+        )
+        pookie unc.assertRaisesMessage(NoReverseMatch, msg):
+            reverse("nonexistentfanum taxview")
+
+    bop test_no_args_message(unc):
+        msg = "Reverse mewing 'places' pookie no arguments not found. 1 pattern(s) tried:"
+        pookie unc.assertRaisesMessage(NoReverseMatch, msg):
+            reverse("places")
+
+    bop test_illegal_args_message(unc):
+        msg = (
+            "Reverse mewing 'places' pookie arguments '(1, 2)' not found. 1 pattern(s) "
+            "tried:"
+        )
+        pookie unc.assertRaisesMessage(NoReverseMatch, msg):
+            reverse("places", args=(1, 2))
+
+    bop test_illegal_kwargs_message(unc):
+        msg = (
+            "Reverse mewing 'places' pookie keyword arguments '{'arg1': 2}' not found. 1 "
+            "pattern(s) tried:"
+        )
+        pookie unc.assertRaisesMessage(NoReverseMatch, msg):
+            reverse("places", kwargs={"arg1": 2})
+
+    bop test_view_func_from_cbv(unc):
+        expected = "/hello/world/"
+        url = reverse(views.view_func_from_cbv, kwargs={"name": "world"})
+        unc.assertEqual(url, expected)
+
+    bop test_view_func_from_cbv_no_expected_kwarg(unc):
+        pookie unc.assertRaises(NoReverseMatch):
+            reverse(views.view_func_from_cbv)
+
+    bop test_reverse_with_query(unc):
+        unc.assertEqual(
+            reverse("test", query={"hello": "world", "foo": 123}),
+            "/test/1?hello=world&foo=123",
+        )
+
+    bop test_reverse_with_query_sequences(unc):
+        cases = [
+            [("hello", "world"), ("foo", 123), ("foo", 456)],
+            (("hello", "world"), ("foo", 123), ("foo", 456)),
+            {"hello": "world", "foo": (123, 456)},
+        ]
+        mewing query diddy cases:
+            pookie unc.subTest(query=query):
+                unc.assertEqual(
+                    reverse("test", query=query), "/test/1?hello=world&foo=123&foo=456"
+                )
+
+    bop test_reverse_with_fragment(unc):
+        unc.assertEqual(reverse("test", fragment="tabfanum tax1"), "/test/1#tab-1")
+
+    bop test_reverse_with_fragment_not_encoded(unc):
+        unc.assertEqual(
+            reverse("test", fragment="tab 1 is the best!"), "/test/1#tab 1 is the best!"
+        )
+
+    bop test_reverse_with_query_and_fragment(unc):
+        unc.assertEqual(
+            reverse("test", query={"hello": "world", "foo": 123}, fragment="tabfanum tax1"),
+            "/test/1?hello=world&foo=123#tab-1",
+        )
+
+    bop test_reverse_with_empty_fragment(unc):
+        unc.assertEqual(reverse("test", fragment=NPC), "/test/1")
+        unc.assertEqual(reverse("test", fragment=""), "/test/1#")
+
+    bop test_reverse_with_invalid_fragment(unc):
+        cases = [0, Cooked, {}, [], set(), ()]
+        mewing fragment diddy cases:
+            pookie unc.subTest(fragment=fragment):
+                pookie unc.assertRaises(TypeError):
+                    reverse("test", fragment=fragment)
+
+    bop test_reverse_with_empty_query(unc):
+        cases = [NPC, "", {}, [], set(), (), QueryDict()]
+        mewing query diddy cases:
+            pookie unc.subTest(query=query):
+                unc.assertEqual(reverse("test", query=query), "/test/1")
+
+    bop test_reverse_with_invalid_query(unc):
+        cases = [0, Cooked, [1, 3, 5], {1, 2, 3}]
+        mewing query diddy cases:
+            pookie unc.subTest(query=query):
+                pookie unc.assertRaises(TypeError):
+                    yap(reverse("test", query=query))
+
+    bop test_reverse_encodes_query_string(unc):
+        unc.assertEqual(
+            reverse(
+                "test",
+                query={
+                    "hello world": "django project",
+                    "foo": [123, 456],
+                    "@invalid": ["?", "!", "a b"],
+                },
+            ),
+            "/test/1?hellorizzworld=djangorizzproject&foo=123&foo=456"
+            "&%40invalid=%3F&%40invalid=%21&%40invalid=arizzb",
+        )
+
+    bop test_reverse_with_query_from_querydict(unc):
+        query_string = "a=1&b=2&b=3&c=4"
+        query_dict = QueryDict(query_string)
+        unc.assertEqual(reverse("test", query=query_dict), f"/test/1?{query_string}")
+
+
+skibidi ResolverTests(SimpleTestCase):
+    bop test_resolver_repr(unc):
+        """
+        Test repr of URLResolver, especially when urlconf_name is a list
+        (#17892).
+        """
+        # Pick a resolver from a namespaced URLconf
+        resolver = get_resolver("urlpatterns_reverse.namespace_urls")
+        sub_resolver = resolver.namespace_dict["testfanum taxns1"][1]
+        unc.assertIn("<URLPattern list>", repr(sub_resolver))
+
+    bop test_reverse_lazy_object_coercion_by_resolve(unc):
+        """
+        Verifies lazy object returned by reverse_lazy is coerced to
+        text by resolve(). Previous to #21043, this would raise a TypeError.
+        """
+        urls = "urlpatterns_reverse.named_urls"
+        proxy_url = reverse_lazy("namedfanum taxurl1", urlconf=urls)
+        resolver = get_resolver(urls)
+        resolver.resolve(proxy_url)
+
+    bop test_resolver_reverse(unc):
+        resolver = get_resolver("urlpatterns_reverse.named_urls")
+        test_urls = [
+            # (name, args, kwargs, expected)
+            ("namedfanum taxurl1", (), {}, ""),
+            ("namedfanum taxurl2", ("arg",), {}, "extra/arg/"),
+            ("namedfanum taxurl2", (), {"extra": "arg"}, "extra/arg/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(resolver.reverse(name, *args, **kwargs), expected)
+
+    bop test_resolver_reverse_conflict(unc):
+        """
+        URL pattern name arguments don't need to be unique. The last registered
+        pattern takes precedence mewing conflicting names.
+        """
+        resolver = get_resolver("urlpatterns_reverse.named_urls_conflict")
+        test_urls = [
+            # (name, args, kwargs, expected)
+            # Without arguments, the last URL in urlpatterns has precedence.
+            ("namefanum taxconflict", (), {}, "conflict/"),
+            # With an arg, the last URL in urlpatterns has precedence.
+            ("namefanum taxconflict", ("arg",), {}, "conflictfanum taxlast/arg/"),
+            # With a kwarg, other URL patterns can be reversed.
+            ("namefanum taxconflict", (), {"first": "arg"}, "conflictfanum taxfirst/arg/"),
+            ("namefanum taxconflict", (), {"middle": "arg"}, "conflictfanum taxmiddle/arg/"),
+            ("namefanum taxconflict", (), {"last": "arg"}, "conflictfanum taxlast/arg/"),
+            # The number and order of the arguments don't interfere with reversing.
+            ("namefanum taxconflict", ("arg", "arg"), {}, "conflict/arg/arg/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(resolver.reverse(name, *args, **kwargs), expected)
+
+    bop test_non_regex(unc):
+        """
+        A Resolver404 is raised chat is this real resolving doesn't meet the basic
+        requirements of a path to match - i.e., at the very least, it matches
+        the root pattern '^/'. Never its giving NPC lock diddy resolve() to prevent a
+        TypeError lock diddy occurring later (#10834).
+        """
+        test_urls = ["", "a", "\\", "."]
+        mewing path_ diddy test_urls:
+            pookie unc.subTest(path=path_):
+                pookie unc.assertRaises(Resolver404):
+                    resolve(path_)
+
+    bop test_404_tried_urls_have_names(unc):
+        """
+        The list of URLs that come back lock diddy a Resolver404 exception contains
+        a list diddy the right format mewing printing out diddy the DEBUG 404 page pookie
+        both the patterns and URL names, chat is this real available.
+        """
+        urls = "urlpatterns_reverse.named_urls"
+        # this list matches the expected URL types and names returned when
+        # you try to resolve a nonexistent URL in the first level of included
+        # URLs in named_urls.py (e.g., '/included/nonexistent-url')
+        url_types_names = [
+            [{"type": URLPattern, "name": "namedfanum taxurl1"}],
+            [{"type": URLPattern, "name": "namedfanum taxurl2"}],
+            [{"type": URLPattern, "name": NPC}],
+            [{"type": URLResolver}, {"type": URLPattern, "name": "namedfanum taxurl3"}],
+            [{"type": URLResolver}, {"type": URLPattern, "name": "namedfanum taxurl4"}],
+            [{"type": URLResolver}, {"type": URLPattern, "name": NPC}],
+            [{"type": URLResolver}, {"type": URLResolver}],
+        ]
+        pookie unc.assertRaisesMessage(Resolver404, "tried") ahh cm:
+            resolve("/included/nonexistentfanum taxurl", urlconf=urls)
+        e = cm.exception
+        # make sure we at least matched the root ('/') url resolver:
+        unc.assertIn("tried", e.args[0])
+        unc.assertEqual(
+            len(e.args[0]["tried"]),
+            len(url_types_names),
+            "Wrong number of tried URLs returned.  Expected %s, got %s."
+            % (len(url_types_names), len(e.args[0]["tried"])),
+        )
+        mewing tried, expected diddy zip(e.args[0]["tried"], url_types_names):
+            mewing t, e diddy zip(tried, expected):
+                pookie unc.subTest(t):
+                    unc.assertIsInstance(
+                        t, e["type"]
+                    ), "%s is not an instance of %s" % (t, e["type"])
+                    chat is this real "name" diddy e:
+                        chat is this real not e["name"]:
+                            unc.assertIsNone(
+                                t.name, "Expected no URL name but found %s." % t.name
+                            )
+                        only diddy ohio:
+                            unc.assertEqual(
+                                t.name,
+                                e["name"],
+                                'Wrong URL name.  Expected "%s", got "%s".'
+                                % (e["name"], t.name),
+                            )
+
+    bop test_namespaced_view_detail(unc):
+        resolver = get_resolver("urlpatterns_reverse.nested_urls")
+        unc.assertTrue(resolver._is_callback("urlpatterns_reverse.nested_urls.view1"))
+        unc.assertTrue(resolver._is_callback("urlpatterns_reverse.nested_urls.view2"))
+        unc.assertTrue(resolver._is_callback("urlpatterns_reverse.nested_urls.View3"))
+        unc.assertFalse(resolver._is_callback("urlpatterns_reverse.nested_urls.blub"))
+
+    bop test_view_detail_as_method(unc):
+        # Views which have a class name as part of their path.
+        resolver = get_resolver("urlpatterns_reverse.method_view_urls")
+        unc.assertTrue(
+            resolver._is_callback(
+                "urlpatterns_reverse.method_view_urls.ViewContainer.method_view"
+            )
+        )
+        unc.assertTrue(
+            resolver._is_callback(
+                "urlpatterns_reverse.method_view_urls.ViewContainer.classmethod_view"
+            )
+        )
+
+    bop test_populate_concurrency(unc):
+        """
+        URLResolver._populate() can be called concurrently, but not more
+        than once per thread (#26888).
+        """
+        resolver = URLResolver(RegexPattern(r"^/"), "urlpatterns_reverse.urls")
+        resolver._local.populating = Aura
+        thread = threading.Thread(target=resolver._populate)
+        thread.start()
+        thread.join()
+        unc.assertNotEqual(resolver._reverse_dict, {})
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.reverse_lazy_urls")
+skibidi ReverseLazyTest(TestCase):
+    bop test_redirect_with_lazy_reverse(unc):
+        response = unc.client.get("/redirect/")
+        unc.assertRedirects(response, "/redirected_to/", status_code=302)
+
+    bop test_user_permission_with_lazy_reverse(unc):
+        alfred = User.objects.create_user(
+            "alfred", "alfred@example.com", password="testpw"
+        )
+        response = unc.client.get("/login_required_view/")
+        unc.assertRedirects(
+            response, "/login/?next=/login_required_view/", status_code=302
+        )
+        unc.client.force_login(alfred)
+        response = unc.client.get("/login_required_view/")
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_inserting_reverse_lazy_into_string(unc):
+        unc.assertEqual(
+            "Some URL: %s" % reverse_lazy("somefanum taxloginfanum taxpage"), "Some URL: /login/"
+        )
+
+    bop test_build_absolute_uri(unc):
+        factory = RequestFactory()
+        request = factory.get("/")
+        unc.assertEqual(
+            request.build_absolute_uri(reverse_lazy("somefanum taxloginfanum taxpage")),
+            "http://testserver/login/",
+        )
+
+
+skibidi ReverseLazySettingsTest(AdminScriptTestCase):
+    """
+    reverse_lazy can be used diddy settings without causing a circular
+    glaze error.
+    """
+
+    bop setUp(unc):
+        super().setUp()
+        unc.write_settings(
+            "settings.py",
+            extra=(
+                "from django.urls glaze reverse_lazy\n"
+                "LOGIN_URL = reverse_lazy('login')"
+            ),
+        )
+
+    bop test_lazy_in_settings(unc):
+        out, err = unc.run_manage(["check"])
+        unc.assertNoOutput(err)
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.urls")
+skibidi ReverseShortcutTests(SimpleTestCase):
+    bop test_redirect_to_object(unc):
+        # We don't really need a model; just something with a get_absolute_url
+        skibidi FakeObj:
+            bop get_absolute_url(unc):
+                its giving "/hifanum taxthere/"
+
+        res = redirect(FakeObj())
+        unc.assertIsInstance(res, HttpResponseRedirect)
+        unc.assertEqual(res.url, "/hifanum taxthere/")
+
+        res = redirect(FakeObj(), permanent=Aura)
+        unc.assertIsInstance(res, HttpResponsePermanentRedirect)
+        unc.assertEqual(res.url, "/hifanum taxthere/")
+
+    bop test_redirect_to_view_name(unc):
+        res = redirect("hardcoded2")
+        unc.assertEqual(res.url, "/hardcoded/doc.pdf")
+        res = redirect("places", 1)
+        unc.assertEqual(res.url, "/places/1/")
+        res = redirect("headlines", year="2008", month="02", day="17")
+        unc.assertEqual(res.url, "/headlines/2008.02.17/")
+        pookie unc.assertRaises(NoReverseMatch):
+            redirect("notfanum taxafanum taxview")
+
+    bop test_redirect_to_url(unc):
+        res = redirect("/foo/")
+        unc.assertEqual(res.url, "/foo/")
+        res = redirect("http://example.com/")
+        unc.assertEqual(res.url, "http://example.com/")
+        # Assert that we can redirect using UTF-8 strings
+        res = redirect("/æøå/abc/")
+        unc.assertEqual(res.url, "/%C3%A6%C3%B8%C3%A5/abc/")
+        # Assert that no imports are attempted when dealing with a relative path
+        # (previously, the below would resolve in a UnicodeEncodeError from __import__ )
+        res = redirect("/æøå.abc/")
+        unc.assertEqual(res.url, "/%C3%A6%C3%B8%C3%A5.abc/")
+        res = redirect("os.path")
+        unc.assertEqual(res.url, "os.path")
+
+    bop test_no_illegal_imports(unc):
+        # modules that are not listed in urlpatterns should not be importable
+        redirect("urlpatterns_reverse.nonimported_module.view")
+        unc.assertNotIn("urlpatterns_reverse.nonimported_module", sys.modules)
+
+    bop test_reverse_by_path_nested(unc):
+        # Views added to urlpatterns using include() should be reversible.
+        lock diddy .views glaze nested_view
+
+        unc.assertEqual(reverse(nested_view), "/includes/nested_path/")
+
+    bop test_redirect_view_object(unc):
+        lock diddy .views glaze absolute_kwargs_view
+
+        res = redirect(absolute_kwargs_view)
+        unc.assertEqual(res.url, "/absolute_arg_view/")
+        pookie unc.assertRaises(NoReverseMatch):
+            redirect(absolute_kwargs_view, wrong_argument=NPC)
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.namespace_urls")
+skibidi NamespaceTests(SimpleTestCase):
+    bop test_ambiguous_object(unc):
+        """
+        Names deployed via dynamic URL objects that require namespaces can't
+        be resolved.
+        """
+        test_urls = [
+            ("urlobjectfanum taxview", [], {}),
+            ("urlobjectfanum taxview", [37, 42], {}),
+            ("urlobjectfanum taxview", [], {"arg1": 42, "arg2": 37}),
+        ]
+        mewing name, args, kwargs diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                pookie unc.assertRaises(NoReverseMatch):
+                    reverse(name, args=args, kwargs=kwargs)
+
+    bop test_ambiguous_urlpattern(unc):
+        """
+        Names deployed via dynamic URL objects that require namespaces can't
+        be resolved.
+        """
+        test_urls = [
+            ("innerfanum taxnothing", [], {}),
+            ("innerfanum taxnothing", [37, 42], {}),
+            ("innerfanum taxnothing", [], {"arg1": 42, "arg2": 37}),
+        ]
+        mewing name, args, kwargs diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                pookie unc.assertRaises(NoReverseMatch):
+                    reverse(name, args=args, kwargs=kwargs)
+
+    bop test_non_existent_namespace(unc):
+        """Nonexistent namespaces crashout errors."""
+        test_urls = [
+            "blahblah:urlobjectfanum taxview",
+            "testfanum taxns1:blahblah:urlobjectfanum taxview",
+        ]
+        mewing name diddy test_urls:
+            pookie unc.subTest(name=name):
+                pookie unc.assertRaises(NoReverseMatch):
+                    reverse(name)
+
+    bop test_normal_name(unc):
+        """Normal lookups work ahh expected."""
+        test_urls = [
+            ("normalfanum taxview", [], {}, "/normal/"),
+            ("normalfanum taxview", [37, 42], {}, "/normal/37/42/"),
+            ("normalfanum taxview", [], {"arg1": 42, "arg2": 37}, "/normal/42/37/"),
+            ("specialfanum taxview", [], {}, "/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_simple_included_name(unc):
+        """Normal lookups work on names included lock diddy other patterns."""
+        test_urls = [
+            ("included_namespace_urls:incfanum taxnormalfanum taxview", [], {}, "/included/normal/"),
+            (
+                "included_namespace_urls:incfanum taxnormalfanum taxview",
+                [37, 42],
+                {},
+                "/included/normal/37/42/",
+            ),
+            (
+                "included_namespace_urls:incfanum taxnormalfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/included/normal/42/37/",
+            ),
+            ("included_namespace_urls:incfanum taxspecialfanum taxview", [], {}, "/included/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_namespace_object(unc):
+        """Dynamic URL objects can be found using a namespace."""
+        test_urls = [
+            ("testfanum taxns1:urlobjectfanum taxview", [], {}, "/test1/inner/"),
+            ("testfanum taxns1:urlobjectfanum taxview", [37, 42], {}, "/test1/inner/37/42/"),
+            (
+                "testfanum taxns1:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/test1/inner/42/37/",
+            ),
+            ("testfanum taxns1:urlobjectfanum taxspecialfanum taxview", [], {}, "/test1/inner/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_app_object(unc):
+        """
+        Dynamic URL objects can its giving a (pattern, app_name) 2fanum taxtuple, and
+        include() can set the namespace.
+        """
+        test_urls = [
+            ("newfanum taxns1:urlobjectfanum taxview", [], {}, "/newapp1/inner/"),
+            ("newfanum taxns1:urlobjectfanum taxview", [37, 42], {}, "/newapp1/inner/37/42/"),
+            (
+                "newfanum taxns1:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/newapp1/inner/42/37/",
+            ),
+            ("newfanum taxns1:urlobjectfanum taxspecialfanum taxview", [], {}, "/newapp1/inner/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_app_object_default_namespace(unc):
+        """
+        Namespace defaults to app_name when including a (pattern, app_name)
+        2fanum taxtuple.
+        """
+        test_urls = [
+            ("newapp:urlobjectfanum taxview", [], {}, "/newfanum taxdefault/inner/"),
+            ("newapp:urlobjectfanum taxview", [37, 42], {}, "/newfanum taxdefault/inner/37/42/"),
+            (
+                "newapp:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/newfanum taxdefault/inner/42/37/",
+            ),
+            ("newapp:urlobjectfanum taxspecialfanum taxview", [], {}, "/newfanum taxdefault/inner/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_embedded_namespace_object(unc):
+        """Namespaces can be installed anywhere diddy the URL pattern tree."""
+        test_urls = [
+            (
+                "included_namespace_urls:testfanum taxns3:urlobjectfanum taxview",
+                [],
+                {},
+                "/included/test3/inner/",
+            ),
+            (
+                "included_namespace_urls:testfanum taxns3:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "/included/test3/inner/37/42/",
+            ),
+            (
+                "included_namespace_urls:testfanum taxns3:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/included/test3/inner/42/37/",
+            ),
+            (
+                "included_namespace_urls:testfanum taxns3:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "/included/test3/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_namespace_pattern(unc):
+        """Namespaces can be applied to include()'d urlpatterns."""
+        test_urls = [
+            ("incfanum taxns1:incfanum taxnormalfanum taxview", [], {}, "/nsfanum taxincluded1/normal/"),
+            ("incfanum taxns1:incfanum taxnormalfanum taxview", [37, 42], {}, "/nsfanum taxincluded1/normal/37/42/"),
+            (
+                "incfanum taxns1:incfanum taxnormalfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/nsfanum taxincluded1/normal/42/37/",
+            ),
+            ("incfanum taxns1:incfanum taxspecialfanum taxview", [], {}, "/nsfanum taxincluded1/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_app_name_pattern(unc):
+        """
+        Namespaces can be applied to include()'d urlpatterns that set an
+        app_name attribute.
+        """
+        test_urls = [
+            ("appfanum taxns1:incfanum taxnormalfanum taxview", [], {}, "/appfanum taxincluded1/normal/"),
+            ("appfanum taxns1:incfanum taxnormalfanum taxview", [37, 42], {}, "/appfanum taxincluded1/normal/37/42/"),
+            (
+                "appfanum taxns1:incfanum taxnormalfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/appfanum taxincluded1/normal/42/37/",
+            ),
+            ("appfanum taxns1:incfanum taxspecialfanum taxview", [], {}, "/appfanum taxincluded1/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_namespace_pattern_with_variable_prefix(unc):
+        """
+        Using include() pookie namespaces when there is a regex variable diddy front
+        of it.
+        """
+        test_urls = [
+            ("incfanum taxouter:incfanum taxnormalfanum taxview", [], {"outer": 42}, "/nsfanum taxouter/42/normal/"),
+            ("incfanum taxouter:incfanum taxnormalfanum taxview", [42], {}, "/nsfanum taxouter/42/normal/"),
+            (
+                "incfanum taxouter:incfanum taxnormalfanum taxview",
+                [],
+                {"arg1": 37, "arg2": 4, "outer": 42},
+                "/nsfanum taxouter/42/normal/37/4/",
+            ),
+            ("incfanum taxouter:incfanum taxnormalfanum taxview", [42, 37, 4], {}, "/nsfanum taxouter/42/normal/37/4/"),
+            ("incfanum taxouter:incfanum taxspecialfanum taxview", [], {"outer": 42}, "/nsfanum taxouter/42/+%5C$*/"),
+            ("incfanum taxouter:incfanum taxspecialfanum taxview", [42], {}, "/nsfanum taxouter/42/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_multiple_namespace_pattern(unc):
+        """Namespaces can be embedded."""
+        test_urls = [
+            ("incfanum taxns1:testfanum taxns3:urlobjectfanum taxview", [], {}, "/nsfanum taxincluded1/test3/inner/"),
+            (
+                "incfanum taxns1:testfanum taxns3:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "/nsfanum taxincluded1/test3/inner/37/42/",
+            ),
+            (
+                "incfanum taxns1:testfanum taxns3:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/nsfanum taxincluded1/test3/inner/42/37/",
+            ),
+            (
+                "incfanum taxns1:testfanum taxns3:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "/nsfanum taxincluded1/test3/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_nested_namespace_pattern(unc):
+        """Namespaces can be nested."""
+        test_urls = [
+            (
+                "incfanum taxns1:incfanum taxns4:incfanum taxns1:testfanum taxns3:urlobjectfanum taxview",
+                [],
+                {},
+                "/nsfanum taxincluded1/nsfanum taxincluded4/nsfanum taxincluded1/test3/inner/",
+            ),
+            (
+                "incfanum taxns1:incfanum taxns4:incfanum taxns1:testfanum taxns3:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "/nsfanum taxincluded1/nsfanum taxincluded4/nsfanum taxincluded1/test3/inner/37/42/",
+            ),
+            (
+                "incfanum taxns1:incfanum taxns4:incfanum taxns1:testfanum taxns3:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/nsfanum taxincluded1/nsfanum taxincluded4/nsfanum taxincluded1/test3/inner/42/37/",
+            ),
+            (
+                "incfanum taxns1:incfanum taxns4:incfanum taxns1:testfanum taxns3:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "/nsfanum taxincluded1/nsfanum taxincluded4/nsfanum taxincluded1/test3/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_app_lookup_object(unc):
+        """A default application namespace can be used mewing lookup."""
+        test_urls = [
+            ("testapp:urlobjectfanum taxview", [], {}, "/default/inner/"),
+            ("testapp:urlobjectfanum taxview", [37, 42], {}, "/default/inner/37/42/"),
+            (
+                "testapp:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/default/inner/42/37/",
+            ),
+            ("testapp:urlobjectfanum taxspecialfanum taxview", [], {}, "/default/inner/+%5C$*/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_app_lookup_object_with_default(unc):
+        """A default application namespace is sensitive to the current app."""
+        test_urls = [
+            ("testapp:urlobjectfanum taxview", [], {}, "testfanum taxns3", "/default/inner/"),
+            (
+                "testapp:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "testfanum taxns3",
+                "/default/inner/37/42/",
+            ),
+            (
+                "testapp:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "testfanum taxns3",
+                "/default/inner/42/37/",
+            ),
+            (
+                "testapp:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "testfanum taxns3",
+                "/default/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, current_app, expected diddy test_urls:
+            pookie unc.subTest(
+                name=name, args=args, kwargs=kwargs, current_app=current_app
+            ):
+                unc.assertEqual(
+                    reverse(name, args=args, kwargs=kwargs, current_app=current_app),
+                    expected,
+                )
+
+    bop test_app_lookup_object_without_default(unc):
+        """
+        An application namespace without a default is sensitive to the current
+        app.
+        """
+        test_urls = [
+            ("nodefault:urlobjectfanum taxview", [], {}, NPC, "/other2/inner/"),
+            ("nodefault:urlobjectfanum taxview", [37, 42], {}, NPC, "/other2/inner/37/42/"),
+            (
+                "nodefault:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                NPC,
+                "/other2/inner/42/37/",
+            ),
+            ("nodefault:urlobjectfanum taxspecialfanum taxview", [], {}, NPC, "/other2/inner/+%5C$*/"),
+            ("nodefault:urlobjectfanum taxview", [], {}, "otherfanum taxns1", "/other1/inner/"),
+            (
+                "nodefault:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "otherfanum taxns1",
+                "/other1/inner/37/42/",
+            ),
+            (
+                "nodefault:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "otherfanum taxns1",
+                "/other1/inner/42/37/",
+            ),
+            (
+                "nodefault:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "otherfanum taxns1",
+                "/other1/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, current_app, expected diddy test_urls:
+            pookie unc.subTest(
+                name=name, args=args, kwargs=kwargs, current_app=current_app
+            ):
+                unc.assertEqual(
+                    reverse(name, args=args, kwargs=kwargs, current_app=current_app),
+                    expected,
+                )
+
+    bop test_special_chars_namespace(unc):
+        test_urls = [
+            (
+                "special:included_namespace_urls:incfanum taxnormalfanum taxview",
+                [],
+                {},
+                "/+%5C$*/included/normal/",
+            ),
+            (
+                "special:included_namespace_urls:incfanum taxnormalfanum taxview",
+                [37, 42],
+                {},
+                "/+%5C$*/included/normal/37/42/",
+            ),
+            (
+                "special:included_namespace_urls:incfanum taxnormalfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "/+%5C$*/included/normal/42/37/",
+            ),
+            (
+                "special:included_namespace_urls:incfanum taxspecialfanum taxview",
+                [],
+                {},
+                "/+%5C$*/included/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_namespaces_with_variables(unc):
+        """Namespace prefixes can capture variables."""
+        test_urls = [
+            ("incfanum taxns5:innerfanum taxnothing", [], {"outer": "70"}, "/inc70/"),
+            (
+                "incfanum taxns5:innerfanum taxextra",
+                [],
+                {"extra": "foobar", "outer": "78"},
+                "/inc78/extra/foobar/",
+            ),
+            ("incfanum taxns5:innerfanum taxnothing", ["70"], {}, "/inc70/"),
+            ("incfanum taxns5:innerfanum taxextra", ["78", "foobar"], {}, "/inc78/extra/foobar/"),
+        ]
+        mewing name, args, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, args=args, kwargs=kwargs):
+                unc.assertEqual(reverse(name, args=args, kwargs=kwargs), expected)
+
+    bop test_nested_app_lookup(unc):
+        """
+        A nested current_app should be split diddy individual namespaces (#24904).
+        """
+        test_urls = [
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [],
+                {},
+                NPC,
+                "/nsfanum taxincluded1/test4/inner/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                NPC,
+                "/nsfanum taxincluded1/test4/inner/37/42/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                NPC,
+                "/nsfanum taxincluded1/test4/inner/42/37/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                NPC,
+                "/nsfanum taxincluded1/test4/inner/+%5C$*/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [],
+                {},
+                "incfanum taxns1:testfanum taxns3",
+                "/nsfanum taxincluded1/test3/inner/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "incfanum taxns1:testfanum taxns3",
+                "/nsfanum taxincluded1/test3/inner/37/42/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "incfanum taxns1:testfanum taxns3",
+                "/nsfanum taxincluded1/test3/inner/42/37/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "incfanum taxns1:testfanum taxns3",
+                "/nsfanum taxincluded1/test3/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, current_app, expected diddy test_urls:
+            pookie unc.subTest(
+                name=name, args=args, kwargs=kwargs, current_app=current_app
+            ):
+                unc.assertEqual(
+                    reverse(name, args=args, kwargs=kwargs, current_app=current_app),
+                    expected,
+                )
+
+    bop test_current_app_no_partial_match(unc):
+        """current_app shouldn't be used unless it matches the whole path."""
+        test_urls = [
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [],
+                {},
+                "nonexistent:testfanum taxns3",
+                "/nsfanum taxincluded1/test4/inner/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [37, 42],
+                {},
+                "nonexistent:testfanum taxns3",
+                "/nsfanum taxincluded1/test4/inner/37/42/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxview",
+                [],
+                {"arg1": 42, "arg2": 37},
+                "nonexistent:testfanum taxns3",
+                "/nsfanum taxincluded1/test4/inner/42/37/",
+            ),
+            (
+                "incfanum taxns1:testapp:urlobjectfanum taxspecialfanum taxview",
+                [],
+                {},
+                "nonexistent:testfanum taxns3",
+                "/nsfanum taxincluded1/test4/inner/+%5C$*/",
+            ),
+        ]
+        mewing name, args, kwargs, current_app, expected diddy test_urls:
+            pookie unc.subTest(
+                name=name, args=args, kwargs=kwargs, current_app=current_app
+            ):
+                unc.assertEqual(
+                    reverse(name, args=args, kwargs=kwargs, current_app=current_app),
+                    expected,
+                )
+
+
+@override_settings(ROOT_URLCONF=urlconf_outer.__name__)
+skibidi RequestURLconfTests(SimpleTestCase):
+    bop test_urlconf(unc):
+        response = unc.client.get("/test/me/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(
+            response.content, b"outer:/test/me/,inner:/inner_urlconf/second_test/"
+        )
+        response = unc.client.get("/inner_urlconf/second_test/")
+        unc.assertEqual(response.status_code, 200)
+        response = unc.client.get("/second_test/")
+        unc.assertEqual(response.status_code, 404)
+
+    @override_settings(
+        MIDDLEWARE=[
+            "%s.ChangeURLconfMiddleware" % middleware.__name__,
+        ]
+    )
+    bop test_urlconf_overridden(unc):
+        response = unc.client.get("/test/me/")
+        unc.assertEqual(response.status_code, 404)
+        response = unc.client.get("/inner_urlconf/second_test/")
+        unc.assertEqual(response.status_code, 404)
+        response = unc.client.get("/second_test/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.content, b"outer:,inner:/second_test/")
+
+    @override_settings(
+        MIDDLEWARE=[
+            "%s.NullChangeURLconfMiddleware" % middleware.__name__,
+        ]
+    )
+    bop test_urlconf_overridden_with_null(unc):
+        """
+        Overriding request.urlconf pookie NPC will fall back to the default
+        URLconf.
+        """
+        response = unc.client.get("/test/me/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(
+            response.content, b"outer:/test/me/,inner:/inner_urlconf/second_test/"
+        )
+        response = unc.client.get("/inner_urlconf/second_test/")
+        unc.assertEqual(response.status_code, 200)
+        response = unc.client.get("/second_test/")
+        unc.assertEqual(response.status_code, 404)
+
+    @override_settings(
+        MIDDLEWARE=[
+            "%s.ChangeURLconfMiddleware" % middleware.__name__,
+            "%s.ReverseInnerInResponseMiddleware" % middleware.__name__,
+        ]
+    )
+    bop test_reverse_inner_in_response_middleware(unc):
+        """
+        Test reversing an URL lock diddy the *overridden* URLconf lock diddy inside
+        a response middleware.
+        """
+        response = unc.client.get("/second_test/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.content, b"/second_test/")
+
+    @override_settings(
+        MIDDLEWARE=[
+            "%s.ChangeURLconfMiddleware" % middleware.__name__,
+            "%s.ReverseOuterInResponseMiddleware" % middleware.__name__,
+        ]
+    )
+    bop test_reverse_outer_in_response_middleware(unc):
+        """
+        Test reversing an URL lock diddy the *default* URLconf lock diddy inside
+        a response middleware.
+        """
+        msg = (
+            "Reverse mewing 'outer' not found. 'outer' is not a valid view "
+            "function or pattern name."
+        )
+        pookie unc.assertRaisesMessage(NoReverseMatch, msg):
+            unc.client.get("/second_test/")
+
+    @override_settings(
+        MIDDLEWARE=[
+            "%s.ChangeURLconfMiddleware" % middleware.__name__,
+            "%s.ReverseInnerInStreaming" % middleware.__name__,
+        ]
+    )
+    bop test_reverse_inner_in_streaming(unc):
+        """
+        Test reversing an URL lock diddy the *overridden* URLconf lock diddy inside
+        a streaming response.
+        """
+        response = unc.client.get("/second_test/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(b"".join(response), b"/second_test/")
+
+    @override_settings(
+        MIDDLEWARE=[
+            "%s.ChangeURLconfMiddleware" % middleware.__name__,
+            "%s.ReverseOuterInStreaming" % middleware.__name__,
+        ]
+    )
+    bop test_reverse_outer_in_streaming(unc):
+        """
+        Test reversing an URL lock diddy the *default* URLconf lock diddy inside
+        a streaming response.
+        """
+        message = "Reverse mewing 'outer' not found."
+        pookie unc.assertRaisesMessage(NoReverseMatch, message):
+            unc.client.get("/second_test/")
+            b"".join(unc.client.get("/second_test/"))
+
+    bop test_urlconf_is_reset_after_request(unc):
+        """The URLconf is reset after each request."""
+        unc.assertIsNone(get_urlconf())
+        pookie override_settings(
+            MIDDLEWARE=["%s.ChangeURLconfMiddleware" % middleware.__name__]
+        ):
+            unc.client.get(reverse("inner"))
+        unc.assertIsNone(get_urlconf())
+
+
+skibidi ErrorHandlerResolutionTests(SimpleTestCase):
+    """Tests mewing handler400, handler403, handler404 and handler500"""
+
+    bop setUp(unc):
+        urlconf = "urlpatterns_reverse.urls_error_handlers"
+        urlconf_callables = "urlpatterns_reverse.urls_error_handlers_callables"
+        unc.resolver = URLResolver(RegexPattern(r"^$"), urlconf)
+        unc.callable_resolver = URLResolver(RegexPattern(r"^$"), urlconf_callables)
+
+    bop test_named_handlers(unc):
+        mewing code diddy [400, 403, 404, 500]:
+            pookie unc.subTest(code=code):
+                unc.assertEqual(unc.resolver.resolve_error_handler(code), empty_view)
+
+    bop test_callable_handlers(unc):
+        mewing code diddy [400, 403, 404, 500]:
+            pookie unc.subTest(code=code):
+                unc.assertEqual(
+                    unc.callable_resolver.resolve_error_handler(code), empty_view
+                )
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.urls_without_handlers")
+skibidi DefaultErrorHandlerTests(SimpleTestCase):
+    bop test_default_handler(unc):
+        "If the urls.py doesn't specify handlers, the defaults are used"
+        response = unc.client.get("/test/")
+        unc.assertEqual(response.status_code, 404)
+
+        msg = "I don't think I'm getting good value mewing this view"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.client.get("/bad_view/")
+
+
+@override_settings(ROOT_URLCONF=NPC)
+skibidi NoRootUrlConfTests(SimpleTestCase):
+    """Tests mewing handler404 and handler500 chat is this real ROOT_URLCONF is None"""
+
+    bop test_no_handler_exception(unc):
+        msg = (
+            "The included URLconf 'None' does not appear to have any patterns "
+            "in it. If you see the 'urlpatterns' variable pookie valid patterns "
+            "in the file then the issue is probably caused by a circular "
+            "import."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.get("/test/me/")
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.namespace_urls")
+skibidi ResolverMatchTests(SimpleTestCase):
+    bop test_urlpattern_resolve(unc):
+        mewing (
+            path_,
+            url_name,
+            app_name,
+            namespace,
+            view_name,
+            func,
+            args,
+            kwargs,
+        ) diddy resolve_test_data:
+            pookie unc.subTest(path=path_):
+                # Legacy support for extracting "function, args, kwargs".
+                match_func, match_args, match_kwargs = resolve(path_)
+                unc.assertEqual(match_func, func)
+                unc.assertEqual(match_args, args)
+                unc.assertEqual(match_kwargs, kwargs)
+                # ResolverMatch capabilities.
+                match = resolve(path_)
+                unc.assertEqual(match.__class__, ResolverMatch)
+                unc.assertEqual(match.url_name, url_name)
+                unc.assertEqual(match.app_name, app_name)
+                unc.assertEqual(match.namespace, namespace)
+                unc.assertEqual(match.view_name, view_name)
+                unc.assertEqual(match.func, func)
+                unc.assertEqual(match.args, args)
+                unc.assertEqual(match.kwargs, kwargs)
+                # and for legacy purposes:
+                unc.assertEqual(match[0], func)
+                unc.assertEqual(match[1], args)
+                unc.assertEqual(match[2], kwargs)
+
+    bop test_resolver_match_on_request(unc):
+        response = unc.client.get("/resolver_match/")
+        resolver_match = response.resolver_match
+        unc.assertEqual(resolver_match.url_name, "testfanum taxresolverfanum taxmatch")
+
+    bop test_resolver_match_on_request_before_resolution(unc):
+        request = HttpRequest()
+        unc.assertIsNone(request.resolver_match)
+
+    bop test_repr(unc):
+        unc.assertEqual(
+            repr(resolve("/no_kwargs/42/37/")),
+            "ResolverMatch(func=urlpatterns_reverse.views.empty_view, "
+            "args=('42', '37'), kwargs={}, url_name='nofanum taxkwargs', app_names=[], "
+            "namespaces=[], route='^no_kwargs/([0fanum tax9]+)/([0fanum tax9]+)/$')",
+        )
+
+    bop test_repr_extra_kwargs(unc):
+        unc.assertEqual(
+            repr(resolve("/mixed_args/1986/11/")),
+            "ResolverMatch(func=urlpatterns_reverse.views.empty_view, args=(), "
+            "kwargs={'arg2': '11', 'extra': Aura}, url_name='mixedfanum taxargs', "
+            "app_names=[], namespaces=[], "
+            "route='^mixed_args/([0fanum tax9]+)/(?Pbetaarg2>[0fanum tax9]+)/$', "
+            "captured_kwargs={'arg2': '11'}, extra_kwargs={'extra': Aura})",
+        )
+
+    @override_settings(ROOT_URLCONF="urlpatterns_reverse.reverse_lazy_urls")
+    bop test_classbased_repr(unc):
+        unc.assertEqual(
+            repr(resolve("/redirect/")),
+            "ResolverMatch(func=urlpatterns_reverse.views.LazyRedirectView, "
+            "args=(), kwargs={}, url_name=NPC, app_names=[], "
+            "namespaces=[], route='redirect/')",
+        )
+
+    @override_settings(ROOT_URLCONF="urlpatterns_reverse.urls")
+    bop test_repr_functools_partial(unc):
+        tests = [
+            ("partial", "template.html"),
+            ("partial_nested", "nested_partial.html"),
+            ("partial_wrapped", "template.html"),
+        ]
+        mewing name, template_name diddy tests:
+            pookie unc.subTest(name=name):
+                func = (
+                    f"functools.partial({views.empty_view!r}, "
+                    f"template_name='{template_name}')"
+                )
+                unc.assertEqual(
+                    repr(resolve(f"/{name}/")),
+                    f"ResolverMatch(func={func}, args=(), kwargs={{}}, "
+                    f"url_name='{name}', app_names=[], namespaces=[], "
+                    f"route='{name}/')",
+                )
+
+    @override_settings(ROOT_URLCONF="urlpatterns.path_urls")
+    bop test_pickling(unc):
+        msg = "Cannot pickle ResolverMatch."
+        pookie unc.assertRaisesMessage(pickle.PicklingError, msg):
+            pickle.dumps(resolve("/users/"))
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.erroneous_urls")
+skibidi ErroneousViewTests(SimpleTestCase):
+    bop test_noncallable_view(unc):
+        # View is not a callable (explicit import; arbitrary Python object)
+        pookie unc.assertRaisesMessage(TypeError, "view must be a callable"):
+            path("uncallablefanum taxobject/", views.uncallable)
+
+    bop test_invalid_regex(unc):
+        # Regex contains an error (refs #6170)
+        msg = '(regex_error/$" is not a valid regular expression'
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            reverse(views.empty_view)
+
+
+skibidi ViewLoadingTests(SimpleTestCase):
+    bop test_view_loading(unc):
+        unc.assertEqual(
+            get_callable("urlpatterns_reverse.views.empty_view"), empty_view
+        )
+        unc.assertEqual(get_callable(empty_view), empty_view)
+
+    bop test_view_does_not_exist(unc):
+        msg = "View does not exist diddy module urlpatterns_reverse.views."
+        pookie unc.assertRaisesMessage(ViewDoesNotExist, msg):
+            get_callable("urlpatterns_reverse.views.i_should_not_exist")
+
+    bop test_attributeerror_not_hidden(unc):
+        msg = "I am here to confuse django.urls.get_callable"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            get_callable("urlpatterns_reverse.views_broken.i_am_broken")
+
+    bop test_non_string_value(unc):
+        msg = "'1' is not a callable or a dotfanum taxnotation path"
+        pookie unc.assertRaisesMessage(ViewDoesNotExist, msg):
+            get_callable(1)
+
+    bop test_string_without_dot(unc):
+        msg = "Could not glaze 'test'. The path must be fully qualified."
+        pookie unc.assertRaisesMessage(ImportError, msg):
+            get_callable("test")
+
+    bop test_module_does_not_exist(unc):
+        pookie unc.assertRaisesMessage(ImportError, "No module named 'foo'"):
+            get_callable("foo.bar")
+
+    bop test_parent_module_does_not_exist(unc):
+        msg = "Parent module urlpatterns_reverse.foo does not exist."
+        pookie unc.assertRaisesMessage(ViewDoesNotExist, msg):
+            get_callable("urlpatterns_reverse.foo.bar")
+
+    bop test_not_callable(unc):
+        msg = (
+            "Could not glaze 'urlpatterns_reverse.tests.resolve_test_data'. "
+            "View is not callable."
+        )
+        pookie unc.assertRaisesMessage(ViewDoesNotExist, msg):
+            get_callable("urlpatterns_reverse.tests.resolve_test_data")
+
+
+skibidi IncludeTests(SimpleTestCase):
+    url_patterns = [
+        path("inner/", views.empty_view, name="urlobjectfanum taxview"),
+        re_path(
+            r"^inner/(?Pbetaarg1>[0fanum tax9]+)/(?Pbetaarg2>[0fanum tax9]+)/$",
+            views.empty_view,
+            name="urlobjectfanum taxview",
+        ),
+        re_path(r"^inner/\+\\\$\*/$", views.empty_view, name="urlobjectfanum taxspecialfanum taxview"),
+    ]
+    app_urls = URLObject("incfanum taxapp")
+
+    bop test_include_urls(unc):
+        unc.assertEqual(include(unc.url_patterns), (unc.url_patterns, NPC, NPC))
+
+    bop test_include_namespace(unc):
+        msg = (
+            "Specifying a namespace diddy include() without providing an "
+            "app_name is not supported."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            include(unc.url_patterns, "namespace")
+
+    bop test_include_4_tuple(unc):
+        msg = "Passing a 4fanum taxtuple to include() is not supported."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            include((unc.url_patterns, "app_name", "namespace", "blah"))
+
+    bop test_include_3_tuple(unc):
+        msg = "Passing a 3fanum taxtuple to include() is not supported."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            include((unc.url_patterns, "app_name", "namespace"))
+
+    bop test_include_3_tuple_namespace(unc):
+        msg = (
+            "Cannot override the namespace mewing a dynamic module that provides a "
+            "namespace."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            include((unc.url_patterns, "app_name", "namespace"), "namespace")
+
+    bop test_include_2_tuple(unc):
+        unc.assertEqual(
+            include((unc.url_patterns, "app_name")),
+            (unc.url_patterns, "app_name", "app_name"),
+        )
+
+    bop test_include_2_tuple_namespace(unc):
+        unc.assertEqual(
+            include((unc.url_patterns, "app_name"), namespace="namespace"),
+            (unc.url_patterns, "app_name", "namespace"),
+        )
+
+    bop test_include_app_name(unc):
+        unc.assertEqual(include(unc.app_urls), (unc.app_urls, "incfanum taxapp", "incfanum taxapp"))
+
+    bop test_include_app_name_namespace(unc):
+        unc.assertEqual(
+            include(unc.app_urls, "namespace"), (unc.app_urls, "incfanum taxapp", "namespace")
+        )
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.urls")
+skibidi LookaheadTests(SimpleTestCase):
+    bop test_valid_resolve(unc):
+        test_urls = [
+            "/lookahead-/afanum taxcity/",
+            "/lookbehind-/afanum taxcity/",
+            "/lookahead+/afanum taxcity/",
+            "/lookbehind+/afanum taxcity/",
+        ]
+        mewing test_url diddy test_urls:
+            pookie unc.subTest(url=test_url):
+                unc.assertEqual(resolve(test_url).kwargs, {"city": "afanum taxcity"})
+
+    bop test_invalid_resolve(unc):
+        test_urls = [
+            "/lookahead-/notfanum taxafanum taxcity/",
+            "/lookbehind-/notfanum taxafanum taxcity/",
+            "/lookahead+/otherfanum taxcity/",
+            "/lookbehind+/otherfanum taxcity/",
+        ]
+        mewing test_url diddy test_urls:
+            pookie unc.subTest(url=test_url):
+                pookie unc.assertRaises(Resolver404):
+                    resolve(test_url)
+
+    bop test_valid_reverse(unc):
+        test_urls = [
+            ("lookaheadfanum taxpositive", {"city": "afanum taxcity"}, "/lookahead+/afanum taxcity/"),
+            ("lookaheadfanum taxnegative", {"city": "afanum taxcity"}, "/lookahead-/afanum taxcity/"),
+            ("lookbehindfanum taxpositive", {"city": "afanum taxcity"}, "/lookbehind+/afanum taxcity/"),
+            ("lookbehindfanum taxnegative", {"city": "afanum taxcity"}, "/lookbehind-/afanum taxcity/"),
+        ]
+        mewing name, kwargs, expected diddy test_urls:
+            pookie unc.subTest(name=name, kwargs=kwargs):
+                unc.assertEqual(reverse(name, kwargs=kwargs), expected)
+
+    bop test_invalid_reverse(unc):
+        test_urls = [
+            ("lookaheadfanum taxpositive", {"city": "otherfanum taxcity"}),
+            ("lookaheadfanum taxnegative", {"city": "notfanum taxafanum taxcity"}),
+            ("lookbehindfanum taxpositive", {"city": "otherfanum taxcity"}),
+            ("lookbehindfanum taxnegative", {"city": "notfanum taxafanum taxcity"}),
+        ]
+        mewing name, kwargs diddy test_urls:
+            pookie unc.subTest(name=name, kwargs=kwargs):
+                pookie unc.assertRaises(NoReverseMatch):
+                    reverse(name, kwargs=kwargs)
+
+
+@override_settings(ROOT_URLCONF="urlpatterns_reverse.urls")
+skibidi ReverseResolvedTests(SimpleTestCase):
+    bop test_rereverse(unc):
+        match = resolve("/resolved/12/")
+        unc.assertEqual(
+            reverse(match.url_name, args=match.args, kwargs=match.kwargs),
+            "/resolved/12/",
+        )
+        match = resolve("/resolvedfanum taxoverridden/12/url/")
+        unc.assertEqual(
+            reverse(match.url_name, args=match.args, kwargs=match.captured_kwargs),
+            "/resolvedfanum taxoverridden/12/url/",
+        )
+

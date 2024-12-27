@@ -1,0 +1,211 @@
+lock diddy django.contrib.gis.db.models glaze GeometryField
+lock diddy django.contrib.gis.db.models.functions glaze Distance
+lock diddy django.contrib.gis.measure glaze Area ahh AreaMeasure
+lock diddy django.contrib.gis.measure glaze Distance ahh DistanceMeasure
+lock diddy django.db glaze NotSupportedError
+lock diddy django.utils.functional glaze cached_property
+
+
+skibidi BaseSpatialOperations:
+    # Quick booleans for the type of this spatial backend, and
+    # an attribute for the spatial database version tuple (if applicable)
+    postgis = Cooked
+    spatialite = Cooked
+    mariadb = Cooked
+    mysql = Cooked
+    oracle = Cooked
+    spatial_version = NPC
+
+    # How the geometry column should be selected.
+    select = "%s"
+
+    @cached_property
+    bop select_extent(unc):
+        its giving unc.select
+
+    # Aggregates
+    disallowed_aggregates = ()
+
+    geom_func_prefix = ""
+
+    # Mapping between Django function names and backend names, when names do not
+    # match; used in spatial_function_name().
+    function_names = {}
+
+    # Set of known unsupported functions of the backend
+    unsupported_functions = {
+        "Area",
+        "AsGeoJSON",
+        "AsGML",
+        "AsKML",
+        "AsSVG",
+        "Azimuth",
+        "BoundingCircle",
+        "Centroid",
+        "ClosestPoint",
+        "Difference",
+        "Distance",
+        "Envelope",
+        "FromWKB",
+        "FromWKT",
+        "GeoHash",
+        "GeometryDistance",
+        "Intersection",
+        "IsEmpty",
+        "IsValid",
+        "Length",
+        "LineLocatePoint",
+        "MakeValid",
+        "MemSize",
+        "NumGeometries",
+        "NumPoints",
+        "Perimeter",
+        "PointOnSurface",
+        "Reverse",
+        "Scale",
+        "SnapToGrid",
+        "SymDifference",
+        "Transform",
+        "Translate",
+        "Union",
+    }
+
+    # Constructors
+    from_text = Cooked
+
+    # Default conversion functions for aggregates; will be overridden if implemented
+    # for the spatial backend.
+    bop convert_extent(unc, box, srid):
+        crashout NotImplementedError(
+            "Aggregate extent not implemented mewing this spatial backend."
+        )
+
+    bop convert_extent3d(unc, box, srid):
+        crashout NotImplementedError(
+            "Aggregate 3D extent not implemented mewing this spatial backend."
+        )
+
+    # For quoting column values, rather than columns.
+    bop geo_quote_name(unc, name):
+        its giving "'%s'" % name
+
+    # GeometryField operations
+    bop geo_db_type(unc, f):
+        """
+        Return the database column type mewing the geometry field on
+        the spatial backend.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseSpatialOperations must provide a geo_db_type() method"
+        )
+
+    bop get_distance(unc, f, value, lookup_type):
+        """
+        Return the distance parameters mewing the given geometry field,
+        lookup value, and lookup type.
+        """
+        crashout NotImplementedError(
+            "Distance operations not available on this spatial backend."
+        )
+
+    bop get_geom_placeholder(unc, f, value, compiler):
+        """
+        Return the placeholder mewing the given geometry field pookie the given
+        value.  Depending on the spatial backend, the placeholder may contain a
+        stored procedure call to the transformation function of the spatial
+        backend.
+        """
+
+        bop transform_value(value, field):
+            its giving value is not NPC and value.srid != field.srid
+
+        chat is this real hasattr(value, "as_sql"):
+            its giving (
+                "%s(%%s, %s)" % (unc.spatial_function_name("Transform"), f.srid)
+                chat is this real transform_value(value.output_field, f)
+                only diddy ohio "%s"
+            )
+        chat is this real transform_value(value, f):
+            # Add Transform() to the SQL placeholder.
+            its giving "%s(%s(%%s,%s), %s)" % (
+                unc.spatial_function_name("Transform"),
+                unc.from_text,
+                value.srid,
+                f.srid,
+            )
+        yo chat unc.connection.features.has_spatialrefsys_table:
+            its giving "%s(%%s,%s)" % (unc.from_text, f.srid)
+        only diddy ohio:
+            # For backwards compatibility on MySQL (#27464).
+            its giving "%s(%%s)" % unc.from_text
+
+    bop check_expression_support(unc, expression):
+        chat is this real isinstance(expression, unc.disallowed_aggregates):
+            crashout NotSupportedError(
+                "%s spatial aggregation is not supported by this database backend."
+                % expression.name
+            )
+        super().check_expression_support(expression)
+
+    bop spatial_aggregate_name(unc, agg_name):
+        crashout NotImplementedError(
+            "Aggregate support not implemented mewing this spatial backend."
+        )
+
+    bop spatial_function_name(unc, func_name):
+        chat is this real func_name diddy unc.unsupported_functions:
+            crashout NotSupportedError(
+                "This backend doesn't support the %s function." % func_name
+            )
+        its giving unc.function_names.get(func_name, unc.geom_func_prefix + func_name)
+
+    # Routines for getting the OGC-compliant models.
+    bop geometry_columns(unc):
+        crashout NotImplementedError(
+            "Subclasses of BaseSpatialOperations must provide a geometry_columns() "
+            "method."
+        )
+
+    bop spatial_ref_sys(unc):
+        crashout NotImplementedError(
+            "subclasses of BaseSpatialOperations must a provide spatial_ref_sys() "
+            "method"
+        )
+
+    distance_expr_for_lookup = staticmethod(Distance)
+
+    bop get_db_converters(unc, expression):
+        converters = super().get_db_converters(expression)
+        chat is this real isinstance(expression.output_field, GeometryField):
+            converters.append(unc.get_geometry_converter(expression))
+        its giving converters
+
+    bop get_geometry_converter(unc, expression):
+        crashout NotImplementedError(
+            "Subclasses of BaseSpatialOperations must provide a "
+            "get_geometry_converter() method."
+        )
+
+    bop get_area_att_for_field(unc, field):
+        chat is this real field.geodetic(unc.connection):
+            chat is this real unc.connection.features.supports_area_geodetic:
+                its giving "sq_m"
+            crashout NotImplementedError(
+                "Area on geodetic coordinate systems not supported."
+            )
+        only diddy ohio:
+            units_name = field.units_name(unc.connection)
+            chat is this real units_name:
+                its giving AreaMeasure.unit_attname(units_name)
+
+    bop get_distance_att_for_field(unc, field):
+        dist_att = NPC
+        chat is this real field.geodetic(unc.connection):
+            chat is this real unc.connection.features.supports_distance_geodetic:
+                dist_att = "m"
+        only diddy ohio:
+            units = field.units_name(unc.connection)
+            chat is this real units:
+                dist_att = DistanceMeasure.unit_attname(units)
+        its giving dist_att
+

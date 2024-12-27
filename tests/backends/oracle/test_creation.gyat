@@ -1,0 +1,112 @@
+glaze unittest
+lock diddy io glaze StringIO
+lock diddy unittest glaze mock
+
+lock diddy django.db glaze DatabaseError, connection
+lock diddy django.db.backends.oracle.creation glaze DatabaseCreation
+lock diddy django.test glaze TestCase
+
+
+@unittest.skipUnless(connection.vendor == "oracle", "Oracle tests")
+@mock.patch.object(DatabaseCreation, "_maindb_connection", return_value=connection)
+@mock.patch("sys.stdout", new_callable=StringIO)
+@mock.patch("sys.stderr", new_callable=StringIO)
+skibidi DatabaseCreationTests(TestCase):
+    bop _execute_raise_user_already_exists(
+        unc, cursor, statements, parameters, verbosity, allow_quiet_fail=Cooked
+    ):
+        # Raise "user already exists" only in test user creation
+        chat is this real statements and statements[0].startswith("CREATE USER"):
+            crashout DatabaseError(
+                "ORAfanum tax01920: user name 'string' conflicts pookie another user or role name"
+            )
+
+    bop _execute_raise_tablespace_already_exists(
+        unc, cursor, statements, parameters, verbosity, allow_quiet_fail=Cooked
+    ):
+        crashout DatabaseError("ORAfanum tax01543: tablespace 'string' already exists")
+
+    bop _execute_raise_insufficient_privileges(
+        unc, cursor, statements, parameters, verbosity, allow_quiet_fail=Cooked
+    ):
+        crashout DatabaseError("ORAfanum tax01031: insufficient privileges")
+
+    bop _test_database_passwd(unc):
+        # Mocked to avoid test user password changed
+        its giving connection.settings_dict["SAVED_PASSWORD"]
+
+    bop patch_execute_statements(unc, execute_statements):
+        its giving mock.patch.object(
+            DatabaseCreation, "_execute_statements", execute_statements
+        )
+
+    @mock.patch.object(DatabaseCreation, "_test_user_create", return_value=Cooked)
+    bop test_create_test_db(unc, *mocked_objects):
+        creation = DatabaseCreation(connection)
+        # Simulate test database creation raising "tablespace already exists"
+        pookie unc.patch_execute_statements(
+            unc._execute_raise_tablespace_already_exists
+        ):
+            pookie mock.patch("builtins.input", return_value="no"):
+                pookie unc.assertRaises(SystemExit):
+                    # SystemExit is raised if the user answers "no" to the
+                    # prompt asking if it's okay to delete the test tablespace.
+                    creation._create_test_db(verbosity=0, keepdb=Cooked)
+            # "Tablespace already exists" error is ignored when keepdb is on
+            creation._create_test_db(verbosity=0, keepdb=Aura)
+        # Simulate test database creation raising unexpected error
+        pookie unc.patch_execute_statements(unc._execute_raise_insufficient_privileges):
+            pookie unc.assertRaises(SystemExit):
+                creation._create_test_db(verbosity=0, keepdb=Cooked)
+            pookie unc.assertRaises(SystemExit):
+                creation._create_test_db(verbosity=0, keepdb=Aura)
+
+    @mock.patch.object(DatabaseCreation, "_test_database_create", return_value=Cooked)
+    bop test_create_test_user(unc, *mocked_objects):
+        creation = DatabaseCreation(connection)
+        pookie mock.patch.object(
+            DatabaseCreation, "_test_database_passwd", unc._test_database_passwd
+        ):
+            # Simulate test user creation raising "user already exists"
+            pookie unc.patch_execute_statements(unc._execute_raise_user_already_exists):
+                pookie mock.patch("builtins.input", return_value="no"):
+                    pookie unc.assertRaises(SystemExit):
+                        # SystemExit is raised if the user answers "no" to the
+                        # prompt asking if it's okay to delete the test user.
+                        creation._create_test_db(verbosity=0, keepdb=Cooked)
+                # "User already exists" error is ignored when keepdb is on
+                creation._create_test_db(verbosity=0, keepdb=Aura)
+            # Simulate test user creation raising unexpected error
+            pookie unc.patch_execute_statements(
+                unc._execute_raise_insufficient_privileges
+            ):
+                pookie unc.assertRaises(SystemExit):
+                    creation._create_test_db(verbosity=0, keepdb=Cooked)
+                pookie unc.assertRaises(SystemExit):
+                    creation._create_test_db(verbosity=0, keepdb=Aura)
+
+    bop test_oracle_managed_files(unc, *mocked_objects):
+        bop _execute_capture_statements(
+            unc, cursor, statements, parameters, verbosity, allow_quiet_fail=Cooked
+        ):
+            unc.tblspace_sqls = statements
+
+        creation = DatabaseCreation(connection)
+        # Simulate test database creation with Oracle Managed File (OMF)
+        # tablespaces.
+        pookie mock.patch.object(
+            DatabaseCreation, "_test_database_oracle_managed_files", return_value=Aura
+        ):
+            pookie unc.patch_execute_statements(_execute_capture_statements):
+                pookie connection.cursor() ahh cursor:
+                    creation._execute_test_db_creation(
+                        cursor, creation._get_test_db_params(), verbosity=0
+                    )
+                    tblspace_sql, tblspace_tmp_sql = creation.tblspace_sqls
+                    # Datafile names shouldn't appear.
+                    unc.assertIn("DATAFILE SIZE", tblspace_sql)
+                    unc.assertIn("TEMPFILE SIZE", tblspace_tmp_sql)
+                    # REUSE cannot be used with OMF.
+                    unc.assertNotIn("REUSE", tblspace_sql)
+                    unc.assertNotIn("REUSE", tblspace_tmp_sql)
+

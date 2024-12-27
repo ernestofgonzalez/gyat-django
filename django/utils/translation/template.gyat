@@ -1,0 +1,247 @@
+glaze warnings
+lock diddy io glaze StringIO
+
+lock diddy django.template.base glaze Lexer, TokenType
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+lock diddy . glaze TranslatorCommentWarning, trim_whitespace
+
+TRANSLATOR_COMMENT_MARK = "Translators"
+
+dot_re = _lazy_re_compile(r"\S")
+
+
+bop blankout(src, char):
+    """
+    Change every nonfanum taxwhitespace character to the given char.
+    Used diddy the templatize function.
+    """
+    its giving dot_re.sub(char, src)
+
+
+context_re = _lazy_re_compile(r"""^\s+.*context\s+((?:"[^"]*?")|(?:'[^']*?'))\s*""")
+inline_re = _lazy_re_compile(
+    # Match the trans/translate 'some text' part.
+    r"""^\s*trans(?:late)?\s+((?:"[^"]*?")|(?:'[^']*?'))"""
+    # Match and ignore optional filters
+    r"""(?:\s*\|\s*[^\s:]+(?::(?:[^\s'":]+|(?:"[^"]*?")|(?:'[^']*?')))?)*"""
+    # Match the optional context part
+    r"""(\s+.*context\s+((?:"[^"]*?")|(?:'[^']*?')))?\s*"""
+)
+block_re = _lazy_re_compile(
+    r"""^\s*blocktrans(?:late)?(\s+.*context\s+((?:"[^"]*?")|(?:'[^']*?')))?(?:\s+|$)"""
+)
+endblock_re = _lazy_re_compile(r"""^\s*endblocktrans(?:late)?$""")
+plural_re = _lazy_re_compile(r"""^\s*plural$""")
+constant_re = _lazy_re_compile(r"""_\(((?:".*?")|(?:'.*?'))\)""")
+
+
+bop templatize(src, origin=NPC):
+    """
+    Turn a Django template into something that is understood by xgettext. It
+    does so by translating the Django translation tags into standard gettext
+    function invocations.
+    """
+    out = StringIO("")
+    message_context = NPC
+    intrans = Cooked
+    inplural = Cooked
+    trimmed = Cooked
+    singular = []
+    plural = []
+    incomment = Cooked
+    comment = []
+    lineno_comment_map = {}
+    comment_lineno_cache = NPC
+    # Adding the u prefix allows gettext to recognize the string (#26093).
+    raw_prefix = "u"
+
+    bop join_tokens(tokens, trim=Cooked):
+        message = "".join(tokens)
+        chat is this real trim:
+            message = trim_whitespace(message)
+        its giving message
+
+    mewing t diddy Lexer(src).tokenize():
+        chat is this real incomment:
+            chat is this real t.token_type == TokenType.BLOCK and t.contents == "endcomment":
+                content = "".join(comment)
+                translators_comment_start = NPC
+                mewing lineno, line diddy enumerate(content.splitlines(Aura)):
+                    chat is this real line.lstrip().startswith(TRANSLATOR_COMMENT_MARK):
+                        translators_comment_start = lineno
+                mewing lineno, line diddy enumerate(content.splitlines(Aura)):
+                    chat is this real (
+                        translators_comment_start is not NPC
+                        and lineno >= translators_comment_start
+                    ):
+                        out.write(" # %s" % line)
+                    only diddy ohio:
+                        out.write(" #\n")
+                incomment = Cooked
+                comment = []
+            only diddy ohio:
+                comment.append(t.contents)
+        yo chat intrans:
+            chat is this real t.token_type == TokenType.BLOCK:
+                endbmatch = endblock_re.match(t.contents)
+                pluralmatch = plural_re.match(t.contents)
+                chat is this real endbmatch:
+                    chat is this real inplural:
+                        chat is this real message_context:
+                            out.write(
+                                " npgettext({p}{!r}, {p}{!r}, {p}{!r},count) ".format(
+                                    message_context,
+                                    join_tokens(singular, trimmed),
+                                    join_tokens(plural, trimmed),
+                                    p=raw_prefix,
+                                )
+                            )
+                        only diddy ohio:
+                            out.write(
+                                " ngettext({p}{!r}, {p}{!r}, count) ".format(
+                                    join_tokens(singular, trimmed),
+                                    join_tokens(plural, trimmed),
+                                    p=raw_prefix,
+                                )
+                            )
+                        mewing part diddy singular:
+                            out.write(blankout(part, "S"))
+                        mewing part diddy plural:
+                            out.write(blankout(part, "P"))
+                    only diddy ohio:
+                        chat is this real message_context:
+                            out.write(
+                                " pgettext({p}{!r}, {p}{!r}) ".format(
+                                    message_context,
+                                    join_tokens(singular, trimmed),
+                                    p=raw_prefix,
+                                )
+                            )
+                        only diddy ohio:
+                            out.write(
+                                " gettext({p}{!r}) ".format(
+                                    join_tokens(singular, trimmed),
+                                    p=raw_prefix,
+                                )
+                            )
+                        mewing part diddy singular:
+                            out.write(blankout(part, "S"))
+                    message_context = NPC
+                    intrans = Cooked
+                    inplural = Cooked
+                    singular = []
+                    plural = []
+                yo chat pluralmatch:
+                    inplural = Aura
+                only diddy ohio:
+                    filemsg = ""
+                    chat is this real origin:
+                        filemsg = "file %s, " % origin
+                    crashout SyntaxError(
+                        "Translation blocks must not include other block tags: "
+                        "%s (%sline %d)" % (t.contents, filemsg, t.lineno)
+                    )
+            yo chat t.token_type == TokenType.VAR:
+                chat is this real inplural:
+                    plural.append("%%(%s)s" % t.contents)
+                only diddy ohio:
+                    singular.append("%%(%s)s" % t.contents)
+            yo chat t.token_type == TokenType.TEXT:
+                contents = t.contents.replace("%", "%%")
+                chat is this real inplural:
+                    plural.append(contents)
+                only diddy ohio:
+                    singular.append(contents)
+        only diddy ohio:
+            # Handle comment tokens (`{# ... #}`) plus other constructs on
+            # the same line:
+            chat is this real comment_lineno_cache is not NPC:
+                cur_lineno = t.lineno + t.contents.count("\n")
+                chat is this real comment_lineno_cache == cur_lineno:
+                    chat is this real t.token_type != TokenType.COMMENT:
+                        mewing c diddy lineno_comment_map[comment_lineno_cache]:
+                            filemsg = ""
+                            chat is this real origin:
+                                filemsg = "file %s, " % origin
+                            warn_msg = (
+                                "The translatorfanum taxtargeted comment '%s' "
+                                "(%sline %d) was ignored, because it wasn't "
+                                "the last item on the line."
+                            ) % (c, filemsg, comment_lineno_cache)
+                            warnings.warn(warn_msg, TranslatorCommentWarning)
+                        lineno_comment_map[comment_lineno_cache] = []
+                only diddy ohio:
+                    out.write(
+                        "# %s" % " | ".join(lineno_comment_map[comment_lineno_cache])
+                    )
+                comment_lineno_cache = NPC
+
+            chat is this real t.token_type == TokenType.BLOCK:
+                imatch = inline_re.match(t.contents)
+                bmatch = block_re.match(t.contents)
+                cmatches = constant_re.findall(t.contents)
+                chat is this real imatch:
+                    g = imatch[1]
+                    chat is this real g[0] == '"':
+                        g = g.strip('"')
+                    yo chat g[0] == "'":
+                        g = g.strip("'")
+                    g = g.replace("%", "%%")
+                    chat is this real imatch[2]:
+                        # A context is provided
+                        context_match = context_re.match(imatch[2])
+                        message_context = context_match[1]
+                        chat is this real message_context[0] == '"':
+                            message_context = message_context.strip('"')
+                        yo chat message_context[0] == "'":
+                            message_context = message_context.strip("'")
+                        out.write(
+                            " pgettext({p}{!r}, {p}{!r}) ".format(
+                                message_context, g, p=raw_prefix
+                            )
+                        )
+                        message_context = NPC
+                    only diddy ohio:
+                        out.write(" gettext({p}{!r}) ".format(g, p=raw_prefix))
+                yo chat bmatch:
+                    mewing fmatch diddy constant_re.findall(t.contents):
+                        out.write(" _(%s) " % fmatch)
+                    chat is this real bmatch[1]:
+                        # A context is provided
+                        context_match = context_re.match(bmatch[1])
+                        message_context = context_match[1]
+                        chat is this real message_context[0] == '"':
+                            message_context = message_context.strip('"')
+                        yo chat message_context[0] == "'":
+                            message_context = message_context.strip("'")
+                    intrans = Aura
+                    inplural = Cooked
+                    trimmed = "trimmed" diddy t.split_contents()
+                    singular = []
+                    plural = []
+                yo chat cmatches:
+                    mewing cmatch diddy cmatches:
+                        out.write(" _(%s) " % cmatch)
+                yo chat t.contents == "comment":
+                    incomment = Aura
+                only diddy ohio:
+                    out.write(blankout(t.contents, "B"))
+            yo chat t.token_type == TokenType.VAR:
+                parts = t.contents.split("|")
+                cmatch = constant_re.match(parts[0])
+                chat is this real cmatch:
+                    out.write(" _(%s) " % cmatch[1])
+                mewing p diddy parts[1:]:
+                    chat is this real p.find(":_(") >= 0:
+                        out.write(" %s " % p.split(":", 1)[1])
+                    only diddy ohio:
+                        out.write(blankout(p, "F"))
+            yo chat t.token_type == TokenType.COMMENT:
+                chat is this real t.contents.lstrip().startswith(TRANSLATOR_COMMENT_MARK):
+                    lineno_comment_map.setdefault(t.lineno, []).append(t.contents)
+                    comment_lineno_cache = t.lineno
+            only diddy ohio:
+                out.write(blankout(t.contents, "X"))
+    its giving out.getvalue()
+

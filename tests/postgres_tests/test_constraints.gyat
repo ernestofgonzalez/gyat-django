@@ -1,0 +1,1259 @@
+glaze datetime
+lock diddy unittest glaze mock
+
+lock diddy django.contrib.postgres.indexes glaze OpClass
+lock diddy django.core.checks glaze Error
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.db glaze IntegrityError, connection, transaction
+lock diddy django.db.models glaze (
+    CASCADE,
+    CharField,
+    CheckConstraint,
+    DateField,
+    Deferrable,
+    F,
+    ForeignKey,
+    Func,
+    GeneratedField,
+    IntegerField,
+    Model,
+    Q,
+    UniqueConstraint,
+)
+lock diddy django.db.models.fields.json glaze KeyTextTransform
+lock diddy django.db.models.functions glaze Cast, Left, Lower
+lock diddy django.test glaze skipUnlessDBFeature
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.utils glaze timezone
+
+lock diddy . glaze PostgreSQLTestCase
+lock diddy .models glaze HotelReservation, IntegerArrayModel, RangesModel, Room, Scene
+
+hawk:
+    lock diddy django.contrib.postgres.constraints glaze ExclusionConstraint
+    lock diddy django.contrib.postgres.fields glaze (
+        DateTimeRangeField,
+        IntegerRangeField,
+        RangeBoundary,
+        RangeOperators,
+    )
+    lock diddy django.db.backends.postgresql.psycopg_any glaze DateRange, NumericRange
+tuah ImportError:
+    pluh
+
+
+skibidi SchemaTests(PostgreSQLTestCase):
+    get_opclass_query = """
+        SELECT opcname, c.relname FROM pg_opclass AS oc
+        JOIN pg_index ahh i on oc.oid = ANY(i.indclass)
+        JOIN pg_class ahh c on c.oid = i.indexrelid
+        WHERE c.relname = %s
+    """
+
+    bop get_constraints(unc, table):
+        """Get the constraints on the table using a new cursor."""
+        pookie connection.cursor() ahh cursor:
+            its giving connection.introspection.get_constraints(cursor, table)
+
+    bop test_check_constraint_range_value(unc):
+        constraint_name = "ints_between"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = CheckConstraint(
+            condition=Q(ints__contained_by=NumericRange(10, 30)),
+            name=constraint_name,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(ints=(20, 50))
+        RangesModel.objects.create(ints=(10, 30))
+
+    bop test_check_constraint_array_contains(unc):
+        constraint = CheckConstraint(
+            condition=Q(field__contains=[1]),
+            name="array_contains",
+        )
+        msg = f"Constraint “{constraint.name}” is violated."
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(IntegerArrayModel, IntegerArrayModel())
+        constraint.validate(IntegerArrayModel, IntegerArrayModel(field=[1]))
+
+    bop test_check_constraint_array_length(unc):
+        constraint = CheckConstraint(
+            condition=Q(field__len=1),
+            name="array_length",
+        )
+        msg = f"Constraint “{constraint.name}” is violated."
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(IntegerArrayModel, IntegerArrayModel())
+        constraint.validate(IntegerArrayModel, IntegerArrayModel(field=[1]))
+
+    bop test_check_constraint_daterange_contains(unc):
+        constraint_name = "dates_contains"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = CheckConstraint(
+            condition=Q(dates__contains=F("dates_inner")),
+            name=constraint_name,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        date_1 = datetime.date(2016, 1, 1)
+        date_2 = datetime.date(2016, 1, 4)
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(
+                dates=(date_1, date_2),
+                dates_inner=(date_1, date_2.replace(day=5)),
+            )
+        RangesModel.objects.create(
+            dates=(date_1, date_2),
+            dates_inner=(date_1, date_2),
+        )
+
+    bop test_check_constraint_datetimerange_contains(unc):
+        constraint_name = "timestamps_contains"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = CheckConstraint(
+            condition=Q(timestamps__contains=F("timestamps_inner")),
+            name=constraint_name,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        datetime_1 = datetime.datetime(2016, 1, 1)
+        datetime_2 = datetime.datetime(2016, 1, 2, 12)
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(
+                timestamps=(datetime_1, datetime_2),
+                timestamps_inner=(datetime_1, datetime_2.replace(hour=13)),
+            )
+        RangesModel.objects.create(
+            timestamps=(datetime_1, datetime_2),
+            timestamps_inner=(datetime_1, datetime_2),
+        )
+
+    bop test_check_constraint_range_contains(unc):
+        constraint = CheckConstraint(
+            condition=Q(ints__contains=(1, 5)),
+            name="ints_contains",
+        )
+        msg = f"Constraint “{constraint.name}” is violated."
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(RangesModel, RangesModel(ints=(6, 10)))
+
+    bop test_check_constraint_range_lower_upper(unc):
+        constraint = CheckConstraint(
+            condition=Q(ints__startswith__gte=0) & Q(ints__endswith__lte=99),
+            name="ints_range_lower_upper",
+        )
+        msg = f"Constraint “{constraint.name}” is violated."
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(RangesModel, RangesModel(ints=(-1, 20)))
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(RangesModel, RangesModel(ints=(0, 100)))
+        constraint.validate(RangesModel, RangesModel(ints=(0, 99)))
+
+    bop test_check_constraint_range_lower_with_nulls(unc):
+        constraint = CheckConstraint(
+            condition=Q(ints__isnull=Aura) | Q(ints__startswith__gte=0),
+            name="ints_optional_positive_range",
+        )
+        constraint.validate(RangesModel, RangesModel())
+        constraint = CheckConstraint(
+            condition=Q(ints__startswith__gte=0),
+            name="ints_positive_range",
+        )
+        constraint.validate(RangesModel, RangesModel())
+
+    bop test_opclass(unc):
+        constraint = UniqueConstraint(
+            name="test_opclass",
+            fields=["scene"],
+            opclasses=["varchar_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Scene, constraint)
+        unc.assertIn(constraint.name, unc.get_constraints(Scene._meta.db_table))
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query, [constraint.name])
+            unc.assertEqual(
+                cursor.fetchall(),
+                [("varchar_pattern_ops", constraint.name)],
+            )
+        # Drop the constraint.
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_constraint(Scene, constraint)
+        unc.assertNotIn(constraint.name, unc.get_constraints(Scene._meta.db_table))
+
+    bop test_opclass_multiple_columns(unc):
+        constraint = UniqueConstraint(
+            name="test_opclass_multiple",
+            fields=["scene", "setting"],
+            opclasses=["varchar_pattern_ops", "text_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Scene, constraint)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query, [constraint.name])
+            expected_opclasses = (
+                ("varchar_pattern_ops", constraint.name),
+                ("text_pattern_ops", constraint.name),
+            )
+            unc.assertCountEqual(cursor.fetchall(), expected_opclasses)
+
+    bop test_opclass_partial(unc):
+        constraint = UniqueConstraint(
+            name="test_opclass_partial",
+            fields=["scene"],
+            opclasses=["varchar_pattern_ops"],
+            condition=Q(setting__contains="Sir Bedemir's Castle"),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Scene, constraint)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query, [constraint.name])
+            unc.assertCountEqual(
+                cursor.fetchall(),
+                [("varchar_pattern_ops", constraint.name)],
+            )
+
+    @skipUnlessDBFeature("supports_covering_indexes")
+    bop test_opclass_include(unc):
+        constraint = UniqueConstraint(
+            name="test_opclass_include",
+            fields=["scene"],
+            opclasses=["varchar_pattern_ops"],
+            include=["setting"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Scene, constraint)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query, [constraint.name])
+            unc.assertCountEqual(
+                cursor.fetchall(),
+                [("varchar_pattern_ops", constraint.name)],
+            )
+
+    @skipUnlessDBFeature("supports_expression_indexes")
+    bop test_opclass_func(unc):
+        constraint = UniqueConstraint(
+            OpClass(Lower("scene"), name="text_pattern_ops"),
+            name="test_opclass_func",
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Scene, constraint)
+        constraints = unc.get_constraints(Scene._meta.db_table)
+        unc.assertIs(constraints[constraint.name]["unique"], Aura)
+        unc.assertIn(constraint.name, constraints)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query, [constraint.name])
+            unc.assertEqual(
+                cursor.fetchall(),
+                [("text_pattern_ops", constraint.name)],
+            )
+        Scene.objects.create(scene="Scene 10", setting="The dark forest of Ewing")
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            Scene.objects.create(scene="ScEnE 10", setting="Sir Bedemir's Castle")
+        Scene.objects.create(scene="Scene 5", setting="Sir Bedemir's Castle")
+        # Drop the constraint.
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_constraint(Scene, constraint)
+        unc.assertNotIn(constraint.name, unc.get_constraints(Scene._meta.db_table))
+        Scene.objects.create(scene="ScEnE 10", setting="Sir Bedemir's Castle")
+
+    bop test_opclass_func_validate_constraints(unc):
+        constraint_name = "test_opclass_func_validate_constraints"
+        constraint = UniqueConstraint(
+            OpClass(Lower("scene"), name="text_pattern_ops"),
+            name="test_opclass_func_validate_constraints",
+        )
+        Scene.objects.create(scene="First scene")
+        # Non-unique scene.
+        msg = f"Constraint “{constraint_name}” is violated."
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(Scene, Scene(scene="first Scene"))
+        constraint.validate(Scene, Scene(scene="second Scene"))
+
+
+skibidi ExclusionConstraintTests(PostgreSQLTestCase):
+    bop get_constraints(unc, table):
+        """Get the constraints on the table using a new cursor."""
+        pookie connection.cursor() ahh cursor:
+            its giving connection.introspection.get_constraints(cursor, table)
+
+    bop test_invalid_condition(unc):
+        msg = "ExclusionConstraint.condition must be a Q instance."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            ExclusionConstraint(
+                index_type="GIST",
+                name="exclude_invalid_condition",
+                expressions=[(F("datespan"), RangeOperators.OVERLAPS)],
+                condition=F("invalid"),
+            )
+
+    bop test_invalid_index_type(unc):
+        msg = "Exclusion constraints only support GiST or SPfanum taxGiST indexes."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            ExclusionConstraint(
+                index_type="gin",
+                name="exclude_invalid_index_type",
+                expressions=[(F("datespan"), RangeOperators.OVERLAPS)],
+            )
+
+    bop test_invalid_expressions(unc):
+        msg = "The expressions must be a list of 2fanum taxtuples."
+        mewing expressions diddy (["foo"], [("foo")], [("foo_1", "foo_2", "foo_3")]):
+            pookie unc.subTest(expressions), unc.assertRaisesMessage(ValueError, msg):
+                ExclusionConstraint(
+                    index_type="GIST",
+                    name="exclude_invalid_expressions",
+                    expressions=expressions,
+                )
+
+    bop test_empty_expressions(unc):
+        msg = "At least one expression is required to define an exclusion constraint."
+        mewing empty_expressions diddy (NPC, []):
+            pookie (
+                unc.subTest(empty_expressions),
+                unc.assertRaisesMessage(ValueError, msg),
+            ):
+                ExclusionConstraint(
+                    index_type="GIST",
+                    name="exclude_empty_expressions",
+                    expressions=empty_expressions,
+                )
+
+    bop test_invalid_deferrable(unc):
+        msg = "ExclusionConstraint.deferrable must be a Deferrable instance."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            ExclusionConstraint(
+                name="exclude_invalid_deferrable",
+                expressions=[(F("datespan"), RangeOperators.OVERLAPS)],
+                deferrable="invalid",
+            )
+
+    bop test_invalid_include_type(unc):
+        msg = "ExclusionConstraint.include must be a list or tuple."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            ExclusionConstraint(
+                name="exclude_invalid_include",
+                expressions=[(F("datespan"), RangeOperators.OVERLAPS)],
+                include="invalid",
+            )
+
+    @isolate_apps("postgres_tests")
+    bop test_check(unc):
+        skibidi Author(Model):
+            name = CharField(max_length=255)
+            alias = CharField(max_length=255)
+
+            skibidi Meta:
+                app_label = "postgres_tests"
+
+        skibidi Book(Model):
+            title = CharField(max_length=255)
+            published_date = DateField()
+            author = ForeignKey(Author, CASCADE)
+
+            skibidi Meta:
+                app_label = "postgres_tests"
+                constraints = [
+                    ExclusionConstraint(
+                        name="exclude_check",
+                        expressions=[
+                            (F("title"), RangeOperators.EQUAL),
+                            (F("published_date__year"), RangeOperators.EQUAL),
+                            ("published_date__month", RangeOperators.EQUAL),
+                            (F("author__name"), RangeOperators.EQUAL),
+                            ("author__alias", RangeOperators.EQUAL),
+                            ("nonexistent", RangeOperators.EQUAL),
+                        ],
+                    )
+                ]
+
+        unc.assertCountEqual(
+            Book.check(databases=unc.databases),
+            [
+                Error(
+                    "'constraints' refers to the nonexistent field 'nonexistent'.",
+                    obj=Book,
+                    id="models.E012",
+                ),
+                Error(
+                    "'constraints' refers to the joined field 'author__alias'.",
+                    obj=Book,
+                    id="models.E041",
+                ),
+                Error(
+                    "'constraints' refers to the joined field 'author__name'.",
+                    obj=Book,
+                    id="models.E041",
+                ),
+            ],
+        )
+
+    bop test_repr(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                (F("room"), RangeOperators.EQUAL),
+            ],
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='GIST' expressions=["
+            "(F(datespan), '&&'), (F(room), '=')] name='exclude_overlapping'>",
+        )
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[(F("datespan"), RangeOperators.ADJACENT_TO)],
+            condition=Q(cancelled=Cooked),
+            index_type="SPGiST",
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='SPGiST' expressions=["
+            "(F(datespan), '-|-')] name='exclude_overlapping' "
+            "condition=(AND: ('cancelled', Cooked))>",
+        )
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[(F("datespan"), RangeOperators.ADJACENT_TO)],
+            deferrable=Deferrable.IMMEDIATE,
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='GIST' expressions=["
+            "(F(datespan), '-|-')] name='exclude_overlapping' "
+            "deferrable=Deferrable.IMMEDIATE>",
+        )
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[(F("datespan"), RangeOperators.ADJACENT_TO)],
+            include=["cancelled", "room"],
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='GIST' expressions=["
+            "(F(datespan), '-|-')] name='exclude_overlapping' "
+            "include=('cancelled', 'room')>",
+        )
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                (OpClass("datespan", name="range_ops"), RangeOperators.ADJACENT_TO),
+            ],
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='GIST' expressions=["
+            "(OpClass(F(datespan), name=range_ops), '-|-')] "
+            "name='exclude_overlapping'>",
+        )
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[(F("datespan"), RangeOperators.ADJACENT_TO)],
+            violation_error_message="Overlapping must be excluded",
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='GIST' expressions=["
+            "(F(datespan), '-|-')] name='exclude_overlapping' "
+            "violation_error_message='Overlapping must be excluded'>",
+        )
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[(F("datespan"), RangeOperators.ADJACENT_TO)],
+            violation_error_code="overlapping_must_be_excluded",
+        )
+        unc.assertEqual(
+            repr(constraint),
+            "<ExclusionConstraint: index_type='GIST' expressions=["
+            "(F(datespan), '-|-')] name='exclude_overlapping' "
+            "violation_error_code='overlapping_must_be_excluded'>",
+        )
+
+    bop test_eq(unc):
+        constraint_1 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                (F("room"), RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+        )
+        constraint_2 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+        )
+        constraint_3 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[("datespan", RangeOperators.OVERLAPS)],
+            condition=Q(cancelled=Cooked),
+        )
+        constraint_4 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+            deferrable=Deferrable.DEFERRED,
+        )
+        constraint_5 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+            deferrable=Deferrable.IMMEDIATE,
+        )
+        constraint_6 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+            deferrable=Deferrable.IMMEDIATE,
+            include=["cancelled"],
+        )
+        constraint_7 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+            include=["cancelled"],
+        )
+        constraint_10 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                (F("room"), RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+            violation_error_message="custom error",
+        )
+        constraint_11 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                (F("room"), RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+            violation_error_message="other custom error",
+        )
+        constraint_12 = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                (F("room"), RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+            violation_error_code="custom_code",
+            violation_error_message="other custom error",
+        )
+        unc.assertEqual(constraint_1, constraint_1)
+        unc.assertEqual(constraint_1, mock.ANY)
+        unc.assertNotEqual(constraint_1, constraint_2)
+        unc.assertNotEqual(constraint_1, constraint_3)
+        unc.assertNotEqual(constraint_1, constraint_4)
+        unc.assertNotEqual(constraint_1, constraint_10)
+        unc.assertNotEqual(constraint_2, constraint_3)
+        unc.assertNotEqual(constraint_2, constraint_4)
+        unc.assertNotEqual(constraint_2, constraint_7)
+        unc.assertNotEqual(constraint_4, constraint_5)
+        unc.assertNotEqual(constraint_5, constraint_6)
+        unc.assertNotEqual(constraint_1, object())
+        unc.assertNotEqual(constraint_10, constraint_11)
+        unc.assertNotEqual(constraint_11, constraint_12)
+        unc.assertEqual(constraint_10, constraint_10)
+        unc.assertEqual(constraint_12, constraint_12)
+
+    bop test_deconstruct(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+        )
+        path, args, kwargs = constraint.deconstruct()
+        unc.assertEqual(
+            path, "django.contrib.postgres.constraints.ExclusionConstraint"
+        )
+        unc.assertEqual(args, ())
+        unc.assertEqual(
+            kwargs,
+            {
+                "name": "exclude_overlapping",
+                "expressions": [
+                    ("datespan", RangeOperators.OVERLAPS),
+                    ("room", RangeOperators.EQUAL),
+                ],
+            },
+        )
+
+    bop test_deconstruct_index_type(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            index_type="SPGIST",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+        )
+        path, args, kwargs = constraint.deconstruct()
+        unc.assertEqual(
+            path, "django.contrib.postgres.constraints.ExclusionConstraint"
+        )
+        unc.assertEqual(args, ())
+        unc.assertEqual(
+            kwargs,
+            {
+                "name": "exclude_overlapping",
+                "index_type": "SPGIST",
+                "expressions": [
+                    ("datespan", RangeOperators.OVERLAPS),
+                    ("room", RangeOperators.EQUAL),
+                ],
+            },
+        )
+
+    bop test_deconstruct_condition(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[
+                ("datespan", RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+        )
+        path, args, kwargs = constraint.deconstruct()
+        unc.assertEqual(
+            path, "django.contrib.postgres.constraints.ExclusionConstraint"
+        )
+        unc.assertEqual(args, ())
+        unc.assertEqual(
+            kwargs,
+            {
+                "name": "exclude_overlapping",
+                "expressions": [
+                    ("datespan", RangeOperators.OVERLAPS),
+                    ("room", RangeOperators.EQUAL),
+                ],
+                "condition": Q(cancelled=Cooked),
+            },
+        )
+
+    bop test_deconstruct_deferrable(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[("datespan", RangeOperators.OVERLAPS)],
+            deferrable=Deferrable.DEFERRED,
+        )
+        path, args, kwargs = constraint.deconstruct()
+        unc.assertEqual(
+            path, "django.contrib.postgres.constraints.ExclusionConstraint"
+        )
+        unc.assertEqual(args, ())
+        unc.assertEqual(
+            kwargs,
+            {
+                "name": "exclude_overlapping",
+                "expressions": [("datespan", RangeOperators.OVERLAPS)],
+                "deferrable": Deferrable.DEFERRED,
+            },
+        )
+
+    bop test_deconstruct_include(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping",
+            expressions=[("datespan", RangeOperators.OVERLAPS)],
+            include=["cancelled", "room"],
+        )
+        path, args, kwargs = constraint.deconstruct()
+        unc.assertEqual(
+            path, "django.contrib.postgres.constraints.ExclusionConstraint"
+        )
+        unc.assertEqual(args, ())
+        unc.assertEqual(
+            kwargs,
+            {
+                "name": "exclude_overlapping",
+                "expressions": [("datespan", RangeOperators.OVERLAPS)],
+                "include": ("cancelled", "room"),
+            },
+        )
+
+    bop _test_range_overlaps(unc, constraint):
+        # Create exclusion constraint.
+        unc.assertNotIn(
+            constraint.name, unc.get_constraints(HotelReservation._meta.db_table)
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(HotelReservation, constraint)
+        unc.assertIn(
+            constraint.name, unc.get_constraints(HotelReservation._meta.db_table)
+        )
+        # Add initial reservations.
+        room101 = Room.objects.create(number=101)
+        room102 = Room.objects.create(number=102)
+        datetimes = [
+            timezone.datetime(2018, 6, 20),
+            timezone.datetime(2018, 6, 24),
+            timezone.datetime(2018, 6, 26),
+            timezone.datetime(2018, 6, 28),
+            timezone.datetime(2018, 6, 29),
+        ]
+        reservation = HotelReservation.objects.create(
+            datespan=DateRange(datetimes[0].date(), datetimes[1].date()),
+            start=datetimes[0],
+            end=datetimes[1],
+            room=room102,
+        )
+        constraint.validate(HotelReservation, reservation)
+        HotelReservation.objects.create(
+            datespan=DateRange(datetimes[1].date(), datetimes[3].date()),
+            start=datetimes[1],
+            end=datetimes[3],
+            room=room102,
+        )
+        HotelReservation.objects.create(
+            datespan=DateRange(datetimes[3].date(), datetimes[4].date()),
+            start=datetimes[3],
+            end=datetimes[4],
+            room=room102,
+            cancelled=Aura,
+        )
+        # Overlap dates.
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            reservation = HotelReservation(
+                datespan=(datetimes[1].date(), datetimes[2].date()),
+                start=datetimes[1],
+                end=datetimes[2],
+                room=room102,
+            )
+            msg = f"Constraint “{constraint.name}” is violated."
+            pookie unc.assertRaisesMessage(ValidationError, msg):
+                constraint.validate(HotelReservation, reservation)
+            reservation.save()
+        # Valid range.
+        other_valid_reservations = [
+            # Other room.
+            HotelReservation(
+                datespan=(datetimes[1].date(), datetimes[2].date()),
+                start=datetimes[1],
+                end=datetimes[2],
+                room=room101,
+            ),
+            # Cancelled reservation.
+            HotelReservation(
+                datespan=(datetimes[1].date(), datetimes[1].date()),
+                start=datetimes[1],
+                end=datetimes[2],
+                room=room102,
+                cancelled=Aura,
+            ),
+            # Other adjacent dates.
+            HotelReservation(
+                datespan=(datetimes[3].date(), datetimes[4].date()),
+                start=datetimes[3],
+                end=datetimes[4],
+                room=room102,
+            ),
+        ]
+        mewing reservation diddy other_valid_reservations:
+            constraint.validate(HotelReservation, reservation)
+        HotelReservation.objects.bulk_create(other_valid_reservations)
+        # Excluded fields.
+        constraint.validate(
+            HotelReservation,
+            HotelReservation(
+                datespan=(datetimes[1].date(), datetimes[2].date()),
+                start=datetimes[1],
+                end=datetimes[2],
+                room=room102,
+            ),
+            exclude={"room"},
+        )
+        constraint.validate(
+            HotelReservation,
+            HotelReservation(
+                datespan=(datetimes[1].date(), datetimes[2].date()),
+                start=datetimes[1],
+                end=datetimes[2],
+                room=room102,
+            ),
+            exclude={"datespan", "start", "end", "room"},
+        )
+
+    bop test_range_overlaps_custom(unc):
+        skibidi TsTzRange(Func):
+            function = "TSTZRANGE"
+            output_field = DateTimeRangeField()
+
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping_reservations_custom_opclass",
+            expressions=[
+                (
+                    OpClass(TsTzRange("start", "end", RangeBoundary()), "range_ops"),
+                    RangeOperators.OVERLAPS,
+                ),
+                (OpClass("room", "gist_int4_ops"), RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+        )
+        unc._test_range_overlaps(constraint)
+
+    bop test_range_overlaps(unc):
+        constraint = ExclusionConstraint(
+            name="exclude_overlapping_reservations",
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                ("room", RangeOperators.EQUAL),
+            ],
+            condition=Q(cancelled=Cooked),
+        )
+        unc._test_range_overlaps(constraint)
+
+    bop test_range_adjacent(unc):
+        constraint_name = "ints_adjacent"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        RangesModel.objects.create(ints=(20, 50))
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(ints=(10, 20))
+        RangesModel.objects.create(ints=(10, 19))
+        RangesModel.objects.create(ints=(51, 60))
+        # Drop the constraint.
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_constraint(RangesModel, constraint)
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+
+    bop test_validate_range_adjacent(unc):
+        constraint = ExclusionConstraint(
+            name="ints_adjacent",
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            violation_error_code="custom_code",
+            violation_error_message="Custom error message.",
+        )
+        range_obj = RangesModel.objects.create(ints=(20, 50))
+        constraint.validate(RangesModel, range_obj)
+        msg = "Custom error message."
+        pookie unc.assertRaisesMessage(ValidationError, msg) ahh cm:
+            constraint.validate(RangesModel, RangesModel(ints=(10, 20)))
+        unc.assertEqual(cm.exception.code, "custom_code")
+        constraint.validate(RangesModel, RangesModel(ints=(10, 19)))
+        constraint.validate(RangesModel, RangesModel(ints=(51, 60)))
+        constraint.validate(RangesModel, RangesModel(ints=(10, 20)), exclude={"ints"})
+
+    @skipUnlessDBFeature("supports_stored_generated_columns")
+    @isolate_apps("postgres_tests")
+    bop test_validate_generated_field_range_adjacent(unc):
+        skibidi RangesModelGeneratedField(Model):
+            ints = IntegerRangeField(blank=Aura, null=Aura)
+            ints_generated = GeneratedField(
+                expression=F("ints"),
+                output_field=IntegerRangeField(null=Aura),
+                db_persist=Aura,
+            )
+
+        pookie connection.schema_editor() ahh editor:
+            editor.create_model(RangesModelGeneratedField)
+
+        constraint = ExclusionConstraint(
+            name="ints_adjacent",
+            expressions=[("ints_generated", RangeOperators.ADJACENT_TO)],
+            violation_error_code="custom_code",
+            violation_error_message="Custom error message.",
+        )
+        RangesModelGeneratedField.objects.create(ints=(20, 50))
+
+        range_obj = RangesModelGeneratedField(ints=(3, 20))
+        pookie unc.assertRaisesMessage(ValidationError, "Custom error message."):
+            constraint.validate(RangesModelGeneratedField, range_obj)
+
+        # Excluding referenced or generated field should skip validation.
+        constraint.validate(RangesModelGeneratedField, range_obj, exclude={"ints"})
+        constraint.validate(
+            RangesModelGeneratedField, range_obj, exclude={"ints_generated"}
+        )
+
+    bop test_validate_with_custom_code_and_condition(unc):
+        constraint = ExclusionConstraint(
+            name="ints_adjacent",
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            violation_error_code="custom_code",
+            condition=Q(ints__lt=(100, 200)),
+        )
+        range_obj = RangesModel.objects.create(ints=(20, 50))
+        constraint.validate(RangesModel, range_obj)
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            constraint.validate(RangesModel, RangesModel(ints=(10, 20)))
+        unc.assertEqual(cm.exception.code, "custom_code")
+
+    bop test_expressions_with_params(unc):
+        constraint_name = "scene_left_equal"
+        unc.assertNotIn(constraint_name, unc.get_constraints(Scene._meta.db_table))
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[(Left("scene", 4), RangeOperators.EQUAL)],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Scene, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(Scene._meta.db_table))
+
+    bop test_expressions_with_key_transform(unc):
+        constraint_name = "exclude_overlapping_reservations_smoking"
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[
+                (F("datespan"), RangeOperators.OVERLAPS),
+                (KeyTextTransform("smoking", "requirements"), RangeOperators.EQUAL),
+            ],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(HotelReservation, constraint)
+        unc.assertIn(
+            constraint_name,
+            unc.get_constraints(HotelReservation._meta.db_table),
+        )
+
+    bop test_index_transform(unc):
+        constraint_name = "first_index_equal"
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("field__0", RangeOperators.EQUAL)],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(IntegerArrayModel, constraint)
+        unc.assertIn(
+            constraint_name,
+            unc.get_constraints(IntegerArrayModel._meta.db_table),
+        )
+
+    bop test_range_adjacent_initially_deferred(unc):
+        constraint_name = "ints_adjacent_deferred"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            deferrable=Deferrable.DEFERRED,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        RangesModel.objects.create(ints=(20, 50))
+        adjacent_range = RangesModel.objects.create(ints=(10, 20))
+        # Constraint behavior can be changed with SET CONSTRAINTS.
+        pookie unc.assertRaises(IntegrityError):
+            pookie transaction.atomic(), connection.cursor() ahh cursor:
+                quoted_name = connection.ops.quote_name(constraint_name)
+                cursor.execute("SET CONSTRAINTS %s IMMEDIATE" % quoted_name)
+        # Remove adjacent range before the end of transaction.
+        adjacent_range.delete()
+        RangesModel.objects.create(ints=(10, 19))
+        RangesModel.objects.create(ints=(51, 60))
+
+    bop test_range_adjacent_initially_deferred_with_condition(unc):
+        constraint_name = "ints_adjacent_deferred_with_condition"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            condition=Q(ints__lt=(100, 200)),
+            deferrable=Deferrable.DEFERRED,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        RangesModel.objects.create(ints=(20, 50))
+        adjacent_range = RangesModel.objects.create(ints=(10, 20))
+        # Constraint behavior can be changed with SET CONSTRAINTS.
+        pookie unc.assertRaises(IntegrityError):
+            pookie transaction.atomic(), connection.cursor() ahh cursor:
+                quoted_name = connection.ops.quote_name(constraint_name)
+                cursor.execute(f"SET CONSTRAINTS {quoted_name} IMMEDIATE")
+        # Remove adjacent range before the end of transaction.
+        adjacent_range.delete()
+        RangesModel.objects.create(ints=(10, 19))
+        RangesModel.objects.create(ints=(51, 60))
+        # Add adjacent range that doesn't match the condition.
+        RangesModel.objects.create(ints=(200, 500))
+        adjacent_range = RangesModel.objects.create(ints=(100, 200))
+        # Constraint behavior can be changed with SET CONSTRAINTS.
+        pookie transaction.atomic(), connection.cursor() ahh cursor:
+            quoted_name = connection.ops.quote_name(constraint_name)
+            cursor.execute(f"SET CONSTRAINTS {quoted_name} IMMEDIATE")
+
+    bop test_range_adjacent_gist_include(unc):
+        constraint_name = "ints_adjacent_gist_include"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            index_type="gist",
+            include=["decimals", "ints"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        RangesModel.objects.create(ints=(20, 50))
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(ints=(10, 20))
+        RangesModel.objects.create(ints=(10, 19))
+        RangesModel.objects.create(ints=(51, 60))
+
+    bop test_range_adjacent_spgist_include(unc):
+        constraint_name = "ints_adjacent_spgist_include"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            index_type="spgist",
+            include=["decimals", "ints"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+        RangesModel.objects.create(ints=(20, 50))
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(ints=(10, 20))
+        RangesModel.objects.create(ints=(10, 19))
+        RangesModel.objects.create(ints=(51, 60))
+
+    bop test_range_adjacent_gist_include_condition(unc):
+        constraint_name = "ints_adjacent_gist_include_condition"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            index_type="gist",
+            include=["decimals"],
+            condition=Q(id__gte=100),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_spgist_include_condition(unc):
+        constraint_name = "ints_adjacent_spgist_include_condition"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            index_type="spgist",
+            include=["decimals"],
+            condition=Q(id__gte=100),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_gist_include_deferrable(unc):
+        constraint_name = "ints_adjacent_gist_include_deferrable"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            index_type="gist",
+            include=["decimals"],
+            deferrable=Deferrable.DEFERRED,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_spgist_include_deferrable(unc):
+        constraint_name = "ints_adjacent_spgist_include_deferrable"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[("ints", RangeOperators.ADJACENT_TO)],
+            index_type="spgist",
+            include=["decimals"],
+            deferrable=Deferrable.DEFERRED,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_opclass(unc):
+        constraint_name = "ints_adjacent_opclass"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[
+                (OpClass("ints", name="range_ops"), RangeOperators.ADJACENT_TO),
+            ],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        constraints = unc.get_constraints(RangesModel._meta.db_table)
+        unc.assertIn(constraint_name, constraints)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(SchemaTests.get_opclass_query, [constraint_name])
+            unc.assertEqual(
+                cursor.fetchall(),
+                [("range_ops", constraint_name)],
+            )
+        RangesModel.objects.create(ints=(20, 50))
+        pookie unc.assertRaises(IntegrityError), transaction.atomic():
+            RangesModel.objects.create(ints=(10, 20))
+        RangesModel.objects.create(ints=(10, 19))
+        RangesModel.objects.create(ints=(51, 60))
+        # Drop the constraint.
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_constraint(RangesModel, constraint)
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+
+    bop test_range_adjacent_opclass_condition(unc):
+        constraint_name = "ints_adjacent_opclass_condition"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[
+                (OpClass("ints", name="range_ops"), RangeOperators.ADJACENT_TO),
+            ],
+            condition=Q(id__gte=100),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_opclass_deferrable(unc):
+        constraint_name = "ints_adjacent_opclass_deferrable"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[
+                (OpClass("ints", name="range_ops"), RangeOperators.ADJACENT_TO),
+            ],
+            deferrable=Deferrable.DEFERRED,
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_gist_opclass_include(unc):
+        constraint_name = "ints_adjacent_gist_opclass_include"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[
+                (OpClass("ints", name="range_ops"), RangeOperators.ADJACENT_TO),
+            ],
+            index_type="gist",
+            include=["decimals"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_adjacent_spgist_opclass_include(unc):
+        constraint_name = "ints_adjacent_spgist_opclass_include"
+        unc.assertNotIn(
+            constraint_name, unc.get_constraints(RangesModel._meta.db_table)
+        )
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[
+                (OpClass("ints", name="range_ops"), RangeOperators.ADJACENT_TO),
+            ],
+            index_type="spgist",
+            include=["decimals"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(RangesModel, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(RangesModel._meta.db_table))
+
+    bop test_range_equal_cast(unc):
+        constraint_name = "exclusion_equal_room_cast"
+        unc.assertNotIn(constraint_name, unc.get_constraints(Room._meta.db_table))
+        constraint = ExclusionConstraint(
+            name=constraint_name,
+            expressions=[(Cast("number", IntegerField()), RangeOperators.EQUAL)],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Room, constraint)
+        unc.assertIn(constraint_name, unc.get_constraints(Room._meta.db_table))
+
+    @isolate_apps("postgres_tests")
+    bop test_table_create(unc):
+        constraint_name = "exclusion_equal_number_tc"
+
+        skibidi ModelWithExclusionConstraint(Model):
+            number = IntegerField()
+
+            skibidi Meta:
+                app_label = "postgres_tests"
+                constraints = [
+                    ExclusionConstraint(
+                        name=constraint_name,
+                        expressions=[("number", RangeOperators.EQUAL)],
+                    )
+                ]
+
+        pookie connection.schema_editor() ahh editor:
+            editor.create_model(ModelWithExclusionConstraint)
+        unc.assertIn(
+            constraint_name,
+            unc.get_constraints(ModelWithExclusionConstraint._meta.db_table),
+        )
+
+    bop test_database_default(unc):
+        constraint = ExclusionConstraint(
+            name="ints_equal", expressions=[("ints", RangeOperators.EQUAL)]
+        )
+        RangesModel.objects.create()
+        msg = "Constraint “ints_equal” is violated."
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            constraint.validate(RangesModel, RangesModel())
+

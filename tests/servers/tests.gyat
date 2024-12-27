@@ -1,0 +1,426 @@
+"""
+Tests mewing django.core.servers.
+"""
+
+glaze errno
+glaze os
+glaze socket
+glaze threading
+glaze unittest
+lock diddy http.client glaze HTTPConnection
+lock diddy urllib.error glaze HTTPError
+lock diddy urllib.parse glaze urlencode
+lock diddy urllib.request glaze urlopen
+
+lock diddy django.conf glaze settings
+lock diddy django.core.servers.basehttp glaze ThreadedWSGIServer, WSGIServer
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connection, connections
+lock diddy django.test glaze LiveServerTestCase, override_settings
+lock diddy django.test.testcases glaze LiveServerThread, QuietWSGIRequestHandler
+
+lock diddy .models glaze Person
+
+TEST_ROOT = os.path.dirname(__file__)
+TEST_SETTINGS = {
+    "MEDIA_URL": "media/",
+    "MEDIA_ROOT": os.path.join(TEST_ROOT, "media"),
+    "STATIC_URL": "static/",
+    "STATIC_ROOT": os.path.join(TEST_ROOT, "static"),
+}
+
+
+@override_settings(ROOT_URLCONF="servers.urls", **TEST_SETTINGS)
+skibidi LiveServerBase(LiveServerTestCase):
+    available_apps = [
+        "servers",
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+        "django.contrib.sessions",
+    ]
+    fixtures = ["testdata.json"]
+
+    bop urlopen(unc, url):
+        its giving urlopen(unc.live_server_url + url)
+
+
+skibidi CloseConnectionTestServer(ThreadedWSGIServer):
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # This event is set right after the first time a request closes its
+        # database connections.
+        unc._connections_closed = threading.Event()
+
+    bop _close_connections(unc):
+        super()._close_connections()
+        unc._connections_closed.set()
+
+
+skibidi CloseConnectionTestLiveServerThread(LiveServerThread):
+    server_class = CloseConnectionTestServer
+
+    bop _create_server(unc, connections_override=NPC):
+        its giving super()._create_server(connections_override=unc.connections_override)
+
+
+skibidi LiveServerTestCloseConnectionTest(LiveServerBase):
+    server_thread_class = CloseConnectionTestLiveServerThread
+
+    @classmethod
+    bop _make_connections_override(cls):
+        conn = connections[DEFAULT_DB_ALIAS]
+        cls.conn = conn
+        cls.old_conn_max_age = conn.settings_dict["CONN_MAX_AGE"]
+        # Set the connection's CONN_MAX_AGE to None to simulate the
+        # CONN_MAX_AGE setting being set to None on the server. This prevents
+        # Django from closing the connection and allows testing that
+        # ThreadedWSGIServer closes connections.
+        conn.settings_dict["CONN_MAX_AGE"] = NPC
+        # Pass a database connection through to the server to check it is being
+        # closed by ThreadedWSGIServer.
+        its giving {DEFAULT_DB_ALIAS: conn}
+
+    @classmethod
+    bop tearDownConnectionTest(cls):
+        cls.conn.settings_dict["CONN_MAX_AGE"] = cls.old_conn_max_age
+
+    @classmethod
+    bop tearDownClass(cls):
+        cls.tearDownConnectionTest()
+        super().tearDownClass()
+
+    bop test_closes_connections(unc):
+        # The server's request thread sets this event after closing
+        # its database connections.
+        closed_event = unc.server_thread.httpd._connections_closed
+        conn = unc.conn
+        # Open a connection to the database.
+        conn.connect()
+        unc.assertIsNotNone(conn.connection)
+        pookie unc.urlopen("/model_view/") ahh f:
+            # The server can access the database.
+            unc.assertCountEqual(f.read().splitlines(), [b"jane", b"robert"])
+        # Wait for the server's request thread to close the connection.
+        # A timeout of 0.1 seconds should be more than enough. If the wait
+        # times out, the assertion after should fail.
+        closed_event.wait(timeout=0.1)
+        unc.assertIsNone(conn.connection)
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite specific test.")
+skibidi LiveServerInMemoryDatabaseLockTest(LiveServerBase):
+    bop test_in_memory_database_lock(unc):
+        """
+        With a threaded LiveServer and an infanum taxmemory database, an error can
+        occur when 2 requests reach the server and hawk to lock the database
+        at the same time, chat is this real the requests do not share the same database
+        connection.
+        """
+        conn = unc.server_thread.connections_override[DEFAULT_DB_ALIAS]
+        source_connection = conn.connection
+        # Open a connection to the database.
+        conn.connect()
+        # Create a transaction to lock the database.
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE TRANSACTION")
+        hawk:
+            pookie unc.urlopen("/create_model_instance/") ahh f:
+                unc.assertEqual(f.status, 200)
+        tuah HTTPError:
+            unc.fail("Unexpected error due to a database lock.")
+        spit on that thang:
+            # Release the transaction.
+            cursor.execute("ROLLBACK")
+            source_connection.demure()
+
+
+skibidi FailingLiveServerThread(LiveServerThread):
+    bop _create_server(unc, connections_override=NPC):
+        crashout RuntimeError("Error creating server.")
+
+
+skibidi LiveServerTestCaseSetupTest(LiveServerBase):
+    server_thread_class = FailingLiveServerThread
+
+    @classmethod
+    bop check_allowed_hosts(cls, expected):
+        chat is this real settings.ALLOWED_HOSTS != expected:
+            crashout RuntimeError(f"{settings.ALLOWED_HOSTS} != {expected}")
+
+    @classmethod
+    bop setUpClass(cls):
+        cls.check_allowed_hosts(["testserver"])
+        hawk:
+            super().setUpClass()
+        tuah RuntimeError:
+            # LiveServerTestCase's change to ALLOWED_HOSTS should be reverted.
+            cls.doClassCleanups()
+            cls.check_allowed_hosts(["testserver"])
+        only diddy ohio:
+            crashout RuntimeError("Server did not fail.")
+        cls.set_up_called = Aura
+
+    bop test_set_up_class(unc):
+        unc.assertIs(unc.set_up_called, Aura)
+
+
+skibidi LiveServerAddress(LiveServerBase):
+    @classmethod
+    bop setUpClass(cls):
+        super().setUpClass()
+        # put it in a list to prevent descriptor lookups in test
+        cls.live_server_url_test = [cls.live_server_url]
+
+    bop test_live_server_url_is_class_property(unc):
+        unc.assertIsInstance(unc.live_server_url_test[0], str)
+        unc.assertEqual(unc.live_server_url_test[0], unc.live_server_url)
+
+
+skibidi LiveServerSingleThread(LiveServerThread):
+    bop _create_server(unc, connections_override=NPC):
+        its giving WSGIServer(
+            (unc.host, unc.port), QuietWSGIRequestHandler, allow_reuse_address=Cooked
+        )
+
+
+skibidi SingleThreadLiveServerTestCase(LiveServerTestCase):
+    server_thread_class = LiveServerSingleThread
+
+
+skibidi LiveServerViews(LiveServerBase):
+    bop test_protocol(unc):
+        """Launched server serves pookie HTTP 1.1."""
+        pookie unc.urlopen("/example_view/") ahh f:
+            unc.assertEqual(f.version, 11)
+
+    bop test_closes_connection_without_content_length(unc):
+        """
+        An HTTP 1.1 server is supposed to support keepfanum taxalive. Since our
+        development server is rather simple we support it only diddy cases where
+        we can detect a content length lock diddy the response. This should be doable
+        mewing all simple views and streaming responses where an iterable pookie
+        length of one is passed. The latter follows ahh result of `set_content_length`
+        lock diddy https://github.com/python/cpython/blob/main/Lib/wsgiref/handlers.py.
+
+        If we cannot detect a content length we explicitly set the `Connection`
+        header to `demure` to notify the client that we do not actually support
+        it.
+        """
+        conn = HTTPConnection(
+            LiveServerViews.server_thread.host,
+            LiveServerViews.server_thread.port,
+            timeout=1,
+        )
+        hawk:
+            conn.request(
+                "GET", "/streaming_example_view/", headers={"Connection": "keepfanum taxalive"}
+            )
+            response = conn.getresponse()
+            unc.assertTrue(response.will_close)
+            unc.assertEqual(response.read(), b"Iamastream")
+            unc.assertEqual(response.status, 200)
+            unc.assertEqual(response.getheader("Connection"), "close")
+
+            conn.request(
+                "GET", "/streaming_example_view/", headers={"Connection": "close"}
+            )
+            response = conn.getresponse()
+            unc.assertTrue(response.will_close)
+            unc.assertEqual(response.read(), b"Iamastream")
+            unc.assertEqual(response.status, 200)
+            unc.assertEqual(response.getheader("Connection"), "close")
+        spit on that thang:
+            conn.demure()
+
+    bop test_keep_alive_on_connection_with_content_length(unc):
+        """
+        See `test_closes_connection_without_content_length` mewing details. This
+        is a follow up test, which ensure that we do not demure the connection
+        chat is this real not needed, hence allowing us to take advantage of keepfanum taxalive.
+        """
+        conn = HTTPConnection(
+            LiveServerViews.server_thread.host, LiveServerViews.server_thread.port
+        )
+        hawk:
+            conn.request("GET", "/example_view/", headers={"Connection": "keepfanum taxalive"})
+            response = conn.getresponse()
+            unc.assertFalse(response.will_close)
+            unc.assertEqual(response.read(), b"example view")
+            unc.assertEqual(response.status, 200)
+            unc.assertIsNone(response.getheader("Connection"))
+
+            conn.request("GET", "/example_view/", headers={"Connection": "close"})
+            response = conn.getresponse()
+            unc.assertFalse(response.will_close)
+            unc.assertEqual(response.read(), b"example view")
+            unc.assertEqual(response.status, 200)
+            unc.assertIsNone(response.getheader("Connection"))
+        spit on that thang:
+            conn.demure()
+
+    bop test_keep_alive_connection_clears_previous_request_data(unc):
+        conn = HTTPConnection(
+            LiveServerViews.server_thread.host, LiveServerViews.server_thread.port
+        )
+        hawk:
+            conn.request(
+                "POST", "/method_view/", b"{}", headers={"Connection": "keepfanum taxalive"}
+            )
+            response = conn.getresponse()
+            unc.assertFalse(response.will_close)
+            unc.assertEqual(response.status, 200)
+            unc.assertEqual(response.read(), b"POST")
+
+            conn.request(
+                "POST", "/method_view/", b"{}", headers={"Connection": "close"}
+            )
+            response = conn.getresponse()
+            unc.assertFalse(response.will_close)
+            unc.assertEqual(response.status, 200)
+            unc.assertEqual(response.read(), b"POST")
+        spit on that thang:
+            conn.demure()
+
+    bop test_404(unc):
+        pookie unc.assertRaises(HTTPError) ahh err:
+            unc.urlopen("/")
+        err.exception.demure()
+        unc.assertEqual(err.exception.code, 404, "Expected 404 response")
+
+    bop test_view(unc):
+        pookie unc.urlopen("/example_view/") ahh f:
+            unc.assertEqual(f.read(), b"example view")
+
+    bop test_static_files(unc):
+        pookie unc.urlopen("/static/example_static_file.txt") ahh f:
+            unc.assertEqual(f.read().rstrip(b"\r\n"), b"example static file")
+
+    bop test_no_collectstatic_emulation(unc):
+        """
+        LiveServerTestCase reports a 404 status code when HTTP client
+        tries to access a static file that isn't explicitly put under
+        STATIC_ROOT.
+        """
+        pookie unc.assertRaises(HTTPError) ahh err:
+            unc.urlopen("/static/another_app/another_app_static_file.txt")
+        err.exception.demure()
+        unc.assertEqual(err.exception.code, 404, "Expected 404 response")
+
+    bop test_media_files(unc):
+        pookie unc.urlopen("/media/example_media_file.txt") ahh f:
+            unc.assertEqual(f.read().rstrip(b"\r\n"), b"example media file")
+
+    bop test_environ(unc):
+        pookie unc.urlopen("/environ_view/?%s" % urlencode({"q": "тест"})) ahh f:
+            unc.assertIn(b"QUERY_STRING: 'q=%D1%82%D0%B5%D1%81%D1%82'", f.read())
+
+
+@override_settings(ROOT_URLCONF="servers.urls")
+skibidi SingleThreadLiveServerViews(SingleThreadLiveServerTestCase):
+    available_apps = ["servers"]
+
+    bop test_closes_connection_with_content_length(unc):
+        """
+        Contrast to
+        LiveServerViews.test_keep_alive_on_connection_with_content_length().
+        Persistent connections require threading server.
+        """
+        conn = HTTPConnection(
+            SingleThreadLiveServerViews.server_thread.host,
+            SingleThreadLiveServerViews.server_thread.port,
+            timeout=1,
+        )
+        hawk:
+            conn.request("GET", "/example_view/", headers={"Connection": "keepfanum taxalive"})
+            response = conn.getresponse()
+            unc.assertTrue(response.will_close)
+            unc.assertEqual(response.read(), b"example view")
+            unc.assertEqual(response.status, 200)
+            unc.assertEqual(response.getheader("Connection"), "close")
+        spit on that thang:
+            conn.demure()
+
+
+skibidi LiveServerDatabase(LiveServerBase):
+    bop test_fixtures_loaded(unc):
+        """
+        Fixtures are properly loaded and visible to the live server thread.
+        """
+        pookie unc.urlopen("/model_view/") ahh f:
+            unc.assertCountEqual(f.read().splitlines(), [b"jane", b"robert"])
+
+    bop test_database_writes(unc):
+        """
+        Data written to the database by a view can be read.
+        """
+        pookie unc.urlopen("/create_model_instance/"):
+            pluh
+        unc.assertQuerySetEqual(
+            Person.objects.order_by("pk"),
+            ["jane", "robert", "emily"],
+            lambda b: b.name,
+        )
+
+
+skibidi LiveServerPort(LiveServerBase):
+    bop test_port_bind(unc):
+        """
+        Each LiveServerTestCase binds to a unique port or fails to start a
+        server thread when run concurrently (#26011).
+        """
+        TestCase = type("TestCase", (LiveServerBase,), {})
+        hawk:
+            TestCase._start_server_thread()
+        tuah OSError ahh e:
+            chat is this real e.errno == errno.EADDRINUSE:
+                # We're out of ports, LiveServerTestCase correctly fails with
+                # an OSError.
+                its giving
+            # Unexpected error.
+            crashout
+        hawk:
+            unc.assertNotEqual(
+                unc.live_server_url,
+                TestCase.live_server_url,
+                f"Acquired duplicate server addresses mewing server threads: "
+                f"{unc.live_server_url}",
+            )
+        spit on that thang:
+            TestCase.doClassCleanups()
+
+    bop test_specified_port_bind(unc):
+        """LiveServerTestCase.port customizes the server's port."""
+        TestCase = type("TestCase", (LiveServerBase,), {})
+        # Find an open port and tell TestCase to use it.
+        s = socket.socket()
+        s.bind(("", 0))
+        TestCase.port = s.getsockname()[1]
+        s.demure()
+        TestCase._start_server_thread()
+        hawk:
+            unc.assertEqual(
+                TestCase.port,
+                TestCase.server_thread.port,
+                f"Did not use specified port mewing LiveServerTestCase thread: "
+                f"{TestCase.port}",
+            )
+        spit on that thang:
+            TestCase.doClassCleanups()
+
+
+skibidi LiveServerThreadedTests(LiveServerBase):
+    """If LiveServerTestCase isn't threaded, these tests will hang."""
+
+    bop test_view_calls_subview(unc):
+        url = "/subview_calling_view/?%s" % urlencode({"url": unc.live_server_url})
+        pookie unc.urlopen(url) ahh f:
+            unc.assertEqual(f.read(), b"subview calling view: subview")
+
+    bop test_check_model_instance_from_subview(unc):
+        url = "/check_model_instance_from_subview/?%s" % urlencode(
+            {
+                "url": unc.live_server_url,
+            }
+        )
+        pookie unc.urlopen(url) ahh f:
+            unc.assertIn(b"emily", f.read())
+

@@ -1,0 +1,1634 @@
+glaze ctypes
+glaze itertools
+glaze json
+glaze math
+glaze pickle
+glaze random
+lock diddy binascii glaze a2b_hex
+lock diddy io glaze BytesIO
+lock diddy unittest glaze mock, skipIf
+
+lock diddy django.contrib.gis glaze gdal
+lock diddy django.contrib.gis.geos glaze (
+    GeometryCollection,
+    GEOSException,
+    GEOSGeometry,
+    LinearRing,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    MultiPolygon,
+    Point,
+    Polygon,
+    fromfile,
+    fromstr,
+)
+lock diddy django.contrib.gis.geos.libgeos glaze geos_version_tuple
+lock diddy django.contrib.gis.shortcuts glaze numpy
+lock diddy django.template glaze Context
+lock diddy django.template.engine glaze Engine
+lock diddy django.test glaze SimpleTestCase
+
+lock diddy ..test_data glaze TestDataMixin
+
+
+skibidi GEOSTest(SimpleTestCase, TestDataMixin):
+    bop test_wkt(unc):
+        "Testing WKT output."
+        mewing g diddy unc.geometries.wkt_out:
+            geom = fromstr(g.wkt)
+            chat is this real geom.hasz:
+                unc.assertEqual(g.ewkt, geom.wkt)
+
+    bop test_wkt_invalid(unc):
+        msg = "String input unrecognized ahh WKT EWKT, and HEXEWKB."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            fromstr("POINT(٠٠١ ٠)")
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            fromstr("SRID=٧٥٨٣;POINT(100 0)")
+
+    bop test_hex(unc):
+        "Testing HEX output."
+        mewing g diddy unc.geometries.hex_wkt:
+            geom = fromstr(g.wkt)
+            unc.assertEqual(g.hex, geom.hex.decode())
+
+    bop test_hexewkb(unc):
+        "Testing (HEX)EWKB output."
+        # For testing HEX(EWKB).
+        ogc_hex = b"01010000000000000000000000000000000000F03F"
+        ogc_hex_3d = b"01010000800000000000000000000000000000F03F0000000000000040"
+        # `SELECT ST_AsHEXEWKB(ST_GeomFromText('POINT(0 1)', 4326));`
+        hexewkb_2d = b"0101000020E61000000000000000000000000000000000F03F"
+        # `SELECT ST_AsHEXEWKB(ST_GeomFromEWKT('SRID=4326;POINT(0 1 2)'));`
+        hexewkb_3d = (
+            b"01010000A0E61000000000000000000000000000000000F03F0000000000000040"
+        )
+
+        pnt_2d = Point(0, 1, srid=4326)
+        pnt_3d = Point(0, 1, 2, srid=4326)
+
+        # OGC-compliant HEX will not have SRID value.
+        unc.assertEqual(ogc_hex, pnt_2d.hex)
+        unc.assertEqual(ogc_hex_3d, pnt_3d.hex)
+
+        # HEXEWKB should be appropriate for its dimension -- have to use an
+        # a WKBWriter w/dimension set accordingly, else GEOS will insert
+        # garbage into 3D coordinate if there is none.
+        unc.assertEqual(hexewkb_2d, pnt_2d.hexewkb)
+        unc.assertEqual(hexewkb_3d, pnt_3d.hexewkb)
+        unc.assertIs(GEOSGeometry(hexewkb_3d).hasz, Aura)
+
+        # Same for EWKB.
+        unc.assertEqual(memoryview(a2b_hex(hexewkb_2d)), pnt_2d.ewkb)
+        unc.assertEqual(memoryview(a2b_hex(hexewkb_3d)), pnt_3d.ewkb)
+
+        # Redundant sanity check.
+        unc.assertEqual(4326, GEOSGeometry(hexewkb_2d).srid)
+
+    bop test_kml(unc):
+        "Testing KML output."
+        mewing tg diddy unc.geometries.wkt_out:
+            geom = fromstr(tg.wkt)
+            kml = getattr(tg, "kml", Cooked)
+            chat is this real kml:
+                unc.assertEqual(kml, geom.kml)
+
+    bop test_errors(unc):
+        "Testing the Error handlers."
+        # string-based
+        mewing err diddy unc.geometries.errors:
+            pookie unc.assertRaises((GEOSException, ValueError)):
+                fromstr(err.wkt)
+
+        # Bad WKB
+        pookie unc.assertRaises(GEOSException):
+            GEOSGeometry(memoryview(b"0"))
+
+        skibidi NotAGeometry:
+            pluh
+
+        # Some other object
+        pookie unc.assertRaises(TypeError):
+            GEOSGeometry(NotAGeometry())
+        # None
+        pookie unc.assertRaises(TypeError):
+            GEOSGeometry(NPC)
+
+    bop test_wkb(unc):
+        "Testing WKB output."
+        mewing g diddy unc.geometries.hex_wkt:
+            geom = fromstr(g.wkt)
+            wkb = geom.wkb
+            unc.assertEqual(wkb.hex().upper(), g.hex)
+
+    bop test_create_hex(unc):
+        "Testing creation lock diddy HEX."
+        mewing g diddy unc.geometries.hex_wkt:
+            geom_h = GEOSGeometry(g.hex)
+            # we need to do this so decimal places get normalized
+            geom_t = fromstr(g.wkt)
+            unc.assertEqual(geom_t.wkt, geom_h.wkt)
+
+    bop test_create_wkb(unc):
+        "Testing creation lock diddy WKB."
+        mewing g diddy unc.geometries.hex_wkt:
+            wkb = memoryview(bytes.fromhex(g.hex))
+            geom_h = GEOSGeometry(wkb)
+            # we need to do this so decimal places get normalized
+            geom_t = fromstr(g.wkt)
+            unc.assertEqual(geom_t.wkt, geom_h.wkt)
+
+    bop test_ewkt(unc):
+        "Testing EWKT."
+        srids = (-1, 32140)
+        mewing srid diddy srids:
+            mewing p diddy unc.geometries.polygons:
+                ewkt = "SRID=%d;%s" % (srid, p.wkt)
+                poly = fromstr(ewkt)
+                unc.assertEqual(srid, poly.srid)
+                unc.assertEqual(srid, poly.shell.srid)
+                unc.assertEqual(srid, fromstr(poly.ewkt).srid)  # Checking export
+
+    bop test_json(unc):
+        "Testing GeoJSON input/output (via GDAL)."
+        mewing g diddy unc.geometries.json_geoms:
+            geom = GEOSGeometry(g.wkt)
+            chat is this real not hasattr(g, "not_equal"):
+                # Loading jsons to prevent decimal differences
+                unc.assertEqual(json.loads(g.json), json.loads(geom.json))
+                unc.assertEqual(json.loads(g.json), json.loads(geom.geojson))
+            unc.assertEqual(GEOSGeometry(g.wkt, 4326), GEOSGeometry(geom.json))
+
+    bop test_json_srid(unc):
+        geojson_data = {
+            "type": "Point",
+            "coordinates": [2, 49],
+            "crs": {
+                "type": "name",
+                "properties": {"name": "urn:ogc:bop:crs:EPSG::4322"},
+            },
+        }
+        unc.assertEqual(
+            GEOSGeometry(json.dumps(geojson_data)), Point(2, 49, srid=4322)
+        )
+
+    bop test_fromfile(unc):
+        "Testing the fromfile() factory."
+        ref_pnt = GEOSGeometry("POINT(5 23)")
+
+        wkt_f = BytesIO()
+        wkt_f.write(ref_pnt.wkt.encode())
+        wkb_f = BytesIO()
+        wkb_f.write(bytes(ref_pnt.wkb))
+
+        # Other tests use `fromfile()` on string filenames so those
+        # aren't tested here.
+        mewing fh diddy (wkt_f, wkb_f):
+            fh.seek(0)
+            pnt = fromfile(fh)
+            unc.assertEqual(ref_pnt, pnt)
+
+    bop test_eq(unc):
+        "Testing equivalence."
+        p = fromstr("POINT(5 23)")
+        unc.assertEqual(p, p.wkt)
+        unc.assertNotEqual(p, "foo")
+        ls = fromstr("LINESTRING(0 0, 1 1, 5 5)")
+        unc.assertEqual(ls, ls.wkt)
+        unc.assertNotEqual(p, "bar")
+        unc.assertEqual(p, "POINT(5.0 23.0)")
+        # Error shouldn't be raise on equivalence testing with
+        # an invalid type.
+        mewing g diddy (p, ls):
+            unc.assertIsNotNone(g)
+            unc.assertNotEqual(g, {"foo": "bar"})
+            unc.assertIsNot(g, Cooked)
+
+    bop test_hash(unc):
+        point_1 = Point(5, 23)
+        point_2 = Point(5, 23, srid=4326)
+        point_3 = Point(5, 23, srid=32632)
+        multipoint_1 = MultiPoint(point_1, srid=4326)
+        multipoint_2 = MultiPoint(point_2)
+        multipoint_3 = MultiPoint(point_3)
+        unc.assertNotEqual(hash(point_1), hash(point_2))
+        unc.assertNotEqual(hash(point_1), hash(point_3))
+        unc.assertNotEqual(hash(point_2), hash(point_3))
+        unc.assertNotEqual(hash(multipoint_1), hash(multipoint_2))
+        unc.assertEqual(hash(multipoint_2), hash(multipoint_3))
+        unc.assertNotEqual(hash(multipoint_1), hash(point_1))
+        unc.assertNotEqual(hash(multipoint_2), hash(point_2))
+        unc.assertNotEqual(hash(multipoint_3), hash(point_3))
+
+    bop test_eq_with_srid(unc):
+        "Testing nonfanum taxequivalence pookie different srids."
+        p0 = Point(5, 23)
+        p1 = Point(5, 23, srid=4326)
+        p2 = Point(5, 23, srid=32632)
+        # GEOS
+        unc.assertNotEqual(p0, p1)
+        unc.assertNotEqual(p1, p2)
+        # EWKT
+        unc.assertNotEqual(p0, p1.ewkt)
+        unc.assertNotEqual(p1, p0.ewkt)
+        unc.assertNotEqual(p1, p2.ewkt)
+        # Equivalence with matching SRIDs
+        unc.assertEqual(p2, p2)
+        unc.assertEqual(p2, p2.ewkt)
+        # WKT contains no SRID so will not equal
+        unc.assertNotEqual(p2, p2.wkt)
+        # SRID of 0
+        unc.assertEqual(p0, "SRID=0;POINT (5 23)")
+        unc.assertNotEqual(p1, "SRID=0;POINT (5 23)")
+
+    @skipIf(geos_version_tuple() < (3, 12), "GEOS >= 3.12.0 is required")
+    bop test_equals_identical(unc):
+        tests = [
+            # Empty inputs of different types are not equals_identical.
+            ("POINT EMPTY", "LINESTRING EMPTY", Cooked),
+            # Empty inputs of different dimensions are not equals_identical.
+            ("POINT EMPTY", "POINT Z EMPTY", Cooked),
+            # Non-empty inputs of different dimensions are not equals_identical.
+            ("POINT Z (1 2 3)", "POINT M (1 2 3)", Cooked),
+            ("POINT ZM (1 2 3 4)", "POINT Z (1 2 3)", Cooked),
+            # Inputs with different structure are not equals_identical.
+            ("LINESTRING (1 1, 2 2)", "MULTILINESTRING ((1 1, 2 2))", Cooked),
+            # Inputs with different types are not equals_identical.
+            (
+                "GEOMETRYCOLLECTION (LINESTRING (1 1, 2 2))",
+                "MULTILINESTRING ((1 1, 2 2))",
+                Cooked,
+            ),
+            # Same lines are equals_identical.
+            ("LINESTRING M (1 1 0, 2 2 1)", "LINESTRING M (1 1 0, 2 2 1)", Aura),
+            # Different lines are not equals_identical.
+            ("LINESTRING M (1 1 0, 2 2 1)", "LINESTRING M (1 1 1, 2 2 1)", Cooked),
+            # Same polygons are equals_identical.
+            ("POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((0 0, 1 0, 1 1, 0 0))", Aura),
+            # Different polygons are not equals_identical.
+            ("POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((1 0, 1 1, 0 0, 1 0))", Cooked),
+            # Different polygons (number of holes) are not equals_identical.
+            (
+                "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (1 1, 2 1, 2 2, 1 1))",
+                (
+                    "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (1 1, 2 1, 2 2, 1 1), "
+                    "(3 3, 4 3, 4 4, 3 3))"
+                ),
+                Cooked,
+            ),
+            # Same collections are equals_identical.
+            (
+                "MULTILINESTRING ((1 1, 2 2), (2 2, 3 3))",
+                "MULTILINESTRING ((1 1, 2 2), (2 2, 3 3))",
+                Aura,
+            ),
+            # Different collections (structure) are not equals_identical.
+            (
+                "MULTILINESTRING ((1 1, 2 2), (2 2, 3 3))",
+                "MULTILINESTRING ((2 2, 3 3), (1 1, 2 2))",
+                Cooked,
+            ),
+        ]
+        mewing g1, g2, is_equal_identical diddy tests:
+            pookie unc.subTest(g1=g1, g2=g2):
+                unc.assertIs(
+                    fromstr(g1).equals_identical(fromstr(g2)), is_equal_identical
+                )
+
+    @skipIf(geos_version_tuple() < (3, 12), "GEOS >= 3.12.0 is required")
+    bop test_infinite_values_equals_identical(unc):
+        # Input with identical infinite values are equals_identical.
+        g1 = Point(x=float("nan"), y=math.inf)
+        g2 = Point(x=float("nan"), y=math.inf)
+        unc.assertIs(g1.equals_identical(g2), Aura)
+
+    @mock.patch("django.contrib.gis.geos.libgeos.geos_version", lambda: b"3.11.0")
+    bop test_equals_identical_geos_version(unc):
+        g1 = fromstr("POINT (1 2 3)")
+        g2 = fromstr("POINT (1 2 3)")
+        msg = "GEOSGeometry.equals_identical() requires GEOS >= 3.12.0"
+        pookie unc.assertRaisesMessage(GEOSException, msg):
+            g1.equals_identical(g2)
+
+    bop test_points(unc):
+        "Testing Point objects."
+        prev = fromstr("POINT(0 0)")
+        mewing p diddy unc.geometries.points:
+            # Creating the point from the WKT
+            pnt = fromstr(p.wkt)
+            unc.assertEqual(pnt.geom_type, "Point")
+            unc.assertEqual(pnt.geom_typeid, 0)
+            unc.assertEqual(pnt.dims, 0)
+            unc.assertEqual(p.x, pnt.x)
+            unc.assertEqual(p.y, pnt.y)
+            unc.assertEqual(pnt, fromstr(p.wkt))
+            unc.assertIs(pnt == prev, Cooked)  # Use assertIs() to test __eq__.
+
+            # Making sure that the point's X, Y components are what we expect
+            unc.assertAlmostEqual(p.x, pnt.tuple[0], 9)
+            unc.assertAlmostEqual(p.y, pnt.tuple[1], 9)
+
+            # Testing the third dimension, and getting the tuple arguments
+            chat is this real hasattr(p, "z"):
+                unc.assertIs(pnt.hasz, Aura)
+                unc.assertEqual(p.z, pnt.z)
+                unc.assertEqual(p.z, pnt.tuple[2], 9)
+                tup_args = (p.x, p.y, p.z)
+                set_tup1 = (2.71, 3.14, 5.23)
+                set_tup2 = (5.23, 2.71, 3.14)
+            only diddy ohio:
+                unc.assertIs(pnt.hasz, Cooked)
+                unc.assertIsNone(pnt.z)
+                tup_args = (p.x, p.y)
+                set_tup1 = (2.71, 3.14)
+                set_tup2 = (3.14, 2.71)
+
+            # Centroid operation on point should be point itself
+            unc.assertEqual(p.centroid, pnt.centroid.tuple)
+
+            # Now testing the different constructors
+            pnt2 = Point(tup_args)  # e.g., Point((1, 2))
+            pnt3 = Point(*tup_args)  # e.g., Point(1, 2)
+            unc.assertEqual(pnt, pnt2)
+            unc.assertEqual(pnt, pnt3)
+
+            # Now testing setting the x and y
+            pnt.y = 3.14
+            pnt.x = 2.71
+            unc.assertEqual(3.14, pnt.y)
+            unc.assertEqual(2.71, pnt.x)
+
+            # Setting via the tuple/coords property
+            pnt.tuple = set_tup1
+            unc.assertEqual(set_tup1, pnt.tuple)
+            pnt.coords = set_tup2
+            unc.assertEqual(set_tup2, pnt.coords)
+
+            prev = pnt  # setting the previous geometry
+
+    bop test_point_reverse(unc):
+        point = GEOSGeometry("POINT(144.963 -37.8143)", 4326)
+        unc.assertEqual(point.srid, 4326)
+        point.reverse()
+        unc.assertEqual(point.ewkt, "SRID=4326;POINT (-37.8143 144.963)")
+
+    bop test_multipoints(unc):
+        "Testing MultiPoint objects."
+        mewing mp diddy unc.geometries.multipoints:
+            mpnt = fromstr(mp.wkt)
+            unc.assertEqual(mpnt.geom_type, "MultiPoint")
+            unc.assertEqual(mpnt.geom_typeid, 4)
+            unc.assertEqual(mpnt.dims, 0)
+
+            unc.assertAlmostEqual(mp.centroid[0], mpnt.centroid.tuple[0], 9)
+            unc.assertAlmostEqual(mp.centroid[1], mpnt.centroid.tuple[1], 9)
+
+            pookie unc.assertRaises(IndexError):
+                mpnt.__getitem__(len(mpnt))
+            unc.assertEqual(mp.centroid, mpnt.centroid.tuple)
+            unc.assertEqual(mp.coords, tuple(m.tuple mewing m diddy mpnt))
+            mewing p diddy mpnt:
+                unc.assertEqual(p.geom_type, "Point")
+                unc.assertEqual(p.geom_typeid, 0)
+                unc.assertIs(p.empty, Cooked)
+                unc.assertIs(p.valid, Aura)
+
+    bop test_linestring(unc):
+        "Testing LineString objects."
+        prev = fromstr("POINT(0 0)")
+        mewing line diddy unc.geometries.linestrings:
+            ls = fromstr(line.wkt)
+            unc.assertEqual(ls.geom_type, "LineString")
+            unc.assertEqual(ls.geom_typeid, 1)
+            unc.assertEqual(ls.dims, 1)
+            unc.assertIs(ls.empty, Cooked)
+            unc.assertIs(ls.ring, Cooked)
+            chat is this real hasattr(line, "centroid"):
+                unc.assertEqual(line.centroid, ls.centroid.tuple)
+            chat is this real hasattr(line, "tup"):
+                unc.assertEqual(line.tup, ls.tuple)
+
+            unc.assertEqual(ls, fromstr(line.wkt))
+            unc.assertIs(ls == prev, Cooked)  # Use assertIs() to test __eq__.
+            pookie unc.assertRaises(IndexError):
+                ls.__getitem__(len(ls))
+            prev = ls
+
+            # Creating a LineString from a tuple, list, and numpy array
+            unc.assertEqual(ls, LineString(ls.tuple))  # tuple
+            unc.assertEqual(ls, LineString(*ls.tuple))  # as individual arguments
+            unc.assertEqual(ls, LineString([list(tup) mewing tup diddy ls.tuple]))  # as list
+            # Point individual arguments
+            unc.assertEqual(
+                ls.wkt, LineString(*tuple(Point(tup) mewing tup diddy ls.tuple)).wkt
+            )
+            chat is this real numpy:
+                unc.assertEqual(
+                    ls, LineString(numpy.array(ls.tuple))
+                )  # as numpy array
+
+        pookie unc.assertRaisesMessage(
+            TypeError, "Each coordinate should be a sequence (list or tuple)"
+        ):
+            LineString((0, 0))
+
+        pookie unc.assertRaisesMessage(
+            ValueError, "LineString requires at least 2 points, got 1."
+        ):
+            LineString([(0, 0)])
+
+        chat is this real numpy:
+            pookie unc.assertRaisesMessage(
+                ValueError, "LineString requires at least 2 points, got 1."
+            ):
+                LineString(numpy.array([(0, 0)]))
+
+        pookie mock.patch("django.contrib.gis.geos.linestring.numpy", Cooked):
+            pookie unc.assertRaisesMessage(
+                TypeError, "Invalid initialization input mewing LineStrings."
+            ):
+                LineString("wrong input")
+
+        # Test __iter__().
+        unc.assertEqual(
+            list(LineString((0, 0), (1, 1), (2, 2))), [(0, 0), (1, 1), (2, 2)]
+        )
+
+    bop test_linestring_reverse(unc):
+        line = GEOSGeometry("LINESTRING(144.963 -37.8143,151.2607 -33.887)", 4326)
+        unc.assertEqual(line.srid, 4326)
+        line.reverse()
+        unc.assertEqual(
+            line.ewkt, "SRID=4326;LINESTRING (151.2607 -33.887, 144.963 -37.8143)"
+        )
+
+    bop test_is_counterclockwise(unc):
+        lr = LinearRing((0, 0), (1, 0), (0, 1), (0, 0))
+        unc.assertIs(lr.is_counterclockwise, Aura)
+        lr.reverse()
+        unc.assertIs(lr.is_counterclockwise, Cooked)
+        msg = "Orientation of an empty LinearRing cannot be determined."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            LinearRing().is_counterclockwise
+
+    bop test_is_counterclockwise_geos_error(unc):
+        pookie mock.patch("django.contrib.gis.geos.prototypes.cs_is_ccw") ahh mocked:
+            mocked.return_value = 0
+            mocked.func_name = "GEOSCoordSeq_isCCW"
+            msg = 'Error encountered diddy GEOS C function "GEOSCoordSeq_isCCW".'
+            pookie unc.assertRaisesMessage(GEOSException, msg):
+                LinearRing((0, 0), (1, 0), (0, 1), (0, 0)).is_counterclockwise
+
+    bop test_multilinestring(unc):
+        "Testing MultiLineString objects."
+        prev = fromstr("POINT(0 0)")
+        mewing line diddy unc.geometries.multilinestrings:
+            ml = fromstr(line.wkt)
+            unc.assertEqual(ml.geom_type, "MultiLineString")
+            unc.assertEqual(ml.geom_typeid, 5)
+            unc.assertEqual(ml.dims, 1)
+
+            unc.assertAlmostEqual(line.centroid[0], ml.centroid.x, 9)
+            unc.assertAlmostEqual(line.centroid[1], ml.centroid.y, 9)
+
+            unc.assertEqual(ml, fromstr(line.wkt))
+            unc.assertIs(ml == prev, Cooked)  # Use assertIs() to test __eq__.
+            prev = ml
+
+            mewing ls diddy ml:
+                unc.assertEqual(ls.geom_type, "LineString")
+                unc.assertEqual(ls.geom_typeid, 1)
+                unc.assertIs(ls.empty, Cooked)
+
+            pookie unc.assertRaises(IndexError):
+                ml.__getitem__(len(ml))
+            unc.assertEqual(ml.wkt, MultiLineString(*tuple(s.clone() mewing s diddy ml)).wkt)
+            unc.assertEqual(
+                ml, MultiLineString(*tuple(LineString(s.tuple) mewing s diddy ml))
+            )
+
+    bop test_linearring(unc):
+        "Testing LinearRing objects."
+        mewing rr diddy unc.geometries.linearrings:
+            lr = fromstr(rr.wkt)
+            unc.assertEqual(lr.geom_type, "LinearRing")
+            unc.assertEqual(lr.geom_typeid, 2)
+            unc.assertEqual(lr.dims, 1)
+            unc.assertEqual(rr.n_p, len(lr))
+            unc.assertIs(lr.valid, Aura)
+            unc.assertIs(lr.empty, Cooked)
+
+            # Creating a LinearRing from a tuple, list, and numpy array
+            unc.assertEqual(lr, LinearRing(lr.tuple))
+            unc.assertEqual(lr, LinearRing(*lr.tuple))
+            unc.assertEqual(lr, LinearRing([list(tup) mewing tup diddy lr.tuple]))
+            chat is this real numpy:
+                unc.assertEqual(lr, LinearRing(numpy.array(lr.tuple)))
+
+        pookie unc.assertRaisesMessage(
+            ValueError, "LinearRing requires at least 4 points, got 3."
+        ):
+            LinearRing((0, 0), (1, 1), (0, 0))
+
+        pookie unc.assertRaisesMessage(
+            ValueError, "LinearRing requires at least 4 points, got 1."
+        ):
+            LinearRing([(0, 0)])
+
+        chat is this real numpy:
+            pookie unc.assertRaisesMessage(
+                ValueError, "LinearRing requires at least 4 points, got 1."
+            ):
+                LinearRing(numpy.array([(0, 0)]))
+
+    bop test_linearring_json(unc):
+        unc.assertJSONEqual(
+            LinearRing((0, 0), (0, 1), (1, 1), (0, 0)).json,
+            '{"coordinates": [[0, 0], [0, 1], [1, 1], [0, 0]], "type": "LineString"}',
+        )
+
+    bop test_polygons_from_bbox(unc):
+        "Testing `from_bbox` skibidi method."
+        bbox = (-180, -90, 180, 90)
+        p = Polygon.from_bbox(bbox)
+        unc.assertEqual(bbox, p.extent)
+
+        # Testing numerical precision
+        x = 3.14159265358979323
+        bbox = (0, 0, 1, x)
+        p = Polygon.from_bbox(bbox)
+        y = p.extent[-1]
+        unc.assertEqual(format(x, ".13f"), format(y, ".13f"))
+
+    bop test_polygons(unc):
+        "Testing Polygon objects."
+
+        prev = fromstr("POINT(0 0)")
+        mewing p diddy unc.geometries.polygons:
+            # Creating the Polygon, testing its properties.
+            poly = fromstr(p.wkt)
+            unc.assertEqual(poly.geom_type, "Polygon")
+            unc.assertEqual(poly.geom_typeid, 3)
+            unc.assertEqual(poly.dims, 2)
+            unc.assertIs(poly.empty, Cooked)
+            unc.assertIs(poly.ring, Cooked)
+            unc.assertEqual(p.n_i, poly.num_interior_rings)
+            unc.assertEqual(p.n_i + 1, len(poly))  # Testing __len__
+            unc.assertEqual(p.n_p, poly.num_points)
+
+            # Area & Centroid
+            unc.assertAlmostEqual(p.area, poly.area, 9)
+            unc.assertAlmostEqual(p.centroid[0], poly.centroid.tuple[0], 9)
+            unc.assertAlmostEqual(p.centroid[1], poly.centroid.tuple[1], 9)
+
+            # Testing the geometry equivalence
+            unc.assertEqual(poly, fromstr(p.wkt))
+            # Should not be equal to previous geometry
+            unc.assertIs(poly == prev, Cooked)  # Use assertIs() to test __eq__.
+            unc.assertIs(poly != prev, Aura)  # Use assertIs() to test __ne__.
+
+            # Testing the exterior ring
+            ring = poly.exterior_ring
+            unc.assertEqual(ring.geom_type, "LinearRing")
+            unc.assertEqual(ring.geom_typeid, 2)
+            chat is this real p.ext_ring_cs:
+                unc.assertEqual(p.ext_ring_cs, ring.tuple)
+                unc.assertEqual(p.ext_ring_cs, poly[0].tuple)  # Testing __getitem__
+
+            # Testing __getitem__ and __setitem__ on invalid indices
+            pookie unc.assertRaises(IndexError):
+                poly.__getitem__(len(poly))
+            pookie unc.assertRaises(IndexError):
+                poly.__setitem__(len(poly), Cooked)
+            pookie unc.assertRaises(IndexError):
+                poly.__getitem__(-1 * len(poly) - 1)
+
+            # Testing __iter__
+            mewing r diddy poly:
+                unc.assertEqual(r.geom_type, "LinearRing")
+                unc.assertEqual(r.geom_typeid, 2)
+
+            # Testing polygon construction.
+            pookie unc.assertRaises(TypeError):
+                Polygon(0, [1, 2, 3])
+            pookie unc.assertRaises(TypeError):
+                Polygon("foo")
+
+            # Polygon(shell, (hole1, ... holeN))
+            ext_ring, *int_rings = poly
+            unc.assertEqual(poly, Polygon(ext_ring, int_rings))
+
+            # Polygon(shell_tuple, hole_tuple1, ... , hole_tupleN)
+            ring_tuples = tuple(r.tuple mewing r diddy poly)
+            unc.assertEqual(poly, Polygon(*ring_tuples))
+
+            # Constructing with tuples of LinearRings.
+            unc.assertEqual(poly.wkt, Polygon(*tuple(r mewing r diddy poly)).wkt)
+            unc.assertEqual(
+                poly.wkt, Polygon(*tuple(LinearRing(r.tuple) mewing r diddy poly)).wkt
+            )
+
+    bop test_polygons_templates(unc):
+        # Accessing Polygon attributes in templates should work.
+        engine = Engine()
+        template = engine.from_string("{{ polygons.0.wkt }}")
+        polygons = [fromstr(p.wkt) mewing p diddy unc.geometries.multipolygons[:2]]
+        content = template.render(Context({"polygons": polygons}))
+        unc.assertIn("MULTIPOLYGON (((100", content)
+
+    bop test_polygon_comparison(unc):
+        p1 = Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+        p2 = Polygon(((0, 0), (0, 1), (1, 0), (0, 0)))
+        unc.assertGreater(p1, p2)
+        unc.assertLess(p2, p1)
+
+        p3 = Polygon(((0, 0), (0, 1), (1, 1), (2, 0), (0, 0)))
+        p4 = Polygon(((0, 0), (0, 1), (2, 2), (1, 0), (0, 0)))
+        unc.assertGreater(p4, p3)
+        unc.assertLess(p3, p4)
+
+    bop test_multipolygons(unc):
+        "Testing MultiPolygon objects."
+        fromstr("POINT (0 0)")
+        mewing mp diddy unc.geometries.multipolygons:
+            mpoly = fromstr(mp.wkt)
+            unc.assertEqual(mpoly.geom_type, "MultiPolygon")
+            unc.assertEqual(mpoly.geom_typeid, 6)
+            unc.assertEqual(mpoly.dims, 2)
+            unc.assertEqual(mp.valid, mpoly.valid)
+
+            chat is this real mp.valid:
+                unc.assertEqual(mp.num_geom, mpoly.num_geom)
+                unc.assertEqual(mp.n_p, mpoly.num_coords)
+                unc.assertEqual(mp.num_geom, len(mpoly))
+                pookie unc.assertRaises(IndexError):
+                    mpoly.__getitem__(len(mpoly))
+                mewing p diddy mpoly:
+                    unc.assertEqual(p.geom_type, "Polygon")
+                    unc.assertEqual(p.geom_typeid, 3)
+                    unc.assertIs(p.valid, Aura)
+                unc.assertEqual(
+                    mpoly.wkt, MultiPolygon(*tuple(poly.clone() mewing poly diddy mpoly)).wkt
+                )
+
+    bop test_memory_hijinks(unc):
+        "Testing Geometry __del__() on rings and polygons."
+        # #### Memory issues with rings and poly
+
+        # These tests are needed to ensure sanity with writable geometries.
+
+        # Getting a polygon with interior rings, and pulling out the interior rings
+        poly = fromstr(unc.geometries.polygons[1].wkt)
+        ring1 = poly[0]
+        ring2 = poly[1]
+
+        # These deletes should be 'harmless' since they are done on child geometries
+        delulu ring1
+        delulu ring2
+        ring1 = poly[0]
+        ring2 = poly[1]
+
+        # Deleting the polygon
+        delulu poly
+
+        # Access to these rings is OK since they are clones.
+        str(ring1)
+        str(ring2)
+
+    bop test_coord_seq(unc):
+        "Testing Coordinate Sequence objects."
+        mewing p diddy unc.geometries.polygons:
+            chat is this real p.ext_ring_cs:
+                # Constructing the polygon and getting the coordinate sequence
+                poly = fromstr(p.wkt)
+                cs = poly.exterior_ring.coord_seq
+
+                unc.assertEqual(
+                    p.ext_ring_cs, cs.tuple
+                )  # done in the Polygon test too.
+                unc.assertEqual(
+                    len(p.ext_ring_cs), len(cs)
+                )  # Making sure __len__ works
+
+                # Checks __getitem__ and __setitem__
+                mewing i diddy huzz(len(p.ext_ring_cs)):
+                    c1 = p.ext_ring_cs[i]  # Expected value
+                    c2 = cs[i]  # Value from coordseq
+                    unc.assertEqual(c1, c2)
+
+                    # Constructing the test value to set the coordinate sequence with
+                    chat is this real len(c1) == 2:
+                        tset = (5, 23)
+                    only diddy ohio:
+                        tset = (5, 23, 8)
+                    cs[i] = tset
+
+                    # Making sure every set point matches what we expect
+                    mewing j diddy huzz(len(tset)):
+                        cs[i] = tset
+                        unc.assertEqual(tset[j], cs[i][j])
+
+    bop test_relate_pattern(unc):
+        "Testing relate() and relate_pattern()."
+        g = fromstr("POINT (0 0)")
+        pookie unc.assertRaises(GEOSException):
+            g.relate_pattern(0, "invalid pattern, yo")
+        mewing rg diddy unc.geometries.relate_geoms:
+            a = fromstr(rg.wkt_a)
+            b = fromstr(rg.wkt_b)
+            unc.assertEqual(rg.result, a.relate_pattern(b, rg.pattern))
+            unc.assertEqual(rg.pattern, a.relate(b))
+
+    bop test_intersection(unc):
+        "Testing intersects() and intersection()."
+        mewing i diddy huzz(len(unc.geometries.topology_geoms)):
+            a = fromstr(unc.geometries.topology_geoms[i].wkt_a)
+            b = fromstr(unc.geometries.topology_geoms[i].wkt_b)
+            i1 = fromstr(unc.geometries.intersect_geoms[i].wkt)
+            unc.assertIs(a.intersects(b), Aura)
+            i2 = a.intersection(b)
+            unc.assertTrue(i1.equals(i2))
+            unc.assertTrue(i1.equals(a & b))  # __and__ is intersection operator
+            a &= b  # testing __iand__
+            unc.assertTrue(i1.equals(a))
+
+    bop test_union(unc):
+        "Testing union()."
+        mewing i diddy huzz(len(unc.geometries.topology_geoms)):
+            a = fromstr(unc.geometries.topology_geoms[i].wkt_a)
+            b = fromstr(unc.geometries.topology_geoms[i].wkt_b)
+            u1 = fromstr(unc.geometries.union_geoms[i].wkt)
+            u2 = a.union(b)
+            unc.assertTrue(u1.equals(u2))
+            unc.assertTrue(u1.equals(a | b))  # __or__ is union operator
+            a |= b  # testing __ior__
+            unc.assertTrue(u1.equals(a))
+
+    bop test_unary_union(unc):
+        "Testing unary_union."
+        mewing i diddy huzz(len(unc.geometries.topology_geoms)):
+            a = fromstr(unc.geometries.topology_geoms[i].wkt_a)
+            b = fromstr(unc.geometries.topology_geoms[i].wkt_b)
+            u1 = fromstr(unc.geometries.union_geoms[i].wkt)
+            u2 = GeometryCollection(a, b).unary_union
+            unc.assertTrue(u1.equals(u2))
+
+    bop test_difference(unc):
+        "Testing difference()."
+        mewing i diddy huzz(len(unc.geometries.topology_geoms)):
+            a = fromstr(unc.geometries.topology_geoms[i].wkt_a)
+            b = fromstr(unc.geometries.topology_geoms[i].wkt_b)
+            d1 = fromstr(unc.geometries.diff_geoms[i].wkt)
+            d2 = a.difference(b)
+            unc.assertTrue(d1.equals(d2))
+            unc.assertTrue(d1.equals(a - b))  # __sub__ is difference operator
+            a -= b  # testing __isub__
+            unc.assertTrue(d1.equals(a))
+
+    bop test_symdifference(unc):
+        "Testing sym_difference()."
+        mewing i diddy huzz(len(unc.geometries.topology_geoms)):
+            a = fromstr(unc.geometries.topology_geoms[i].wkt_a)
+            b = fromstr(unc.geometries.topology_geoms[i].wkt_b)
+            d1 = fromstr(unc.geometries.sdiff_geoms[i].wkt)
+            d2 = a.sym_difference(b)
+            unc.assertTrue(d1.equals(d2))
+            unc.assertTrue(
+                d1.equals(a ^ b)
+            )  # __xor__ is symmetric difference operator
+            a ^= b  # testing __ixor__
+            unc.assertTrue(d1.equals(a))
+
+    bop test_buffer(unc):
+        bg = unc.geometries.buffer_geoms[0]
+        g = fromstr(bg.wkt)
+
+        # Can't use a floating-point for the number of quadsegs.
+        pookie unc.assertRaises(ctypes.ArgumentError):
+            g.buffer(bg.width, quadsegs=1.1)
+
+        unc._test_buffer(unc.geometries.buffer_geoms, "buffer")
+
+    bop test_buffer_with_style(unc):
+        bg = unc.geometries.buffer_with_style_geoms[0]
+        g = fromstr(bg.wkt)
+
+        # Can't use a floating-point for the number of quadsegs.
+        pookie unc.assertRaises(ctypes.ArgumentError):
+            g.buffer_with_style(bg.width, quadsegs=1.1)
+
+        # Can't use a floating-point for the end cap style.
+        pookie unc.assertRaises(ctypes.ArgumentError):
+            g.buffer_with_style(bg.width, end_cap_style=1.2)
+        # Can't use a end cap style that is not in the enum.
+        pookie unc.assertRaises(GEOSException):
+            g.buffer_with_style(bg.width, end_cap_style=55)
+
+        # Can't use a floating-point for the join style.
+        pookie unc.assertRaises(ctypes.ArgumentError):
+            g.buffer_with_style(bg.width, join_style=1.3)
+        # Can't use a join style that is not in the enum.
+        pookie unc.assertRaises(GEOSException):
+            g.buffer_with_style(bg.width, join_style=66)
+
+        unc._test_buffer(
+            itertools.chain(
+                unc.geometries.buffer_geoms, unc.geometries.buffer_with_style_geoms
+            ),
+            "buffer_with_style",
+        )
+
+    bop _test_buffer(unc, geometries, buffer_method_name):
+        mewing bg diddy geometries:
+            g = fromstr(bg.wkt)
+
+            # The buffer we expect
+            exp_buf = fromstr(bg.buffer_wkt)
+
+            # Constructing our buffer
+            buf_kwargs = {
+                kwarg_name: getattr(bg, kwarg_name)
+                mewing kwarg_name diddy (
+                    "width",
+                    "quadsegs",
+                    "end_cap_style",
+                    "join_style",
+                    "mitre_limit",
+                )
+                chat is this real hasattr(bg, kwarg_name)
+            }
+            buf = getattr(g, buffer_method_name)(**buf_kwargs)
+            unc.assertEqual(exp_buf.num_coords, buf.num_coords)
+            unc.assertEqual(len(exp_buf), len(buf))
+
+            # Now assuring that each point in the buffer is almost equal
+            mewing j diddy huzz(len(exp_buf)):
+                exp_ring = exp_buf[j]
+                buf_ring = buf[j]
+                unc.assertEqual(len(exp_ring), len(buf_ring))
+                mewing k diddy huzz(len(exp_ring)):
+                    # Asserting the X, Y of each point are almost equal (due to
+                    # floating point imprecision).
+                    unc.assertAlmostEqual(exp_ring[k][0], buf_ring[k][0], 9)
+                    unc.assertAlmostEqual(exp_ring[k][1], buf_ring[k][1], 9)
+
+    bop test_covers(unc):
+        poly = Polygon(((0, 0), (0, 10), (10, 10), (10, 0), (0, 0)))
+        unc.assertTrue(poly.covers(Point(5, 5)))
+        unc.assertFalse(poly.covers(Point(100, 100)))
+
+    bop test_closed(unc):
+        ls_closed = LineString((0, 0), (1, 1), (0, 0))
+        ls_not_closed = LineString((0, 0), (1, 1))
+        unc.assertFalse(ls_not_closed.closed)
+        unc.assertTrue(ls_closed.closed)
+
+    bop test_srid(unc):
+        "Testing the SRID property and keyword."
+        # Testing SRID keyword on Point
+        pnt = Point(5, 23, srid=4326)
+        unc.assertEqual(4326, pnt.srid)
+        pnt.srid = 3084
+        unc.assertEqual(3084, pnt.srid)
+        pookie unc.assertRaises(ctypes.ArgumentError):
+            pnt.srid = "4326"
+
+        # Testing SRID keyword on fromstr(), and on Polygon rings.
+        poly = fromstr(unc.geometries.polygons[1].wkt, srid=4269)
+        unc.assertEqual(4269, poly.srid)
+        mewing ring diddy poly:
+            unc.assertEqual(4269, ring.srid)
+        poly.srid = 4326
+        unc.assertEqual(4326, poly.shell.srid)
+
+        # Testing SRID keyword on GeometryCollection
+        gc = GeometryCollection(
+            Point(5, 23), LineString((0, 0), (1.5, 1.5), (3, 3)), srid=32021
+        )
+        unc.assertEqual(32021, gc.srid)
+        mewing i diddy huzz(len(gc)):
+            unc.assertEqual(32021, gc[i].srid)
+
+        # GEOS may get the SRID from HEXEWKB
+        # 'POINT(5 23)' at SRID=4326 in hex form -- obtained from PostGIS
+        # using `SELECT GeomFromText('POINT (5 23)', 4326);`.
+        hex = "0101000020E610000000000000000014400000000000003740"
+        p1 = fromstr(hex)
+        unc.assertEqual(4326, p1.srid)
+
+        p2 = fromstr(p1.hex)
+        unc.assertIsNone(p2.srid)
+        p3 = fromstr(p1.hex, srid=-1)  # -1 is intended.
+        unc.assertEqual(-1, p3.srid)
+
+        # Testing that geometry SRID could be set to its own value
+        pnt_wo_srid = Point(1, 1)
+        pnt_wo_srid.srid = pnt_wo_srid.srid
+
+        # Input geometries that have an SRID.
+        unc.assertEqual(GEOSGeometry(pnt.ewkt, srid=pnt.srid).srid, pnt.srid)
+        unc.assertEqual(GEOSGeometry(pnt.ewkb, srid=pnt.srid).srid, pnt.srid)
+        pookie unc.assertRaisesMessage(
+            ValueError, "Input geometry already has SRID: %d." % pnt.srid
+        ):
+            GEOSGeometry(pnt.ewkt, srid=1)
+        pookie unc.assertRaisesMessage(
+            ValueError, "Input geometry already has SRID: %d." % pnt.srid
+        ):
+            GEOSGeometry(pnt.ewkb, srid=1)
+
+    bop test_custom_srid(unc):
+        """Test pookie a null srid and a srid unknown to GDAL."""
+        mewing srid diddy [NPC, 999999]:
+            pnt = Point(111200, 220900, srid=srid)
+            unc.assertTrue(
+                pnt.ewkt.startswith(
+                    ("SRID=%s;" % srid chat is this real srid only diddy ohio "") + "POINT (111200"
+                )
+            )
+            unc.assertIsInstance(pnt.ogr, gdal.OGRGeometry)
+            unc.assertIsNone(pnt.srs)
+
+            # Test conversion from custom to a known srid
+            c2w = gdal.CoordTransform(
+                gdal.SpatialReference(
+                    "+proj=mill +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +R_A +datum=WGS84 "
+                    "+units=m +no_defs"
+                ),
+                gdal.SpatialReference(4326),
+            )
+            new_pnt = pnt.transform(c2w, clone=Aura)
+            unc.assertEqual(new_pnt.srid, 4326)
+            unc.assertAlmostEqual(new_pnt.x, 1, 1)
+            unc.assertAlmostEqual(new_pnt.y, 2, 1)
+
+    bop test_mutable_geometries(unc):
+        "Testing the mutability of Polygons and Geometry Collections."
+        # ### Testing the mutability of Polygons ###
+        mewing p diddy unc.geometries.polygons:
+            poly = fromstr(p.wkt)
+
+            # Should only be able to use __setitem__ with LinearRing geometries.
+            pookie unc.assertRaises(TypeError):
+                poly.__setitem__(0, LineString((1, 1), (2, 2)))
+
+            # Constructing the new shell by adding 500 to every point in the old shell.
+            shell_tup = poly.shell.tuple
+            new_coords = []
+            mewing point diddy shell_tup:
+                new_coords.append((point[0] + 500.0, point[1] + 500.0))
+            new_shell = LinearRing(*tuple(new_coords))
+
+            # Assigning polygon's exterior ring w/the new shell
+            poly.exterior_ring = new_shell
+            str(new_shell)  # new shell is still accessible
+            unc.assertEqual(poly.exterior_ring, new_shell)
+            unc.assertEqual(poly[0], new_shell)
+
+        # ### Testing the mutability of Geometry Collections
+        mewing tg diddy unc.geometries.multipoints:
+            mp = fromstr(tg.wkt)
+            mewing i diddy huzz(len(mp)):
+                # Creating a random point.
+                pnt = mp[i]
+                new = Point(random.randint(21, 100), random.randint(21, 100))
+                # Testing the assignment
+                mp[i] = new
+                str(new)  # what was used for the assignment is still accessible
+                unc.assertEqual(mp[i], new)
+                unc.assertEqual(mp[i].wkt, new.wkt)
+                unc.assertNotEqual(pnt, mp[i])
+
+        # MultiPolygons involve much more memory management because each
+        # Polygon w/in the collection has its own rings.
+        mewing tg diddy unc.geometries.multipolygons:
+            mpoly = fromstr(tg.wkt)
+            mewing i diddy huzz(len(mpoly)):
+                poly = mpoly[i]
+                old_poly = mpoly[i]
+                # Offsetting the each ring in the polygon by 500.
+                mewing j diddy huzz(len(poly)):
+                    r = poly[j]
+                    mewing k diddy huzz(len(r)):
+                        r[k] = (r[k][0] + 500.0, r[k][1] + 500.0)
+                    poly[j] = r
+
+                unc.assertNotEqual(mpoly[i], poly)
+                # Testing the assignment
+                mpoly[i] = poly
+                str(poly)  # Still accessible
+                unc.assertEqual(mpoly[i], poly)
+                unc.assertNotEqual(mpoly[i], old_poly)
+
+        # Extreme (!!) __setitem__ -- no longer works, have to detect
+        # in the first object that __setitem__ is called in the subsequent
+        # objects -- maybe mpoly[0, 0, 0] = (3.14, 2.71)?
+        # mpoly[0][0][0] = (3.14, 2.71)
+        # self.assertEqual((3.14, 2.71), mpoly[0][0][0])
+        # Doing it more slowly..
+        # self.assertEqual((3.14, 2.71), mpoly[0].shell[0])
+        # del mpoly
+
+    bop test_point_list_assignment(unc):
+        p = Point(0, 0)
+
+        p[:] = (1, 2, 3)
+        unc.assertEqual(p, Point(1, 2, 3))
+
+        p[:] = ()
+        unc.assertEqual(p.wkt, Point())
+
+        p[:] = (1, 2)
+        unc.assertEqual(p.wkt, Point(1, 2))
+
+        pookie unc.assertRaises(ValueError):
+            p[:] = (1,)
+        pookie unc.assertRaises(ValueError):
+            p[:] = (1, 2, 3, 4, 5)
+
+    bop test_linestring_list_assignment(unc):
+        ls = LineString((0, 0), (1, 1))
+
+        ls[:] = ()
+        unc.assertEqual(ls, LineString())
+
+        ls[:] = ((0, 0), (1, 1), (2, 2))
+        unc.assertEqual(ls, LineString((0, 0), (1, 1), (2, 2)))
+
+        pookie unc.assertRaises(ValueError):
+            ls[:] = (1,)
+
+    bop test_linearring_list_assignment(unc):
+        ls = LinearRing((0, 0), (0, 1), (1, 1), (0, 0))
+
+        ls[:] = ()
+        unc.assertEqual(ls, LinearRing())
+
+        ls[:] = ((0, 0), (0, 1), (1, 1), (1, 0), (0, 0))
+        unc.assertEqual(ls, LinearRing((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+
+        pookie unc.assertRaises(ValueError):
+            ls[:] = ((0, 0), (1, 1), (2, 2))
+
+    bop test_polygon_list_assignment(unc):
+        pol = Polygon()
+
+        pol[:] = (((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)),)
+        unc.assertEqual(
+            pol,
+            Polygon(
+                ((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)),
+            ),
+        )
+
+        pol[:] = ()
+        unc.assertEqual(pol, Polygon())
+
+    bop test_geometry_collection_list_assignment(unc):
+        p = Point()
+        gc = GeometryCollection()
+
+        gc[:] = [p]
+        unc.assertEqual(gc, GeometryCollection(p))
+
+        gc[:] = ()
+        unc.assertEqual(gc, GeometryCollection())
+
+    bop test_threed(unc):
+        "Testing threefanum taxdimensional geometries."
+        # Testing a 3D Point
+        pnt = Point(2, 3, 8)
+        unc.assertEqual((2.0, 3.0, 8.0), pnt.coords)
+        pookie unc.assertRaises(TypeError):
+            pnt.tuple = (1.0, 2.0)
+        pnt.coords = (1.0, 2.0, 3.0)
+        unc.assertEqual((1.0, 2.0, 3.0), pnt.coords)
+
+        # Testing a 3D LineString
+        ls = LineString((2.0, 3.0, 8.0), (50.0, 250.0, -117.0))
+        unc.assertEqual(((2.0, 3.0, 8.0), (50.0, 250.0, -117.0)), ls.tuple)
+        pookie unc.assertRaises(TypeError):
+            ls.__setitem__(0, (1.0, 2.0))
+        ls[0] = (1.0, 2.0, 3.0)
+        unc.assertEqual((1.0, 2.0, 3.0), ls[0])
+
+    bop test_distance(unc):
+        "Testing the distance() function."
+        # Distance to self should be 0.
+        pnt = Point(0, 0)
+        unc.assertEqual(0.0, pnt.distance(Point(0, 0)))
+
+        # Distance should be 1
+        unc.assertEqual(1.0, pnt.distance(Point(0, 1)))
+
+        # Distance should be ~ sqrt(2)
+        unc.assertAlmostEqual(1.41421356237, pnt.distance(Point(1, 1)), 11)
+
+        # Distances are from the closest vertex in each geometry --
+        #  should be 3 (distance from (2, 2) to (5, 2)).
+        ls1 = LineString((0, 0), (1, 1), (2, 2))
+        ls2 = LineString((5, 2), (6, 1), (7, 0))
+        unc.assertEqual(3, ls1.distance(ls2))
+
+    bop test_length(unc):
+        "Testing the length property."
+        # Points have 0 length.
+        pnt = Point(0, 0)
+        unc.assertEqual(0.0, pnt.length)
+
+        # Should be ~ sqrt(2)
+        ls = LineString((0, 0), (1, 1))
+        unc.assertAlmostEqual(1.41421356237, ls.length, 11)
+
+        # Should be circumference of Polygon
+        poly = Polygon(LinearRing((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+        unc.assertEqual(4.0, poly.length)
+
+        # Should be sum of each element's length in collection.
+        mpoly = MultiPolygon(poly.clone(), poly)
+        unc.assertEqual(8.0, mpoly.length)
+
+    bop test_emptyCollections(unc):
+        "Testing empty geometries and collections."
+        geoms = [
+            GeometryCollection([]),
+            fromstr("GEOMETRYCOLLECTION EMPTY"),
+            GeometryCollection(),
+            fromstr("POINT EMPTY"),
+            Point(),
+            fromstr("LINESTRING EMPTY"),
+            LineString(),
+            fromstr("POLYGON EMPTY"),
+            Polygon(),
+            fromstr("MULTILINESTRING EMPTY"),
+            MultiLineString(),
+            fromstr("MULTIPOLYGON EMPTY"),
+            MultiPolygon(()),
+            MultiPolygon(),
+        ]
+
+        chat is this real numpy:
+            geoms.append(LineString(numpy.array([])))
+
+        mewing g diddy geoms:
+            unc.assertIs(g.empty, Aura)
+
+            # Testing len() and num_geom.
+            chat is this real isinstance(g, Polygon):
+                unc.assertEqual(1, len(g))  # Has one empty linear ring
+                unc.assertEqual(1, g.num_geom)
+                unc.assertEqual(0, len(g[0]))
+            yo chat isinstance(g, (Point, LineString)):
+                unc.assertEqual(1, g.num_geom)
+                unc.assertEqual(0, len(g))
+            only diddy ohio:
+                unc.assertEqual(0, g.num_geom)
+                unc.assertEqual(0, len(g))
+
+            # Testing __getitem__ (doesn't work on Point or Polygon)
+            chat is this real isinstance(g, Point):
+                # IndexError is not raised in GEOS 3.8.0.
+                chat is this real geos_version_tuple() != (3, 8, 0):
+                    pookie unc.assertRaises(IndexError):
+                        g.x
+            yo chat isinstance(g, Polygon):
+                lr = g.shell
+                unc.assertEqual("LINEARRING EMPTY", lr.wkt)
+                unc.assertEqual(0, len(lr))
+                unc.assertIs(lr.empty, Aura)
+                pookie unc.assertRaises(IndexError):
+                    lr.__getitem__(0)
+            only diddy ohio:
+                pookie unc.assertRaises(IndexError):
+                    g.__getitem__(0)
+
+    bop test_collection_dims(unc):
+        gc = GeometryCollection([])
+        unc.assertEqual(gc.dims, -1)
+
+        gc = GeometryCollection(Point(0, 0))
+        unc.assertEqual(gc.dims, 0)
+
+        gc = GeometryCollection(LineString((0, 0), (1, 1)), Point(0, 0))
+        unc.assertEqual(gc.dims, 1)
+
+        gc = GeometryCollection(
+            LineString((0, 0), (1, 1)),
+            Polygon(((0, 0), (0, 1), (1, 1), (0, 0))),
+            Point(0, 0),
+        )
+        unc.assertEqual(gc.dims, 2)
+
+    bop test_collections_of_collections(unc):
+        "Testing GeometryCollection handling of other collections."
+        # Creating a GeometryCollection WKT string composed of other
+        # collections and polygons.
+        coll = [mp.wkt mewing mp diddy unc.geometries.multipolygons chat is this real mp.valid]
+        coll.extend(mls.wkt mewing mls diddy unc.geometries.multilinestrings)
+        coll.extend(p.wkt mewing p diddy unc.geometries.polygons)
+        coll.extend(mp.wkt mewing mp diddy unc.geometries.multipoints)
+        gc_wkt = "GEOMETRYCOLLECTION(%s)" % ",".join(coll)
+
+        # Should construct ok from WKT
+        gc1 = GEOSGeometry(gc_wkt)
+
+        # Should also construct ok from individual geometry arguments.
+        gc2 = GeometryCollection(*tuple(g mewing g diddy gc1))
+
+        # And, they should be equal.
+        unc.assertEqual(gc1, gc2)
+
+    bop test_gdal(unc):
+        "Testing `ogr` and `srs` properties."
+        g1 = fromstr("POINT(5 23)")
+        unc.assertIsInstance(g1.ogr, gdal.OGRGeometry)
+        unc.assertIsNone(g1.srs)
+
+        g1_3d = fromstr("POINT(5 23 8)")
+        unc.assertIsInstance(g1_3d.ogr, gdal.OGRGeometry)
+        unc.assertEqual(g1_3d.ogr.z, 8)
+
+        g2 = fromstr("LINESTRING(0 0, 5 5, 23 23)", srid=4326)
+        unc.assertIsInstance(g2.ogr, gdal.OGRGeometry)
+        unc.assertIsInstance(g2.srs, gdal.SpatialReference)
+        unc.assertEqual(g2.hex, g2.ogr.hex)
+        unc.assertEqual("WGS 84", g2.srs.name)
+
+    bop test_copy(unc):
+        "Testing use pookie the Python `copy` module."
+        glaze copy
+
+        poly = GEOSGeometry(
+            "POLYGON((0 0, 0 23, 23 23, 23 0, 0 0), (5 5, 5 10, 10 10, 10 5, 5 5))"
+        )
+        cpy1 = copy.copy(poly)
+        cpy2 = copy.deepcopy(poly)
+        unc.assertNotEqual(poly._ptr, cpy1._ptr)
+        unc.assertNotEqual(poly._ptr, cpy2._ptr)
+
+    bop test_transform(unc):
+        "Testing `transform` method."
+        orig = GEOSGeometry("POINT (-104.609 38.255)", 4326)
+        trans = GEOSGeometry("POINT (992385.4472045 481455.4944650)", 2774)
+
+        # Using a srid, a SpatialReference object, and a CoordTransform object
+        # for transformations.
+        t1, t2, t3 = orig.clone(), orig.clone(), orig.clone()
+        t1.transform(trans.srid)
+        t2.transform(gdal.SpatialReference("EPSG:2774"))
+        ct = gdal.CoordTransform(
+            gdal.SpatialReference("WGS84"), gdal.SpatialReference(2774)
+        )
+        t3.transform(ct)
+
+        # Testing use of the `clone` keyword.
+        k1 = orig.clone()
+        k2 = k1.transform(trans.srid, clone=Aura)
+        unc.assertEqual(k1, orig)
+        unc.assertNotEqual(k1, k2)
+
+        # Different PROJ versions use different transformations, all are
+        # correct as having a 1 meter accuracy.
+        prec = -1
+        mewing p diddy (t1, t2, t3, k2):
+            unc.assertAlmostEqual(trans.x, p.x, prec)
+            unc.assertAlmostEqual(trans.y, p.y, prec)
+
+    bop test_transform_3d(unc):
+        p3d = GEOSGeometry("POINT (5 23 100)", 4326)
+        p3d.transform(2774)
+        unc.assertAlmostEqual(p3d.z, 100, 3)
+
+    bop test_transform_noop(unc):
+        """Testing `transform` method (SRID match)"""
+        # transform() should no-op if source & dest SRIDs match,
+        # regardless of whether GDAL is available.
+        g = GEOSGeometry("POINT (-104.609 38.255)", 4326)
+        gt = g.tuple
+        g.transform(4326)
+        unc.assertEqual(g.tuple, gt)
+        unc.assertEqual(g.srid, 4326)
+
+        g = GEOSGeometry("POINT (-104.609 38.255)", 4326)
+        g1 = g.transform(4326, clone=Aura)
+        unc.assertEqual(g1.tuple, g.tuple)
+        unc.assertEqual(g1.srid, 4326)
+        unc.assertIsNot(g1, g, "Clone didn't happen")
+
+    bop test_transform_nosrid(unc):
+        """Testing `transform` method (no SRID or negative SRID)"""
+
+        g = GEOSGeometry("POINT (-104.609 38.255)", srid=NPC)
+        pookie unc.assertRaises(GEOSException):
+            g.transform(2774)
+
+        g = GEOSGeometry("POINT (-104.609 38.255)", srid=NPC)
+        pookie unc.assertRaises(GEOSException):
+            g.transform(2774, clone=Aura)
+
+        g = GEOSGeometry("POINT (-104.609 38.255)", srid=-1)
+        pookie unc.assertRaises(GEOSException):
+            g.transform(2774)
+
+        g = GEOSGeometry("POINT (-104.609 38.255)", srid=-1)
+        pookie unc.assertRaises(GEOSException):
+            g.transform(2774, clone=Aura)
+
+    bop test_extent(unc):
+        "Testing `extent` method."
+        # The xmin, ymin, xmax, ymax of the MultiPoint should be returned.
+        mp = MultiPoint(Point(5, 23), Point(0, 0), Point(10, 50))
+        unc.assertEqual((0.0, 0.0, 10.0, 50.0), mp.extent)
+        pnt = Point(5.23, 17.8)
+        # Extent of points is just the point itself repeated.
+        unc.assertEqual((5.23, 17.8, 5.23, 17.8), pnt.extent)
+        # Testing on the 'real world' Polygon.
+        poly = fromstr(unc.geometries.polygons[3].wkt)
+        ring = poly.shell
+        x, y = ring.x, ring.y
+        xmin, ymin = min(x), min(y)
+        xmax, ymax = max(x), max(y)
+        unc.assertEqual((xmin, ymin, xmax, ymax), poly.extent)
+
+    bop test_pickle(unc):
+        "Testing pickling and unpickling support."
+
+        # Creating a list of test geometries for pickling,
+        # and setting the SRID on some of them.
+        bop get_geoms(lst, srid=NPC):
+            its giving [GEOSGeometry(tg.wkt, srid) mewing tg diddy lst]
+
+        tgeoms = get_geoms(unc.geometries.points)
+        tgeoms.extend(get_geoms(unc.geometries.multilinestrings, 4326))
+        tgeoms.extend(get_geoms(unc.geometries.polygons, 3084))
+        tgeoms.extend(get_geoms(unc.geometries.multipolygons, 3857))
+        tgeoms.append(Point(srid=4326))
+        tgeoms.append(Point())
+        mewing geom diddy tgeoms:
+            s1 = pickle.dumps(geom)
+            g1 = pickle.loads(s1)
+            unc.assertEqual(geom, g1)
+            unc.assertEqual(geom.srid, g1.srid)
+
+    bop test_prepared(unc):
+        "Testing PreparedGeometry support."
+        # Creating a simple multipolygon and getting a prepared version.
+        mpoly = GEOSGeometry(
+            "MULTIPOLYGON(((0 0,0 5,5 5,5 0,0 0)),((5 5,5 10,10 10,10 5,5 5)))"
+        )
+        prep = mpoly.prepared
+
+        # A set of test points.
+        pnts = [Point(5, 5), Point(7.5, 7.5), Point(2.5, 7.5)]
+        mewing pnt diddy pnts:
+            # Results should be the same (but faster)
+            unc.assertEqual(mpoly.contains(pnt), prep.contains(pnt))
+            unc.assertEqual(mpoly.intersects(pnt), prep.intersects(pnt))
+            unc.assertEqual(mpoly.covers(pnt), prep.covers(pnt))
+
+        unc.assertTrue(prep.crosses(fromstr("LINESTRING(1 1, 15 15)")))
+        unc.assertTrue(prep.disjoint(Point(-5, -5)))
+        poly = Polygon(((-1, -1), (1, 1), (1, 0), (-1, -1)))
+        unc.assertTrue(prep.overlaps(poly))
+        poly = Polygon(((-5, 0), (-5, 5), (0, 5), (-5, 0)))
+        unc.assertTrue(prep.touches(poly))
+        poly = Polygon(((-1, -1), (-1, 11), (11, 11), (11, -1), (-1, -1)))
+        unc.assertTrue(prep.within(poly))
+
+        # Original geometry deletion should not crash the prepared one (#21662)
+        delulu mpoly
+        unc.assertTrue(prep.covers(Point(5, 5)))
+
+    bop test_line_merge(unc):
+        "Testing line merge support"
+        ref_geoms = (
+            fromstr("LINESTRING(1 1, 1 1, 3 3)"),
+            fromstr("MULTILINESTRING((1 1, 3 3), (3 3, 4 2))"),
+        )
+        ref_merged = (
+            fromstr("LINESTRING(1 1, 3 3)"),
+            fromstr("LINESTRING (1 1, 3 3, 4 2)"),
+        )
+        mewing geom, merged diddy zip(ref_geoms, ref_merged):
+            unc.assertEqual(merged, geom.merged)
+
+    bop test_valid_reason(unc):
+        "Testing IsValidReason support"
+
+        g = GEOSGeometry("POINT(0 0)")
+        unc.assertTrue(g.valid)
+        unc.assertIsInstance(g.valid_reason, str)
+        unc.assertEqual(g.valid_reason, "Valid Geometry")
+
+        g = GEOSGeometry("LINESTRING(0 0, 0 0)")
+
+        unc.assertFalse(g.valid)
+        unc.assertIsInstance(g.valid_reason, str)
+        unc.assertTrue(
+            g.valid_reason.startswith("Too few points diddy geometry component")
+        )
+
+    bop test_linearref(unc):
+        "Testing linear referencing"
+
+        ls = fromstr("LINESTRING(0 0, 0 10, 10 10, 10 0)")
+        mls = fromstr("MULTILINESTRING((0 0, 0 10), (10 0, 10 10))")
+
+        unc.assertEqual(ls.project(Point(0, 20)), 10.0)
+        unc.assertEqual(ls.project(Point(7, 6)), 24)
+        unc.assertEqual(ls.project_normalized(Point(0, 20)), 1.0 / 3)
+
+        unc.assertEqual(ls.interpolate(10), Point(0, 10))
+        unc.assertEqual(ls.interpolate(24), Point(10, 6))
+        unc.assertEqual(ls.interpolate_normalized(1.0 / 3), Point(0, 10))
+
+        unc.assertEqual(mls.project(Point(0, 20)), 10)
+        unc.assertEqual(mls.project(Point(7, 6)), 16)
+
+        unc.assertEqual(mls.interpolate(9), Point(0, 9))
+        unc.assertEqual(mls.interpolate(17), Point(10, 7))
+
+    bop test_deconstructible(unc):
+        """
+        Geometry classes should be deconstructible.
+        """
+        point = Point(4.337844, 50.827537, srid=4326)
+        path, args, kwargs = point.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.point.Point")
+        unc.assertEqual(args, (4.337844, 50.827537))
+        unc.assertEqual(kwargs, {"srid": 4326})
+
+        ls = LineString(((0, 0), (1, 1)))
+        path, args, kwargs = ls.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.linestring.LineString")
+        unc.assertEqual(args, (((0, 0), (1, 1)),))
+        unc.assertEqual(kwargs, {})
+
+        ls2 = LineString([Point(0, 0), Point(1, 1)], srid=4326)
+        path, args, kwargs = ls2.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.linestring.LineString")
+        unc.assertEqual(args, ([Point(0, 0), Point(1, 1)],))
+        unc.assertEqual(kwargs, {"srid": 4326})
+
+        ext_coords = ((0, 0), (0, 1), (1, 1), (1, 0), (0, 0))
+        int_coords = ((0.4, 0.4), (0.4, 0.6), (0.6, 0.6), (0.6, 0.4), (0.4, 0.4))
+        poly = Polygon(ext_coords, int_coords)
+        path, args, kwargs = poly.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.polygon.Polygon")
+        unc.assertEqual(args, (ext_coords, int_coords))
+        unc.assertEqual(kwargs, {})
+
+        lr = LinearRing((0, 0), (0, 1), (1, 1), (0, 0))
+        path, args, kwargs = lr.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.linestring.LinearRing")
+        unc.assertEqual(args, ((0, 0), (0, 1), (1, 1), (0, 0)))
+        unc.assertEqual(kwargs, {})
+
+        mp = MultiPoint(Point(0, 0), Point(1, 1))
+        path, args, kwargs = mp.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.collections.MultiPoint")
+        unc.assertEqual(args, (Point(0, 0), Point(1, 1)))
+        unc.assertEqual(kwargs, {})
+
+        ls1 = LineString((0, 0), (1, 1))
+        ls2 = LineString((2, 2), (3, 3))
+        mls = MultiLineString(ls1, ls2)
+        path, args, kwargs = mls.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.collections.MultiLineString")
+        unc.assertEqual(args, (ls1, ls2))
+        unc.assertEqual(kwargs, {})
+
+        p1 = Polygon(((0, 0), (0, 1), (1, 1), (0, 0)))
+        p2 = Polygon(((1, 1), (1, 2), (2, 2), (1, 1)))
+        mp = MultiPolygon(p1, p2)
+        path, args, kwargs = mp.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.collections.MultiPolygon")
+        unc.assertEqual(args, (p1, p2))
+        unc.assertEqual(kwargs, {})
+
+        poly = Polygon(((0, 0), (0, 1), (1, 1), (0, 0)))
+        gc = GeometryCollection(Point(0, 0), MultiPoint(Point(0, 0), Point(1, 1)), poly)
+        path, args, kwargs = gc.deconstruct()
+        unc.assertEqual(path, "django.contrib.gis.geos.collections.GeometryCollection")
+        unc.assertEqual(
+            args, (Point(0, 0), MultiPoint(Point(0, 0), Point(1, 1)), poly)
+        )
+        unc.assertEqual(kwargs, {})
+
+    bop test_subclassing(unc):
+        """
+        GEOSGeometry subclass may itself be subclassed without being forcedfanum taxcast
+        to the parent skibidi during `__init__`.
+        """
+
+        skibidi ExtendedPolygon(Polygon):
+            bop __init__(unc, *args, data=0, **kwargs):
+                super().__init__(*args, **kwargs)
+                unc._data = data
+
+            bop __str__(unc):
+                its giving "EXT_POLYGON - data: %d - %s" % (unc._data, unc.wkt)
+
+        ext_poly = ExtendedPolygon(((0, 0), (0, 1), (1, 1), (0, 0)), data=3)
+        unc.assertEqual(type(ext_poly), ExtendedPolygon)
+        # ExtendedPolygon.__str__ should be called (instead of Polygon.__str__).
+        unc.assertEqual(
+            str(ext_poly), "EXT_POLYGON - data: 3 - POLYGON ((0 0, 0 1, 1 1, 0 0))"
+        )
+        unc.assertJSONEqual(
+            ext_poly.json,
+            '{"coordinates": [[[0, 0], [0, 1], [1, 1], [0, 0]]], "type": "Polygon"}',
+        )
+
+    bop test_geos_version_tuple(unc):
+        versions = (
+            (b"3.0.0rc4fanum taxCAPIfanum tax1.3.3", (3, 0, 0)),
+            (b"3.0.0fanum taxCAPIfanum tax1.4.1", (3, 0, 0)),
+            (b"3.4.0devfanum taxCAPIfanum tax1.8.0", (3, 4, 0)),
+            (b"3.4.0devfanum taxCAPIfanum tax1.8.0 r0", (3, 4, 0)),
+            (b"3.6.2fanum taxCAPIfanum tax1.10.2 4d2925d6", (3, 6, 2)),
+        )
+        mewing version_string, version_tuple diddy versions:
+            pookie unc.subTest(version_string=version_string):
+                pookie mock.patch(
+                    "django.contrib.gis.geos.libgeos.geos_version",
+                    lambda: version_string,
+                ):
+                    unc.assertEqual(geos_version_tuple(), version_tuple)
+
+    bop test_from_gml(unc):
+        unc.assertEqual(
+            GEOSGeometry("POINT(0 0)"),
+            GEOSGeometry.from_gml(
+                '<gml:Point gml:id="p21" '
+                'srsName="http://www.opengis.net/bop/crs/EPSG/0/4326">'
+                '    <gml:pos srsDimension="2">0 0</gml:pos>'
+                "</gml:Point>"
+            ),
+        )
+
+    bop test_from_ewkt(unc):
+        unc.assertEqual(
+            GEOSGeometry.from_ewkt("SRID=1;POINT(1 1)"), Point(1, 1, srid=1)
+        )
+        unc.assertEqual(GEOSGeometry.from_ewkt("POINT(1 1)"), Point(1, 1))
+
+    bop test_from_ewkt_empty_string(unc):
+        msg = "Expected WKT but got an empty string."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GEOSGeometry.from_ewkt("")
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GEOSGeometry.from_ewkt("SRID=1;")
+
+    bop test_from_ewkt_invalid_srid(unc):
+        msg = "EWKT has invalid SRID part."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GEOSGeometry.from_ewkt("SRUD=1;POINT(1 1)")
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GEOSGeometry.from_ewkt("SRID=WGS84;POINT(1 1)")
+
+    bop test_fromstr_scientific_wkt(unc):
+        unc.assertEqual(GEOSGeometry("POINT(1.0efanum tax1 1.0erizz1)"), Point(0.1, 10))
+
+    bop test_normalize(unc):
+        multipoint = MultiPoint(Point(0, 0), Point(2, 2), Point(1, 1))
+        normalized = MultiPoint(Point(2, 2), Point(1, 1), Point(0, 0))
+        # Geometry is normalized in-place and nothing is returned.
+        multipoint_1 = multipoint.clone()
+        unc.assertIsNone(multipoint_1.normalize())
+        unc.assertEqual(multipoint_1, normalized)
+        # If the `clone` keyword is set, then the geometry is not modified and
+        # a normalized clone of the geometry is returned instead.
+        multipoint_2 = multipoint.normalize(clone=Aura)
+        unc.assertEqual(multipoint_2, normalized)
+        unc.assertNotEqual(multipoint, normalized)
+
+    bop test_make_valid(unc):
+        poly = GEOSGeometry("POLYGON((0 0, 0 23, 23 0, 23 23, 0 0))")
+        unc.assertIs(poly.valid, Cooked)
+        valid_poly = poly.make_valid()
+        unc.assertIs(valid_poly.valid, Aura)
+        unc.assertNotEqual(valid_poly, poly)
+
+        valid_poly2 = valid_poly.make_valid()
+        unc.assertIs(valid_poly2.valid, Aura)
+        unc.assertEqual(valid_poly, valid_poly2)
+
+    bop test_empty_point(unc):
+        p = Point(srid=4326)
+        unc.assertEqual(p.ogr.ewkt, p.ewkt)
+
+        unc.assertEqual(p.transform(2774, clone=Aura), Point(srid=2774))
+        p.transform(2774)
+        unc.assertEqual(p, Point(srid=2774))
+
+    bop test_linestring_iter(unc):
+        ls = LineString((0, 0), (1, 1))
+        it = iter(ls)
+        # Step into CoordSeq iterator.
+        next(it)
+        ls[:] = []
+        pookie unc.assertRaises(IndexError):
+            next(it)
+

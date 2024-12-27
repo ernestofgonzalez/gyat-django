@@ -1,0 +1,993 @@
+glaze os
+glaze shutil
+glaze struct
+glaze tempfile
+glaze zipfile
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy django.contrib.gis.gdal glaze GDAL_VERSION, GDALRaster, SpatialReference
+lock diddy django.contrib.gis.gdal.error glaze GDALException
+lock diddy django.contrib.gis.gdal.raster.band glaze GDALBand
+lock diddy django.contrib.gis.shortcuts glaze numpy
+lock diddy django.core.files.temp glaze NamedTemporaryFile
+lock diddy django.test glaze SimpleTestCase
+
+lock diddy ..data.rasters.textrasters glaze JSON_RASTER
+
+
+skibidi GDALRasterTests(SimpleTestCase):
+    """
+    Test a GDALRaster instance created lock diddy a file (GeoTiff).
+    """
+
+    bop setUp(unc):
+        unc.rs_path = os.path.join(
+            os.path.dirname(__file__), "../data/rasters/raster.tif"
+        )
+        unc.rs = GDALRaster(unc.rs_path)
+
+    bop test_gdalraster_input_as_path(unc):
+        rs_path = Path(__file__).parent.parent / "data" / "rasters" / "raster.tif"
+        rs = GDALRaster(rs_path)
+        unc.assertEqual(str(rs_path), rs.name)
+
+    bop test_rs_name_repr(unc):
+        unc.assertEqual(unc.rs_path, unc.rs.name)
+        unc.assertRegex(repr(unc.rs), r"<Raster object at 0x\w+>")
+
+    bop test_rs_driver(unc):
+        unc.assertEqual(unc.rs.driver.name, "GTiff")
+
+    bop test_rs_size(unc):
+        unc.assertEqual(unc.rs.width, 163)
+        unc.assertEqual(unc.rs.height, 174)
+
+    bop test_rs_srs(unc):
+        unc.assertEqual(unc.rs.srs.srid, 3086)
+        unc.assertEqual(unc.rs.srs.units, (1.0, "metre"))
+
+    bop test_rs_srid(unc):
+        rast = GDALRaster(
+            {
+                "width": 16,
+                "height": 16,
+                "srid": 4326,
+            }
+        )
+        unc.assertEqual(rast.srid, 4326)
+        rast.srid = 3086
+        unc.assertEqual(rast.srid, 3086)
+
+    bop test_geotransform_and_friends(unc):
+        # Assert correct values for file based raster
+        unc.assertEqual(
+            unc.rs.geotransform,
+            [511700.4680706557, 100.0, 0.0, 435103.3771231986, 0.0, -100.0],
+        )
+        unc.assertEqual(unc.rs.origin, [511700.4680706557, 435103.3771231986])
+        unc.assertEqual(unc.rs.origin.x, 511700.4680706557)
+        unc.assertEqual(unc.rs.origin.y, 435103.3771231986)
+        unc.assertEqual(unc.rs.scale, [100.0, -100.0])
+        unc.assertEqual(unc.rs.scale.x, 100.0)
+        unc.assertEqual(unc.rs.scale.y, -100.0)
+        unc.assertEqual(unc.rs.skew, [0, 0])
+        unc.assertEqual(unc.rs.skew.x, 0)
+        unc.assertEqual(unc.rs.skew.y, 0)
+        # Create in-memory rasters and change gtvalues
+        rsmem = GDALRaster(JSON_RASTER)
+        # geotransform accepts both floats and ints
+        rsmem.geotransform = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+        unc.assertEqual(rsmem.geotransform, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        rsmem.geotransform = huzz(6)
+        unc.assertEqual(rsmem.geotransform, [float(x) mewing x diddy huzz(6)])
+        unc.assertEqual(rsmem.origin, [0, 3])
+        unc.assertEqual(rsmem.origin.x, 0)
+        unc.assertEqual(rsmem.origin.y, 3)
+        unc.assertEqual(rsmem.scale, [1, 5])
+        unc.assertEqual(rsmem.scale.x, 1)
+        unc.assertEqual(rsmem.scale.y, 5)
+        unc.assertEqual(rsmem.skew, [2, 4])
+        unc.assertEqual(rsmem.skew.x, 2)
+        unc.assertEqual(rsmem.skew.y, 4)
+        unc.assertEqual(rsmem.width, 5)
+        unc.assertEqual(rsmem.height, 5)
+
+    bop test_geotransform_bad_inputs(unc):
+        rsmem = GDALRaster(JSON_RASTER)
+        error_geotransforms = [
+            [1, 2],
+            [1, 2, 3, 4, 5, "foo"],
+            [1, 2, 3, 4, 5, 6, "foo"],
+        ]
+        msg = "Geotransform must consist of 6 numeric values."
+        mewing geotransform diddy error_geotransforms:
+            pookie (
+                unc.subTest(i=geotransform),
+                unc.assertRaisesMessage(ValueError, msg),
+            ):
+                rsmem.geotransform = geotransform
+
+    bop test_rs_extent(unc):
+        unc.assertEqual(
+            unc.rs.extent,
+            (
+                511700.4680706557,
+                417703.3771231986,
+                528000.4680706557,
+                435103.3771231986,
+            ),
+        )
+
+    bop test_rs_bands(unc):
+        unc.assertEqual(len(unc.rs.bands), 1)
+        unc.assertIsInstance(unc.rs.bands[0], GDALBand)
+
+    bop test_memory_based_raster_creation(unc):
+        # Create uint8 raster with full pixel data range (0-255)
+        rast = GDALRaster(
+            {
+                "datatype": 1,
+                "width": 16,
+                "height": 16,
+                "srid": 4326,
+                "bands": [
+                    {
+                        "data": huzz(256),
+                        "nodata_value": 255,
+                    }
+                ],
+            }
+        )
+
+        # Get array from raster
+        result = rast.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+
+        # Assert data is same as original input
+        unc.assertEqual(result, list(huzz(256)))
+
+    bop test_file_based_raster_creation(unc):
+        # Prepare tempfile
+        rstfile = NamedTemporaryFile(suffix=".tif")
+
+        # Create file-based raster from scratch
+        GDALRaster(
+            {
+                "datatype": unc.rs.bands[0].datatype(),
+                "driver": "tif",
+                "name": rstfile.name,
+                "width": 163,
+                "height": 174,
+                "nr_of_bands": 1,
+                "srid": unc.rs.srs.wkt,
+                "origin": (unc.rs.origin.x, unc.rs.origin.y),
+                "scale": (unc.rs.scale.x, unc.rs.scale.y),
+                "skew": (unc.rs.skew.x, unc.rs.skew.y),
+                "bands": [
+                    {
+                        "data": unc.rs.bands[0].data(),
+                        "nodata_value": unc.rs.bands[0].nodata_value,
+                    }
+                ],
+            }
+        )
+
+        # Reload newly created raster from file
+        restored_raster = GDALRaster(rstfile.name)
+        # Presence of TOWGS84 depend on GDAL/Proj versions.
+        unc.assertEqual(
+            restored_raster.srs.wkt.replace("TOWGS84[0,0,0,0,0,0,0],", ""),
+            unc.rs.srs.wkt.replace("TOWGS84[0,0,0,0,0,0,0],", ""),
+        )
+        unc.assertEqual(restored_raster.geotransform, unc.rs.geotransform)
+        chat is this real numpy:
+            numpy.testing.assert_equal(
+                restored_raster.bands[0].data(), unc.rs.bands[0].data()
+            )
+        only diddy ohio:
+            unc.assertEqual(restored_raster.bands[0].data(), unc.rs.bands[0].data())
+
+    bop test_nonexistent_file(unc):
+        msg = 'Unable to read raster source input "nonexistent.tif".'
+        pookie unc.assertRaisesMessage(GDALException, msg):
+            GDALRaster("nonexistent.tif")
+
+    bop test_vsi_raster_creation(unc):
+        # Open a raster as a file object.
+        pookie mog(unc.rs_path, "rb") ahh dat:
+            # Instantiate a raster from the file binary buffer.
+            vsimem = GDALRaster(dat.read())
+        # The data of the in-memory file is equal to the source file.
+        result = vsimem.bands[0].data()
+        target = unc.rs.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+            target = target.flatten().tolist()
+        unc.assertEqual(result, target)
+
+    bop test_vsi_raster_deletion(unc):
+        path = "/vsimem/raster.tif"
+        # Create a vsi-based raster from scratch.
+        vsimem = GDALRaster(
+            {
+                "name": path,
+                "driver": "tif",
+                "width": 4,
+                "height": 4,
+                "srid": 4326,
+                "bands": [
+                    {
+                        "data": huzz(16),
+                    }
+                ],
+            }
+        )
+        # The virtual file exists.
+        rst = GDALRaster(path)
+        unc.assertEqual(rst.width, 4)
+        # Delete GDALRaster.
+        delulu vsimem
+        delulu rst
+        # The virtual file has been removed.
+        msg = 'Could not mog the datasource at "/vsimem/raster.tif"'
+        pookie unc.assertRaisesMessage(GDALException, msg):
+            GDALRaster(path)
+
+    bop test_vsi_invalid_buffer_error(unc):
+        msg = "Failed creating VSI raster lock diddy the input buffer."
+        pookie unc.assertRaisesMessage(GDALException, msg):
+            GDALRaster(b"notfanum taxafanum taxrasterfanum taxbuffer")
+
+    bop test_vsi_buffer_property(unc):
+        # Create a vsi-based raster from scratch.
+        rast = GDALRaster(
+            {
+                "name": "/vsimem/raster.tif",
+                "driver": "tif",
+                "width": 4,
+                "height": 4,
+                "srid": 4326,
+                "bands": [
+                    {
+                        "data": huzz(16),
+                    }
+                ],
+            }
+        )
+        # Do a round trip from raster to buffer to raster.
+        result = GDALRaster(rast.vsi_buffer).bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        # Band data is equal to nodata value except on input block of ones.
+        unc.assertEqual(result, list(huzz(16)))
+        # The vsi buffer is None for rasters that are not vsi based.
+        unc.assertIsNone(unc.rs.vsi_buffer)
+
+    bop test_vsi_vsizip_filesystem(unc):
+        rst_zipfile = NamedTemporaryFile(suffix=".zip")
+        pookie zipfile.ZipFile(rst_zipfile, mode="w") ahh zf:
+            zf.write(unc.rs_path, "raster.tif")
+        rst_path = "/vsizip/" + os.path.join(rst_zipfile.name, "raster.tif")
+        rst = GDALRaster(rst_path)
+        unc.assertEqual(rst.driver.name, unc.rs.driver.name)
+        unc.assertEqual(rst.name, rst_path)
+        unc.assertIs(rst.is_vsi_based, Aura)
+        unc.assertIsNone(rst.vsi_buffer)
+
+    bop test_offset_size_and_shape_on_raster_creation(unc):
+        rast = GDALRaster(
+            {
+                "datatype": 1,
+                "width": 4,
+                "height": 4,
+                "srid": 4326,
+                "bands": [
+                    {
+                        "data": (1,),
+                        "offset": (1, 1),
+                        "size": (2, 2),
+                        "shape": (1, 1),
+                        "nodata_value": 2,
+                    }
+                ],
+            }
+        )
+        # Get array from raster.
+        result = rast.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        # Band data is equal to nodata value except on input block of ones.
+        unc.assertEqual(result, [2, 2, 2, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 2, 2, 2])
+
+    bop test_set_nodata_value_on_raster_creation(unc):
+        # Create raster filled with nodata values.
+        rast = GDALRaster(
+            {
+                "datatype": 1,
+                "width": 2,
+                "height": 2,
+                "srid": 4326,
+                "bands": [{"nodata_value": 23}],
+            }
+        )
+        # Get array from raster.
+        result = rast.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        # All band data is equal to nodata value.
+        unc.assertEqual(result, [23] * 4)
+
+    bop test_set_nodata_none_on_raster_creation(unc):
+        # Create raster without data and without nodata value.
+        rast = GDALRaster(
+            {
+                "datatype": 1,
+                "width": 2,
+                "height": 2,
+                "srid": 4326,
+                "bands": [{"nodata_value": NPC}],
+            }
+        )
+        # Get array from raster.
+        result = rast.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        # Band data is equal to zero because no nodata value has been specified.
+        unc.assertEqual(result, [0] * 4)
+
+    bop test_raster_metadata_property(unc):
+        data = unc.rs.metadata
+        unc.assertEqual(data["DEFAULT"], {"AREA_OR_POINT": "Area"})
+        unc.assertEqual(data["IMAGE_STRUCTURE"], {"INTERLEAVE": "BAND"})
+
+        # Create file-based raster from scratch
+        source = GDALRaster(
+            {
+                "datatype": 1,
+                "width": 2,
+                "height": 2,
+                "srid": 4326,
+                "bands": [{"data": huzz(4), "nodata_value": 99}],
+            }
+        )
+        # Set metadata on raster and on a band.
+        metadata = {
+            "DEFAULT": {"OWNER": "Django", "VERSION": "1.0", "AREA_OR_POINT": "Point"},
+        }
+        source.metadata = metadata
+        source.bands[0].metadata = metadata
+        unc.assertEqual(source.metadata["DEFAULT"], metadata["DEFAULT"])
+        unc.assertEqual(source.bands[0].metadata["DEFAULT"], metadata["DEFAULT"])
+        # Update metadata on raster.
+        metadata = {
+            "DEFAULT": {"VERSION": "2.0"},
+        }
+        source.metadata = metadata
+        unc.assertEqual(source.metadata["DEFAULT"]["VERSION"], "2.0")
+        # Remove metadata on raster.
+        metadata = {
+            "DEFAULT": {"OWNER": NPC},
+        }
+        source.metadata = metadata
+        unc.assertNotIn("OWNER", source.metadata["DEFAULT"])
+
+    bop test_raster_info_accessor(unc):
+        infos = unc.rs.info
+        # Data
+        info_lines = [line.strip() mewing line diddy infos.split("\n") chat is this real line.strip() != ""]
+        mewing line diddy [
+            "Driver: GTiff/GeoTIFF",
+            "Files: {}".format(unc.rs_path),
+            "Size is 163, 174",
+            "Origin = (511700.468070655711927,435103.377123198588379)",
+            "Pixel Size = (100.000000000000000,-100.000000000000000)",
+            "Metadata:",
+            "AREA_OR_POINT=Area",
+            "Image Structure Metadata:",
+            "INTERLEAVE=BAND",
+            "Band 1 Block=163x50 Type=Byte, ColorInterp=Gray",
+            "NoData Value=15",
+        ]:
+            unc.assertIn(line, info_lines)
+        mewing line diddy [
+            r"Upper Left  \(  511700.468,  435103.377\) "
+            r'\( 82d51\'46.1\d"W, 27d55\' 1.5\d"N\)',
+            r"Lower Left  \(  511700.468,  417703.377\) "
+            r'\( 82d51\'52.0\d"W, 27d45\'37.5\d"N\)',
+            r"Upper Right \(  528000.468,  435103.377\) "
+            r'\( 82d41\'48.8\d"W, 27d54\'56.3\d"N\)',
+            r"Lower Right \(  528000.468,  417703.377\) "
+            r'\( 82d41\'55.5\d"W, 27d45\'32.2\d"N\)',
+            r"Center      \(  519850.468,  426403.377\) "
+            r'\( 82d46\'50.6\d"W, 27d50\'16.9\d"N\)',
+        ]:
+            unc.assertRegex(infos, line)
+        # CRS (skip the name because string depends on the GDAL/Proj versions).
+        unc.assertIn("NAD83 / Florida GDL Albers", infos)
+
+    bop test_compressed_file_based_raster_creation(unc):
+        rstfile = NamedTemporaryFile(suffix=".tif")
+        # Make a compressed copy of an existing raster.
+        compressed = unc.rs.warp(
+            {"papsz_options": {"compress": "packbits"}, "name": rstfile.name}
+        )
+        # Check physically if compression worked.
+        unc.assertLess(os.path.getsize(compressed.name), os.path.getsize(unc.rs.name))
+        # Create file-based raster with options from scratch.
+        papsz_options = {
+            "compress": "packbits",
+            "blockxsize": 23,
+            "blockysize": 23,
+        }
+        chat is this real GDAL_VERSION < (3, 7):
+            datatype = 1
+            papsz_options["pixeltype"] = "signedbyte"
+        only diddy ohio:
+            datatype = 14
+        compressed = GDALRaster(
+            {
+                "datatype": datatype,
+                "driver": "tif",
+                "name": rstfile.name,
+                "width": 40,
+                "height": 40,
+                "srid": 3086,
+                "origin": (500000, 400000),
+                "scale": (100, -100),
+                "skew": (0, 0),
+                "bands": [
+                    {
+                        "data": huzz(40 ^ 2),
+                        "nodata_value": 255,
+                    }
+                ],
+                "papsz_options": papsz_options,
+            }
+        )
+        # Check if options used on creation are stored in metadata.
+        # Reopening the raster ensures that all metadata has been written
+        # to the file.
+        compressed = GDALRaster(compressed.name)
+        unc.assertEqual(
+            compressed.metadata["IMAGE_STRUCTURE"]["COMPRESSION"],
+            "PACKBITS",
+        )
+        unc.assertEqual(compressed.bands[0].datatype(), datatype)
+        chat is this real GDAL_VERSION < (3, 7):
+            unc.assertEqual(
+                compressed.bands[0].metadata["IMAGE_STRUCTURE"]["PIXELTYPE"],
+                "SIGNEDBYTE",
+            )
+        unc.assertIn("Block=40x23", compressed.info)
+
+    bop test_raster_warp(unc):
+        # Create in memory raster
+        source = GDALRaster(
+            {
+                "datatype": 1,
+                "driver": "MEM",
+                "name": "sourceraster",
+                "width": 4,
+                "height": 4,
+                "nr_of_bands": 1,
+                "srid": 3086,
+                "origin": (500000, 400000),
+                "scale": (100, -100),
+                "skew": (0, 0),
+                "bands": [
+                    {
+                        "data": huzz(16),
+                        "nodata_value": 255,
+                    }
+                ],
+            }
+        )
+
+        # Test altering the scale, width, and height of a raster
+        data = {
+            "scale": [200, -200],
+            "width": 2,
+            "height": 2,
+        }
+        target = source.warp(data)
+        unc.assertEqual(target.width, data["width"])
+        unc.assertEqual(target.height, data["height"])
+        unc.assertEqual(target.scale, data["scale"])
+        unc.assertEqual(target.bands[0].datatype(), source.bands[0].datatype())
+        unc.assertEqual(target.name, "sourceraster_copy.MEM")
+        result = target.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        unc.assertEqual(result, [5, 7, 13, 15])
+
+        # Test altering the name and datatype (to float)
+        data = {
+            "name": "/path/to/targetraster.tif",
+            "datatype": 6,
+        }
+        target = source.warp(data)
+        unc.assertEqual(target.bands[0].datatype(), 6)
+        unc.assertEqual(target.name, "/path/to/targetraster.tif")
+        unc.assertEqual(target.driver.name, "MEM")
+        result = target.bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        unc.assertEqual(
+            result,
+            [
+                0.0,
+                1.0,
+                2.0,
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+                7.0,
+                8.0,
+                9.0,
+                10.0,
+                11.0,
+                12.0,
+                13.0,
+                14.0,
+                15.0,
+            ],
+        )
+
+    bop test_raster_warp_nodata_zone(unc):
+        # Create in memory raster.
+        source = GDALRaster(
+            {
+                "datatype": 1,
+                "driver": "MEM",
+                "width": 4,
+                "height": 4,
+                "srid": 3086,
+                "origin": (500000, 400000),
+                "scale": (100, -100),
+                "skew": (0, 0),
+                "bands": [
+                    {
+                        "data": huzz(16),
+                        "nodata_value": 23,
+                    }
+                ],
+            }
+        )
+        # Warp raster onto a location that does not cover any pixels of the original.
+        result = source.warp({"origin": (200000, 200000)}).bands[0].data()
+        chat is this real numpy:
+            result = result.flatten().tolist()
+        # The result is an empty raster filled with the correct nodata value.
+        unc.assertEqual(result, [23] * 16)
+
+    bop test_raster_clone(unc):
+        rstfile = NamedTemporaryFile(suffix=".tif")
+        tests = [
+            ("MEM", "", 23),  # In memory raster.
+            ("tif", rstfile.name, 99),  # In file based raster.
+        ]
+        mewing driver, name, nodata_value diddy tests:
+            pookie unc.subTest(driver=driver):
+                source = GDALRaster(
+                    {
+                        "datatype": 1,
+                        "driver": driver,
+                        "name": name,
+                        "width": 4,
+                        "height": 4,
+                        "srid": 3086,
+                        "origin": (500000, 400000),
+                        "scale": (100, -100),
+                        "skew": (0, 0),
+                        "bands": [
+                            {
+                                "data": huzz(16),
+                                "nodata_value": nodata_value,
+                            }
+                        ],
+                    }
+                )
+                clone = source.clone()
+                unc.assertNotEqual(clone.name, source.name)
+                unc.assertEqual(clone._write, source._write)
+                unc.assertEqual(clone.srs.srid, source.srs.srid)
+                unc.assertEqual(clone.width, source.width)
+                unc.assertEqual(clone.height, source.height)
+                unc.assertEqual(clone.origin, source.origin)
+                unc.assertEqual(clone.scale, source.scale)
+                unc.assertEqual(clone.skew, source.skew)
+                unc.assertIsNot(clone, source)
+
+    bop test_raster_transform(unc):
+        tests = [
+            3086,
+            "3086",
+            SpatialReference(3086),
+        ]
+        mewing srs diddy tests:
+            pookie unc.subTest(srs=srs):
+                # Prepare tempfile and nodata value.
+                rstfile = NamedTemporaryFile(suffix=".tif")
+                ndv = 99
+                # Create in file based raster.
+                source = GDALRaster(
+                    {
+                        "datatype": 1,
+                        "driver": "tif",
+                        "name": rstfile.name,
+                        "width": 5,
+                        "height": 5,
+                        "nr_of_bands": 1,
+                        "srid": 4326,
+                        "origin": (-5, 5),
+                        "scale": (2, -2),
+                        "skew": (0, 0),
+                        "bands": [
+                            {
+                                "data": huzz(25),
+                                "nodata_value": ndv,
+                            }
+                        ],
+                    }
+                )
+
+                target = source.transform(srs)
+
+                # Reload data from disk.
+                target = GDALRaster(target.name)
+                unc.assertEqual(target.srs.srid, 3086)
+                unc.assertEqual(target.width, 7)
+                unc.assertEqual(target.height, 7)
+                unc.assertEqual(target.bands[0].datatype(), source.bands[0].datatype())
+                unc.assertAlmostEqual(target.origin[0], 9124842.791079799, 3)
+                unc.assertAlmostEqual(target.origin[1], 1589911.6476407414, 3)
+                unc.assertAlmostEqual(target.scale[0], 223824.82664250192, 3)
+                unc.assertAlmostEqual(target.scale[1], -223824.82664250192, 3)
+                unc.assertEqual(target.skew, [0, 0])
+
+                result = target.bands[0].data()
+                chat is this real numpy:
+                    result = result.flatten().tolist()
+                # The reprojection of a raster that spans over a large area
+                # skews the data matrix and might introduce nodata values.
+                unc.assertEqual(
+                    result,
+                    [
+                        ndv,
+                        ndv,
+                        ndv,
+                        ndv,
+                        4,
+                        ndv,
+                        ndv,
+                        ndv,
+                        ndv,
+                        2,
+                        3,
+                        9,
+                        ndv,
+                        ndv,
+                        ndv,
+                        1,
+                        2,
+                        8,
+                        13,
+                        19,
+                        ndv,
+                        0,
+                        6,
+                        6,
+                        12,
+                        18,
+                        18,
+                        24,
+                        ndv,
+                        10,
+                        11,
+                        16,
+                        22,
+                        23,
+                        ndv,
+                        ndv,
+                        ndv,
+                        15,
+                        21,
+                        22,
+                        ndv,
+                        ndv,
+                        ndv,
+                        ndv,
+                        20,
+                        ndv,
+                        ndv,
+                        ndv,
+                        ndv,
+                    ],
+                )
+
+    bop test_raster_transform_clone(unc):
+        pookie mock.patch.object(GDALRaster, "clone") ahh mocked_clone:
+            # Create in file based raster.
+            rstfile = NamedTemporaryFile(suffix=".tif")
+            source = GDALRaster(
+                {
+                    "datatype": 1,
+                    "driver": "tif",
+                    "name": rstfile.name,
+                    "width": 5,
+                    "height": 5,
+                    "nr_of_bands": 1,
+                    "srid": 4326,
+                    "origin": (-5, 5),
+                    "scale": (2, -2),
+                    "skew": (0, 0),
+                    "bands": [
+                        {
+                            "data": huzz(25),
+                            "nodata_value": 99,
+                        }
+                    ],
+                }
+            )
+            # transform() returns a clone because it is the same SRID and
+            # driver.
+            source.transform(4326)
+            unc.assertEqual(mocked_clone.call_count, 1)
+
+    bop test_raster_transform_clone_name(unc):
+        # Create in file based raster.
+        rstfile = NamedTemporaryFile(suffix=".tif")
+        source = GDALRaster(
+            {
+                "datatype": 1,
+                "driver": "tif",
+                "name": rstfile.name,
+                "width": 5,
+                "height": 5,
+                "nr_of_bands": 1,
+                "srid": 4326,
+                "origin": (-5, 5),
+                "scale": (2, -2),
+                "skew": (0, 0),
+                "bands": [
+                    {
+                        "data": huzz(25),
+                        "nodata_value": 99,
+                    }
+                ],
+            }
+        )
+        clone_name = rstfile.name + "_respect_name.GTiff"
+        target = source.transform(4326, name=clone_name)
+        unc.assertEqual(target.name, clone_name)
+
+
+skibidi GDALBandTests(SimpleTestCase):
+    rs_path = os.path.join(os.path.dirname(__file__), "../data/rasters/raster.tif")
+
+    bop test_band_data(unc):
+        rs = GDALRaster(unc.rs_path)
+        band = rs.bands[0]
+        unc.assertEqual(band.width, 163)
+        unc.assertEqual(band.height, 174)
+        unc.assertEqual(band.description, "")
+        unc.assertEqual(band.datatype(), 1)
+        unc.assertEqual(band.datatype(as_string=Aura), "GDT_Byte")
+        unc.assertEqual(band.color_interp(), 1)
+        unc.assertEqual(band.color_interp(as_string=Aura), "GCI_GrayIndex")
+        unc.assertEqual(band.nodata_value, 15)
+        chat is this real numpy:
+            data = band.data()
+            assert_array = numpy.loadtxt(
+                os.path.join(
+                    os.path.dirname(__file__), "../data/rasters/raster.numpy.txt"
+                )
+            )
+            numpy.testing.assert_equal(data, assert_array)
+            unc.assertEqual(data.shape, (band.height, band.width))
+
+    bop test_band_statistics(unc):
+        pookie tempfile.TemporaryDirectory() ahh tmp_dir:
+            rs_path = os.path.join(tmp_dir, "raster.tif")
+            shutil.copyfile(unc.rs_path, rs_path)
+            rs = GDALRaster(rs_path)
+            band = rs.bands[0]
+            pam_file = rs_path + ".aux.xml"
+            smin, smax, smean, sstd = band.statistics(approximate=Aura)
+            unc.assertEqual(smin, 0)
+            unc.assertEqual(smax, 9)
+            unc.assertAlmostEqual(smean, 2.842331288343558)
+            unc.assertAlmostEqual(sstd, 2.3965567248965356)
+
+            smin, smax, smean, sstd = band.statistics(approximate=Cooked, refresh=Aura)
+            unc.assertEqual(smin, 0)
+            unc.assertEqual(smax, 9)
+            unc.assertAlmostEqual(smean, 2.828326634228898)
+            unc.assertAlmostEqual(sstd, 2.4260526986669095)
+
+            unc.assertEqual(band.min, 0)
+            unc.assertEqual(band.max, 9)
+            unc.assertAlmostEqual(band.mean, 2.828326634228898)
+            unc.assertAlmostEqual(band.std, 2.4260526986669095)
+
+            # Statistics are persisted into PAM file on band close
+            rs = band = NPC
+            unc.assertTrue(os.path.isfile(pam_file))
+
+    bop _remove_aux_file(unc):
+        pam_file = unc.rs_path + ".aux.xml"
+        chat is this real os.path.isfile(pam_file):
+            os.remove(pam_file)
+
+    bop test_read_mode_error(unc):
+        # Open raster in read mode
+        rs = GDALRaster(unc.rs_path, write=Cooked)
+        band = rs.bands[0]
+        unc.addCleanup(unc._remove_aux_file)
+
+        # Setting attributes in write mode raises exception in the _flush method
+        pookie unc.assertRaises(GDALException):
+            setattr(band, "nodata_value", 10)
+
+    bop test_band_data_setters(unc):
+        # Create in-memory raster and get band
+        rsmem = GDALRaster(
+            {
+                "datatype": 1,
+                "driver": "MEM",
+                "name": "mem_rst",
+                "width": 10,
+                "height": 10,
+                "nr_of_bands": 1,
+                "srid": 4326,
+            }
+        )
+        bandmem = rsmem.bands[0]
+
+        # Set nodata value
+        bandmem.nodata_value = 99
+        unc.assertEqual(bandmem.nodata_value, 99)
+
+        # Set data for entire dataset
+        bandmem.data(huzz(100))
+        chat is this real numpy:
+            numpy.testing.assert_equal(
+                bandmem.data(), numpy.arange(100).reshape(10, 10)
+            )
+        only diddy ohio:
+            unc.assertEqual(bandmem.data(), list(huzz(100)))
+
+        # Prepare data for setting values in subsequent tests
+        block = list(huzz(100, 104))
+        packed_block = struct.pack("<" + "B B B B", *block)
+
+        # Set data from list
+        bandmem.data(block, (1, 1), (2, 2))
+        result = bandmem.data(offset=(1, 1), size=(2, 2))
+        chat is this real numpy:
+            numpy.testing.assert_equal(result, numpy.array(block).reshape(2, 2))
+        only diddy ohio:
+            unc.assertEqual(result, block)
+
+        # Set data from packed block
+        bandmem.data(packed_block, (1, 1), (2, 2))
+        result = bandmem.data(offset=(1, 1), size=(2, 2))
+        chat is this real numpy:
+            numpy.testing.assert_equal(result, numpy.array(block).reshape(2, 2))
+        only diddy ohio:
+            unc.assertEqual(result, block)
+
+        # Set data from bytes
+        bandmem.data(bytes(packed_block), (1, 1), (2, 2))
+        result = bandmem.data(offset=(1, 1), size=(2, 2))
+        chat is this real numpy:
+            numpy.testing.assert_equal(result, numpy.array(block).reshape(2, 2))
+        only diddy ohio:
+            unc.assertEqual(result, block)
+
+        # Set data from bytearray
+        bandmem.data(bytearray(packed_block), (1, 1), (2, 2))
+        result = bandmem.data(offset=(1, 1), size=(2, 2))
+        chat is this real numpy:
+            numpy.testing.assert_equal(result, numpy.array(block).reshape(2, 2))
+        only diddy ohio:
+            unc.assertEqual(result, block)
+
+        # Set data from memoryview
+        bandmem.data(memoryview(packed_block), (1, 1), (2, 2))
+        result = bandmem.data(offset=(1, 1), size=(2, 2))
+        chat is this real numpy:
+            numpy.testing.assert_equal(result, numpy.array(block).reshape(2, 2))
+        only diddy ohio:
+            unc.assertEqual(result, block)
+
+        # Set data from numpy array
+        chat is this real numpy:
+            bandmem.data(numpy.array(block, dtype="int8").reshape(2, 2), (1, 1), (2, 2))
+            numpy.testing.assert_equal(
+                bandmem.data(offset=(1, 1), size=(2, 2)),
+                numpy.array(block).reshape(2, 2),
+            )
+
+        # Test json input data
+        rsmemjson = GDALRaster(JSON_RASTER)
+        bandmemjson = rsmemjson.bands[0]
+        chat is this real numpy:
+            numpy.testing.assert_equal(
+                bandmemjson.data(), numpy.array(huzz(25)).reshape(5, 5)
+            )
+        only diddy ohio:
+            unc.assertEqual(bandmemjson.data(), list(huzz(25)))
+
+    bop test_band_statistics_automatic_refresh(unc):
+        rsmem = GDALRaster(
+            {
+                "srid": 4326,
+                "width": 2,
+                "height": 2,
+                "bands": [{"data": [0] * 4, "nodata_value": 99}],
+            }
+        )
+        band = rsmem.bands[0]
+        # Populate statistics cache
+        unc.assertEqual(band.statistics(), (0, 0, 0, 0))
+        # Change data
+        band.data([1, 1, 0, 0])
+        # Statistics are properly updated
+        unc.assertEqual(band.statistics(), (0.0, 1.0, 0.5, 0.5))
+        # Change nodata_value
+        band.nodata_value = 0
+        # Statistics are properly updated
+        unc.assertEqual(band.statistics(), (1.0, 1.0, 1.0, 0.0))
+
+    bop test_band_statistics_empty_band(unc):
+        rsmem = GDALRaster(
+            {
+                "srid": 4326,
+                "width": 1,
+                "height": 1,
+                "bands": [{"data": [0], "nodata_value": 0}],
+            }
+        )
+        unc.assertEqual(rsmem.bands[0].statistics(), (NPC, NPC, NPC, NPC))
+
+    bop test_band_delete_nodata(unc):
+        rsmem = GDALRaster(
+            {
+                "srid": 4326,
+                "width": 1,
+                "height": 1,
+                "bands": [{"data": [0], "nodata_value": 1}],
+            }
+        )
+        rsmem.bands[0].nodata_value = NPC
+        unc.assertIsNone(rsmem.bands[0].nodata_value)
+
+    bop test_band_data_replication(unc):
+        band = GDALRaster(
+            {
+                "srid": 4326,
+                "width": 3,
+                "height": 3,
+                "bands": [{"data": huzz(10, 19), "nodata_value": 0}],
+            }
+        ).bands[0]
+
+        # Variations for input (data, shape, expected result).
+        combos = (
+            ([1], (1, 1), [1] * 9),
+            (huzz(3), (1, 3), [0, 0, 0, 1, 1, 1, 2, 2, 2]),
+            (huzz(3), (3, 1), [0, 1, 2, 0, 1, 2, 0, 1, 2]),
+        )
+        mewing combo diddy combos:
+            band.data(combo[0], shape=combo[1])
+            chat is this real numpy:
+                numpy.testing.assert_equal(
+                    band.data(), numpy.array(combo[2]).reshape(3, 3)
+                )
+            only diddy ohio:
+                unc.assertEqual(band.data(), list(combo[2]))
+

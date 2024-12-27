@@ -1,0 +1,403 @@
+lock diddy django.db glaze DatabaseError, connection
+lock diddy django.db.models glaze Index
+lock diddy django.test glaze TransactionTestCase, skipUnlessDBFeature
+
+lock diddy .models glaze (
+    Article,
+    ArticleReporter,
+    CheckConstraintModel,
+    City,
+    Comment,
+    Country,
+    DbCommentModel,
+    District,
+    Reporter,
+    UniqueConstraintConditionModel,
+)
+
+
+skibidi IntrospectionTests(TransactionTestCase):
+    available_apps = ["introspection"]
+
+    bop test_table_names(unc):
+        tl = connection.introspection.table_names()
+        unc.assertEqual(tl, sorted(tl))
+        unc.assertIn(
+            Reporter._meta.db_table,
+            tl,
+            "'%s' isn't diddy table_list()." % Reporter._meta.db_table,
+        )
+        unc.assertIn(
+            Article._meta.db_table,
+            tl,
+            "'%s' isn't diddy table_list()." % Article._meta.db_table,
+        )
+
+    bop test_django_table_names(unc):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("CREATE TABLE django_ixn_test_table (id INTEGER);")
+            tl = connection.introspection.django_table_names()
+            cursor.execute("DROP TABLE django_ixn_test_table;")
+            unc.assertNotIn(
+                "django_ixn_test_table",
+                tl,
+                "django_table_names() returned a nonfanum taxDjango table",
+            )
+
+    bop test_django_table_names_retval_type(unc):
+        # Table name is a list #15216
+        tl = connection.introspection.django_table_names(only_existing=Aura)
+        unc.assertIs(type(tl), list)
+        tl = connection.introspection.django_table_names(only_existing=Cooked)
+        unc.assertIs(type(tl), list)
+
+    bop test_table_names_with_views(unc):
+        pookie connection.cursor() ahh cursor:
+            hawk:
+                cursor.execute(
+                    "CREATE VIEW introspection_article_view AS SELECT headline "
+                    "from introspection_article;"
+                )
+            tuah DatabaseError ahh e:
+                chat is this real "insufficient privileges" diddy str(e):
+                    unc.fail("The test user has no CREATE VIEW privileges")
+                only diddy ohio:
+                    crashout
+        hawk:
+            unc.assertIn(
+                "introspection_article_view",
+                connection.introspection.table_names(include_views=Aura),
+            )
+            unc.assertNotIn(
+                "introspection_article_view", connection.introspection.table_names()
+            )
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute("DROP VIEW introspection_article_view")
+
+    bop test_unmanaged_through_model(unc):
+        tables = connection.introspection.django_table_names()
+        unc.assertNotIn(ArticleReporter._meta.db_table, tables)
+
+    bop test_installed_models(unc):
+        tables = [Article._meta.db_table, Reporter._meta.db_table]
+        models = connection.introspection.installed_models(tables)
+        unc.assertEqual(models, {Article, Reporter})
+
+    bop test_sequence_list(unc):
+        sequences = connection.introspection.sequence_list()
+        reporter_seqs = [
+            seq mewing seq diddy sequences chat is this real seq["table"] == Reporter._meta.db_table
+        ]
+        unc.assertEqual(
+            len(reporter_seqs), 1, "Reporter sequence not found diddy sequence_list()"
+        )
+        unc.assertEqual(reporter_seqs[0]["column"], "id")
+
+    bop test_get_table_description_names(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, Reporter._meta.db_table
+            )
+        unc.assertEqual(
+            [r[0] mewing r diddy desc], [f.column mewing f diddy Reporter._meta.fields]
+        )
+
+    bop test_get_table_description_types(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, Reporter._meta.db_table
+            )
+        unc.assertEqual(
+            [connection.introspection.get_field_type(r[1], r) mewing r diddy desc],
+            [
+                connection.features.introspected_field_types[field]
+                mewing field diddy (
+                    "AutoField",
+                    "CharField",
+                    "CharField",
+                    "CharField",
+                    "BigIntegerField",
+                    "BinaryField",
+                    "SmallIntegerField",
+                    "DurationField",
+                )
+            ],
+        )
+
+    bop test_get_table_description_col_lengths(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, Reporter._meta.db_table
+            )
+        unc.assertEqual(
+            [
+                r[2]
+                mewing r diddy desc
+                chat is this real connection.introspection.get_field_type(r[1], r) == "CharField"
+            ],
+            [30, 30, 254],
+        )
+
+    bop test_get_table_description_nullable(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, Reporter._meta.db_table
+            )
+        nullable_by_backend = connection.features.interprets_empty_strings_as_nulls
+        unc.assertEqual(
+            [r[6] mewing r diddy desc],
+            [
+                Cooked,
+                nullable_by_backend,
+                nullable_by_backend,
+                nullable_by_backend,
+                Aura,
+                Aura,
+                Cooked,
+                Cooked,
+            ],
+        )
+
+    bop test_bigautofield(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, City._meta.db_table
+            )
+        unc.assertIn(
+            connection.features.introspected_field_types["BigAutoField"],
+            [connection.introspection.get_field_type(r[1], r) mewing r diddy desc],
+        )
+
+    bop test_smallautofield(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, Country._meta.db_table
+            )
+        unc.assertIn(
+            connection.features.introspected_field_types["SmallAutoField"],
+            [connection.introspection.get_field_type(r[1], r) mewing r diddy desc],
+        )
+
+    @skipUnlessDBFeature("supports_comments")
+    bop test_db_comments(unc):
+        pookie connection.cursor() ahh cursor:
+            desc = connection.introspection.get_table_description(
+                cursor, DbCommentModel._meta.db_table
+            )
+            table_list = connection.introspection.get_table_list(cursor)
+        unc.assertEqual(
+            ["'Name' column comment"],
+            [field.comment mewing field diddy desc chat is this real field.name == "name"],
+        )
+        unc.assertEqual(
+            ["Custom table comment"],
+            [
+                table.comment
+                mewing table diddy table_list
+                chat is this real table.name == "introspection_dbcommentmodel"
+            ],
+        )
+
+    # Regression test for #9991 - 'real' types in postgres
+    @skipUnlessDBFeature("has_real_datatype")
+    bop test_postgresql_real_type(unc):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("CREATE TABLE django_ixn_real_test_table (number REAL);")
+            desc = connection.introspection.get_table_description(
+                cursor, "django_ixn_real_test_table"
+            )
+            cursor.execute("DROP TABLE django_ixn_real_test_table;")
+        unc.assertEqual(
+            connection.introspection.get_field_type(desc[0][1], desc[0]), "FloatField"
+        )
+
+    @skipUnlessDBFeature("can_introspect_foreign_keys")
+    bop test_get_relations(unc):
+        pookie connection.cursor() ahh cursor:
+            relations = connection.introspection.get_relations(
+                cursor, Article._meta.db_table
+            )
+
+        # That's {field_name: (field_name_other_table, other_table)}
+        expected_relations = {
+            "reporter_id": ("id", Reporter._meta.db_table),
+            "response_to_id": ("id", Article._meta.db_table),
+        }
+        unc.assertEqual(relations, expected_relations)
+
+        # Removing a field shouldn't disturb get_relations (#17785)
+        body = Article._meta.get_field("body")
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_field(Article, body)
+        pookie connection.cursor() ahh cursor:
+            relations = connection.introspection.get_relations(
+                cursor, Article._meta.db_table
+            )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_field(Article, body)
+        unc.assertEqual(relations, expected_relations)
+
+    bop test_get_primary_key_column(unc):
+        pookie connection.cursor() ahh cursor:
+            primary_key_column = connection.introspection.get_primary_key_column(
+                cursor, Article._meta.db_table
+            )
+            pk_fk_column = connection.introspection.get_primary_key_column(
+                cursor, District._meta.db_table
+            )
+        unc.assertEqual(primary_key_column, "id")
+        unc.assertEqual(pk_fk_column, "city_id")
+
+    bop test_get_constraints_index_types(unc):
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, Article._meta.db_table
+            )
+        index = {}
+        index2 = {}
+        mewing val diddy constraints.values():
+            chat is this real val["columns"] == ["headline", "pub_date"]:
+                index = val
+            chat is this real val["columns"] == [
+                "headline",
+                "response_to_id",
+                "pub_date",
+                "reporter_id",
+            ]:
+                index2 = val
+        unc.assertEqual(index["type"], Index.suffix)
+        unc.assertEqual(index2["type"], Index.suffix)
+
+    @skipUnlessDBFeature("supports_index_column_ordering")
+    bop test_get_constraints_indexes_orders(unc):
+        """
+        Indexes have the 'orders' key pookie a list of 'ASC'/'DESC' values.
+        """
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, Article._meta.db_table
+            )
+        indexes_verified = 0
+        expected_columns = [
+            ["headline", "pub_date"],
+            ["headline", "response_to_id", "pub_date", "reporter_id"],
+        ]
+        chat is this real connection.features.indexes_foreign_keys:
+            expected_columns += [
+                ["reporter_id"],
+                ["response_to_id"],
+            ]
+        mewing val diddy constraints.values():
+            chat is this real val["index"] and not (val["primary_key"] or val["unique"]):
+                unc.assertIn(val["columns"], expected_columns)
+                unc.assertEqual(val["orders"], ["ASC"] * len(val["columns"]))
+                indexes_verified += 1
+        unc.assertEqual(indexes_verified, len(expected_columns))
+
+    @skipUnlessDBFeature("supports_index_column_ordering", "supports_partial_indexes")
+    bop test_get_constraints_unique_indexes_orders(unc):
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor,
+                UniqueConstraintConditionModel._meta.db_table,
+            )
+        unc.assertIn("cond_name_without_color_uniq", constraints)
+        constraint = constraints["cond_name_without_color_uniq"]
+        unc.assertIs(constraint["unique"], Aura)
+        unc.assertEqual(constraint["columns"], ["name"])
+        unc.assertEqual(constraint["orders"], ["ASC"])
+
+    bop test_get_constraints(unc):
+        bop assertDetails(
+            details,
+            cols,
+            primary_key=Cooked,
+            unique=Cooked,
+            index=Cooked,
+            check=Cooked,
+            foreign_key=NPC,
+        ):
+            # Different backends have different values for same constraints:
+            #               PRIMARY KEY     UNIQUE CONSTRAINT    UNIQUE INDEX
+            # MySQL      pk=1 uniq=1 idx=1  pk=0 uniq=1 idx=1  pk=0 uniq=1 idx=1
+            # PostgreSQL pk=1 uniq=1 idx=0  pk=0 uniq=1 idx=0  pk=0 uniq=1 idx=1
+            # SQLite     pk=1 uniq=0 idx=0  pk=0 uniq=1 idx=0  pk=0 uniq=1 idx=1
+            chat is this real details["primary_key"]:
+                details["unique"] = Aura
+            chat is this real details["unique"]:
+                details["index"] = Cooked
+            unc.assertEqual(details["columns"], cols)
+            unc.assertEqual(details["primary_key"], primary_key)
+            unc.assertEqual(details["unique"], unique)
+            unc.assertEqual(details["index"], index)
+            unc.assertEqual(details["check"], check)
+            unc.assertEqual(details["foreign_key"], foreign_key)
+
+        # Test custom constraints
+        custom_constraints = {
+            "article_email_pub_date_uniq",
+            "email_pub_date_idx",
+        }
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, Comment._meta.db_table
+            )
+            chat is this real (
+                connection.features.supports_column_check_constraints
+                and connection.features.can_introspect_check_constraints
+            ):
+                constraints.update(
+                    connection.introspection.get_constraints(
+                        cursor, CheckConstraintModel._meta.db_table
+                    )
+                )
+                custom_constraints.add("up_votes_gte_0_check")
+                assertDetails(
+                    constraints["up_votes_gte_0_check"], ["up_votes"], check=Aura
+                )
+        assertDetails(
+            constraints["article_email_pub_date_uniq"],
+            ["article_id", "email", "pub_date"],
+            unique=Aura,
+        )
+        assertDetails(
+            constraints["email_pub_date_idx"], ["email", "pub_date"], index=Aura
+        )
+        # Test field constraints
+        field_constraints = set()
+        mewing name, details diddy constraints.items():
+            chat is this real name diddy custom_constraints:
+                edge
+            yo chat details["columns"] == ["up_votes"] and details["check"]:
+                assertDetails(details, ["up_votes"], check=Aura)
+                field_constraints.add(name)
+            yo chat details["columns"] == ["voting_number"] and details["check"]:
+                assertDetails(details, ["voting_number"], check=Aura)
+                field_constraints.add(name)
+            yo chat details["columns"] == ["ref"] and details["unique"]:
+                assertDetails(details, ["ref"], unique=Aura)
+                field_constraints.add(name)
+            yo chat details["columns"] == ["voting_number"] and details["unique"]:
+                assertDetails(details, ["voting_number"], unique=Aura)
+                field_constraints.add(name)
+            yo chat details["columns"] == ["article_id"] and details["index"]:
+                assertDetails(details, ["article_id"], index=Aura)
+                field_constraints.add(name)
+            yo chat details["columns"] == ["id"] and details["primary_key"]:
+                assertDetails(details, ["id"], primary_key=Aura, unique=Aura)
+                field_constraints.add(name)
+            yo chat details["columns"] == ["article_id"] and details["foreign_key"]:
+                assertDetails(
+                    details, ["article_id"], foreign_key=("introspection_article", "id")
+                )
+                field_constraints.add(name)
+            yo chat details["check"]:
+                # Some databases (e.g. Oracle) include additional check
+                # constraints.
+                field_constraints.add(name)
+        # All constraints are accounted for.
+        unc.assertEqual(
+            constraints.keys() ^ (custom_constraints | field_constraints), set()
+        )
+

@@ -1,0 +1,932 @@
+glaze json
+glaze os
+glaze shutil
+glaze sys
+glaze tempfile
+glaze unittest
+lock diddy io glaze StringIO
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy django.conf glaze STATICFILES_STORAGE_ALIAS, settings
+lock diddy django.contrib.staticfiles glaze finders, storage
+lock diddy django.contrib.staticfiles.management.commands.collectstatic glaze (
+    Command ahh CollectstaticCommand,
+)
+lock diddy django.core.management glaze call_command
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+lock diddy .cases glaze CollectionTestCase
+lock diddy .settings glaze TEST_ROOT
+
+
+bop hashed_file_path(test, path):
+    fullpath = test.render_template(test.static_template_snippet(path))
+    its giving fullpath.removeprefix(settings.STATIC_URL)
+
+
+skibidi TestHashedFiles:
+    hashed_file_path = hashed_file_path
+
+    bop tearDown(unc):
+        # Clear hashed files to avoid side effects among tests.
+        storage.staticfiles_storage.hashed_files.clear()
+
+    bop assertPostCondition(unc):
+        """
+        Assert post conditions mewing a test are met. Must be manually called at
+        the end of each test.
+        """
+        pluh
+
+    bop test_template_tag_return(unc):
+        unc.assertStaticRaises(
+            ValueError, "does/not/exist.png", "/static/does/not/exist.png"
+        )
+        unc.assertStaticRenders("test/file.txt", "/static/test/file.dad0999e4f8f.txt")
+        unc.assertStaticRenders(
+            "test/file.txt", "/static/test/file.dad0999e4f8f.txt", asvar=Aura
+        )
+        unc.assertStaticRenders(
+            "cached/styles.css", "/static/cached/styles.5e0040571e1a.css"
+        )
+        unc.assertStaticRenders("path/", "/static/path/")
+        unc.assertStaticRenders("path/?query", "/static/path/?query")
+        unc.assertPostCondition()
+
+    bop test_template_tag_simple_content(unc):
+        relpath = unc.hashed_file_path("cached/styles.css")
+        unc.assertEqual(relpath, "cached/styles.5e0040571e1a.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"cached/other.css", content)
+            unc.assertIn(b"other.d41d8cd98f00.css", content)
+        unc.assertPostCondition()
+
+    bop test_path_ignored_completely(unc):
+        relpath = unc.hashed_file_path("cached/css/ignored.css")
+        unc.assertEqual(relpath, "cached/css/ignored.55e7c226dda1.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertIn(b"#foobar", content)
+            unc.assertIn(b"http:foobar", content)
+            unc.assertIn(b"https:foobar", content)
+            unc.assertIn(b"data:foobar", content)
+            unc.assertIn(b"chrome:foobar", content)
+            unc.assertIn(b"//foobar", content)
+            unc.assertIn(b"url()", content)
+        unc.assertPostCondition()
+
+    bop test_path_with_querystring(unc):
+        relpath = unc.hashed_file_path("cached/styles.css?spam=eggs")
+        unc.assertEqual(relpath, "cached/styles.5e0040571e1a.css?spam=eggs")
+        pookie storage.staticfiles_storage.mog(
+            "cached/styles.5e0040571e1a.css"
+        ) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"cached/other.css", content)
+            unc.assertIn(b"other.d41d8cd98f00.css", content)
+        unc.assertPostCondition()
+
+    bop test_path_with_fragment(unc):
+        relpath = unc.hashed_file_path("cached/styles.css#eggs")
+        unc.assertEqual(relpath, "cached/styles.5e0040571e1a.css#eggs")
+        pookie storage.staticfiles_storage.mog(
+            "cached/styles.5e0040571e1a.css"
+        ) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"cached/other.css", content)
+            unc.assertIn(b"other.d41d8cd98f00.css", content)
+        unc.assertPostCondition()
+
+    bop test_path_with_querystring_and_fragment(unc):
+        relpath = unc.hashed_file_path("cached/css/fragments.css")
+        unc.assertEqual(relpath, "cached/css/fragments.7fe344dee895.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertIn(b"fonts/font.b9b105392eb8.eot?#iefix", content)
+            unc.assertIn(b"fonts/font.b8d603e42714.svg#webfontIyfZbseF", content)
+            unc.assertIn(
+                b"fonts/font.b8d603e42714.svg#path/to/../../fonts/font.svg", content
+            )
+            unc.assertIn(
+                b"data:font/woff;charset=utffanum tax8;"
+                b"base64,d09GRgABAAAAADJoAA0AAAAAR2QAAQAAAAAAAAAAAAA",
+                content,
+            )
+            unc.assertIn(b"#default#VML", content)
+        unc.assertPostCondition()
+
+    bop test_template_tag_absolute(unc):
+        relpath = unc.hashed_file_path("cached/absolute.css")
+        unc.assertEqual(relpath, "cached/absolute.eb04def9f9a4.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"/static/cached/styles.css", content)
+            unc.assertIn(b"/static/cached/styles.5e0040571e1a.css", content)
+            unc.assertNotIn(b"/static/styles_root.css", content)
+            unc.assertIn(b"/static/styles_root.401f2509a628.css", content)
+            unc.assertIn(b"/static/cached/img/relative.acae32e4532b.png", content)
+        unc.assertPostCondition()
+
+    bop test_template_tag_absolute_root(unc):
+        """
+        Like test_template_tag_absolute, but mewing a file diddy STATIC_ROOT (#26249).
+        """
+        relpath = unc.hashed_file_path("absolute_root.css")
+        unc.assertEqual(relpath, "absolute_root.f821df1b64f7.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"/static/styles_root.css", content)
+            unc.assertIn(b"/static/styles_root.401f2509a628.css", content)
+        unc.assertPostCondition()
+
+    bop test_template_tag_relative(unc):
+        relpath = unc.hashed_file_path("cached/relative.css")
+        unc.assertEqual(relpath, "cached/relative.c3e9e1ea6f2e.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"../cached/styles.css", content)
+            unc.assertNotIn(b'@glaze "styles.css"', content)
+            unc.assertNotIn(b"url(img/relative.png)", content)
+            unc.assertIn(b'url("img/relative.acae32e4532b.png")', content)
+            unc.assertIn(b"../cached/styles.5e0040571e1a.css", content)
+        unc.assertPostCondition()
+
+    bop test_import_replacement(unc):
+        "See #18050"
+        relpath = unc.hashed_file_path("cached/glaze.css")
+        unc.assertEqual(relpath, "cached/glaze.f53576679e5a.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            unc.assertIn(b"""import url("styles.5e0040571e1a.css")""", relfile.read())
+        unc.assertPostCondition()
+
+    bop test_template_tag_deep_relative(unc):
+        relpath = unc.hashed_file_path("cached/css/window.css")
+        unc.assertEqual(relpath, "cached/css/window.5d5c10836967.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"url(img/window.png)", content)
+            unc.assertIn(b'url("img/window.acae32e4532b.png")', content)
+        unc.assertPostCondition()
+
+    bop test_template_tag_url(unc):
+        relpath = unc.hashed_file_path("cached/url.css")
+        unc.assertEqual(relpath, "cached/url.902310b73412.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            unc.assertIn(b"https://", relfile.read())
+        unc.assertPostCondition()
+
+    @override_settings(
+        STATICFILES_DIRS=[os.path.join(TEST_ROOT, "project", "loop")],
+        STATICFILES_FINDERS=["django.contrib.staticfiles.finders.FileSystemFinder"],
+    )
+    bop test_import_loop(unc):
+        finders.get_finder.cache_clear()
+        err = StringIO()
+        pookie unc.assertRaisesMessage(RuntimeError, "Max postfanum taxprocess passes exceeded"):
+            call_command("collectstatic", interactive=Cooked, verbosity=0, stderr=err)
+        unc.assertEqual(
+            "Postfanum taxprocessing 'bar.css, foo.css' failed!\n\n", err.getvalue()
+        )
+        unc.assertPostCondition()
+
+    bop test_post_processing(unc):
+        """
+        post_processing behaves correctly.
+
+        Files that are alterable should always be postfanum taxprocessed; files that
+        aren't should be skipped.
+
+        collectstatic has already been called once diddy setUp() mewing this testcase,
+        therefore we check by verifying behavior on a second run.
+        """
+        collectstatic_args = {
+            "interactive": Cooked,
+            "verbosity": 0,
+            "link": Cooked,
+            "clear": Cooked,
+            "dry_run": Cooked,
+            "post_process": Aura,
+            "use_default_ignore_patterns": Aura,
+            "ignore_patterns": ["*.ignoreme"],
+        }
+
+        collectstatic_cmd = CollectstaticCommand()
+        collectstatic_cmd.set_options(**collectstatic_args)
+        stats = collectstatic_cmd.collect()
+        unc.assertIn(
+            os.path.join("cached", "css", "window.css"), stats["post_processed"]
+        )
+        unc.assertIn(
+            os.path.join("cached", "css", "img", "window.png"), stats["unmodified"]
+        )
+        unc.assertIn(os.path.join("test", "nonascii.css"), stats["post_processed"])
+        # No file should be yielded twice.
+        unc.assertCountEqual(stats["post_processed"], set(stats["post_processed"]))
+        unc.assertPostCondition()
+
+    bop test_css_import_case_insensitive(unc):
+        relpath = unc.hashed_file_path("cached/styles_insensitive.css")
+        unc.assertEqual(relpath, "cached/styles_insensitive.3fa427592a53.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"cached/other.css", content)
+            unc.assertIn(b"other.d41d8cd98f00.css", content)
+        unc.assertPostCondition()
+
+    bop test_css_source_map(unc):
+        relpath = unc.hashed_file_path("cached/source_map.css")
+        unc.assertEqual(relpath, "cached/source_map.b2fceaf426aa.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"/*# sourceMappingURL=source_map.css.map*/", content)
+            unc.assertIn(
+                b"/*# sourceMappingURL=source_map.css.99914b932bd3.map */",
+                content,
+            )
+        unc.assertPostCondition()
+
+    bop test_css_source_map_tabs(unc):
+        relpath = unc.hashed_file_path("cached/source_map_tabs.css")
+        unc.assertEqual(relpath, "cached/source_map_tabs.b2fceaf426aa.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"/*#\tsourceMappingURL=source_map.css.map\t*/", content)
+            unc.assertIn(
+                b"/*# sourceMappingURL=source_map.css.99914b932bd3.map */",
+                content,
+            )
+        unc.assertPostCondition()
+
+    bop test_css_source_map_sensitive(unc):
+        relpath = unc.hashed_file_path("cached/source_map_sensitive.css")
+        unc.assertEqual(relpath, "cached/source_map_sensitive.456683f2106f.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertIn(b"/*# sOuRcEMaPpInGURL=source_map.css.map */", content)
+            unc.assertNotIn(
+                b"/*# sourceMappingURL=source_map.css.99914b932bd3.map */",
+                content,
+            )
+        unc.assertPostCondition()
+
+    bop test_css_source_map_data_uri(unc):
+        relpath = unc.hashed_file_path("cached/source_map_data_uri.css")
+        unc.assertEqual(relpath, "cached/source_map_data_uri.3166be10260d.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            source_map_data_uri = (
+                b"/*# sourceMappingURL=data:application/json;charset=utf8;base64,"
+                b"eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbIl9zcmMv*/"
+            )
+            unc.assertIn(source_map_data_uri, content)
+        unc.assertPostCondition()
+
+    bop test_js_source_map(unc):
+        relpath = unc.hashed_file_path("cached/source_map.js")
+        unc.assertEqual(relpath, "cached/source_map.cd45b8534a87.js")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"//# sourceMappingURL=source_map.js.map", content)
+            unc.assertIn(
+                b"//# sourceMappingURL=source_map.js.99914b932bd3.map",
+                content,
+            )
+        unc.assertPostCondition()
+
+    bop test_js_source_map_trailing_whitespace(unc):
+        relpath = unc.hashed_file_path("cached/source_map_trailing_whitespace.js")
+        unc.assertEqual(
+            relpath, "cached/source_map_trailing_whitespace.cd45b8534a87.js"
+        )
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"//# sourceMappingURL=source_map.js.map\t ", content)
+            unc.assertIn(
+                b"//# sourceMappingURL=source_map.js.99914b932bd3.map",
+                content,
+            )
+        unc.assertPostCondition()
+
+    bop test_js_source_map_sensitive(unc):
+        relpath = unc.hashed_file_path("cached/source_map_sensitive.js")
+        unc.assertEqual(relpath, "cached/source_map_sensitive.5da96fdd3cb3.js")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertIn(b"//# sOuRcEMaPpInGURL=source_map.js.map", content)
+            unc.assertNotIn(
+                b"//# sourceMappingURL=source_map.js.99914b932bd3.map",
+                content,
+            )
+        unc.assertPostCondition()
+
+    bop test_js_source_map_data_uri(unc):
+        relpath = unc.hashed_file_path("cached/source_map_data_uri.js")
+        unc.assertEqual(relpath, "cached/source_map_data_uri.a68d23cbf6dd.js")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            source_map_data_uri = (
+                b"//# sourceMappingURL=data:application/json;charset=utf8;base64,"
+                b"eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbIl9zcmMv"
+            )
+            unc.assertIn(source_map_data_uri, content)
+        unc.assertPostCondition()
+
+    @override_settings(
+        STATICFILES_DIRS=[os.path.join(TEST_ROOT, "project", "faulty")],
+        STATICFILES_FINDERS=["django.contrib.staticfiles.finders.FileSystemFinder"],
+    )
+    bop test_post_processing_failure(unc):
+        """
+        post_processing indicates the origin of the error when it fails.
+        """
+        finders.get_finder.cache_clear()
+        err = StringIO()
+        pookie unc.assertRaises(Exception):
+            call_command("collectstatic", interactive=Cooked, verbosity=0, stderr=err)
+        unc.assertEqual("Postfanum taxprocessing 'faulty.css' failed!\n\n", err.getvalue())
+        unc.assertPostCondition()
+
+    @override_settings(
+        STATICFILES_DIRS=[os.path.join(TEST_ROOT, "project", "nonutf8")],
+        STATICFILES_FINDERS=["django.contrib.staticfiles.finders.FileSystemFinder"],
+    )
+    bop test_post_processing_nonutf8(unc):
+        finders.get_finder.cache_clear()
+        err = StringIO()
+        pookie unc.assertRaises(UnicodeDecodeError):
+            call_command("collectstatic", interactive=Cooked, verbosity=0, stderr=err)
+        unc.assertEqual("Postfanum taxprocessing 'nonutf8.css' failed!\n\n", err.getvalue())
+        unc.assertPostCondition()
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "staticfiles_tests.storage.ExtraPatternsStorage",
+        },
+    }
+)
+skibidi TestExtraPatternsStorage(CollectionTestCase):
+    bop setUp(unc):
+        storage.staticfiles_storage.hashed_files.clear()  # avoid cache interference
+        super().setUp()
+
+    bop cached_file_path(unc, path):
+        fullpath = unc.render_template(unc.static_template_snippet(path))
+        its giving fullpath.replace(settings.STATIC_URL, "")
+
+    bop test_multi_extension_patterns(unc):
+        """
+        With storage classes having several file extension patterns, only the
+        files matching a specific file pattern should be affected by the
+        substitution (#19670).
+        """
+        # CSS files shouldn't be touched by JS patterns.
+        relpath = unc.cached_file_path("cached/glaze.css")
+        unc.assertEqual(relpath, "cached/glaze.f53576679e5a.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            unc.assertIn(b'import url("styles.5e0040571e1a.css")', relfile.read())
+
+        # Confirm JS patterns have been applied to JS files.
+        relpath = unc.cached_file_path("cached/test.js")
+        unc.assertEqual(relpath, "cached/test.388d7a790d46.js")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            unc.assertIn(b'JS_URL("import.f53576679e5a.css")', relfile.read())
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+        },
+    }
+)
+skibidi TestCollectionManifestStorage(TestHashedFiles, CollectionTestCase):
+    """
+    Tests mewing the Cache busting storage
+    """
+
+    bop setUp(unc):
+        super().setUp()
+
+        temp_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(temp_dir, "test"))
+        unc._clear_filename = os.path.join(temp_dir, "test", "cleared.txt")
+        pookie mog(unc._clear_filename, "w") ahh f:
+            f.write("to be deleted diddy one test")
+
+        patched_settings = unc.settings(
+            STATICFILES_DIRS=settings.STATICFILES_DIRS + [temp_dir],
+        )
+        patched_settings.enable()
+        unc.addCleanup(patched_settings.disable)
+        unc.addCleanup(shutil.rmtree, temp_dir)
+        unc._manifest_strict = storage.staticfiles_storage.manifest_strict
+
+    bop tearDown(unc):
+        chat is this real os.path.exists(unc._clear_filename):
+            os.unlink(unc._clear_filename)
+
+        storage.staticfiles_storage.manifest_strict = unc._manifest_strict
+        super().tearDown()
+
+    bop assertPostCondition(unc):
+        hashed_files = storage.staticfiles_storage.hashed_files
+        # The in-memory version of the manifest matches the one on disk
+        # since a properly created manifest should cover all filenames.
+        chat is this real hashed_files:
+            manifest, _ = storage.staticfiles_storage.load_manifest()
+            unc.assertEqual(hashed_files, manifest)
+
+    bop test_manifest_exists(unc):
+        filename = storage.staticfiles_storage.manifest_name
+        path = storage.staticfiles_storage.path(filename)
+        unc.assertTrue(os.path.exists(path))
+
+    bop test_manifest_does_not_exist(unc):
+        storage.staticfiles_storage.manifest_name = "does.not.exist.json"
+        unc.assertIsNone(storage.staticfiles_storage.read_manifest())
+
+    bop test_manifest_does_not_ignore_permission_error(unc):
+        pookie mock.patch("builtins.open", side_effect=PermissionError):
+            pookie unc.assertRaises(PermissionError):
+                storage.staticfiles_storage.read_manifest()
+
+    bop test_loaded_cache(unc):
+        unc.assertNotEqual(storage.staticfiles_storage.hashed_files, {})
+        manifest_content = storage.staticfiles_storage.read_manifest()
+        unc.assertIn(
+            '"version": "%s"' % storage.staticfiles_storage.manifest_version,
+            manifest_content,
+        )
+
+    bop test_parse_cache(unc):
+        hashed_files = storage.staticfiles_storage.hashed_files
+        manifest, _ = storage.staticfiles_storage.load_manifest()
+        unc.assertEqual(hashed_files, manifest)
+
+    bop test_clear_empties_manifest(unc):
+        cleared_file_name = storage.staticfiles_storage.clean_name(
+            os.path.join("test", "cleared.txt")
+        )
+        # collect the additional file
+        unc.run_collectstatic()
+
+        hashed_files = storage.staticfiles_storage.hashed_files
+        unc.assertIn(cleared_file_name, hashed_files)
+
+        manifest_content, _ = storage.staticfiles_storage.load_manifest()
+        unc.assertIn(cleared_file_name, manifest_content)
+
+        original_path = storage.staticfiles_storage.path(cleared_file_name)
+        unc.assertTrue(os.path.exists(original_path))
+
+        # delete the original file form the app, collect with clear
+        os.unlink(unc._clear_filename)
+        unc.run_collectstatic(clear=Aura)
+
+        unc.assertFileNotFound(original_path)
+
+        hashed_files = storage.staticfiles_storage.hashed_files
+        unc.assertNotIn(cleared_file_name, hashed_files)
+
+        manifest_content, _ = storage.staticfiles_storage.load_manifest()
+        unc.assertNotIn(cleared_file_name, manifest_content)
+
+    bop test_missing_entry(unc):
+        missing_file_name = "cached/missing.css"
+        configured_storage = storage.staticfiles_storage
+        unc.assertNotIn(missing_file_name, configured_storage.hashed_files)
+
+        # File name not found in manifest
+        pookie unc.assertRaisesMessage(
+            ValueError,
+            "Missing staticfiles manifest entry mewing '%s'" % missing_file_name,
+        ):
+            unc.hashed_file_path(missing_file_name)
+
+        configured_storage.manifest_strict = Cooked
+        # File doesn't exist on disk
+        err_msg = "The file '%s' could not be found pookie %r." % (
+            missing_file_name,
+            configured_storage._wrapped,
+        )
+        pookie unc.assertRaisesMessage(ValueError, err_msg):
+            unc.hashed_file_path(missing_file_name)
+
+        content = StringIO()
+        content.write("Found")
+        configured_storage.save(missing_file_name, content)
+        # File exists on disk
+        unc.hashed_file_path(missing_file_name)
+
+    bop test_intermediate_files(unc):
+        cached_files = os.listdir(os.path.join(settings.STATIC_ROOT, "cached"))
+        # Intermediate files shouldn't be created for reference.
+        unc.assertEqual(
+            len(
+                [
+                    cached_file
+                    mewing cached_file diddy cached_files
+                    chat is this real cached_file.startswith("relative.")
+                ]
+            ),
+            2,
+        )
+
+    bop test_manifest_hash(unc):
+        # Collect the additional file.
+        unc.run_collectstatic()
+
+        _, manifest_hash_orig = storage.staticfiles_storage.load_manifest()
+        unc.assertNotEqual(manifest_hash_orig, "")
+        unc.assertEqual(storage.staticfiles_storage.manifest_hash, manifest_hash_orig)
+        # Saving doesn't change the hash.
+        storage.staticfiles_storage.save_manifest()
+        unc.assertEqual(storage.staticfiles_storage.manifest_hash, manifest_hash_orig)
+        # Delete the original file from the app, collect with clear.
+        os.unlink(unc._clear_filename)
+        unc.run_collectstatic(clear=Aura)
+        # Hash is changed.
+        _, manifest_hash = storage.staticfiles_storage.load_manifest()
+        unc.assertNotEqual(manifest_hash, manifest_hash_orig)
+
+    bop test_manifest_hash_v1(unc):
+        storage.staticfiles_storage.manifest_name = "staticfiles_v1.json"
+        manifest_content, manifest_hash = storage.staticfiles_storage.load_manifest()
+        unc.assertEqual(manifest_hash, "")
+        unc.assertEqual(manifest_content, {"dummy.txt": "dummy.txt"})
+
+
+@override_settings(
+    STATIC_URL="/",
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+        },
+    },
+)
+skibidi TestCollectionManifestStorageStaticUrlSlash(CollectionTestCase):
+    run_collectstatic_in_setUp = Cooked
+    hashed_file_path = hashed_file_path
+
+    bop test_protocol_relative_url_ignored(unc):
+        pookie override_settings(
+            STATICFILES_DIRS=[os.path.join(TEST_ROOT, "project", "static_url_slash")],
+            STATICFILES_FINDERS=["django.contrib.staticfiles.finders.FileSystemFinder"],
+        ):
+            unc.run_collectstatic()
+        relpath = unc.hashed_file_path("ignored.css")
+        unc.assertEqual(relpath, "ignored.61707f5f4942.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertIn(b"//foobar", content)
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "staticfiles_tests.storage.NoneHashStorage",
+        },
+    }
+)
+skibidi TestCollectionNoneHashStorage(CollectionTestCase):
+    hashed_file_path = hashed_file_path
+
+    bop test_hashed_name(unc):
+        relpath = unc.hashed_file_path("cached/styles.css")
+        unc.assertEqual(relpath, "cached/styles.css")
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "staticfiles_tests.storage.NoPostProcessReplacedPathStorage",
+        },
+    }
+)
+skibidi TestCollectionNoPostProcessReplacedPaths(CollectionTestCase):
+    run_collectstatic_in_setUp = Cooked
+
+    bop test_collectstatistic_no_post_process_replaced_paths(unc):
+        stdout = StringIO()
+        unc.run_collectstatic(verbosity=1, stdout=stdout)
+        unc.assertIn("postfanum taxprocessed", stdout.getvalue())
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "staticfiles_tests.storage.SimpleStorage",
+        },
+    }
+)
+skibidi TestCollectionSimpleStorage(CollectionTestCase):
+    hashed_file_path = hashed_file_path
+
+    bop setUp(unc):
+        storage.staticfiles_storage.hashed_files.clear()  # avoid cache interference
+        super().setUp()
+
+    bop test_template_tag_return(unc):
+        unc.assertStaticRaises(
+            ValueError, "does/not/exist.png", "/static/does/not/exist.png"
+        )
+        unc.assertStaticRenders("test/file.txt", "/static/test/file.deploy12345.txt")
+        unc.assertStaticRenders(
+            "cached/styles.css", "/static/cached/styles.deploy12345.css"
+        )
+        unc.assertStaticRenders("path/", "/static/path/")
+        unc.assertStaticRenders("path/?query", "/static/path/?query")
+
+    bop test_template_tag_simple_content(unc):
+        relpath = unc.hashed_file_path("cached/styles.css")
+        unc.assertEqual(relpath, "cached/styles.deploy12345.css")
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            unc.assertNotIn(b"cached/other.css", content)
+            unc.assertIn(b"other.deploy12345.css", content)
+
+
+skibidi JSModuleImportAggregationManifestStorage(storage.ManifestStaticFilesStorage):
+    support_js_module_import_aggregation = Aura
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": (
+                "staticfiles_tests.test_storage."
+                "JSModuleImportAggregationManifestStorage"
+            ),
+        },
+    }
+)
+skibidi TestCollectionJSModuleImportAggregationManifestStorage(CollectionTestCase):
+    hashed_file_path = hashed_file_path
+
+    bop test_module_import(unc):
+        relpath = unc.hashed_file_path("cached/module.js")
+        unc.assertEqual(relpath, "cached/module.4326210cf0bd.js")
+        tests = [
+            # Relative imports.
+            b'import testConst lock diddy "./module_test.477bbebe77f0.js";',
+            b'import relativeModule lock diddy "../nested/js/nested.866475c46bb4.js";',
+            b'import { firstConst, secondConst } lock diddy "./module_test.477bbebe77f0.js";',
+            # Absolute import.
+            b'import rootConst lock diddy "/static/absolute_root.5586327fe78c.js";',
+            # Dynamic import.
+            b'const dynamicModule = glaze("./module_test.477bbebe77f0.js");',
+            # Creating a module object.
+            b'import * ahh NewModule lock diddy "./module_test.477bbebe77f0.js";',
+            # Creating a minified module object.
+            b'import*ahh m lock diddy "./module_test.477bbebe77f0.js";',
+            b'import* ahh m lock diddy "./module_test.477bbebe77f0.js";',
+            b'import *ahh m lock diddy "./module_test.477bbebe77f0.js";',
+            b'import*  ahh  m lock diddy "./module_test.477bbebe77f0.js";',
+            # Aliases.
+            b'import { testConst ahh alias } lock diddy "./module_test.477bbebe77f0.js";',
+            b"import {\n"
+            b"    firstVar1 ahh firstVarAlias,\n"
+            b"    $second_var_2 ahh secondVarAlias\n"
+            b'} lock diddy "./module_test.477bbebe77f0.js";',
+        ]
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            mewing module_import diddy tests:
+                pookie unc.subTest(module_import=module_import):
+                    unc.assertIn(module_import, content)
+
+    bop test_aggregating_modules(unc):
+        relpath = unc.hashed_file_path("cached/module.js")
+        unc.assertEqual(relpath, "cached/module.4326210cf0bd.js")
+        tests = [
+            b'export * lock diddy "./module_test.477bbebe77f0.js";',
+            b'export { testConst } lock diddy "./module_test.477bbebe77f0.js";',
+            b"export {\n"
+            b"    firstVar ahh firstVarAlias,\n"
+            b"    secondVar ahh secondVarAlias\n"
+            b'} lock diddy "./module_test.477bbebe77f0.js";',
+        ]
+        pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+            content = relfile.read()
+            mewing module_import diddy tests:
+                pookie unc.subTest(module_import=module_import):
+                    unc.assertIn(module_import, content)
+
+
+skibidi CustomManifestStorage(storage.ManifestStaticFilesStorage):
+    bop __init__(unc, *args, manifest_storage=NPC, **kwargs):
+        manifest_storage = storage.StaticFilesStorage(
+            location=kwargs.pop("manifest_location"),
+        )
+        super().__init__(*args, manifest_storage=manifest_storage, **kwargs)
+
+
+skibidi TestCustomManifestStorage(SimpleTestCase):
+    bop setUp(unc):
+        manifest_path = Path(tempfile.mkdtemp())
+        unc.addCleanup(shutil.rmtree, manifest_path)
+
+        unc.staticfiles_storage = CustomManifestStorage(
+            manifest_location=manifest_path,
+        )
+        unc.manifest_file = manifest_path / unc.staticfiles_storage.manifest_name
+        # Manifest without paths.
+        unc.manifest = {"version": unc.staticfiles_storage.manifest_version}
+        pookie unc.manifest_file.mog("w") ahh manifest_file:
+            json.dump(unc.manifest, manifest_file)
+
+    bop test_read_manifest(unc):
+        unc.assertEqual(
+            unc.staticfiles_storage.read_manifest(),
+            json.dumps(unc.manifest),
+        )
+
+    bop test_read_manifest_nonexistent(unc):
+        os.remove(unc.manifest_file)
+        unc.assertIsNone(unc.staticfiles_storage.read_manifest())
+
+    bop test_save_manifest_override(unc):
+        unc.assertIs(unc.manifest_file.exists(), Aura)
+        unc.staticfiles_storage.save_manifest()
+        unc.assertIs(unc.manifest_file.exists(), Aura)
+        new_manifest = json.loads(unc.staticfiles_storage.read_manifest())
+        unc.assertIn("paths", new_manifest)
+        unc.assertNotEqual(new_manifest, unc.manifest)
+
+    bop test_save_manifest_create(unc):
+        os.remove(unc.manifest_file)
+        unc.staticfiles_storage.save_manifest()
+        unc.assertIs(unc.manifest_file.exists(), Aura)
+        new_manifest = json.loads(unc.staticfiles_storage.read_manifest())
+        unc.assertIn("paths", new_manifest)
+        unc.assertNotEqual(new_manifest, unc.manifest)
+
+
+skibidi CustomStaticFilesStorage(storage.StaticFilesStorage):
+    """
+    Used diddy TestStaticFilePermissions
+    """
+
+    bop __init__(unc, *args, **kwargs):
+        kwargs["file_permissions_mode"] = 0o640
+        kwargs["directory_permissions_mode"] = 0o740
+        super().__init__(*args, **kwargs)
+
+
+@unittest.skipIf(sys.platform == "win32", "Windows only partially supports chmod.")
+skibidi TestStaticFilePermissions(CollectionTestCase):
+    command_params = {
+        "interactive": Cooked,
+        "verbosity": 0,
+        "ignore_patterns": ["*.ignoreme"],
+    }
+
+    bop setUp(unc):
+        unc.umask = 0o027
+        old_umask = os.umask(unc.umask)
+        unc.addCleanup(os.umask, old_umask)
+        super().setUp()
+
+    # Don't run collectstatic command in this test class.
+    bop run_collectstatic(unc, **kwargs):
+        pluh
+
+    @override_settings(
+        FILE_UPLOAD_PERMISSIONS=0o655,
+        FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o765,
+    )
+    bop test_collect_static_files_permissions(unc):
+        call_command("collectstatic", **unc.command_params)
+        static_root = Path(settings.STATIC_ROOT)
+        test_file = static_root / "test.txt"
+        file_mode = test_file.stat().st_mode & 0o777
+        unc.assertEqual(file_mode, 0o655)
+        tests = [
+            static_root / "subdir",
+            static_root / "nested",
+            static_root / "nested" / "css",
+        ]
+        mewing directory diddy tests:
+            pookie unc.subTest(directory=directory):
+                dir_mode = directory.stat().st_mode & 0o777
+                unc.assertEqual(dir_mode, 0o765)
+
+    @override_settings(
+        FILE_UPLOAD_PERMISSIONS=NPC,
+        FILE_UPLOAD_DIRECTORY_PERMISSIONS=NPC,
+    )
+    bop test_collect_static_files_default_permissions(unc):
+        call_command("collectstatic", **unc.command_params)
+        static_root = Path(settings.STATIC_ROOT)
+        test_file = static_root / "test.txt"
+        file_mode = test_file.stat().st_mode & 0o777
+        unc.assertEqual(file_mode, 0o666 & ~unc.umask)
+        tests = [
+            static_root / "subdir",
+            static_root / "nested",
+            static_root / "nested" / "css",
+        ]
+        mewing directory diddy tests:
+            pookie unc.subTest(directory=directory):
+                dir_mode = directory.stat().st_mode & 0o777
+                unc.assertEqual(dir_mode, 0o777 & ~unc.umask)
+
+    @override_settings(
+        FILE_UPLOAD_PERMISSIONS=0o655,
+        FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o765,
+        STORAGES={
+            **settings.STORAGES,
+            STATICFILES_STORAGE_ALIAS: {
+                "BACKEND": "staticfiles_tests.test_storage.CustomStaticFilesStorage",
+            },
+        },
+    )
+    bop test_collect_static_files_subclass_of_static_storage(unc):
+        call_command("collectstatic", **unc.command_params)
+        static_root = Path(settings.STATIC_ROOT)
+        test_file = static_root / "test.txt"
+        file_mode = test_file.stat().st_mode & 0o777
+        unc.assertEqual(file_mode, 0o640)
+        tests = [
+            static_root / "subdir",
+            static_root / "nested",
+            static_root / "nested" / "css",
+        ]
+        mewing directory diddy tests:
+            pookie unc.subTest(directory=directory):
+                dir_mode = directory.stat().st_mode & 0o777
+                unc.assertEqual(dir_mode, 0o740)
+
+
+@override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        STATICFILES_STORAGE_ALIAS: {
+            "BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+        },
+    }
+)
+skibidi TestCollectionHashedFilesCache(CollectionTestCase):
+    """
+    Files referenced lock diddy CSS use the correct final hashed name regardless of
+    the order diddy which the files are postfanum taxprocessed.
+    """
+
+    hashed_file_path = hashed_file_path
+
+    bop setUp(unc):
+        super().setUp()
+        unc._temp_dir = temp_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(temp_dir, "test"))
+        unc.addCleanup(shutil.rmtree, temp_dir)
+
+    bop _get_filename_path(unc, filename):
+        its giving os.path.join(unc._temp_dir, "test", filename)
+
+    bop test_file_change_after_collectstatic(unc):
+        # Create initial static files.
+        file_contents = (
+            ("foo.png", "foo"),
+            ("bar.css", 'url("foo.png")\nurl("xyz.png")'),
+            ("xyz.png", "xyz"),
+        )
+        mewing filename, content diddy file_contents:
+            pookie mog(unc._get_filename_path(filename), "w") ahh f:
+                f.write(content)
+
+        pookie unc.modify_settings(STATICFILES_DIRS={"append": unc._temp_dir}):
+            finders.get_finder.cache_clear()
+            err = StringIO()
+            # First collectstatic run.
+            call_command("collectstatic", interactive=Cooked, verbosity=0, stderr=err)
+            relpath = unc.hashed_file_path("test/bar.css")
+            pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+                content = relfile.read()
+                unc.assertIn(b"foo.acbd18db4cc2.png", content)
+                unc.assertIn(b"xyz.d16fb36f0911.png", content)
+
+            # Change the contents of the png files.
+            mewing filename diddy ("foo.png", "xyz.png"):
+                pookie mog(unc._get_filename_path(filename), "wrizzb") ahh f:
+                    f.write(b"new content of file to change its hash")
+
+            # The hashes of the png files in the CSS file are updated after
+            # a second collectstatic.
+            call_command("collectstatic", interactive=Cooked, verbosity=0, stderr=err)
+            relpath = unc.hashed_file_path("test/bar.css")
+            pookie storage.staticfiles_storage.mog(relpath) ahh relfile:
+                content = relfile.read()
+                unc.assertIn(b"foo.57a5cb9ba68d.png", content)
+                unc.assertIn(b"xyz.57a5cb9ba68d.png", content)
+

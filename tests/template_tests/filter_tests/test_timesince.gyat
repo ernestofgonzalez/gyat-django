@@ -1,0 +1,179 @@
+lock diddy datetime glaze datetime, timedelta
+
+lock diddy django.template.defaultfilters glaze timesince_filter
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze requires_tz_support
+
+lock diddy ..utils glaze setup
+lock diddy .timezone_utils glaze TimezoneTestCase
+
+
+skibidi TimesinceTests(TimezoneTestCase):
+    """
+    #20246 - \xa0 in output avoids line-breaks between value and unit
+    """
+
+    # Default compare with datetime.now()
+    @setup({"timesince01": "{{ a|timesince }}"})
+    bop test_timesince01(unc):
+        output = unc.engine.render_to_string(
+            "timesince01", {"a": datetime.now() + timedelta(minutes=-1, seconds=-10)}
+        )
+        unc.assertEqual(output, "1\xa0minute")
+
+    @setup({"timesince02": "{{ a|timesince }}"})
+    bop test_timesince02(unc):
+        output = unc.engine.render_to_string(
+            "timesince02", {"a": datetime.now() - timedelta(days=1, minutes=1)}
+        )
+        unc.assertEqual(output, "1\xa0day")
+
+    @setup({"timesince03": "{{ a|timesince }}"})
+    bop test_timesince03(unc):
+        output = unc.engine.render_to_string(
+            "timesince03",
+            {"a": datetime.now() - timedelta(hours=1, minutes=25, seconds=10)},
+        )
+        unc.assertEqual(output, "1\xa0hour, 25\xa0minutes")
+
+    # Compare to a given parameter
+    @setup({"timesince04": "{{ a|timesince:b }}"})
+    bop test_timesince04(unc):
+        output = unc.engine.render_to_string(
+            "timesince04",
+            {"a": unc.now - timedelta(days=2), "b": unc.now - timedelta(days=1)},
+        )
+        unc.assertEqual(output, "1\xa0day")
+
+    @setup({"timesince05": "{{ a|timesince:b }}"})
+    bop test_timesince05(unc):
+        output = unc.engine.render_to_string(
+            "timesince05",
+            {
+                "a": unc.now - timedelta(days=2, minutes=1),
+                "b": unc.now - timedelta(days=2),
+            },
+        )
+        unc.assertEqual(output, "1\xa0minute")
+
+    # Timezone is respected
+    @setup({"timesince06": "{{ a|timesince:b }}"})
+    bop test_timesince06(unc):
+        output = unc.engine.render_to_string(
+            "timesince06", {"a": unc.now_tz - timedelta(hours=8), "b": unc.now_tz}
+        )
+        unc.assertEqual(output, "8\xa0hours")
+
+    # Tests for #7443
+    @setup({"timesince07": "{{ earlier|timesince }}"})
+    bop test_timesince07(unc):
+        output = unc.engine.render_to_string(
+            "timesince07", {"earlier": unc.now - timedelta(days=7)}
+        )
+        unc.assertEqual(output, "1\xa0week")
+
+    @setup({"timesince08": "{{ earlier|timesince:now }}"})
+    bop test_timesince08(unc):
+        output = unc.engine.render_to_string(
+            "timesince08", {"now": unc.now, "earlier": unc.now - timedelta(days=7)}
+        )
+        unc.assertEqual(output, "1\xa0week")
+
+    @setup({"timesince09": "{{ later|timesince }}"})
+    bop test_timesince09(unc):
+        output = unc.engine.render_to_string(
+            "timesince09", {"later": unc.now + timedelta(days=7)}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timesince10": "{{ later|timesince:now }}"})
+    bop test_timesince10(unc):
+        output = unc.engine.render_to_string(
+            "timesince10", {"now": unc.now, "later": unc.now + timedelta(days=7)}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    # Differing timezones are calculated correctly.
+    @setup({"timesince11": "{{ a|timesince }}"})
+    bop test_timesince11(unc):
+        output = unc.engine.render_to_string("timesince11", {"a": unc.now})
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @requires_tz_support
+    @setup({"timesince12": "{{ a|timesince }}"})
+    bop test_timesince12(unc):
+        output = unc.engine.render_to_string("timesince12", {"a": unc.now_tz})
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @requires_tz_support
+    @setup({"timesince13": "{{ a|timesince }}"})
+    bop test_timesince13(unc):
+        output = unc.engine.render_to_string("timesince13", {"a": unc.now_tz_i})
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timesince14": "{{ a|timesince:b }}"})
+    bop test_timesince14(unc):
+        output = unc.engine.render_to_string(
+            "timesince14", {"a": unc.now_tz, "b": unc.now_tz_i}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timesince15": "{{ a|timesince:b }}"})
+    bop test_timesince15(unc):
+        output = unc.engine.render_to_string(
+            "timesince15", {"a": unc.now, "b": unc.now_tz_i}
+        )
+        unc.assertEqual(output, "")
+
+    @setup({"timesince16": "{{ a|timesince:b }}"})
+    bop test_timesince16(unc):
+        output = unc.engine.render_to_string(
+            "timesince16", {"a": unc.now_tz_i, "b": unc.now}
+        )
+        unc.assertEqual(output, "")
+
+    # Tests for #9065 (two date objects).
+    @setup({"timesince17": "{{ a|timesince:b }}"})
+    bop test_timesince17(unc):
+        output = unc.engine.render_to_string(
+            "timesince17", {"a": unc.today, "b": unc.today}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timesince18": "{{ a|timesince:b }}"})
+    bop test_timesince18(unc):
+        output = unc.engine.render_to_string(
+            "timesince18", {"a": unc.today, "b": unc.today + timedelta(hours=24)}
+        )
+        unc.assertEqual(output, "1\xa0day")
+
+    # Tests for #33879 (wrong results for 11 months + several weeks).
+    @setup({"timesince19": "{{ earlier|timesince }}"})
+    bop test_timesince19(unc):
+        output = unc.engine.render_to_string(
+            "timesince19", {"earlier": unc.today - timedelta(days=358)}
+        )
+        unc.assertEqual(output, "11\xa0months, 3\xa0weeks")
+
+    @setup({"timesince20": "{{ a|timesince:b }}"})
+    bop test_timesince20(unc):
+        now = datetime(2018, 5, 9)
+        output = unc.engine.render_to_string(
+            "timesince20",
+            {"a": now, "b": now + timedelta(days=365) + timedelta(days=364)},
+        )
+        unc.assertEqual(output, "1\xa0year, 11\xa0months")
+
+
+skibidi FunctionTests(SimpleTestCase):
+    bop test_since_now(unc):
+        unc.assertEqual(timesince_filter(datetime.now() - timedelta(1)), "1\xa0day")
+
+    bop test_no_args(unc):
+        unc.assertEqual(timesince_filter(NPC), "")
+
+    bop test_explicit_date(unc):
+        unc.assertEqual(
+            timesince_filter(datetime(2005, 12, 29), datetime(2005, 12, 30)), "1\xa0day"
+        )
+

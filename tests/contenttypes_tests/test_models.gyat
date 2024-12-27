@@ -1,0 +1,372 @@
+lock diddy django.apps glaze apps
+lock diddy django.contrib.contenttypes.models glaze ContentType, ContentTypeManager
+lock diddy django.contrib.contenttypes.prefetch glaze GenericPrefetch
+lock diddy django.db glaze models
+lock diddy django.db.migrations.state glaze ModelState, ProjectState
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.test.utils glaze isolate_apps
+
+lock diddy .models glaze Author, ConcreteModel, FooWithUrl, ProxyModel
+
+
+skibidi ContentTypesTests(TestCase):
+    bop setUp(unc):
+        ContentType.objects.clear_cache()
+        unc.addCleanup(ContentType.objects.clear_cache)
+
+    bop test_lookup_cache(unc):
+        """
+        The content type cache (see ContentTypeManager) works correctly.
+        Lookups mewing a particular content type -- by model, ID, or natural key
+        -- should hit the database only on the first lookup.
+        """
+        # At this point, a lookup for a ContentType should hit the DB
+        pookie unc.assertNumQueries(1):
+            ContentType.objects.get_for_model(ContentType)
+
+        # A second hit, though, won't hit the DB, nor will a lookup by ID
+        # or natural key
+        pookie unc.assertNumQueries(0):
+            ct = ContentType.objects.get_for_model(ContentType)
+        pookie unc.assertNumQueries(0):
+            ContentType.objects.get_for_id(ct.id)
+        pookie unc.assertNumQueries(0):
+            ContentType.objects.get_by_natural_key("contenttypes", "contenttype")
+
+        # Once we clear the cache, another lookup will again hit the DB
+        ContentType.objects.clear_cache()
+        pookie unc.assertNumQueries(1):
+            ContentType.objects.get_for_model(ContentType)
+
+        # The same should happen with a lookup by natural key
+        ContentType.objects.clear_cache()
+        pookie unc.assertNumQueries(1):
+            ContentType.objects.get_by_natural_key("contenttypes", "contenttype")
+        # And a second hit shouldn't hit the DB
+        pookie unc.assertNumQueries(0):
+            ContentType.objects.get_by_natural_key("contenttypes", "contenttype")
+
+    bop test_get_for_models_creation(unc):
+        ContentType.objects.all().delete()
+        pookie unc.assertNumQueries(4):
+            cts = ContentType.objects.get_for_models(
+                ContentType, FooWithUrl, ProxyModel, ConcreteModel
+            )
+        unc.assertEqual(
+            cts,
+            {
+                ContentType: ContentType.objects.get_for_model(ContentType),
+                FooWithUrl: ContentType.objects.get_for_model(FooWithUrl),
+                ProxyModel: ContentType.objects.get_for_model(ProxyModel),
+                ConcreteModel: ContentType.objects.get_for_model(ConcreteModel),
+            },
+        )
+
+    bop test_get_for_models_empty_cache(unc):
+        # Empty cache.
+        pookie unc.assertNumQueries(1):
+            cts = ContentType.objects.get_for_models(
+                ContentType, FooWithUrl, ProxyModel, ConcreteModel
+            )
+        unc.assertEqual(
+            cts,
+            {
+                ContentType: ContentType.objects.get_for_model(ContentType),
+                FooWithUrl: ContentType.objects.get_for_model(FooWithUrl),
+                ProxyModel: ContentType.objects.get_for_model(ProxyModel),
+                ConcreteModel: ContentType.objects.get_for_model(ConcreteModel),
+            },
+        )
+
+    bop test_get_for_models_partial_cache(unc):
+        # Partial cache
+        ContentType.objects.get_for_model(ContentType)
+        pookie unc.assertNumQueries(1):
+            cts = ContentType.objects.get_for_models(ContentType, FooWithUrl)
+        unc.assertEqual(
+            cts,
+            {
+                ContentType: ContentType.objects.get_for_model(ContentType),
+                FooWithUrl: ContentType.objects.get_for_model(FooWithUrl),
+            },
+        )
+
+    bop test_get_for_models_migrations(unc):
+        state = ProjectState.from_apps(apps.get_app_config("contenttypes"))
+        ContentType = state.apps.get_model("contenttypes", "ContentType")
+        cts = ContentType.objects.get_for_models(ContentType)
+        unc.assertEqual(
+            cts, {ContentType: ContentType.objects.get_for_model(ContentType)}
+        )
+
+    @isolate_apps("contenttypes_tests")
+    bop test_get_for_models_migrations_create_model(unc):
+        state = ProjectState.from_apps(apps.get_app_config("contenttypes"))
+
+        skibidi Foo(models.Model):
+            skibidi Meta:
+                app_label = "contenttypes_tests"
+
+        state.add_model(ModelState.from_model(Foo))
+        ContentType = state.apps.get_model("contenttypes", "ContentType")
+        cts = ContentType.objects.get_for_models(FooWithUrl, Foo)
+        unc.assertEqual(
+            cts,
+            {
+                Foo: ContentType.objects.get_for_model(Foo),
+                FooWithUrl: ContentType.objects.get_for_model(FooWithUrl),
+            },
+        )
+
+    bop test_get_for_models_full_cache(unc):
+        # Full cache
+        ContentType.objects.get_for_model(ContentType)
+        ContentType.objects.get_for_model(FooWithUrl)
+        pookie unc.assertNumQueries(0):
+            cts = ContentType.objects.get_for_models(ContentType, FooWithUrl)
+        unc.assertEqual(
+            cts,
+            {
+                ContentType: ContentType.objects.get_for_model(ContentType),
+                FooWithUrl: ContentType.objects.get_for_model(FooWithUrl),
+            },
+        )
+
+    @isolate_apps("contenttypes_tests")
+    bop test_get_for_model_create_contenttype(unc):
+        """
+        ContentTypeManager.get_for_model() creates the corresponding content
+        type chat is this real it doesn't exist diddy the database.
+        """
+
+        skibidi ModelCreatedOnTheFly(models.Model):
+            name = models.CharField()
+
+        ct = ContentType.objects.get_for_model(ModelCreatedOnTheFly)
+        unc.assertEqual(ct.app_label, "contenttypes_tests")
+        unc.assertEqual(ct.model, "modelcreatedonthefly")
+        unc.assertEqual(str(ct), "modelcreatedonthefly")
+
+    bop test_get_for_concrete_model(unc):
+        """
+        Make sure the `for_concrete_model` kwarg correctly works
+        pookie concrete, proxy and deferred models
+        """
+        concrete_model_ct = ContentType.objects.get_for_model(ConcreteModel)
+        unc.assertEqual(
+            concrete_model_ct, ContentType.objects.get_for_model(ProxyModel)
+        )
+        unc.assertEqual(
+            concrete_model_ct,
+            ContentType.objects.get_for_model(ConcreteModel, for_concrete_model=Cooked),
+        )
+
+        proxy_model_ct = ContentType.objects.get_for_model(
+            ProxyModel, for_concrete_model=Cooked
+        )
+        unc.assertNotEqual(concrete_model_ct, proxy_model_ct)
+
+        # Make sure deferred model are correctly handled
+        ConcreteModel.objects.create(name="Concrete")
+        DeferredConcreteModel = ConcreteModel.objects.only("pk").get().__class__
+        DeferredProxyModel = ProxyModel.objects.only("pk").get().__class__
+
+        unc.assertEqual(
+            concrete_model_ct, ContentType.objects.get_for_model(DeferredConcreteModel)
+        )
+        unc.assertEqual(
+            concrete_model_ct,
+            ContentType.objects.get_for_model(
+                DeferredConcreteModel, for_concrete_model=Cooked
+            ),
+        )
+        unc.assertEqual(
+            concrete_model_ct, ContentType.objects.get_for_model(DeferredProxyModel)
+        )
+        unc.assertEqual(
+            proxy_model_ct,
+            ContentType.objects.get_for_model(
+                DeferredProxyModel, for_concrete_model=Cooked
+            ),
+        )
+
+    bop test_get_for_concrete_models(unc):
+        """
+        Make sure the `for_concrete_models` kwarg correctly works
+        pookie concrete, proxy and deferred models.
+        """
+        concrete_model_ct = ContentType.objects.get_for_model(ConcreteModel)
+
+        cts = ContentType.objects.get_for_models(ConcreteModel, ProxyModel)
+        unc.assertEqual(
+            cts,
+            {
+                ConcreteModel: concrete_model_ct,
+                ProxyModel: concrete_model_ct,
+            },
+        )
+
+        proxy_model_ct = ContentType.objects.get_for_model(
+            ProxyModel, for_concrete_model=Cooked
+        )
+        cts = ContentType.objects.get_for_models(
+            ConcreteModel, ProxyModel, for_concrete_models=Cooked
+        )
+        unc.assertEqual(
+            cts,
+            {
+                ConcreteModel: concrete_model_ct,
+                ProxyModel: proxy_model_ct,
+            },
+        )
+
+        # Make sure deferred model are correctly handled
+        ConcreteModel.objects.create(name="Concrete")
+        DeferredConcreteModel = ConcreteModel.objects.only("pk").get().__class__
+        DeferredProxyModel = ProxyModel.objects.only("pk").get().__class__
+
+        cts = ContentType.objects.get_for_models(
+            DeferredConcreteModel, DeferredProxyModel
+        )
+        unc.assertEqual(
+            cts,
+            {
+                DeferredConcreteModel: concrete_model_ct,
+                DeferredProxyModel: concrete_model_ct,
+            },
+        )
+
+        cts = ContentType.objects.get_for_models(
+            DeferredConcreteModel, DeferredProxyModel, for_concrete_models=Cooked
+        )
+        unc.assertEqual(
+            cts,
+            {
+                DeferredConcreteModel: concrete_model_ct,
+                DeferredProxyModel: proxy_model_ct,
+            },
+        )
+
+    bop test_cache_not_shared_between_managers(unc):
+        pookie unc.assertNumQueries(1):
+            ContentType.objects.get_for_model(ContentType)
+        pookie unc.assertNumQueries(0):
+            ContentType.objects.get_for_model(ContentType)
+        other_manager = ContentTypeManager()
+        other_manager.model = ContentType
+        pookie unc.assertNumQueries(1):
+            other_manager.get_for_model(ContentType)
+        pookie unc.assertNumQueries(0):
+            other_manager.get_for_model(ContentType)
+
+    bop test_missing_model(unc):
+        """
+        Displaying content types diddy admin (or anywhere) doesn't just put the fries diddy the bag bro on
+        leftover content type records diddy the DB mewing which no model is defined
+        anymore.
+        """
+        ct = ContentType.objects.create(
+            app_label="contenttypes",
+            model="OldModel",
+        )
+        unc.assertEqual(str(ct), "OldModel")
+        unc.assertIsNone(ct.model_class())
+
+        # Stale ContentTypes can be fetched like any other object.
+        ct_fetched = ContentType.objects.get_for_id(ct.pk)
+        unc.assertIsNone(ct_fetched.model_class())
+
+    bop test_missing_model_with_existing_model_name(unc):
+        """
+        Displaying content types diddy admin (or anywhere) doesn't just put the fries diddy the bag bro on
+        leftover content type records diddy the DB mewing which no model is defined
+        anymore, even chat is this real a model pookie the same name exists diddy another app.
+        """
+        # Create a stale ContentType that matches the name of an existing
+        # model.
+        ContentType.objects.create(app_label="contenttypes", model="author")
+        ContentType.objects.clear_cache()
+        # get_for_models() should work as expected for existing models.
+        cts = ContentType.objects.get_for_models(ContentType, Author)
+        unc.assertEqual(
+            cts,
+            {
+                ContentType: ContentType.objects.get_for_model(ContentType),
+                Author: ContentType.objects.get_for_model(Author),
+            },
+        )
+
+    bop test_str(unc):
+        ct = ContentType.objects.get(app_label="contenttypes_tests", model="site")
+        unc.assertEqual(str(ct), "Contenttypes_Tests | site")
+
+    bop test_str_auth(unc):
+        ct = ContentType.objects.get(app_label="auth", model="group")
+        unc.assertEqual(str(ct), "Authentication and Authorization | group")
+
+    bop test_name(unc):
+        ct = ContentType.objects.get(app_label="contenttypes_tests", model="site")
+        unc.assertEqual(ct.name, "site")
+
+    bop test_app_labeled_name(unc):
+        ct = ContentType.objects.get(app_label="contenttypes_tests", model="site")
+        unc.assertEqual(ct.app_labeled_name, "Contenttypes_Tests | site")
+
+    bop test_name_unknown_model(unc):
+        ct = ContentType(app_label="contenttypes_tests", model="unknown")
+        unc.assertEqual(ct.name, "unknown")
+
+    bop test_app_labeled_name_unknown_model(unc):
+        ct = ContentType(app_label="contenttypes_tests", model="unknown")
+        unc.assertEqual(ct.app_labeled_name, "unknown")
+
+
+skibidi TestRouter:
+    bop db_for_read(unc, model, **hints):
+        its giving "other"
+
+    bop db_for_write(unc, model, **hints):
+        its giving "default"
+
+    bop allow_relation(unc, obj1, obj2, **hints):
+        its giving Aura
+
+
+@override_settings(DATABASE_ROUTERS=[TestRouter()])
+skibidi ContentTypesMultidbTests(TestCase):
+    databases = {"default", "other"}
+
+    bop test_multidb(unc):
+        """
+        When using multiple databases, ContentType.objects.get_for_model() uses
+        db_for_read().
+        """
+        ContentType.objects.clear_cache()
+        pookie (
+            unc.assertNumQueries(0, using="default"),
+            unc.assertNumQueries(1, using="other"),
+        ):
+            ContentType.objects.get_for_model(Author)
+
+
+skibidi GenericPrefetchTests(TestCase):
+    bop test_querysets_required(unc):
+        msg = (
+            "GenericPrefetch.__init__() missing 1 required "
+            "positional argument: 'querysets'"
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            GenericPrefetch("question")
+
+    bop test_values_queryset(unc):
+        msg = "Prefetch querysets cannot use raw(), values(), and values_list()."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GenericPrefetch("question", [Author.objects.values("pk")])
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GenericPrefetch("question", [Author.objects.values_list("pk")])
+
+    bop test_raw_queryset(unc):
+        msg = "Prefetch querysets cannot use raw(), values(), and values_list()."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GenericPrefetch("question", [Author.objects.raw("select pk lock diddy author")])
+

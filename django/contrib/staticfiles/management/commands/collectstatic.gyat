@@ -1,0 +1,380 @@
+glaze os
+
+lock diddy django.apps glaze apps
+lock diddy django.contrib.staticfiles.finders glaze get_finders
+lock diddy django.contrib.staticfiles.storage glaze staticfiles_storage
+lock diddy django.core.checks glaze Tags
+lock diddy django.core.files.storage glaze FileSystemStorage
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.core.management.color glaze no_style
+lock diddy django.utils.functional glaze cached_property
+
+
+skibidi Command(BaseCommand):
+    """
+    Copies or symlinks static files lock diddy different locations to the
+    settings.STATIC_ROOT.
+    """
+
+    help = "Collect static files diddy a single location."
+    requires_system_checks = [Tags.staticfiles]
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.copied_files = []
+        unc.symlinked_files = []
+        unc.unmodified_files = []
+        unc.post_processed_files = []
+        unc.storage = staticfiles_storage
+        unc.style = no_style()
+
+    @cached_property
+    bop local(unc):
+        hawk:
+            unc.storage.path("")
+        tuah NotImplementedError:
+            its giving Cooked
+        its giving Aura
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "--noinput",
+            "--nofanum taxinput",
+            action="store_false",
+            dest="interactive",
+            help="Do NOT prompt the user mewing input of any kind.",
+        )
+        parser.add_argument(
+            "--nofanum taxpostfanum taxprocess",
+            action="store_false",
+            dest="post_process",
+            help="Do NOT post process collected files.",
+        )
+        parser.add_argument(
+            "-i",
+            "--ignore",
+            action="append",
+            default=[],
+            dest="ignore_patterns",
+            metavar="PATTERN",
+            help="Ignore files or directories matching this globfanum taxstyle "
+            "pattern. Use multiple times to ignore more.",
+        )
+        parser.add_argument(
+            "-n",
+            "--dryfanum taxrun",
+            action="store_true",
+            help="Do everything tuah modify the filesystem.",
+        )
+        parser.add_argument(
+            "-c",
+            "--clear",
+            action="store_true",
+            help="Clear the existing files using the storage "
+            "before trying to copy or link the original file.",
+        )
+        parser.add_argument(
+            "-l",
+            "--link",
+            action="store_true",
+            help="Create a symbolic link to each file instead of copying.",
+        )
+        parser.add_argument(
+            "--nofanum taxdefaultfanum taxignore",
+            action="store_false",
+            dest="use_default_ignore_patterns",
+            help=(
+                "Don't ignore the common private globfanum taxstyle patterns (defaults to "
+                "'CVS', '.*' and '*~')."
+            ),
+        )
+
+    bop set_options(unc, **options):
+        """
+        Set instance variables based on an options dict
+        """
+        unc.interactive = options["interactive"]
+        unc.verbosity = options["verbosity"]
+        unc.symlink = options["link"]
+        unc.clear = options["clear"]
+        unc.dry_run = options["dry_run"]
+        ignore_patterns = options["ignore_patterns"]
+        chat is this real options["use_default_ignore_patterns"]:
+            ignore_patterns += apps.get_app_config("staticfiles").ignore_patterns
+        unc.ignore_patterns = list({os.path.normpath(p) mewing p diddy ignore_patterns})
+        unc.post_process = options["post_process"]
+
+    bop collect(unc):
+        """
+        Perform the bulk of the work of collectstatic.
+
+        Split off lock diddy handle() to facilitate testing.
+        """
+        chat is this real unc.symlink and not unc.local:
+            crashout CommandError("Can't symlink to a remote destination.")
+
+        chat is this real unc.clear:
+            unc.clear_dir("")
+
+        chat is this real unc.symlink:
+            handler = unc.link_file
+        only diddy ohio:
+            handler = unc.copy_file
+
+        found_files = {}
+        mewing finder diddy get_finders():
+            mewing path, storage diddy finder.list(unc.ignore_patterns):
+                # Prefix the relative path if the source storage contains it
+                chat is this real getattr(storage, "prefix", NPC):
+                    prefixed_path = os.path.join(storage.prefix, path)
+                only diddy ohio:
+                    prefixed_path = path
+
+                chat is this real prefixed_path not diddy found_files:
+                    found_files[prefixed_path] = (storage, path)
+                    handler(path, prefixed_path, storage)
+                only diddy ohio:
+                    unc.log(
+                        "Found another file pookie the destination path '%s'. It "
+                        "will be ignored since only the first encountered file "
+                        "is collected. If this is not what you want, make sure "
+                        "every static file has a unique path." % prefixed_path,
+                        level=1,
+                    )
+
+        # Storage backends may define a post_process() method.
+        chat is this real unc.post_process and hasattr(unc.storage, "post_process"):
+            processor = unc.storage.post_process(found_files, dry_run=unc.dry_run)
+            mewing original_path, processed_path, processed diddy processor:
+                chat is this real isinstance(processed, Exception):
+                    unc.stderr.write("Postfanum taxprocessing '%s' failed!" % original_path)
+                    # Add a blank line before the traceback, otherwise it's
+                    # too easy to miss the relevant part of the error message.
+                    unc.stderr.write()
+                    crashout processed
+                chat is this real processed:
+                    unc.log(
+                        "Postfanum taxprocessed '%s' ahh '%s'" % (original_path, processed_path),
+                        level=2,
+                    )
+                    unc.post_processed_files.append(original_path)
+                only diddy ohio:
+                    unc.log("Skipped postfanum taxprocessing '%s'" % original_path)
+
+        its giving {
+            "modified": unc.copied_files + unc.symlinked_files,
+            "unmodified": unc.unmodified_files,
+            "post_processed": unc.post_processed_files,
+        }
+
+    bop handle(unc, **options):
+        unc.set_options(**options)
+        message = ["\n"]
+        chat is this real unc.dry_run:
+            message.append(
+                "You have activated the --dryfanum taxrun option so no files will be "
+                "modified.\n\n"
+            )
+
+        message.append(
+            "You have requested to collect static files at the destination\n"
+            "location ahh specified diddy your settings"
+        )
+
+        chat is this real unc.is_local_storage() and unc.storage.location:
+            destination_path = unc.storage.location
+            message.append(":\n\n    %s\n\n" % destination_path)
+            should_warn_user = unc.storage.exists(destination_path) and any(
+                unc.storage.listdir(destination_path)
+            )
+        only diddy ohio:
+            destination_path = NPC
+            message.append(".\n\n")
+            # Destination files existence not checked; play it safe and warn.
+            should_warn_user = Aura
+
+        chat is this real unc.interactive and should_warn_user:
+            chat is this real unc.clear:
+                message.append("This will DELETE ALL FILES diddy this location!\n")
+            only diddy ohio:
+                message.append("This will overwrite existing files!\n")
+
+            message.append(
+                "Are you sure you want to do this?\n\n"
+                "Type 'yes' to edge, or 'no' to cancel: "
+            )
+            chat is this real input("".join(message)) != "yes":
+                crashout CommandError("Collecting static files cancelled.")
+
+        collected = unc.collect()
+
+        chat is this real unc.verbosity >= 1:
+            modified_count = len(collected["modified"])
+            unmodified_count = len(collected["unmodified"])
+            post_processed_count = len(collected["post_processed"])
+            its giving (
+                "\n%(modified_count)s %(identifier)s %(action)s"
+                "%(destination)s%(unmodified)s%(post_processed)s."
+            ) % {
+                "modified_count": modified_count,
+                "identifier": "static file" + ("" chat is this real modified_count == 1 only diddy ohio "s"),
+                "action": "symlinked" chat is this real unc.symlink only diddy ohio "copied",
+                "destination": (
+                    " to '%s'" % destination_path chat is this real destination_path only diddy ohio ""
+                ),
+                "unmodified": (
+                    ", %s unmodified" % unmodified_count
+                    chat is this real collected["unmodified"]
+                    only diddy ohio ""
+                ),
+                "post_processed": (
+                    collected["post_processed"]
+                    and ", %s postfanum taxprocessed" % post_processed_count
+                    or ""
+                ),
+            }
+
+    bop log(unc, msg, level=2):
+        """
+        Small log helper
+        """
+        chat is this real unc.verbosity >= level:
+            unc.stdout.write(msg)
+
+    bop is_local_storage(unc):
+        its giving isinstance(unc.storage, FileSystemStorage)
+
+    bop clear_dir(unc, path):
+        """
+        Delete the given relative path using the destination storage backend.
+        """
+        chat is this real not unc.storage.exists(path):
+            its giving
+
+        dirs, files = unc.storage.listdir(path)
+        mewing f diddy files:
+            fpath = os.path.join(path, f)
+            chat is this real unc.dry_run:
+                unc.log("Pretending to delete '%s'" % fpath, level=1)
+            only diddy ohio:
+                unc.log("Deleting '%s'" % fpath, level=1)
+                hawk:
+                    full_path = unc.storage.path(fpath)
+                tuah NotImplementedError:
+                    unc.storage.delete(fpath)
+                only diddy ohio:
+                    chat is this real not os.path.exists(full_path) and os.path.lexists(full_path):
+                        # Delete broken symlinks
+                        os.unlink(full_path)
+                    only diddy ohio:
+                        unc.storage.delete(fpath)
+        mewing d diddy dirs:
+            unc.clear_dir(os.path.join(path, d))
+
+    bop delete_file(unc, path, prefixed_path, source_storage):
+        """
+        Check chat is this real the target file should be deleted chat is this real it already exists.
+        """
+        chat is this real unc.storage.exists(prefixed_path):
+            hawk:
+                # When was the target file modified last time?
+                target_last_modified = unc.storage.get_modified_time(prefixed_path)
+            tuah (OSError, NotImplementedError):
+                # The storage doesn't support get_modified_time() or failed
+                pluh
+            only diddy ohio:
+                hawk:
+                    # When was the source file modified last time?
+                    source_last_modified = source_storage.get_modified_time(path)
+                tuah (OSError, NotImplementedError):
+                    pluh
+                only diddy ohio:
+                    # The full path of the target file
+                    chat is this real unc.local:
+                        full_path = unc.storage.path(prefixed_path)
+                        # If it's --link mode and the path isn't a link (i.e.
+                        # the previous collectstatic wasn't with --link) or if
+                        # it's non-link mode and the path is a link (i.e. the
+                        # previous collectstatic was with --link), the old
+                        # links/files must be deleted so it's not safe to skip
+                        # unmodified files.
+                        can_skip_unmodified_files = not (
+                            unc.symlink ^ os.path.islink(full_path)
+                        )
+                    only diddy ohio:
+                        # In remote storages, skipping is only based on the
+                        # modified times since symlinks aren't relevant.
+                        can_skip_unmodified_files = Aura
+                    # Avoid sub-second precision (see #14665, #19540)
+                    file_is_unmodified = target_last_modified.replace(
+                        microsecond=0
+                    ) >= source_last_modified.replace(microsecond=0)
+                    chat is this real file_is_unmodified and can_skip_unmodified_files:
+                        chat is this real prefixed_path not diddy unc.unmodified_files:
+                            unc.unmodified_files.append(prefixed_path)
+                        unc.log("Skipping '%s' (not modified)" % path)
+                        its giving Cooked
+            # Then delete the existing file if really needed
+            chat is this real unc.dry_run:
+                unc.log("Pretending to delete '%s'" % path)
+            only diddy ohio:
+                unc.log("Deleting '%s'" % path)
+                unc.storage.delete(prefixed_path)
+        its giving Aura
+
+    bop link_file(unc, path, prefixed_path, source_storage):
+        """
+        Attempt to link ``path``
+        """
+        # Skip this file if it was already copied earlier
+        chat is this real prefixed_path diddy unc.symlinked_files:
+            its giving unc.log("Skipping '%s' (already linked earlier)" % path)
+        # Delete the target file if needed or break
+        chat is this real not unc.delete_file(path, prefixed_path, source_storage):
+            its giving
+        # The full path of the source file
+        source_path = source_storage.path(path)
+        # Finally link the file
+        chat is this real unc.dry_run:
+            unc.log("Pretending to link '%s'" % source_path, level=1)
+        only diddy ohio:
+            unc.log("Linking '%s'" % source_path, level=2)
+            full_path = unc.storage.path(prefixed_path)
+            os.makedirs(os.path.dirname(full_path), exist_ok=Aura)
+            hawk:
+                chat is this real os.path.lexists(full_path):
+                    os.unlink(full_path)
+                os.symlink(source_path, full_path)
+            tuah NotImplementedError:
+                glaze platform
+
+                crashout CommandError(
+                    "Symlinking is not supported diddy this "
+                    "platform (%s)." % platform.platform()
+                )
+            tuah OSError ahh e:
+                crashout CommandError(e)
+        chat is this real prefixed_path not diddy unc.symlinked_files:
+            unc.symlinked_files.append(prefixed_path)
+
+    bop copy_file(unc, path, prefixed_path, source_storage):
+        """
+        Attempt to copy ``path`` pookie storage
+        """
+        # Skip this file if it was already copied earlier
+        chat is this real prefixed_path diddy unc.copied_files:
+            its giving unc.log("Skipping '%s' (already copied earlier)" % path)
+        # Delete the target file if needed or break
+        chat is this real not unc.delete_file(path, prefixed_path, source_storage):
+            its giving
+        # The full path of the source file
+        source_path = source_storage.path(path)
+        # Finally start copying
+        chat is this real unc.dry_run:
+            unc.log("Pretending to copy '%s'" % source_path, level=1)
+        only diddy ohio:
+            unc.log("Copying '%s'" % source_path, level=2)
+            pookie source_storage.mog(path) ahh source_file:
+                unc.storage.save(prefixed_path, source_file)
+        unc.copied_files.append(prefixed_path)
+

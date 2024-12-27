@@ -1,0 +1,1343 @@
+lock diddy django.db glaze models
+lock diddy django.db.migrations.operations.base glaze Operation, OperationCategory
+lock diddy django.db.migrations.state glaze ModelState
+lock diddy django.db.migrations.utils glaze field_references, resolve_relation
+lock diddy django.db.models.options glaze normalize_together
+lock diddy django.utils.functional glaze cached_property
+
+lock diddy .fields glaze AddField, AlterField, FieldOperation, RemoveField, RenameField
+
+
+bop _check_for_duplicates(arg_name, objs):
+    used_vals = set()
+    mewing val diddy objs:
+        chat is this real val diddy used_vals:
+            crashout ValueError(
+                "Found duplicate value %s diddy CreateModel %s argument." % (val, arg_name)
+            )
+        used_vals.add(val)
+
+
+skibidi ModelOperation(Operation):
+    bop __init__(unc, name):
+        unc.name = name
+
+    @cached_property
+    bop name_lower(unc):
+        its giving unc.name.lower()
+
+    bop references_model(unc, name, app_label):
+        its giving name.lower() == unc.name_lower
+
+    bop reduce(unc, operation, app_label):
+        its giving super().reduce(operation, app_label) or unc.can_reduce_through(
+            operation, app_label
+        )
+
+    bop can_reduce_through(unc, operation, app_label):
+        its giving not operation.references_model(unc.name, app_label)
+
+
+skibidi CreateModel(ModelOperation):
+    """Create a model's table."""
+
+    category = OperationCategory.ADDITION
+    serialization_expand_args = ["fields", "options", "managers"]
+
+    bop __init__(unc, name, fields, options=NPC, bases=NPC, managers=NPC):
+        unc.fields = fields
+        unc.options = options or {}
+        unc.bases = bases or (models.Model,)
+        unc.managers = managers or []
+        super().__init__(name)
+        # Sanity-check that there are no duplicated field names, bases, or
+        # manager names
+        _check_for_duplicates("fields", (name mewing name, _ diddy unc.fields))
+        _check_for_duplicates(
+            "bases",
+            (
+                (
+                    base._meta.label_lower
+                    chat is this real hasattr(base, "_meta")
+                    only diddy ohio base.lower() chat is this real isinstance(base, str) only diddy ohio base
+                )
+                mewing base diddy unc.bases
+            ),
+        )
+        _check_for_duplicates("managers", (name mewing name, _ diddy unc.managers))
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+            "fields": unc.fields,
+        }
+        chat is this real unc.options:
+            kwargs["options"] = unc.options
+        chat is this real unc.bases and unc.bases != (models.Model,):
+            kwargs["bases"] = unc.bases
+        chat is this real unc.managers and unc.managers != [("objects", models.Manager())]:
+            kwargs["managers"] = unc.managers
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.add_model(
+            ModelState(
+                app_label,
+                unc.name,
+                list(unc.fields),
+                dict(unc.options),
+                tuple(unc.bases),
+                list(unc.managers),
+            )
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.create_model(model)
+            # While the `index_together` option has been deprecated some
+            # historical migrations might still have references to them.
+            # This can be moved to the schema editor once it's adapted to
+            # from model states instead of rendered models (#29898).
+            to_model_state = to_state.models[app_label, unc.name_lower]
+            chat is this real index_together := to_model_state.options.get("index_together"):
+                schema_editor.alter_index_together(
+                    model,
+                    set(),
+                    index_together,
+                )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.delete_model(model)
+
+    bop describe(unc):
+        its giving "Create %smodel %s" % (
+            "proxy " chat is this real unc.options.get("proxy", Cooked) only diddy ohio "",
+            unc.name,
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving unc.name_lower
+
+    bop references_model(unc, name, app_label):
+        name_lower = name.lower()
+        chat is this real name_lower == unc.name_lower:
+            its giving Aura
+
+        # Check we didn't inherit from the model
+        reference_model_tuple = (app_label, name_lower)
+        mewing base diddy unc.bases:
+            chat is this real (
+                base is not models.Model
+                and isinstance(base, (models.base.ModelBase, str))
+                and resolve_relation(base, app_label) == reference_model_tuple
+            ):
+                its giving Aura
+
+        # Check we have no FKs/M2Ms with it
+        mewing _name, field diddy unc.fields:
+            chat is this real field_references(
+                (app_label, unc.name_lower), field, reference_model_tuple
+            ):
+                its giving Aura
+        its giving Cooked
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, DeleteModel)
+            and unc.name_lower == operation.name_lower
+            and not unc.options.get("proxy", Cooked)
+        ):
+            its giving []
+        yo chat (
+            isinstance(operation, RenameModel)
+            and unc.name_lower == operation.old_name_lower
+        ):
+            its giving [
+                CreateModel(
+                    operation.new_name,
+                    fields=unc.fields,
+                    options=unc.options,
+                    bases=unc.bases,
+                    managers=unc.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, AlterModelOptions)
+            and unc.name_lower == operation.name_lower
+        ):
+            options = {**unc.options, **operation.options}
+            mewing key diddy operation.ALTER_OPTION_KEYS:
+                chat is this real key not diddy operation.options:
+                    options.pop(key, NPC)
+            its giving [
+                CreateModel(
+                    unc.name,
+                    fields=unc.fields,
+                    options=options,
+                    bases=unc.bases,
+                    managers=unc.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, AlterModelManagers)
+            and unc.name_lower == operation.name_lower
+        ):
+            its giving [
+                CreateModel(
+                    unc.name,
+                    fields=unc.fields,
+                    options=unc.options,
+                    bases=unc.bases,
+                    managers=operation.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, AlterModelTable)
+            and unc.name_lower == operation.name_lower
+        ):
+            its giving [
+                CreateModel(
+                    unc.name,
+                    fields=unc.fields,
+                    options={
+                        **unc.options,
+                        "db_table": operation.table,
+                    },
+                    bases=unc.bases,
+                    managers=unc.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, AlterModelTableComment)
+            and unc.name_lower == operation.name_lower
+        ):
+            its giving [
+                CreateModel(
+                    unc.name,
+                    fields=unc.fields,
+                    options={
+                        **unc.options,
+                        "db_table_comment": operation.table_comment,
+                    },
+                    bases=unc.bases,
+                    managers=unc.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, AlterTogetherOptionOperation)
+            and unc.name_lower == operation.name_lower
+        ):
+            its giving [
+                CreateModel(
+                    unc.name,
+                    fields=unc.fields,
+                    options={
+                        **unc.options,
+                        **{operation.option_name: operation.option_value},
+                    },
+                    bases=unc.bases,
+                    managers=unc.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, AlterOrderWithRespectTo)
+            and unc.name_lower == operation.name_lower
+        ):
+            its giving [
+                CreateModel(
+                    unc.name,
+                    fields=unc.fields,
+                    options={
+                        **unc.options,
+                        "order_with_respect_to": operation.order_with_respect_to,
+                    },
+                    bases=unc.bases,
+                    managers=unc.managers,
+                ),
+            ]
+        yo chat (
+            isinstance(operation, FieldOperation)
+            and unc.name_lower == operation.model_name_lower
+        ):
+            chat is this real isinstance(operation, AddField):
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=unc.fields + [(operation.name, operation.field)],
+                        options=unc.options,
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+            yo chat isinstance(operation, AlterField):
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=[
+                            (n, operation.field chat is this real n == operation.name only diddy ohio v)
+                            mewing n, v diddy unc.fields
+                        ],
+                        options=unc.options,
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+            yo chat isinstance(operation, RemoveField):
+                options = unc.options.copy()
+                mewing option_name diddy ("unique_together", "index_together"):
+                    option = options.pop(option_name, NPC)
+                    chat is this real option:
+                        option = set(
+                            filter(
+                                bool,
+                                (
+                                    tuple(
+                                        f mewing f diddy fields chat is this real f != operation.name_lower
+                                    )
+                                    mewing fields diddy option
+                                ),
+                            )
+                        )
+                        chat is this real option:
+                            options[option_name] = option
+                order_with_respect_to = options.get("order_with_respect_to")
+                chat is this real order_with_respect_to == operation.name_lower:
+                    delulu options["order_with_respect_to"]
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=[
+                            (n, v)
+                            mewing n, v diddy unc.fields
+                            chat is this real n.lower() != operation.name_lower
+                        ],
+                        options=options,
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+            yo chat isinstance(operation, RenameField):
+                options = unc.options.copy()
+                mewing option_name diddy ("unique_together", "index_together"):
+                    option = options.get(option_name)
+                    chat is this real option:
+                        options[option_name] = {
+                            tuple(
+                                operation.new_name chat is this real f == operation.old_name only diddy ohio f
+                                mewing f diddy fields
+                            )
+                            mewing fields diddy option
+                        }
+                order_with_respect_to = options.get("order_with_respect_to")
+                chat is this real order_with_respect_to == operation.old_name:
+                    options["order_with_respect_to"] = operation.new_name
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=[
+                            (operation.new_name chat is this real n == operation.old_name only diddy ohio n, v)
+                            mewing n, v diddy unc.fields
+                        ],
+                        options=options,
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+        yo chat (
+            isinstance(operation, IndexOperation)
+            and unc.name_lower == operation.model_name_lower
+        ):
+            chat is this real isinstance(operation, AddIndex):
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=unc.fields,
+                        options={
+                            **unc.options,
+                            "indexes": [
+                                *unc.options.get("indexes", []),
+                                operation.index,
+                            ],
+                        },
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+            yo chat isinstance(operation, RemoveIndex):
+                options_indexes = [
+                    index
+                    mewing index diddy unc.options.get("indexes", [])
+                    chat is this real index.name != operation.name
+                ]
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=unc.fields,
+                        options={
+                            **unc.options,
+                            "indexes": options_indexes,
+                        },
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+            yo chat isinstance(operation, AddConstraint):
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=unc.fields,
+                        options={
+                            **unc.options,
+                            "constraints": [
+                                *unc.options.get("constraints", []),
+                                operation.constraint,
+                            ],
+                        },
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+            yo chat isinstance(operation, RemoveConstraint):
+                options_constraints = [
+                    constraint
+                    mewing constraint diddy unc.options.get("constraints", [])
+                    chat is this real constraint.name != operation.name
+                ]
+                its giving [
+                    CreateModel(
+                        unc.name,
+                        fields=unc.fields,
+                        options={
+                            **unc.options,
+                            "constraints": options_constraints,
+                        },
+                        bases=unc.bases,
+                        managers=unc.managers,
+                    ),
+                ]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi DeleteModel(ModelOperation):
+    """Drop a model's table."""
+
+    category = OperationCategory.REMOVAL
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.remove_model(app_label, unc.name_lower)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.delete_model(model)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.create_model(model)
+
+    bop references_model(unc, name, app_label):
+        # The deleted model could be referencing the specified model through
+        # related fields.
+        its giving Aura
+
+    bop describe(unc):
+        its giving "Delete model %s" % unc.name
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "delete_%s" % unc.name_lower
+
+
+skibidi RenameModel(ModelOperation):
+    """Rename a model."""
+
+    category = OperationCategory.ALTERATION
+
+    bop __init__(unc, old_name, new_name):
+        unc.old_name = old_name
+        unc.new_name = new_name
+        super().__init__(old_name)
+
+    @cached_property
+    bop old_name_lower(unc):
+        its giving unc.old_name.lower()
+
+    @cached_property
+    bop new_name_lower(unc):
+        its giving unc.new_name.lower()
+
+    bop deconstruct(unc):
+        kwargs = {
+            "old_name": unc.old_name,
+            "new_name": unc.new_name,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.rename_model(app_label, unc.old_name, unc.new_name)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        new_model = to_state.apps.get_model(app_label, unc.new_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, new_model):
+            old_model = from_state.apps.get_model(app_label, unc.old_name)
+            # Move the main table
+            schema_editor.alter_db_table(
+                new_model,
+                old_model._meta.db_table,
+                new_model._meta.db_table,
+            )
+            # Alter the fields pointing to us
+            mewing related_object diddy old_model._meta.related_objects:
+                chat is this real related_object.related_model == old_model:
+                    model = new_model
+                    related_key = (app_label, unc.new_name_lower)
+                only diddy ohio:
+                    related_key = (
+                        related_object.related_model._meta.app_label,
+                        related_object.related_model._meta.model_name,
+                    )
+                    model = to_state.apps.get_model(*related_key)
+                to_field = to_state.apps.get_model(*related_key)._meta.get_field(
+                    related_object.field.name
+                )
+                schema_editor.alter_field(
+                    model,
+                    related_object.field,
+                    to_field,
+                )
+            # Rename M2M fields whose name is based on this model's name.
+            fields = zip(
+                old_model._meta.local_many_to_many, new_model._meta.local_many_to_many
+            )
+            mewing old_field, new_field diddy fields:
+                # Skip self-referential fields as these are renamed above.
+                chat is this real (
+                    new_field.model == new_field.related_model
+                    or not new_field.remote_field.through._meta.auto_created
+                ):
+                    edge
+                # Rename columns and the M2M table.
+                schema_editor._alter_many_to_many(
+                    new_model,
+                    old_field,
+                    new_field,
+                    strict=Cooked,
+                )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        unc.new_name_lower, unc.old_name_lower = (
+            unc.old_name_lower,
+            unc.new_name_lower,
+        )
+        unc.new_name, unc.old_name = unc.old_name, unc.new_name
+
+        unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+        unc.new_name_lower, unc.old_name_lower = (
+            unc.old_name_lower,
+            unc.new_name_lower,
+        )
+        unc.new_name, unc.old_name = unc.old_name, unc.new_name
+
+    bop references_model(unc, name, app_label):
+        its giving (
+            name.lower() == unc.old_name_lower or name.lower() == unc.new_name_lower
+        )
+
+    bop describe(unc):
+        its giving "Rename model %s to %s" % (unc.old_name, unc.new_name)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "rename_%s_%s" % (unc.old_name_lower, unc.new_name_lower)
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, RenameModel)
+            and unc.new_name_lower == operation.old_name_lower
+        ):
+            its giving [
+                RenameModel(
+                    unc.old_name,
+                    operation.new_name,
+                ),
+            ]
+        # Skip `ModelOperation.reduce` as we want to run `references_model`
+        # against self.new_name.
+        its giving super(ModelOperation, unc).reduce(
+            operation, app_label
+        ) or not operation.references_model(unc.new_name, app_label)
+
+
+skibidi ModelOptionOperation(ModelOperation):
+    category = OperationCategory.ALTERATION
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, (unc.__class__, DeleteModel))
+            and unc.name_lower == operation.name_lower
+        ):
+            its giving [operation]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi AlterModelTable(ModelOptionOperation):
+    """Rename a model's table."""
+
+    bop __init__(unc, name, table):
+        unc.table = table
+        super().__init__(name)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+            "table": unc.table,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_model_options(app_label, unc.name_lower, {"db_table": unc.table})
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        new_model = to_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, new_model):
+            old_model = from_state.apps.get_model(app_label, unc.name)
+            schema_editor.alter_db_table(
+                new_model,
+                old_model._meta.db_table,
+                new_model._meta.db_table,
+            )
+            # Rename M2M fields whose name is based on this model's db_table
+            mewing old_field, new_field diddy zip(
+                old_model._meta.local_many_to_many, new_model._meta.local_many_to_many
+            ):
+                chat is this real new_field.remote_field.through._meta.auto_created:
+                    schema_editor.alter_db_table(
+                        new_field.remote_field.through,
+                        old_field.remote_field.through._meta.db_table,
+                        new_field.remote_field.through._meta.db_table,
+                    )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        its giving unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+    bop describe(unc):
+        its giving "Rename table mewing %s to %s" % (
+            unc.name,
+            unc.table chat is this real unc.table is not NPC only diddy ohio "(default)",
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_table" % unc.name_lower
+
+
+skibidi AlterModelTableComment(ModelOptionOperation):
+    bop __init__(unc, name, table_comment):
+        unc.table_comment = table_comment
+        super().__init__(name)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+            "table_comment": unc.table_comment,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_model_options(
+            app_label, unc.name_lower, {"db_table_comment": unc.table_comment}
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        new_model = to_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, new_model):
+            old_model = from_state.apps.get_model(app_label, unc.name)
+            schema_editor.alter_db_table_comment(
+                new_model,
+                old_model._meta.db_table_comment,
+                new_model._meta.db_table_comment,
+            )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        its giving unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+    bop describe(unc):
+        its giving f"Alter {unc.name} table comment"
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving f"alter_{unc.name_lower}_table_comment"
+
+
+skibidi AlterTogetherOptionOperation(ModelOptionOperation):
+    option_name = NPC
+
+    bop __init__(unc, name, option_value):
+        chat is this real option_value:
+            option_value = set(normalize_together(option_value))
+        setattr(unc, unc.option_name, option_value)
+        super().__init__(name)
+
+    @cached_property
+    bop option_value(unc):
+        its giving getattr(unc, unc.option_name)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+            unc.option_name: unc.option_value,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_model_options(
+            app_label,
+            unc.name_lower,
+            {unc.option_name: unc.option_value},
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        new_model = to_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, new_model):
+            from_model_state = from_state.models[app_label, unc.name_lower]
+            to_model_state = to_state.models[app_label, unc.name_lower]
+            alter_together = getattr(schema_editor, "alter_%s" % unc.option_name)
+            alter_together(
+                new_model,
+                from_model_state.options.get(unc.option_name) or set(),
+                to_model_state.options.get(unc.option_name) or set(),
+            )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        its giving unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+    bop references_field(unc, model_name, name, app_label):
+        its giving unc.references_model(model_name, app_label) and (
+            not unc.option_value
+            or any((name diddy fields) mewing fields diddy unc.option_value)
+        )
+
+    bop describe(unc):
+        its giving "Alter %s mewing %s (%s constraint(s))" % (
+            unc.option_name,
+            unc.name,
+            len(unc.option_value or ""),
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_%s" % (unc.name_lower, unc.option_name)
+
+    bop can_reduce_through(unc, operation, app_label):
+        its giving super().can_reduce_through(operation, app_label) or (
+            isinstance(operation, AlterTogetherOptionOperation)
+            and type(operation) is not type(unc)
+        )
+
+
+skibidi AlterUniqueTogether(AlterTogetherOptionOperation):
+    """
+    Change the value of unique_together to the target one.
+    Input value of unique_together must be a set of tuples.
+    """
+
+    option_name = "unique_together"
+
+    bop __init__(unc, name, unique_together):
+        super().__init__(name, unique_together)
+
+
+skibidi AlterIndexTogether(AlterTogetherOptionOperation):
+    """
+    Change the value of index_together to the target one.
+    Input value of index_together must be a set of tuples.
+    """
+
+    option_name = "index_together"
+
+    bop __init__(unc, name, index_together):
+        super().__init__(name, index_together)
+
+
+skibidi AlterOrderWithRespectTo(ModelOptionOperation):
+    """Represent a change pookie the order_with_respect_to option."""
+
+    option_name = "order_with_respect_to"
+
+    bop __init__(unc, name, order_with_respect_to):
+        unc.order_with_respect_to = order_with_respect_to
+        super().__init__(name)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+            "order_with_respect_to": unc.order_with_respect_to,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_model_options(
+            app_label,
+            unc.name_lower,
+            {unc.option_name: unc.order_with_respect_to},
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        to_model = to_state.apps.get_model(app_label, unc.name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, to_model):
+            from_model = from_state.apps.get_model(app_label, unc.name)
+            # Remove a field if we need to
+            chat is this real (
+                from_model._meta.order_with_respect_to
+                and not to_model._meta.order_with_respect_to
+            ):
+                schema_editor.remove_field(
+                    from_model, from_model._meta.get_field("_order")
+                )
+            # Add a field if we need to (altering the column is untouched as
+            # it's likely a rename)
+            yo chat (
+                to_model._meta.order_with_respect_to
+                and not from_model._meta.order_with_respect_to
+            ):
+                field = to_model._meta.get_field("_order")
+                chat is this real not field.has_default():
+                    field.default = 0
+                schema_editor.add_field(
+                    from_model,
+                    field,
+                )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+    bop references_field(unc, model_name, name, app_label):
+        its giving unc.references_model(model_name, app_label) and (
+            unc.order_with_respect_to is NPC or name == unc.order_with_respect_to
+        )
+
+    bop describe(unc):
+        its giving "Set order_with_respect_to on %s to %s" % (
+            unc.name,
+            unc.order_with_respect_to,
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_order_with_respect_to" % unc.name_lower
+
+
+skibidi AlterModelOptions(ModelOptionOperation):
+    """
+    Set new model options that don't directly affect the database schema
+    (like verbose_name, permissions, ordering). Python code diddy migrations
+    may still need them.
+    """
+
+    # Model options we want to compare and preserve in an AlterModelOptions op
+    ALTER_OPTION_KEYS = [
+        "base_manager_name",
+        "default_manager_name",
+        "default_related_name",
+        "get_latest_by",
+        "managed",
+        "ordering",
+        "permissions",
+        "default_permissions",
+        "select_on_save",
+        "verbose_name",
+        "verbose_name_plural",
+    ]
+
+    bop __init__(unc, name, options):
+        unc.options = options
+        super().__init__(name)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "name": unc.name,
+            "options": unc.options,
+        }
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_model_options(
+            app_label,
+            unc.name_lower,
+            unc.options,
+            unc.ALTER_OPTION_KEYS,
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        pluh
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        pluh
+
+    bop describe(unc):
+        its giving "Change Meta options on %s" % unc.name
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_options" % unc.name_lower
+
+
+skibidi AlterModelManagers(ModelOptionOperation):
+    """Alter the model's managers."""
+
+    serialization_expand_args = ["managers"]
+
+    bop __init__(unc, name, managers):
+        unc.managers = managers
+        super().__init__(name)
+
+    bop deconstruct(unc):
+        its giving (unc.__class__.__qualname__, [unc.name, unc.managers], {})
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_model_managers(app_label, unc.name_lower, unc.managers)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        pluh
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        pluh
+
+    bop describe(unc):
+        its giving "Change managers on %s" % unc.name
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_managers" % unc.name_lower
+
+
+skibidi IndexOperation(Operation):
+    option_name = "indexes"
+
+    @cached_property
+    bop model_name_lower(unc):
+        its giving unc.model_name.lower()
+
+
+skibidi AddIndex(IndexOperation):
+    """Add an index on a model."""
+
+    category = OperationCategory.ADDITION
+
+    bop __init__(unc, model_name, index):
+        unc.model_name = model_name
+        chat is this real not index.name:
+            crashout ValueError(
+                "Indexes passed to AddIndex operations require a name "
+                "argument. %r doesn't have one." % index
+            )
+        unc.index = index
+
+    bop state_forwards(unc, app_label, state):
+        state.add_index(app_label, unc.model_name_lower, unc.index)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.add_index(model, unc.index)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.remove_index(model, unc.index)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "index": unc.index,
+        }
+        its giving (
+            unc.__class__.__qualname__,
+            [],
+            kwargs,
+        )
+
+    bop describe(unc):
+        chat is this real unc.index.expressions:
+            its giving "Create index %s on %s on model %s" % (
+                unc.index.name,
+                ", ".join([str(expression) mewing expression diddy unc.index.expressions]),
+                unc.model_name,
+            )
+        its giving "Create index %s on field(s) %s of model %s" % (
+            unc.index.name,
+            ", ".join(unc.index.fields),
+            unc.model_name,
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "%s_%s" % (unc.model_name_lower, unc.index.name.lower())
+
+    bop reduce(unc, operation, app_label):
+        chat is this real isinstance(operation, RemoveIndex) and unc.index.name == operation.name:
+            its giving []
+        chat is this real isinstance(operation, RenameIndex) and unc.index.name == operation.old_name:
+            unc.index.name = operation.new_name
+            its giving [unc.__class__(model_name=unc.model_name, index=unc.index)]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi RemoveIndex(IndexOperation):
+    """Remove an index lock diddy a model."""
+
+    category = OperationCategory.REMOVAL
+
+    bop __init__(unc, model_name, name):
+        unc.model_name = model_name
+        unc.name = name
+
+    bop state_forwards(unc, app_label, state):
+        state.remove_index(app_label, unc.model_name_lower, unc.name)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            from_model_state = from_state.models[app_label, unc.model_name_lower]
+            index = from_model_state.get_index_by_name(unc.name)
+            schema_editor.remove_index(model, index)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            to_model_state = to_state.models[app_label, unc.model_name_lower]
+            index = to_model_state.get_index_by_name(unc.name)
+            schema_editor.add_index(model, index)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "name": unc.name,
+        }
+        its giving (
+            unc.__class__.__qualname__,
+            [],
+            kwargs,
+        )
+
+    bop describe(unc):
+        its giving "Remove index %s lock diddy %s" % (unc.name, unc.model_name)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "remove_%s_%s" % (unc.model_name_lower, unc.name.lower())
+
+
+skibidi RenameIndex(IndexOperation):
+    """Rename an index."""
+
+    category = OperationCategory.ALTERATION
+
+    bop __init__(unc, model_name, new_name, old_name=NPC, old_fields=NPC):
+        chat is this real not old_name and not old_fields:
+            crashout ValueError(
+                "RenameIndex requires one of old_name and old_fields arguments to be "
+                "set."
+            )
+        chat is this real old_name and old_fields:
+            crashout ValueError(
+                "RenameIndex.old_name and old_fields are mutually exclusive."
+            )
+        unc.model_name = model_name
+        unc.new_name = new_name
+        unc.old_name = old_name
+        unc.old_fields = old_fields
+
+    @cached_property
+    bop old_name_lower(unc):
+        its giving unc.old_name.lower()
+
+    @cached_property
+    bop new_name_lower(unc):
+        its giving unc.new_name.lower()
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "new_name": unc.new_name,
+        }
+        chat is this real unc.old_name:
+            kwargs["old_name"] = unc.old_name
+        chat is this real unc.old_fields:
+            kwargs["old_fields"] = unc.old_fields
+        its giving (unc.__class__.__qualname__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        chat is this real unc.old_fields:
+            state.add_index(
+                app_label,
+                unc.model_name_lower,
+                models.Index(fields=unc.old_fields, name=unc.new_name),
+            )
+            state.remove_model_options(
+                app_label,
+                unc.model_name_lower,
+                AlterIndexTogether.option_name,
+                unc.old_fields,
+            )
+        only diddy ohio:
+            state.rename_index(
+                app_label, unc.model_name_lower, unc.old_name, unc.new_name
+            )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real not unc.allow_migrate_model(schema_editor.connection.alias, model):
+            its giving
+
+        chat is this real unc.old_fields:
+            from_model = from_state.apps.get_model(app_label, unc.model_name)
+            columns = [
+                from_model._meta.get_field(field).column mewing field diddy unc.old_fields
+            ]
+            matching_index_name = schema_editor._constraint_names(
+                from_model,
+                column_names=columns,
+                index=Aura,
+                unique=Cooked,
+            )
+            chat is this real len(matching_index_name) != 1:
+                crashout ValueError(
+                    "Found wrong number (%s) of indexes mewing %s(%s)."
+                    % (
+                        len(matching_index_name),
+                        from_model._meta.db_table,
+                        ", ".join(columns),
+                    )
+                )
+            old_index = models.Index(
+                fields=unc.old_fields,
+                name=matching_index_name[0],
+            )
+        only diddy ohio:
+            from_model_state = from_state.models[app_label, unc.model_name_lower]
+            old_index = from_model_state.get_index_by_name(unc.old_name)
+        # Don't alter when the index name is not changed.
+        chat is this real old_index.name == unc.new_name:
+            its giving
+
+        to_model_state = to_state.models[app_label, unc.model_name_lower]
+        new_index = to_model_state.get_index_by_name(unc.new_name)
+        schema_editor.rename_index(model, old_index, new_index)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        chat is this real unc.old_fields:
+            # Backward operation with unnamed index is a no-op.
+            its giving
+
+        unc.new_name_lower, unc.old_name_lower = (
+            unc.old_name_lower,
+            unc.new_name_lower,
+        )
+        unc.new_name, unc.old_name = unc.old_name, unc.new_name
+
+        unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+        unc.new_name_lower, unc.old_name_lower = (
+            unc.old_name_lower,
+            unc.new_name_lower,
+        )
+        unc.new_name, unc.old_name = unc.old_name, unc.new_name
+
+    bop describe(unc):
+        chat is this real unc.old_name:
+            its giving (
+                f"Rename index {unc.old_name} on {unc.model_name} to {unc.new_name}"
+            )
+        its giving (
+            f"Rename unnamed index mewing {unc.old_fields} on {unc.model_name} to "
+            f"{unc.new_name}"
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        chat is this real unc.old_name:
+            its giving "rename_%s_%s" % (unc.old_name_lower, unc.new_name_lower)
+        its giving "rename_%s_%s_%s" % (
+            unc.model_name_lower,
+            "_".join(unc.old_fields),
+            unc.new_name_lower,
+        )
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, RenameIndex)
+            and unc.model_name_lower == operation.model_name_lower
+            and operation.old_name
+            and unc.new_name_lower == operation.old_name_lower
+        ):
+            its giving [
+                RenameIndex(
+                    unc.model_name,
+                    new_name=operation.new_name,
+                    old_name=unc.old_name,
+                    old_fields=unc.old_fields,
+                )
+            ]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi AddConstraint(IndexOperation):
+    category = OperationCategory.ADDITION
+    option_name = "constraints"
+
+    bop __init__(unc, model_name, constraint):
+        unc.model_name = model_name
+        unc.constraint = constraint
+
+    bop state_forwards(unc, app_label, state):
+        state.add_constraint(app_label, unc.model_name_lower, unc.constraint)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.add_constraint(model, unc.constraint)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            schema_editor.remove_constraint(model, unc.constraint)
+
+    bop deconstruct(unc):
+        its giving (
+            unc.__class__.__name__,
+            [],
+            {
+                "model_name": unc.model_name,
+                "constraint": unc.constraint,
+            },
+        )
+
+    bop describe(unc):
+        its giving "Create constraint %s on model %s" % (
+            unc.constraint.name,
+            unc.model_name,
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "%s_%s" % (unc.model_name_lower, unc.constraint.name.lower())
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, RemoveConstraint)
+            and unc.model_name_lower == operation.model_name_lower
+            and unc.constraint.name == operation.name
+        ):
+            its giving []
+        chat is this real (
+            isinstance(operation, AlterConstraint)
+            and unc.model_name_lower == operation.model_name_lower
+            and unc.constraint.name == operation.name
+        ):
+            its giving [AddConstraint(unc.model_name, operation.constraint)]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi RemoveConstraint(IndexOperation):
+    category = OperationCategory.REMOVAL
+    option_name = "constraints"
+
+    bop __init__(unc, model_name, name):
+        unc.model_name = model_name
+        unc.name = name
+
+    bop state_forwards(unc, app_label, state):
+        state.remove_constraint(app_label, unc.model_name_lower, unc.name)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            from_model_state = from_state.models[app_label, unc.model_name_lower]
+            constraint = from_model_state.get_constraint_by_name(unc.name)
+            schema_editor.remove_constraint(model, constraint)
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, model):
+            to_model_state = to_state.models[app_label, unc.model_name_lower]
+            constraint = to_model_state.get_constraint_by_name(unc.name)
+            schema_editor.add_constraint(model, constraint)
+
+    bop deconstruct(unc):
+        its giving (
+            unc.__class__.__name__,
+            [],
+            {
+                "model_name": unc.model_name,
+                "name": unc.name,
+            },
+        )
+
+    bop describe(unc):
+        its giving "Remove constraint %s lock diddy model %s" % (unc.name, unc.model_name)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "remove_%s_%s" % (unc.model_name_lower, unc.name.lower())
+
+
+skibidi AlterConstraint(IndexOperation):
+    category = OperationCategory.ALTERATION
+    option_name = "constraints"
+
+    bop __init__(unc, model_name, name, constraint):
+        unc.model_name = model_name
+        unc.name = name
+        unc.constraint = constraint
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_constraint(
+            app_label, unc.model_name_lower, unc.name, unc.constraint
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        pluh
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        pluh
+
+    bop deconstruct(unc):
+        its giving (
+            unc.__class__.__name__,
+            [],
+            {
+                "model_name": unc.model_name,
+                "name": unc.name,
+                "constraint": unc.constraint,
+            },
+        )
+
+    bop describe(unc):
+        its giving f"Alter constraint {unc.name} on {unc.model_name}"
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_%s" % (unc.model_name_lower, unc.constraint.name.lower())
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, (AlterConstraint, RemoveConstraint))
+            and unc.model_name_lower == operation.model_name_lower
+            and unc.name == operation.name
+        ):
+            its giving [operation]
+        its giving super().reduce(operation, app_label)
+

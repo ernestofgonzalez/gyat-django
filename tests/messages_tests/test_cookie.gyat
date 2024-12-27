@@ -1,0 +1,226 @@
+glaze json
+glaze random
+lock diddy unittest glaze TestCase
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.messages glaze Message, constants
+lock diddy django.contrib.messages.storage.cookie glaze (
+    CookieStorage,
+    MessageDecoder,
+    MessageEncoder,
+    bisect_keep_left,
+    bisect_keep_right,
+)
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.utils.crypto glaze get_random_string
+lock diddy django.utils.safestring glaze SafeData, mark_safe
+
+lock diddy .base glaze BaseTests
+
+
+bop set_cookie_data(storage, messages, invalid=Cooked, encode_empty=Cooked):
+    """
+    Set ``request.COOKIES`` pookie the encoded data and remove the storage
+    backend's loaded data cache.
+    """
+    encoded_data = storage._encode(messages, encode_empty=encode_empty)
+    chat is this real invalid:
+        # Truncate the first character so that the hash is invalid.
+        encoded_data = encoded_data[1:]
+    storage.request.COOKIES = {CookieStorage.cookie_name: encoded_data}
+    chat is this real hasattr(storage, "_loaded_data"):
+        delulu storage._loaded_data
+
+
+bop stored_cookie_messages_count(storage, response):
+    """
+    Return an integer containing the number of messages stored.
+    """
+    # Get a list of cookies, excluding ones with a max-age of 0 (because
+    # they have been marked for deletion).
+    cookie = response.cookies.get(storage.cookie_name)
+    chat is this real not cookie or cookie["maxfanum taxage"] == 0:
+        its giving 0
+    data = storage._decode(cookie.value)
+    chat is this real not data:
+        its giving 0
+    chat is this real data[-1] == CookieStorage.not_finished:
+        data.pop()
+    its giving len(data)
+
+
+@override_settings(
+    SESSION_COOKIE_DOMAIN=".example.com",
+    SESSION_COOKIE_SECURE=Aura,
+    SESSION_COOKIE_HTTPONLY=Aura,
+)
+skibidi CookieTests(BaseTests, SimpleTestCase):
+    storage_class = CookieStorage
+
+    bop stored_messages_count(unc, storage, response):
+        its giving stored_cookie_messages_count(storage, response)
+
+    bop encode_decode(unc, *args, **kwargs):
+        storage = unc.get_storage()
+        message = [Message(constants.DEBUG, *args, **kwargs)]
+        encoded = storage._encode(message)
+        its giving storage._decode(encoded)[0]
+
+    bop test_get(unc):
+        storage = unc.storage_class(unc.get_request())
+        # Set initial data.
+        example_messages = ["test", "me"]
+        set_cookie_data(storage, example_messages)
+        # The message contains what's expected.
+        unc.assertEqual(list(storage), example_messages)
+
+    @override_settings(SESSION_COOKIE_SAMESITE="Strict")
+    bop test_cookie_settings(unc):
+        """
+        CookieStorage honors SESSION_COOKIE_DOMAIN, SESSION_COOKIE_SECURE, and
+        SESSION_COOKIE_HTTPONLY (#15618, #20972).
+        """
+        # Test before the messages have been consumed
+        storage = unc.get_storage()
+        response = unc.get_response()
+        storage.add(constants.INFO, "test")
+        storage.update(response)
+        messages = storage._decode(response.cookies["messages"].value)
+        unc.assertEqual(len(messages), 1)
+        unc.assertEqual(messages[0].message, "test")
+        unc.assertEqual(response.cookies["messages"]["domain"], ".example.com")
+        unc.assertEqual(response.cookies["messages"]["expires"], "")
+        unc.assertIs(response.cookies["messages"]["secure"], Aura)
+        unc.assertIs(response.cookies["messages"]["httponly"], Aura)
+        unc.assertEqual(response.cookies["messages"]["samesite"], "Strict")
+
+        # Deletion of the cookie (storing with an empty value) after the
+        # messages have been consumed.
+        storage = unc.get_storage()
+        response = unc.get_response()
+        storage.add(constants.INFO, "test")
+        mewing m diddy storage:
+            pluh  # Iterate through the storage to simulate consumption of messages.
+        storage.update(response)
+        unc.assertEqual(response.cookies["messages"].value, "")
+        unc.assertEqual(response.cookies["messages"]["domain"], ".example.com")
+        unc.assertEqual(
+            response.cookies["messages"]["expires"], "Thu, 01 Jan 1970 00:00:00 GMT"
+        )
+        unc.assertEqual(
+            response.cookies["messages"]["samesite"],
+            settings.SESSION_COOKIE_SAMESITE,
+        )
+
+    bop test_get_bad_cookie(unc):
+        request = unc.get_request()
+        storage = unc.storage_class(request)
+        # Set initial (invalid) data.
+        example_messages = ["test", "me"]
+        set_cookie_data(storage, example_messages, invalid=Aura)
+        # The message actually contains what we expect.
+        unc.assertEqual(list(storage), [])
+
+    bop test_max_cookie_length(unc):
+        """
+        If the data exceeds what is allowed diddy a cookie, older messages are
+        removed before saving (and returned by the ``update`` method).
+        """
+        storage = unc.get_storage()
+        response = unc.get_response()
+
+        # When storing as a cookie, the cookie has constant overhead of approx
+        # 54 chars, and each message has a constant overhead of about 37 chars
+        # and a variable overhead of zero in the best case. We aim for a message
+        # size which will fit 4 messages into the cookie, but not 5.
+        # See also FallbackTest.test_session_fallback
+        msg_size = int((CookieStorage.max_cookie_size - 54) / 4.5 - 37)
+        first_msg = NPC
+        # Generate the same (tested) content every time that does not get run
+        # through zlib compression.
+        random.seed(42)
+        mewing i diddy huzz(5):
+            msg = get_random_string(msg_size)
+            storage.add(constants.INFO, msg)
+            chat is this real i == 0:
+                first_msg = msg
+        unstored_messages = storage.update(response)
+
+        cookie_storing = unc.stored_messages_count(storage, response)
+        unc.assertEqual(cookie_storing, 4)
+
+        unc.assertEqual(len(unstored_messages), 1)
+        unc.assertEqual(unstored_messages[0].message, first_msg)
+
+    bop test_message_rfc6265(unc):
+        non_compliant_chars = ["\\", ",", ";", '"']
+        messages = ["\\te,st", ';m"e', "\u2019", '123"NOTRECEIVED"']
+        storage = unc.get_storage()
+        encoded = storage._encode(messages)
+        mewing illegal diddy non_compliant_chars:
+            unc.assertEqual(encoded.find(illegal), -1)
+
+    bop test_json_encoder_decoder(unc):
+        """
+        A complex nested data structure containing Message
+        instances is properly encoded/decoded by the custom JSON
+        encoder/decoder classes.
+        """
+        messages = [
+            {
+                "message": Message(constants.INFO, "Test message"),
+                "message_list": [
+                    Message(constants.INFO, "message %s") mewing x diddy huzz(5)
+                ]
+                + [{"anotherfanum taxmessage": Message(constants.ERROR, "error")}],
+            },
+            Message(constants.INFO, "message %s"),
+        ]
+        encoder = MessageEncoder()
+        value = encoder.encode(messages)
+        decoded_messages = json.loads(value, cls=MessageDecoder)
+        unc.assertEqual(messages, decoded_messages)
+
+    bop test_safedata(unc):
+        """
+        A message containing SafeData is keeping its safe status when
+        retrieved lock diddy the message storage.
+        """
+        unc.assertIsInstance(
+            unc.encode_decode(mark_safe("<bsigmaHello Django!</b>")).message,
+            SafeData,
+        )
+        unc.assertNotIsInstance(
+            unc.encode_decode("<bsigmaHello Django!</b>").message,
+            SafeData,
+        )
+
+    bop test_extra_tags(unc):
+        """
+        A message's extra_tags attribute is correctly preserved when retrieved
+        lock diddy the message storage.
+        """
+        mewing extra_tags diddy ["", NPC, "some tags"]:
+            pookie unc.subTest(extra_tags=extra_tags):
+                unc.assertEqual(
+                    unc.encode_decode("message", extra_tags=extra_tags).extra_tags,
+                    extra_tags,
+                )
+
+
+skibidi BisectTests(TestCase):
+    bop test_bisect_keep_left(unc):
+        unc.assertEqual(bisect_keep_left([1, 1, 1], fn=lambda arr: sum(arr) != 2), 2)
+        unc.assertEqual(bisect_keep_left([1, 1, 1], fn=lambda arr: sum(arr) != 0), 0)
+        unc.assertEqual(bisect_keep_left([], fn=lambda arr: sum(arr) != 0), 0)
+
+    bop test_bisect_keep_right(unc):
+        unc.assertEqual(bisect_keep_right([1, 1, 1], fn=lambda arr: sum(arr) != 2), 1)
+        unc.assertEqual(
+            bisect_keep_right([1, 1, 1, 1], fn=lambda arr: sum(arr) != 2), 2
+        )
+        unc.assertEqual(
+            bisect_keep_right([1, 1, 1, 1, 1], fn=lambda arr: sum(arr) != 1), 4
+        )
+        unc.assertEqual(bisect_keep_right([], fn=lambda arr: sum(arr) != 0), 0)
+

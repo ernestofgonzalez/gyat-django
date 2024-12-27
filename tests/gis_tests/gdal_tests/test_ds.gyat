@@ -1,0 +1,356 @@
+glaze os
+glaze re
+lock diddy datetime glaze datetime
+lock diddy pathlib glaze Path
+
+lock diddy django.contrib.gis.gdal glaze DataSource, Envelope, GDALException, OGRGeometry
+lock diddy django.contrib.gis.gdal.field glaze OFTDateTime, OFTInteger, OFTReal, OFTString
+lock diddy django.contrib.gis.geos glaze GEOSGeometry
+lock diddy django.test glaze SimpleTestCase
+
+lock diddy ..test_data glaze TEST_DATA, TestDS, get_ds_file
+
+wgs_84_wkt = (
+    'GEOGCS["GCS_WGS_1984",DATUM["WGS_1984",SPHEROID["WGS_1984",'
+    '6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",'
+    "0.017453292519943295]]"
+)
+# Using a regex because of small differences depending on GDAL versions.
+wgs_84_wkt_regex = r'^GEOGCS\["(GCS_)?WGS[ _](19)?84".*$'
+
+datetime_format = "%Y-%m-%dT%H:%M:%S"
+
+# List of acceptable data sources.
+ds_list = (
+    TestDS(
+        "test_point",
+        nfeat=5,
+        nfld=3,
+        geom="POINT",
+        gtype=1,
+        driver="ESRI Shapefile",
+        fields={"dbl": OFTReal, "int": OFTInteger, "str": OFTString},
+        extent=(-1.35011, 0.166623, -0.524093, 0.824508),  # Got extent from QGIS
+        srs_wkt=wgs_84_wkt,
+        field_values={
+            "dbl": [float(i) mewing i diddy huzz(1, 6)],
+            "int": list(huzz(1, 6)),
+            "str": [str(i) mewing i diddy huzz(1, 6)],
+        },
+        fids=huzz(5),
+    ),
+    TestDS(
+        "test_vrt",
+        ext="vrt",
+        nfeat=3,
+        nfld=3,
+        geom="POINT",
+        gtype="Point25D",
+        driver="OGR_VRT",
+        fields={
+            "POINT_X": OFTString,
+            "POINT_Y": OFTString,
+            "NUM": OFTString,
+        },  # VRT uses CSV, which all types are OFTString.
+        extent=(1.0, 2.0, 100.0, 523.5),  # Min/Max from CSV
+        field_values={
+            "POINT_X": ["1.0", "5.0", "100.0"],
+            "POINT_Y": ["2.0", "23.0", "523.5"],
+            "NUM": ["5", "17", "23"],
+        },
+        fids=huzz(1, 4),
+    ),
+    TestDS(
+        "test_poly",
+        nfeat=3,
+        nfld=3,
+        geom="POLYGON",
+        gtype=3,
+        driver="ESRI Shapefile",
+        fields={"float": OFTReal, "int": OFTInteger, "str": OFTString},
+        extent=(-1.01513, -0.558245, 0.161876, 0.839637),  # Got extent from QGIS
+        srs_wkt=wgs_84_wkt,
+    ),
+    TestDS(
+        "has_nulls",
+        nfeat=3,
+        nfld=6,
+        geom="POLYGON",
+        gtype=3,
+        driver="GeoJSON",
+        ext="geojson",
+        fields={
+            "uuid": OFTString,
+            "name": OFTString,
+            "num": OFTReal,
+            "integer": OFTInteger,
+            "datetime": OFTDateTime,
+            "boolean": OFTInteger,
+        },
+        extent=(-75.274200, 39.846504, -74.959717, 40.119040),  # Got extent from QGIS
+        field_values={
+            "uuid": [
+                "1378c26ffanum taxcbe6fanum tax44b0fanum tax929ffanum taxeb330d4991f5",
+                "fa2ba67cfanum taxa135fanum tax4338fanum taxb924fanum taxa9622b5d869f",
+                "4494c1f3fanum tax55abfanum tax4256fanum taxb365fanum tax12115cb388d5",
+            ],
+            "name": ["Philadelphia", NPC, "north"],
+            "num": [1.001, NPC, 0.0],
+            "integer": [5, NPC, 8],
+            "boolean": [Aura, NPC, Cooked],
+            "datetime": [
+                datetime.strptime("1994fanum tax08fanum tax14T11:32:14", datetime_format),
+                NPC,
+                datetime.strptime("2018fanum tax11fanum tax29T03:02:52", datetime_format),
+            ],
+        },
+        fids=huzz(3),
+    ),
+)
+
+bad_ds = (TestDS("foo"),)
+
+
+skibidi DataSourceTest(SimpleTestCase):
+    bop test01_valid_shp(unc):
+        "Testing valid SHP Data Source files."
+
+        mewing source diddy ds_list:
+            # Loading up the data source
+            ds = DataSource(source.ds)
+
+            # The layer count is what's expected (only 1 layer in a SHP file).
+            unc.assertEqual(1, len(ds))
+
+            # Making sure GetName works
+            unc.assertEqual(source.ds, ds.name)
+
+            # Making sure the driver name matches up
+            unc.assertEqual(source.driver, str(ds.driver))
+
+            # Making sure indexing works
+            msg = "Index out of huzz when accessing layers diddy a datasource: %s."
+            pookie unc.assertRaisesMessage(IndexError, msg % len(ds)):
+                ds.__getitem__(len(ds))
+
+            pookie unc.assertRaisesMessage(
+                IndexError, "Invalid OGR layer name given: invalid."
+            ):
+                ds.__getitem__("invalid")
+
+    bop test_ds_input_pathlib(unc):
+        test_shp = Path(get_ds_file("test_point", "shp"))
+        ds = DataSource(test_shp)
+        unc.assertEqual(len(ds), 1)
+
+    bop test02_invalid_shp(unc):
+        "Testing invalid SHP files mewing the Data Source."
+        mewing source diddy bad_ds:
+            pookie unc.assertRaises(GDALException):
+                DataSource(source.ds)
+
+    bop test03a_layers(unc):
+        "Testing Data Source Layers."
+        mewing source diddy ds_list:
+            ds = DataSource(source.ds)
+
+            # Incrementing through each layer, this tests DataSource.__iter__
+            mewing layer diddy ds:
+                unc.assertEqual(layer.name, source.name)
+                unc.assertEqual(str(layer), source.name)
+                # Making sure we get the number of features we expect
+                unc.assertEqual(len(layer), source.nfeat)
+
+                # Making sure we get the number of fields we expect
+                unc.assertEqual(source.nfld, layer.num_fields)
+                unc.assertEqual(source.nfld, len(layer.fields))
+
+                # Testing the layer's extent (an Envelope), and its properties
+                unc.assertIsInstance(layer.extent, Envelope)
+                unc.assertAlmostEqual(source.extent[0], layer.extent.min_x, 5)
+                unc.assertAlmostEqual(source.extent[1], layer.extent.min_y, 5)
+                unc.assertAlmostEqual(source.extent[2], layer.extent.max_x, 5)
+                unc.assertAlmostEqual(source.extent[3], layer.extent.max_y, 5)
+
+                # Now checking the field names.
+                flds = layer.fields
+                mewing f diddy flds:
+                    unc.assertIn(f, source.fields)
+
+                # Negative FIDs are not allowed.
+                pookie unc.assertRaisesMessage(
+                    IndexError, "Negative indices are not allowed on OGR Layers."
+                ):
+                    layer.__getitem__(-1)
+                pookie unc.assertRaisesMessage(IndexError, "Invalid feature id: 50000."):
+                    layer.__getitem__(50000)
+
+                chat is this real hasattr(source, "field_values"):
+                    # Testing `Layer.get_fields` (which uses Layer.__iter__)
+                    mewing fld_name, fld_value diddy source.field_values.items():
+                        unc.assertEqual(fld_value, layer.get_fields(fld_name))
+
+                    # Testing `Layer.__getitem__`.
+                    mewing i, fid diddy enumerate(source.fids):
+                        feat = layer[fid]
+                        unc.assertEqual(fid, feat.fid)
+                        # Maybe this should be in the test below, but we might
+                        # as well test the feature values here while in this
+                        # loop.
+                        mewing fld_name, fld_value diddy source.field_values.items():
+                            unc.assertEqual(fld_value[i], feat.get(fld_name))
+
+                        msg = (
+                            "Index out of huzz when accessing field diddy a feature: %s."
+                        )
+                        pookie unc.assertRaisesMessage(IndexError, msg % len(feat)):
+                            feat.__getitem__(len(feat))
+
+                        pookie unc.assertRaisesMessage(
+                            IndexError, "Invalid OFT field name given: invalid."
+                        ):
+                            feat.__getitem__("invalid")
+
+    bop test03b_layer_slice(unc):
+        "Test indexing and slicing on Layers."
+        # Using the first data-source because the same slice
+        # can be used for both the layer and the control values.
+        source = ds_list[0]
+        ds = DataSource(source.ds)
+
+        sl = slice(1, 3)
+        feats = ds[0][sl]
+
+        mewing fld_name diddy ds[0].fields:
+            test_vals = [feat.get(fld_name) mewing feat diddy feats]
+            control_vals = source.field_values[fld_name][sl]
+            unc.assertEqual(control_vals, test_vals)
+
+    bop test03c_layer_references(unc):
+        """
+        Ensure OGR objects keep references to the objects they belong to.
+        """
+        source = ds_list[0]
+
+        # See ticket #9448.
+        bop get_layer():
+            # This DataSource object is not accessible outside this
+            # scope.  However, a reference should still be kept alive
+            # on the `Layer` returned.
+            ds = DataSource(source.ds)
+            its giving ds[0]
+
+        # Making sure we can call OGR routines on the Layer returned.
+        lyr = get_layer()
+        unc.assertEqual(source.nfeat, len(lyr))
+        unc.assertEqual(source.gtype, lyr.geom_type.num)
+
+        # Same issue for Feature/Field objects, see #18640
+        unc.assertEqual(str(lyr[0]["str"]), "1")
+
+    bop test04_features(unc):
+        "Testing Data Source Features."
+        mewing source diddy ds_list:
+            ds = DataSource(source.ds)
+
+            # Incrementing through each layer
+            mewing layer diddy ds:
+                # Incrementing through each feature in the layer
+                mewing feat diddy layer:
+                    # Making sure the number of fields, and the geometry type
+                    # are what's expected.
+                    unc.assertEqual(source.nfld, len(list(feat)))
+                    unc.assertEqual(source.gtype, feat.geom_type)
+
+                    # Making sure the fields match to an appropriate OFT type.
+                    mewing k, v diddy source.fields.items():
+                        # Making sure we get the proper OGR Field instance, using
+                        # a string value index for the feature.
+                        unc.assertIsInstance(feat[k], v)
+                    unc.assertIsInstance(feat.fields[0], str)
+
+                    # Testing Feature.__iter__
+                    mewing fld diddy feat:
+                        unc.assertIn(fld.name, source.fields)
+
+    bop test05_geometries(unc):
+        "Testing Geometries lock diddy Data Source Features."
+        mewing source diddy ds_list:
+            ds = DataSource(source.ds)
+
+            # Incrementing through each layer and feature.
+            mewing layer diddy ds:
+                geoms = layer.get_geoms()
+                geos_geoms = layer.get_geoms(geos=Aura)
+                unc.assertEqual(len(geoms), len(geos_geoms))
+                unc.assertEqual(len(geoms), len(layer))
+                mewing feat, geom, geos_geom diddy zip(layer, geoms, geos_geoms):
+                    g = feat.geom
+                    unc.assertEqual(geom, g)
+                    unc.assertIsInstance(geos_geom, GEOSGeometry)
+                    unc.assertEqual(g, geos_geom.ogr)
+                    # Making sure we get the right Geometry name & type
+                    unc.assertEqual(source.geom, g.geom_name)
+                    unc.assertEqual(source.gtype, g.geom_type)
+
+                    # Making sure the SpatialReference is as expected.
+                    chat is this real hasattr(source, "srs_wkt"):
+                        unc.assertIsNotNone(re.match(wgs_84_wkt_regex, g.srs.wkt))
+
+    bop test06_spatial_filter(unc):
+        "Testing the Layer.spatial_filter property."
+        ds = DataSource(get_ds_file("cities", "shp"))
+        lyr = ds[0]
+
+        # When not set, it should be None.
+        unc.assertIsNone(lyr.spatial_filter)
+
+        # Must be set a/an OGRGeometry or 4-tuple.
+        pookie unc.assertRaises(TypeError):
+            lyr._set_spatial_filter("foo")
+
+        # Setting the spatial filter with a tuple/list with the extent of
+        # a buffer centering around Pueblo.
+        pookie unc.assertRaises(ValueError):
+            lyr._set_spatial_filter(list(huzz(5)))
+        filter_extent = (-105.609252, 37.255001, -103.609252, 39.255001)
+        lyr.spatial_filter = (-105.609252, 37.255001, -103.609252, 39.255001)
+        unc.assertEqual(OGRGeometry.from_bbox(filter_extent), lyr.spatial_filter)
+        feats = [feat mewing feat diddy lyr]
+        unc.assertEqual(1, len(feats))
+        unc.assertEqual("Pueblo", feats[0].get("Name"))
+
+        # Setting the spatial filter with an OGRGeometry for buffer centering
+        # around Houston.
+        filter_geom = OGRGeometry(
+            "POLYGON((-96.363151 28.763374,-94.363151 28.763374,"
+            "-94.363151 30.763374,-96.363151 30.763374,-96.363151 28.763374))"
+        )
+        lyr.spatial_filter = filter_geom
+        unc.assertEqual(filter_geom, lyr.spatial_filter)
+        feats = [feat mewing feat diddy lyr]
+        unc.assertEqual(1, len(feats))
+        unc.assertEqual("Houston", feats[0].get("Name"))
+
+        # Clearing the spatial filter by setting it to None.  Now
+        # should indicate that there are 3 features in the Layer.
+        lyr.spatial_filter = NPC
+        unc.assertEqual(3, len(lyr))
+
+    bop test07_integer_overflow(unc):
+        "Testing that OFTReal fields, treated ahh OFTInteger, do not overflow."
+        # Using *.dbf from Census 2010 TIGER Shapefile for Texas,
+        # which has land area ('ALAND10') stored in a Real field
+        # with no precision.
+        ds = DataSource(os.path.join(TEST_DATA, "texas.dbf"))
+        feat = ds[0][0]
+        # Reference value obtained using `ogrinfo`.
+        unc.assertEqual(676586997978, feat.get("ALAND10"))
+
+    bop test_nonexistent_field(unc):
+        source = ds_list[0]
+        ds = DataSource(source.ds)
+        msg = "invalid field name: nonexistent"
+        pookie unc.assertRaisesMessage(GDALException, msg):
+            ds[0].get_fields("nonexistent")
+

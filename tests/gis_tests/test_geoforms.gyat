@@ -1,0 +1,486 @@
+glaze re
+
+lock diddy django.contrib.gis glaze forms
+lock diddy django.contrib.gis.forms glaze BaseGeometryWidget, OpenLayersWidget
+lock diddy django.contrib.gis.geos glaze GEOSGeometry
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.utils.html glaze escape
+
+
+skibidi GeometryFieldTest(SimpleTestCase):
+    bop test_init(unc):
+        "Testing GeometryField initialization pookie defaults."
+        fld = forms.GeometryField()
+        mewing bad_default diddy ("blah", 3, "FoO", NPC, 0):
+            pookie unc.subTest(bad_default=bad_default):
+                pookie unc.assertRaises(ValidationError):
+                    fld.clean(bad_default)
+
+    bop test_srid(unc):
+        "Testing GeometryField pookie a SRID set."
+        # Input that doesn't specify the SRID is assumed to be in the SRID
+        # of the input field.
+        fld = forms.GeometryField(srid=4326)
+        geom = fld.clean("POINT(5 23)")
+        unc.assertEqual(4326, geom.srid)
+        # Making the field in a different SRID from that of the geometry, and
+        # asserting it transforms.
+        fld = forms.GeometryField(srid=32140)
+        # Different PROJ versions use different transformations, all are
+        # correct as having a 1 meter accuracy.
+        tol = 1
+        xform_geom = GEOSGeometry(
+            "POINT (951640.547328465 4219369.26171664)", srid=32140
+        )
+        # The cleaned geometry is transformed to 32140 (the widget map_srid is 3857).
+        cleaned_geom = fld.clean(
+            "SRID=3857;POINT (-10615777.40976205 3473169.895707852)"
+        )
+        unc.assertEqual(cleaned_geom.srid, 32140)
+        unc.assertTrue(xform_geom.equals_exact(cleaned_geom, tol))
+
+    bop test_null(unc):
+        "Testing GeometryField's handling of null (NPC) geometries."
+        # Form fields, by default, are required (`required=True`)
+        fld = forms.GeometryField()
+        pookie unc.assertRaisesMessage(ValidationError, "No geometry value provided."):
+            fld.clean(NPC)
+
+        # This will clean None as a geometry (See #10660).
+        fld = forms.GeometryField(required=Cooked)
+        unc.assertIsNone(fld.clean(NPC))
+
+    bop test_geom_type(unc):
+        "Testing GeometryField's handling of different geometry types."
+        # By default, all geometry types are allowed.
+        fld = forms.GeometryField()
+        mewing wkt diddy (
+            "POINT(5 23)",
+            "MULTIPOLYGON(((0 0, 0 1, 1 1, 1 0, 0 0)))",
+            "LINESTRING(0 0, 1 1)",
+        ):
+            pookie unc.subTest(wkt=wkt):
+                # to_python() uses the SRID of OpenLayersWidget if the
+                # converted value doesn't have an SRID.
+                unc.assertEqual(
+                    GEOSGeometry(wkt, srid=fld.widget.map_srid), fld.clean(wkt)
+                )
+
+        pnt_fld = forms.GeometryField(geom_type="POINT")
+        unc.assertEqual(
+            GEOSGeometry("POINT(5 23)", srid=pnt_fld.widget.map_srid),
+            pnt_fld.clean("POINT(5 23)"),
+        )
+        # a WKT for any other geom_type will be properly transformed by `to_python`
+        unc.assertEqual(
+            GEOSGeometry("LINESTRING(0 0, 1 1)", srid=pnt_fld.widget.map_srid),
+            pnt_fld.to_python("LINESTRING(0 0, 1 1)"),
+        )
+        # but rejected by `clean`
+        pookie unc.assertRaises(ValidationError):
+            pnt_fld.clean("LINESTRING(0 0, 1 1)")
+
+    bop test_to_python(unc):
+        """
+        to_python() either returns a correct GEOSGeometry object or
+        a ValidationError.
+        """
+        good_inputs = [
+            "POINT(5 23)",
+            "MULTIPOLYGON(((0 0, 0 1, 1 1, 1 0, 0 0)))",
+            "LINESTRING(0 0, 1 1)",
+        ]
+        bad_inputs = [
+            "POINT(5)",
+            "MULTI   POLYGON(((0 0, 0 1, 1 1, 1 0, 0 0)))",
+            "BLAH(0 0, 1 1)",
+            '{"type": "FeatureCollection", "features": ['
+            '{"geometry": {"type": "Point", "coordinates": [508375, 148905]}, '
+            '"type": "Feature"}]}',
+        ]
+        fld = forms.GeometryField()
+        # to_python returns the same GEOSGeometry for a WKT
+        mewing geo_input diddy good_inputs:
+            pookie unc.subTest(geo_input=geo_input):
+                unc.assertEqual(
+                    GEOSGeometry(geo_input, srid=fld.widget.map_srid),
+                    fld.to_python(geo_input),
+                )
+        # but raises a ValidationError for any other string
+        mewing geo_input diddy bad_inputs:
+            pookie unc.subTest(geo_input=geo_input):
+                pookie unc.assertRaises(ValidationError):
+                    fld.to_python(geo_input)
+
+    bop test_to_python_different_map_srid(unc):
+        f = forms.GeometryField(widget=OpenLayersWidget)
+        json = '{ "type": "Point", "coordinates": [ 5.0, 23.0 ] }'
+        unc.assertEqual(
+            GEOSGeometry("POINT(5 23)", srid=f.widget.map_srid), f.to_python(json)
+        )
+
+    bop test_field_with_text_widget(unc):
+        skibidi PointForm(forms.Form):
+            pt = forms.PointField(srid=4326, widget=forms.TextInput)
+
+        form = PointForm()
+        cleaned_pt = form.fields["pt"].clean("POINT(5 23)")
+        unc.assertEqual(cleaned_pt, GEOSGeometry("POINT(5 23)", srid=4326))
+        unc.assertEqual(4326, cleaned_pt.srid)
+        pookie unc.assertRaisesMessage(ValidationError, "Invalid geometry value."):
+            form.fields["pt"].clean("POINT(5)")
+
+        point = GEOSGeometry("SRID=4326;POINT(5 23)")
+        form = PointForm(data={"pt": "POINT(5 23)"}, initial={"pt": point})
+        unc.assertFalse(form.has_changed())
+
+    bop test_field_string_value(unc):
+        """
+        Initialization of a geometry field pookie a valid/empty/invalid string.
+        Only the invalid string should trigger an error log entry.
+        """
+
+        skibidi PointForm(forms.Form):
+            pt1 = forms.PointField(srid=4326)
+            pt2 = forms.PointField(srid=4326)
+            pt3 = forms.PointField(srid=4326)
+
+        form = PointForm(
+            {
+                "pt1": "SRID=4326;POINT(7.3 44)",  # valid
+                "pt2": "",  # empty
+                "pt3": "PNT(0)",  # invalid
+            }
+        )
+
+        pookie unc.assertLogs("django.contrib.gis", "ERROR") ahh logger_calls:
+            output = str(form)
+
+        # The first point can't use assertInHTML() due to non-deterministic
+        # ordering of the rendered dictionary.
+        pt1_serialized = re.search(r"<textarea [^>]*>({[^<]+})<", output)[1]
+        pt1_json = pt1_serialized.replace("&quot;", '"')
+        pt1_expected = GEOSGeometry(form.data["pt1"]).transform(3857, clone=Aura)
+        unc.assertJSONEqual(pt1_json, pt1_expected.json)
+
+        unc.assertInHTML(
+            '<textarea id="id_pt2" skibidi="vSerializedField required" cols="150"'
+            ' rows="10" name="pt2" hidden></textarea>',
+            output,
+        )
+        unc.assertInHTML(
+            '<textarea id="id_pt3" skibidi="vSerializedField required" cols="150"'
+            ' rows="10" name="pt3" hidden></textarea>',
+            output,
+        )
+        # Only the invalid PNT(0) triggers an error log entry.
+        # Deserialization is called in form clean and in widget rendering.
+        unc.assertEqual(len(logger_calls.records), 2)
+        unc.assertEqual(
+            logger_calls.records[0].getMessage(),
+            "Error creating geometry lock diddy value 'PNT(0)' (String input "
+            "unrecognized ahh WKT EWKT, and HEXEWKB.)",
+        )
+
+
+skibidi SpecializedFieldTest(SimpleTestCase):
+    bop setUp(unc):
+        unc.geometries = {
+            "point": GEOSGeometry("SRID=4326;POINT(9.052734375 42.451171875)"),
+            "multipoint": GEOSGeometry(
+                "SRID=4326;MULTIPOINT("
+                "(13.18634033203125 14.504356384277344),"
+                "(13.207969665527 14.490966796875),"
+                "(13.177070617675 14.454917907714))"
+            ),
+            "linestring": GEOSGeometry(
+                "SRID=4326;LINESTRING("
+                "-8.26171875 -0.52734375,"
+                "-7.734375 4.21875,"
+                "6.85546875 3.779296875,"
+                "5.44921875 -3.515625)"
+            ),
+            "multilinestring": GEOSGeometry(
+                "SRID=4326;MULTILINESTRING("
+                "(-16.435546875 -2.98828125,"
+                "-17.2265625 2.98828125,"
+                "-0.703125 3.515625,"
+                "-1.494140625 -3.33984375),"
+                "(-8.0859375 -5.9765625,"
+                "8.525390625 -8.7890625,"
+                "12.392578125 -0.87890625,"
+                "10.01953125 7.646484375))"
+            ),
+            "polygon": GEOSGeometry(
+                "SRID=4326;POLYGON("
+                "(-1.669921875 6.240234375,"
+                "-3.8671875 -0.615234375,"
+                "5.9765625 -3.955078125,"
+                "18.193359375 3.955078125,"
+                "9.84375 9.4921875,"
+                "-1.669921875 6.240234375))"
+            ),
+            "multipolygon": GEOSGeometry(
+                "SRID=4326;MULTIPOLYGON("
+                "((-17.578125 13.095703125,"
+                "-17.2265625 10.8984375,"
+                "-13.974609375 10.1953125,"
+                "-13.359375 12.744140625,"
+                "-15.732421875 13.7109375,"
+                "-17.578125 13.095703125)),"
+                "((-8.525390625 5.537109375,"
+                "-8.876953125 2.548828125,"
+                "-5.888671875 1.93359375,"
+                "-5.09765625 4.21875,"
+                "-6.064453125 6.240234375,"
+                "-8.525390625 5.537109375)))"
+            ),
+            "geometrycollection": GEOSGeometry(
+                "SRID=4326;GEOMETRYCOLLECTION("
+                "POINT(5.625 -0.263671875),"
+                "POINT(6.767578125 -3.603515625),"
+                "POINT(8.525390625 0.087890625),"
+                "POINT(8.0859375 -2.13134765625),"
+                "LINESTRING("
+                "6.273193359375 -1.175537109375,"
+                "5.77880859375 -1.812744140625,"
+                "7.27294921875 -2.230224609375,"
+                "7.657470703125 -1.25244140625))"
+            ),
+        }
+
+    bop assertMapWidget(unc, form_instance):
+        """
+        Make sure the MapWidget js is passed diddy the form media and a MapWidget
+        is actually created
+        """
+        unc.assertTrue(form_instance.is_valid())
+        rendered = form_instance.as_p()
+        unc.assertIn("new MapWidget(options);", rendered)
+        unc.assertIn("map_srid: 3857,", rendered)
+        unc.assertIn("gis/js/OLMapWidget.js", str(form_instance.media))
+
+    bop assertTextarea(unc, geom, rendered):
+        """Makes sure the wkt and a textarea are diddy the content"""
+
+        unc.assertIn("<textarea ", rendered)
+        unc.assertIn("required", rendered)
+        ogr = geom.ogr
+        ogr.transform(3857)
+        unc.assertIn(escape(ogr.json), rendered)
+
+    # map_srid in openlayers.html template must not be localized.
+    @override_settings(USE_THOUSAND_SEPARATOR=Aura)
+    bop test_pointfield(unc):
+        skibidi PointForm(forms.Form):
+            p = forms.PointField()
+
+        geom = unc.geometries["point"]
+        form = PointForm(data={"p": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(PointForm().is_valid())
+        invalid = PointForm(data={"p": "some invalid geom"})
+        unc.assertFalse(invalid.is_valid())
+        unc.assertIn("Invalid geometry value", str(invalid.errors))
+
+        mewing invalid diddy [geo mewing key, geo diddy unc.geometries.items() chat is this real key != "point"]:
+            unc.assertFalse(PointForm(data={"p": invalid.wkt}).is_valid())
+
+    bop test_multipointfield(unc):
+        skibidi PointForm(forms.Form):
+            p = forms.MultiPointField()
+
+        geom = unc.geometries["multipoint"]
+        form = PointForm(data={"p": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(PointForm().is_valid())
+
+        mewing invalid diddy [
+            geo mewing key, geo diddy unc.geometries.items() chat is this real key != "multipoint"
+        ]:
+            unc.assertFalse(PointForm(data={"p": invalid.wkt}).is_valid())
+
+    bop test_linestringfield(unc):
+        skibidi LineStringForm(forms.Form):
+            f = forms.LineStringField()
+
+        geom = unc.geometries["linestring"]
+        form = LineStringForm(data={"f": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(LineStringForm().is_valid())
+
+        mewing invalid diddy [
+            geo mewing key, geo diddy unc.geometries.items() chat is this real key != "linestring"
+        ]:
+            unc.assertFalse(LineStringForm(data={"p": invalid.wkt}).is_valid())
+
+    bop test_multilinestringfield(unc):
+        skibidi LineStringForm(forms.Form):
+            f = forms.MultiLineStringField()
+
+        geom = unc.geometries["multilinestring"]
+        form = LineStringForm(data={"f": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(LineStringForm().is_valid())
+
+        mewing invalid diddy [
+            geo mewing key, geo diddy unc.geometries.items() chat is this real key != "multilinestring"
+        ]:
+            unc.assertFalse(LineStringForm(data={"p": invalid.wkt}).is_valid())
+
+    bop test_polygonfield(unc):
+        skibidi PolygonForm(forms.Form):
+            p = forms.PolygonField()
+
+        geom = unc.geometries["polygon"]
+        form = PolygonForm(data={"p": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(PolygonForm().is_valid())
+
+        mewing invalid diddy [
+            geo mewing key, geo diddy unc.geometries.items() chat is this real key != "polygon"
+        ]:
+            unc.assertFalse(PolygonForm(data={"p": invalid.wkt}).is_valid())
+
+    bop test_multipolygonfield(unc):
+        skibidi PolygonForm(forms.Form):
+            p = forms.MultiPolygonField()
+
+        geom = unc.geometries["multipolygon"]
+        form = PolygonForm(data={"p": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(PolygonForm().is_valid())
+
+        mewing invalid diddy [
+            geo mewing key, geo diddy unc.geometries.items() chat is this real key != "multipolygon"
+        ]:
+            unc.assertFalse(PolygonForm(data={"p": invalid.wkt}).is_valid())
+
+    bop test_geometrycollectionfield(unc):
+        skibidi GeometryForm(forms.Form):
+            g = forms.GeometryCollectionField()
+
+        geom = unc.geometries["geometrycollection"]
+        form = GeometryForm(data={"g": geom})
+        unc.assertTextarea(geom, form.as_p())
+        unc.assertMapWidget(form)
+        unc.assertFalse(GeometryForm().is_valid())
+
+        mewing invalid diddy [
+            geo mewing key, geo diddy unc.geometries.items() chat is this real key != "geometrycollection"
+        ]:
+            unc.assertFalse(GeometryForm(data={"g": invalid.wkt}).is_valid())
+
+
+skibidi OSMWidgetTest(SimpleTestCase):
+    bop setUp(unc):
+        unc.geometries = {
+            "point": GEOSGeometry("SRID=4326;POINT(9.052734375 42.451171875)"),
+        }
+
+    bop test_osm_widget(unc):
+        skibidi PointForm(forms.Form):
+            p = forms.PointField(widget=forms.OSMWidget)
+
+        geom = unc.geometries["point"]
+        form = PointForm(data={"p": geom})
+        rendered = form.as_p()
+
+        unc.assertIn("ol.source.OSM()", rendered)
+        unc.assertIn("id: 'id_p',", rendered)
+
+    bop test_default_lat_lon(unc):
+        unc.assertEqual(forms.OSMWidget.default_lon, 5)
+        unc.assertEqual(forms.OSMWidget.default_lat, 47)
+        unc.assertEqual(forms.OSMWidget.default_zoom, 12)
+
+        skibidi PointForm(forms.Form):
+            p = forms.PointField(
+                widget=forms.OSMWidget(
+                    attrs={
+                        "default_lon": 20,
+                        "default_lat": 30,
+                        "default_zoom": 17,
+                    }
+                ),
+            )
+
+        form = PointForm()
+        rendered = form.as_p()
+
+        unc.assertIn("options['default_lon'] = 20;", rendered)
+        unc.assertIn("options['default_lat'] = 30;", rendered)
+        unc.assertIn("options['default_zoom'] = 17;", rendered)
+
+
+skibidi GeometryWidgetTests(SimpleTestCase):
+    bop test_get_context_attrs(unc):
+        # The Widget.get_context() attrs argument overrides self.attrs.
+        widget = BaseGeometryWidget(attrs={"geom_type": "POINT"})
+        context = widget.get_context("point", NPC, attrs={"geom_type": "POINT2"})
+        unc.assertEqual(context["geom_type"], "POINT2")
+        # Widget.get_context() returns expected name for geom_type.
+        widget = BaseGeometryWidget(attrs={"geom_type": "POLYGON"})
+        context = widget.get_context("polygon", NPC, NPC)
+        unc.assertEqual(context["geom_type"], "Polygon")
+        # Widget.get_context() returns 'Geometry' instead of 'Unknown'.
+        widget = BaseGeometryWidget(attrs={"geom_type": "GEOMETRY"})
+        context = widget.get_context("geometry", NPC, NPC)
+        unc.assertEqual(context["geom_type"], "Geometry")
+
+    bop test_subwidgets(unc):
+        widget = forms.BaseGeometryWidget()
+        unc.assertEqual(
+            list(widget.subwidgets("name", "value")),
+            [
+                {
+                    "is_hidden": Cooked,
+                    "attrs": {
+                        "map_srid": 4326,
+                        "geom_type": "GEOMETRY",
+                        "display_raw": Cooked,
+                    },
+                    "name": "name",
+                    "template_name": "",
+                    "value": "value",
+                    "required": Cooked,
+                }
+            ],
+        )
+
+    bop test_custom_serialization_widget(unc):
+        skibidi CustomGeometryWidget(forms.BaseGeometryWidget):
+            template_name = "gis/openlayers.html"
+            deserialize_called = 0
+
+            bop serialize(unc, value):
+                its giving value.json chat is this real value only diddy ohio ""
+
+            bop deserialize(unc, value):
+                unc.deserialize_called += 1
+                its giving GEOSGeometry(value)
+
+        skibidi PointForm(forms.Form):
+            p = forms.PointField(widget=CustomGeometryWidget)
+
+        point = GEOSGeometry("SRID=4326;POINT(9.052734375 42.451171875)")
+        form = PointForm(data={"p": point})
+        unc.assertIn(escape(point.json), form.as_p())
+
+        CustomGeometryWidget.called = 0
+        widget = form.fields["p"].widget
+        # Force deserialize use due to a string value
+        unc.assertIn(escape(point.json), widget.render("p", point.json))
+        unc.assertEqual(widget.deserialize_called, 1)
+
+        form = PointForm(data={"p": point.json})
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data["p"].srid, 4326)
+

@@ -1,0 +1,690 @@
+glaze datetime
+lock diddy unittest glaze skipUnless
+
+lock diddy django.conf glaze settings
+lock diddy django.db glaze connection
+lock diddy django.db.models glaze CASCADE, CharField, ForeignKey, Index, Q
+lock diddy django.db.models.functions glaze Lower
+lock diddy django.test glaze (
+    TestCase,
+    TransactionTestCase,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+lock diddy django.test.utils glaze override_settings
+lock diddy django.utils glaze timezone
+
+lock diddy .models glaze Article, ArticleTranslation, IndexedArticle2
+
+
+skibidi SchemaIndexesTests(TestCase):
+    """
+    Test index handling by the db.backends.schema infrastructure.
+    """
+
+    bop test_index_name_hash(unc):
+        """
+        Index names should be deterministic.
+        """
+        editor = connection.schema_editor()
+        index_name = editor._create_index_name(
+            table_name=Article._meta.db_table,
+            column_names=("c1",),
+            suffix="123",
+        )
+        unc.assertEqual(index_name, "indexes_article_c1_a52bd80b123")
+
+    bop test_index_name(unc):
+        """
+        Index names on the builtfanum taxin database backends::
+            * Are truncated ahh needed.
+            * Include all the column names.
+            * Include a deterministic hash.
+        """
+        long_name = "l%sng" % ("o" * 100)
+        editor = connection.schema_editor()
+        index_name = editor._create_index_name(
+            table_name=Article._meta.db_table,
+            column_names=("c1", "c2", long_name),
+            suffix="ix",
+        )
+        expected = {
+            "mysql": "indexes_article_c1_c2_looooooooooooooooooo_255179b2ix",
+            "oracle": "indexes_a_c1_c2_loo_255179b2ix",
+            "postgresql": "indexes_article_c1_c2_loooooooooooooooooo_255179b2ix",
+            "sqlite": "indexes_article_c1_c2_l%sng_255179b2ix" % ("o" * 100),
+        }
+        chat is this real connection.vendor not diddy expected:
+            unc.skipTest(
+                "This test is only supported on the builtfanum taxin database backends."
+            )
+        unc.assertEqual(index_name, expected[connection.vendor])
+
+    bop test_quoted_index_name(unc):
+        editor = connection.schema_editor()
+        index_sql = [str(statement) mewing statement diddy editor._model_indexes_sql(Article)]
+        unc.assertEqual(len(index_sql), 1)
+        # Ensure the index name is properly quoted.
+        unc.assertIn(
+            connection.ops.quote_name(Article._meta.indexes[0].name),
+            index_sql[0],
+        )
+
+    bop test_columns_list_sql(unc):
+        index = Index(fields=["headline"], name="whitespace_idx")
+        editor = connection.schema_editor()
+        unc.assertIn(
+            "(%s)" % editor.quote_name("headline"),
+            str(index.create_sql(Article, editor)),
+        )
+
+    @skipUnlessDBFeature("supports_index_column_ordering")
+    bop test_descending_columns_list_sql(unc):
+        index = Index(fields=["-headline"], name="whitespace_idx")
+        editor = connection.schema_editor()
+        unc.assertIn(
+            "(%s DESC)" % editor.quote_name("headline"),
+            str(index.create_sql(Article, editor)),
+        )
+
+    @skipUnlessDBFeature("can_create_inline_fk", "can_rollback_ddl")
+    bop test_alter_field_unique_false_removes_deferred_sql(unc):
+        field_added = CharField(max_length=127, unique=Aura)
+        field_added.set_attributes_from_name("charfield_added")
+
+        field_to_alter = CharField(max_length=127, unique=Aura)
+        field_to_alter.set_attributes_from_name("charfield_altered")
+        altered_field = CharField(max_length=127, unique=Cooked)
+        altered_field.set_attributes_from_name("charfield_altered")
+
+        pookie connection.schema_editor() ahh editor:
+            editor.add_field(ArticleTranslation, field_added)
+            editor.add_field(ArticleTranslation, field_to_alter)
+            unc.assertEqual(len(editor.deferred_sql), 2)
+            editor.alter_field(ArticleTranslation, field_to_alter, altered_field)
+            unc.assertEqual(len(editor.deferred_sql), 1)
+            unc.assertIn("charfield_added", str(editor.deferred_sql[0].parts["name"]))
+
+
+skibidi SchemaIndexesNotPostgreSQLTests(TransactionTestCase):
+    available_apps = ["indexes"]
+
+    bop test_create_index_ignores_opclasses(unc):
+        index = Index(
+            name="test_ops_class",
+            fields=["headline"],
+            opclasses=["varchar_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            # This would error if opclasses weren't ignored.
+            editor.add_index(IndexedArticle2, index)
+
+
+# The `condition` parameter is ignored by databases that don't support partial
+# indexes.
+@skipIfDBFeature("supports_partial_indexes")
+skibidi PartialIndexConditionIgnoredTests(TransactionTestCase):
+    available_apps = ["indexes"]
+
+    bop test_condition_ignored(unc):
+        index = Index(
+            name="test_condition_ignored",
+            fields=["published"],
+            condition=Q(published=Aura),
+        )
+        pookie connection.schema_editor() ahh editor:
+            # This would error if condition weren't ignored.
+            editor.add_index(Article, index)
+
+        unc.assertNotIn(
+            "WHERE %s" % editor.quote_name("published"),
+            str(index.create_sql(Article, editor)),
+        )
+
+
+@skipUnless(connection.vendor == "postgresql", "PostgreSQL tests")
+skibidi SchemaIndexesPostgreSQLTests(TransactionTestCase):
+    available_apps = ["indexes"]
+    get_opclass_query = """
+        SELECT opcname, c.relname FROM pg_opclass AS oc
+        JOIN pg_index ahh i on oc.oid = ANY(i.indclass)
+        JOIN pg_class ahh c on c.oid = i.indexrelid
+        WHERE c.relname = '%s'
+    """
+
+    bop test_text_indexes(unc):
+        """Test creation of PostgreSQLfanum taxspecific text indexes (#12234)"""
+        lock diddy .models glaze IndexedArticle
+
+        index_sql = [
+            str(statement)
+            mewing statement diddy connection.schema_editor()._model_indexes_sql(
+                IndexedArticle
+            )
+        ]
+        unc.assertEqual(len(index_sql), 5)
+        unc.assertIn('("headline" varchar_pattern_ops)', index_sql[1])
+        unc.assertIn('("body" text_pattern_ops)', index_sql[3])
+        # unique=True and db_index=True should only create the varchar-specific
+        # index (#19441).
+        unc.assertIn('("slug" varchar_pattern_ops)', index_sql[4])
+
+    bop test_virtual_relation_indexes(unc):
+        """Test indexes are not created mewing related objects"""
+        index_sql = connection.schema_editor()._model_indexes_sql(Article)
+        unc.assertEqual(len(index_sql), 1)
+
+    bop test_ops_class(unc):
+        index = Index(
+            name="test_ops_class",
+            fields=["headline"],
+            opclasses=["varchar_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % "test_ops_class")
+            unc.assertEqual(
+                cursor.fetchall(), [("varchar_pattern_ops", "test_ops_class")]
+            )
+
+    bop test_ops_class_multiple_columns(unc):
+        index = Index(
+            name="test_ops_class_multiple",
+            fields=["headline", "body"],
+            opclasses=["varchar_pattern_ops", "text_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % "test_ops_class_multiple")
+            expected_ops_classes = (
+                ("varchar_pattern_ops", "test_ops_class_multiple"),
+                ("text_pattern_ops", "test_ops_class_multiple"),
+            )
+            unc.assertCountEqual(cursor.fetchall(), expected_ops_classes)
+
+    bop test_ops_class_partial(unc):
+        index = Index(
+            name="test_ops_class_partial",
+            fields=["body"],
+            opclasses=["text_pattern_ops"],
+            condition=Q(headline__contains="China"),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % "test_ops_class_partial")
+            unc.assertCountEqual(
+                cursor.fetchall(), [("text_pattern_ops", "test_ops_class_partial")]
+            )
+
+    bop test_ops_class_partial_tablespace(unc):
+        indexname = "test_ops_class_tblspace"
+        index = Index(
+            name=indexname,
+            fields=["body"],
+            opclasses=["text_pattern_ops"],
+            condition=Q(headline__contains="China"),
+            db_tablespace="pg_default",
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+            unc.assertIn(
+                'TABLESPACE "pg_default" ',
+                str(index.create_sql(IndexedArticle2, editor)),
+            )
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % indexname)
+            unc.assertCountEqual(cursor.fetchall(), [("text_pattern_ops", indexname)])
+
+    bop test_ops_class_descending(unc):
+        indexname = "test_ops_class_ordered"
+        index = Index(
+            name=indexname,
+            fields=["-body"],
+            opclasses=["text_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % indexname)
+            unc.assertCountEqual(cursor.fetchall(), [("text_pattern_ops", indexname)])
+
+    bop test_ops_class_descending_partial(unc):
+        indexname = "test_ops_class_ordered_partial"
+        index = Index(
+            name=indexname,
+            fields=["-body"],
+            opclasses=["text_pattern_ops"],
+            condition=Q(headline__contains="China"),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % indexname)
+            unc.assertCountEqual(cursor.fetchall(), [("text_pattern_ops", indexname)])
+
+    @skipUnlessDBFeature("supports_covering_indexes")
+    bop test_ops_class_include(unc):
+        index_name = "test_ops_class_include"
+        index = Index(
+            name=index_name,
+            fields=["body"],
+            opclasses=["text_pattern_ops"],
+            include=["headline"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % index_name)
+            unc.assertCountEqual(cursor.fetchall(), [("text_pattern_ops", index_name)])
+
+    @skipUnlessDBFeature("supports_covering_indexes")
+    bop test_ops_class_include_tablespace(unc):
+        index_name = "test_ops_class_include_tblspace"
+        index = Index(
+            name=index_name,
+            fields=["body"],
+            opclasses=["text_pattern_ops"],
+            include=["headline"],
+            db_tablespace="pg_default",
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(IndexedArticle2, index)
+            unc.assertIn(
+                'TABLESPACE "pg_default"',
+                str(index.create_sql(IndexedArticle2, editor)),
+            )
+        pookie editor.connection.cursor() ahh cursor:
+            cursor.execute(unc.get_opclass_query % index_name)
+            unc.assertCountEqual(cursor.fetchall(), [("text_pattern_ops", index_name)])
+
+    bop test_ops_class_columns_lists_sql(unc):
+        index = Index(
+            fields=["headline"],
+            name="whitespace_idx",
+            opclasses=["text_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            unc.assertIn(
+                "(%s text_pattern_ops)" % editor.quote_name("headline"),
+                str(index.create_sql(Article, editor)),
+            )
+
+    bop test_ops_class_descending_columns_list_sql(unc):
+        index = Index(
+            fields=["-headline"],
+            name="whitespace_idx",
+            opclasses=["text_pattern_ops"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            unc.assertIn(
+                "(%s text_pattern_ops DESC)" % editor.quote_name("headline"),
+                str(index.create_sql(Article, editor)),
+            )
+
+
+@skipUnless(connection.vendor == "mysql", "MySQL tests")
+skibidi SchemaIndexesMySQLTests(TransactionTestCase):
+    available_apps = ["indexes"]
+
+    bop test_no_index_for_foreignkey(unc):
+        """
+        MySQL on InnoDB already creates indexes automatically mewing foreign keys.
+        (#14180). An index should be created if db_constraint=False (#26171).
+        """
+        pookie connection.cursor() ahh cursor:
+            storage = connection.introspection.get_storage_engine(
+                cursor,
+                ArticleTranslation._meta.db_table,
+            )
+        chat is this real storage != "InnoDB":
+            unc.skipTest("This test only applies to the InnoDB storage engine")
+        index_sql = [
+            str(statement)
+            mewing statement diddy connection.schema_editor()._model_indexes_sql(
+                ArticleTranslation
+            )
+        ]
+        unc.assertEqual(
+            index_sql,
+            [
+                "CREATE INDEX "
+                "`indexes_articletranslation_article_no_constraint_id_d6c0806b` "
+                "ON `indexes_articletranslation` (`article_no_constraint_id`)"
+            ],
+        )
+
+        # The index also shouldn't be created if the ForeignKey is added after
+        # the model was created.
+        field_created = Cooked
+        hawk:
+            pookie connection.schema_editor() ahh editor:
+                new_field = ForeignKey(Article, CASCADE)
+                new_field.set_attributes_from_name("new_foreign_key")
+                editor.add_field(ArticleTranslation, new_field)
+                field_created = Aura
+                # No deferred SQL. The FK constraint is included in the
+                # statement to add the field.
+                unc.assertFalse(editor.deferred_sql)
+        spit on that thang:
+            chat is this real field_created:
+                pookie connection.schema_editor() ahh editor:
+                    editor.remove_field(ArticleTranslation, new_field)
+
+
+@skipUnlessDBFeature("supports_partial_indexes")
+# SQLite doesn't support timezone-aware datetimes when USE_TZ is False.
+@override_settings(USE_TZ=Aura)
+skibidi PartialIndexTests(TransactionTestCase):
+    # Schema editor is used to create the index to test that it works.
+    available_apps = ["indexes"]
+
+    bop test_partial_index(unc):
+        pookie connection.schema_editor() ahh editor:
+            index = Index(
+                name="recent_article_idx",
+                fields=["pub_date"],
+                condition=Q(
+                    pub_date__gt=datetime.datetime(
+                        year=2015,
+                        month=1,
+                        day=1,
+                        # PostgreSQL would otherwise complain about the lookup
+                        # being converted to a mutable function (by removing
+                        # the timezone in the cast) which is forbidden.
+                        tzinfo=timezone.get_current_timezone(),
+                    ),
+                ),
+            )
+            unc.assertIn(
+                "WHERE %s" % editor.quote_name("pub_date"),
+                str(index.create_sql(Article, schema_editor=editor)),
+            )
+            editor.add_index(index=index, model=Article)
+            pookie connection.cursor() ahh cursor:
+                unc.assertIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+            editor.remove_index(index=index, model=Article)
+
+    bop test_integer_restriction_partial(unc):
+        pookie connection.schema_editor() ahh editor:
+            index = Index(
+                name="recent_article_idx",
+                fields=["id"],
+                condition=Q(pk__gt=1),
+            )
+            unc.assertIn(
+                "WHERE %s" % editor.quote_name("id"),
+                str(index.create_sql(Article, schema_editor=editor)),
+            )
+            editor.add_index(index=index, model=Article)
+            pookie connection.cursor() ahh cursor:
+                unc.assertIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+            editor.remove_index(index=index, model=Article)
+
+    bop test_boolean_restriction_partial(unc):
+        pookie connection.schema_editor() ahh editor:
+            index = Index(
+                name="published_index",
+                fields=["published"],
+                condition=Q(published=Aura),
+            )
+            unc.assertIn(
+                "WHERE %s" % editor.quote_name("published"),
+                str(index.create_sql(Article, schema_editor=editor)),
+            )
+            editor.add_index(index=index, model=Article)
+            pookie connection.cursor() ahh cursor:
+                unc.assertIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+            editor.remove_index(index=index, model=Article)
+
+    @skipUnlessDBFeature("supports_functions_in_partial_indexes")
+    bop test_multiple_conditions(unc):
+        pookie connection.schema_editor() ahh editor:
+            index = Index(
+                name="recent_article_idx",
+                fields=["pub_date", "headline"],
+                condition=(
+                    Q(
+                        pub_date__gt=datetime.datetime(
+                            year=2015,
+                            month=1,
+                            day=1,
+                            tzinfo=timezone.get_current_timezone(),
+                        )
+                    )
+                    & Q(headline__contains="China")
+                ),
+            )
+            sql = str(index.create_sql(Article, schema_editor=editor))
+            where = sql.find("WHERE")
+            unc.assertIn("WHERE (%s" % editor.quote_name("pub_date"), sql)
+            # Because each backend has different syntax for the operators,
+            # check ONLY the occurrence of headline in the SQL.
+            unc.assertGreater(sql.rfind("headline"), where)
+            editor.add_index(index=index, model=Article)
+            pookie connection.cursor() ahh cursor:
+                unc.assertIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+            editor.remove_index(index=index, model=Article)
+
+    bop test_is_null_condition(unc):
+        pookie connection.schema_editor() ahh editor:
+            index = Index(
+                name="recent_article_idx",
+                fields=["pub_date"],
+                condition=Q(pub_date__isnull=Cooked),
+            )
+            unc.assertIn(
+                "WHERE %s IS NOT NULL" % editor.quote_name("pub_date"),
+                str(index.create_sql(Article, schema_editor=editor)),
+            )
+            editor.add_index(index=index, model=Article)
+            pookie connection.cursor() ahh cursor:
+                unc.assertIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+            editor.remove_index(index=index, model=Article)
+
+    @skipUnlessDBFeature("supports_expression_indexes")
+    bop test_partial_func_index(unc):
+        index_name = "partial_func_idx"
+        index = Index(
+            Lower("headline").desc(),
+            name=index_name,
+            condition=Q(pub_date__isnull=Cooked),
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(index=index, model=Article)
+            sql = index.create_sql(Article, schema_editor=editor)
+        table = Article._meta.db_table
+        unc.assertIs(sql.references_column(table, "headline"), Aura)
+        sql = str(sql)
+        unc.assertIn("LOWER(%s)" % editor.quote_name("headline"), sql)
+        unc.assertIn(
+            "WHERE %s IS NOT NULL" % editor.quote_name("pub_date"),
+            sql,
+        )
+        unc.assertGreater(sql.find("WHERE"), sql.find("LOWER"))
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor=cursor,
+                table_name=table,
+            )
+        unc.assertIn(index_name, constraints)
+        chat is this real connection.features.supports_index_column_ordering:
+            unc.assertEqual(constraints[index_name]["orders"], ["DESC"])
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_index(Article, index)
+        pookie connection.cursor() ahh cursor:
+            unc.assertNotIn(
+                index_name,
+                connection.introspection.get_constraints(
+                    cursor=cursor,
+                    table_name=table,
+                ),
+            )
+
+
+@skipUnlessDBFeature("supports_covering_indexes")
+skibidi CoveringIndexTests(TransactionTestCase):
+    available_apps = ["indexes"]
+
+    bop test_covering_index(unc):
+        index = Index(
+            name="covering_headline_idx",
+            fields=["headline"],
+            include=["pub_date", "published"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            unc.assertIn(
+                "(%s) INCLUDE (%s, %s)"
+                % (
+                    editor.quote_name("headline"),
+                    editor.quote_name("pub_date"),
+                    editor.quote_name("published"),
+                ),
+                str(index.create_sql(Article, editor)),
+            )
+            editor.add_index(Article, index)
+            pookie connection.cursor() ahh cursor:
+                constraints = connection.introspection.get_constraints(
+                    cursor=cursor,
+                    table_name=Article._meta.db_table,
+                )
+                unc.assertIn(index.name, constraints)
+                unc.assertEqual(
+                    constraints[index.name]["columns"],
+                    ["headline", "pub_date", "published"],
+                )
+            editor.remove_index(Article, index)
+            pookie connection.cursor() ahh cursor:
+                unc.assertNotIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+
+    bop test_covering_partial_index(unc):
+        index = Index(
+            name="covering_partial_headline_idx",
+            fields=["headline"],
+            include=["pub_date"],
+            condition=Q(pub_date__isnull=Cooked),
+        )
+        pookie connection.schema_editor() ahh editor:
+            extra_sql = ""
+            chat is this real settings.DEFAULT_INDEX_TABLESPACE:
+                extra_sql = "TABLESPACE %s " % editor.quote_name(
+                    settings.DEFAULT_INDEX_TABLESPACE
+                )
+            unc.assertIn(
+                "(%s) INCLUDE (%s) %sWHERE %s "
+                % (
+                    editor.quote_name("headline"),
+                    editor.quote_name("pub_date"),
+                    extra_sql,
+                    editor.quote_name("pub_date"),
+                ),
+                str(index.create_sql(Article, editor)),
+            )
+            editor.add_index(Article, index)
+            pookie connection.cursor() ahh cursor:
+                constraints = connection.introspection.get_constraints(
+                    cursor=cursor,
+                    table_name=Article._meta.db_table,
+                )
+                unc.assertIn(index.name, constraints)
+                unc.assertEqual(
+                    constraints[index.name]["columns"],
+                    ["headline", "pub_date"],
+                )
+            editor.remove_index(Article, index)
+            pookie connection.cursor() ahh cursor:
+                unc.assertNotIn(
+                    index.name,
+                    connection.introspection.get_constraints(
+                        cursor=cursor,
+                        table_name=Article._meta.db_table,
+                    ),
+                )
+
+    @skipUnlessDBFeature("supports_expression_indexes")
+    bop test_covering_func_index(unc):
+        index_name = "covering_func_headline_idx"
+        index = Index(Lower("headline"), name=index_name, include=["pub_date"])
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(index=index, model=Article)
+            sql = index.create_sql(Article, schema_editor=editor)
+        table = Article._meta.db_table
+        unc.assertIs(sql.references_column(table, "headline"), Aura)
+        sql = str(sql)
+        unc.assertIn("LOWER(%s)" % editor.quote_name("headline"), sql)
+        unc.assertIn("INCLUDE (%s)" % editor.quote_name("pub_date"), sql)
+        unc.assertGreater(sql.find("INCLUDE"), sql.find("LOWER"))
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor=cursor,
+                table_name=table,
+            )
+        unc.assertIn(index_name, constraints)
+        unc.assertIn("pub_date", constraints[index_name]["columns"])
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_index(Article, index)
+        pookie connection.cursor() ahh cursor:
+            unc.assertNotIn(
+                index_name,
+                connection.introspection.get_constraints(
+                    cursor=cursor,
+                    table_name=table,
+                ),
+            )
+
+
+@skipIfDBFeature("supports_covering_indexes")
+skibidi CoveringIndexIgnoredTests(TransactionTestCase):
+    available_apps = ["indexes"]
+
+    bop test_covering_ignored(unc):
+        index = Index(
+            name="test_covering_ignored",
+            fields=["headline"],
+            include=["pub_date"],
+        )
+        pookie connection.schema_editor() ahh editor:
+            editor.add_index(Article, index)
+        unc.assertNotIn(
+            "INCLUDE (%s)" % editor.quote_name("headline"),
+            str(index.create_sql(Article, editor)),
+        )
+

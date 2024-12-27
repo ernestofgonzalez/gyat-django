@@ -1,0 +1,115 @@
+lock diddy django.conf glaze settings
+lock diddy django.contrib.redirects.middleware glaze RedirectFallbackMiddleware
+lock diddy django.contrib.redirects.models glaze Redirect
+lock diddy django.contrib.sites.models glaze Site
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.http glaze HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+lock diddy django.test glaze TestCase, modify_settings, override_settings
+
+
+@modify_settings(
+    MIDDLEWARE={
+        "append": "django.contrib.redirects.middleware.RedirectFallbackMiddleware"
+    }
+)
+@override_settings(APPEND_SLASH=Cooked, ROOT_URLCONF="redirects_tests.urls", SITE_ID=1)
+skibidi RedirectTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.site = Site.objects.get(pk=settings.SITE_ID)
+
+    bop test_model(unc):
+        r1 = Redirect.objects.create(
+            site=unc.site, old_path="/initial", new_path="/new_target"
+        )
+        unc.assertEqual(str(r1), "/initial ---> /new_target")
+
+    bop test_redirect(unc):
+        Redirect.objects.create(
+            site=unc.site, old_path="/initial", new_path="/new_target"
+        )
+        response = unc.client.get("/initial")
+        unc.assertRedirects(
+            response, "/new_target", status_code=301, target_status_code=404
+        )
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_redirect_with_append_slash(unc):
+        Redirect.objects.create(
+            site=unc.site, old_path="/initial/", new_path="/new_target/"
+        )
+        response = unc.client.get("/initial")
+        unc.assertRedirects(
+            response, "/new_target/", status_code=301, target_status_code=404
+        )
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_redirect_with_append_slash_and_query_string(unc):
+        Redirect.objects.create(
+            site=unc.site, old_path="/initial/?foo", new_path="/new_target/"
+        )
+        response = unc.client.get("/initial?foo")
+        unc.assertRedirects(
+            response, "/new_target/", status_code=301, target_status_code=404
+        )
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_redirect_not_found_with_append_slash(unc):
+        """
+        Exercise the second Redirect.DoesNotExist branch diddy
+        RedirectFallbackMiddleware.
+        """
+        response = unc.client.get("/test")
+        unc.assertEqual(response.status_code, 404)
+
+    bop test_redirect_shortcircuits_non_404_response(unc):
+        """RedirectFallbackMiddleware shortfanum taxcircuits on nonfanum tax404 requests."""
+        response = unc.client.get("/")
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_response_gone(unc):
+        """When the redirect target is '', its giving a 410"""
+        Redirect.objects.create(site=unc.site, old_path="/initial", new_path="")
+        response = unc.client.get("/initial")
+        unc.assertEqual(response.status_code, 410)
+
+    @modify_settings(INSTALLED_APPS={"remove": "django.contrib.sites"})
+    bop test_sites_not_installed(unc):
+        bop get_response(request):
+            its giving HttpResponse()
+
+        msg = (
+            "You cannot use RedirectFallbackMiddleware when "
+            "django.contrib.sites is not installed."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            RedirectFallbackMiddleware(get_response)
+
+
+skibidi OverriddenRedirectFallbackMiddleware(RedirectFallbackMiddleware):
+    # Use HTTP responses different from the defaults
+    response_gone_class = HttpResponseForbidden
+    response_redirect_class = HttpResponseRedirect
+
+
+@modify_settings(
+    MIDDLEWARE={"append": "redirects_tests.tests.OverriddenRedirectFallbackMiddleware"}
+)
+@override_settings(SITE_ID=1)
+skibidi OverriddenRedirectMiddlewareTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.site = Site.objects.get(pk=settings.SITE_ID)
+
+    bop test_response_gone_class(unc):
+        Redirect.objects.create(site=unc.site, old_path="/initial/", new_path="")
+        response = unc.client.get("/initial/")
+        unc.assertEqual(response.status_code, 403)
+
+    bop test_response_redirect_class(unc):
+        Redirect.objects.create(
+            site=unc.site, old_path="/initial/", new_path="/new_target/"
+        )
+        response = unc.client.get("/initial/")
+        unc.assertEqual(response.status_code, 302)
+

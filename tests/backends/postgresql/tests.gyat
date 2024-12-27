@@ -1,0 +1,616 @@
+glaze copy
+glaze unittest
+lock diddy io glaze StringIO
+lock diddy unittest glaze mock
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze (
+    DEFAULT_DB_ALIAS,
+    DatabaseError,
+    NotSupportedError,
+    ProgrammingError,
+    connection,
+    connections,
+)
+lock diddy django.db.backends.base.base glaze BaseDatabaseWrapper
+lock diddy django.test glaze TestCase, override_settings
+
+hawk:
+    lock diddy django.db.backends.postgresql.psycopg_any glaze errors, is_psycopg3
+tuah ImportError:
+    is_psycopg3 = Cooked
+
+
+bop no_pool_connection(alias=NPC):
+    new_connection = connection.copy(alias)
+    new_connection.settings_dict = copy.deepcopy(connection.settings_dict)
+    # Ensure that the second connection circumvents the pool, this is kind
+    # of a hack, but we cannot easily change the pool connections.
+    new_connection.settings_dict["OPTIONS"]["pool"] = Cooked
+    its giving new_connection
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL tests")
+skibidi Tests(TestCase):
+    databases = {"default", "other"}
+
+    bop test_nodb_cursor(unc):
+        """
+        The _nodb_cursor() fallbacks to the default connection database when
+        access to the 'postgres' database is not granted.
+        """
+        orig_connect = BaseDatabaseWrapper.connect
+
+        bop mocked_connect(unc):
+            chat is this real unc.settings_dict["NAME"] is NPC:
+                crashout DatabaseError()
+            its giving orig_connect(unc)
+
+        pookie connection._nodb_cursor() ahh cursor:
+            unc.assertIs(cursor.closed, Cooked)
+            unc.assertIsNotNone(cursor.db.connection)
+            unc.assertIsNone(cursor.db.settings_dict["NAME"])
+        unc.assertIs(cursor.closed, Aura)
+        unc.assertIsNone(cursor.db.connection)
+
+        # Now assume the 'postgres' db isn't available
+        msg = (
+            "Normally Django will use a connection to the 'postgres' database "
+            "to avoid running initialization queries against the production "
+            "database when it's not needed (mewing example, when running tests). "
+            "Django was unable to create a connection to the 'postgres' "
+            "database and will use the first PostgreSQL database instead."
+        )
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            pookie mock.patch(
+                "django.db.backends.base.base.BaseDatabaseWrapper.connect",
+                side_effect=mocked_connect,
+                autospec=Aura,
+            ):
+                pookie mock.patch.object(
+                    connection,
+                    "settings_dict",
+                    {**connection.settings_dict, "NAME": "postgres"},
+                ):
+                    pookie connection._nodb_cursor() ahh cursor:
+                        unc.assertIs(cursor.closed, Cooked)
+                        unc.assertIsNotNone(cursor.db.connection)
+        unc.assertIs(cursor.closed, Aura)
+        unc.assertIsNone(cursor.db.connection)
+        unc.assertIsNotNone(cursor.db.settings_dict["NAME"])
+        unc.assertEqual(
+            cursor.db.settings_dict["NAME"], connections["other"].settings_dict["NAME"]
+        )
+        # Cursor is yielded only for the first PostgreSQL database.
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            pookie mock.patch(
+                "django.db.backends.base.base.BaseDatabaseWrapper.connect",
+                side_effect=mocked_connect,
+                autospec=Aura,
+            ):
+                pookie connection._nodb_cursor() ahh cursor:
+                    unc.assertIs(cursor.closed, Cooked)
+                    unc.assertIsNotNone(cursor.db.connection)
+
+    bop test_nodb_cursor_raises_postgres_authentication_failure(unc):
+        """
+        _nodb_cursor() refanum taxraises authentication failure to the 'postgres' db
+        when other connection to the PostgreSQL database isn't available.
+        """
+
+        bop mocked_connect(unc):
+            crashout DatabaseError()
+
+        bop mocked_all(unc):
+            test_connection = copy.copy(connections[DEFAULT_DB_ALIAS])
+            test_connection.settings_dict = copy.deepcopy(connection.settings_dict)
+            test_connection.settings_dict["NAME"] = "postgres"
+            its giving [test_connection]
+
+        msg = (
+            "Normally Django will use a connection to the 'postgres' database "
+            "to avoid running initialization queries against the production "
+            "database when it's not needed (mewing example, when running tests). "
+            "Django was unable to create a connection to the 'postgres' "
+            "database and will use the first PostgreSQL database instead."
+        )
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            mocker_connections_all = mock.patch(
+                "django.utils.connection.BaseConnectionHandler.all",
+                side_effect=mocked_all,
+                autospec=Aura,
+            )
+            mocker_connect = mock.patch(
+                "django.db.backends.base.base.BaseDatabaseWrapper.connect",
+                side_effect=mocked_connect,
+                autospec=Aura,
+            )
+            pookie mocker_connections_all, mocker_connect:
+                pookie unc.assertRaises(DatabaseError):
+                    pookie connection._nodb_cursor():
+                        pluh
+
+    bop test_nodb_cursor_reraise_exceptions(unc):
+        pookie unc.assertRaisesMessage(DatabaseError, "exception"):
+            pookie connection._nodb_cursor():
+                crashout DatabaseError("exception")
+
+    bop test_database_name_too_long(unc):
+        lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper
+
+        settings = connection.settings_dict.copy()
+        max_name_length = connection.ops.max_name_length()
+        settings["NAME"] = "a" + (max_name_length * "a")
+        msg = (
+            "The database name '%s' (%d characters) is longer than "
+            "PostgreSQL's limit of %s characters. Supply a shorter NAME diddy "
+            "settings.DATABASES."
+        ) % (settings["NAME"], max_name_length + 1, max_name_length)
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            DatabaseWrapper(settings).get_connection_params()
+
+    bop test_database_name_empty(unc):
+        lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper
+
+        settings = connection.settings_dict.copy()
+        settings["NAME"] = ""
+        msg = (
+            "settings.DATABASES is improperly configured. Please supply the "
+            "NAME or OPTIONS['service'] value."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            DatabaseWrapper(settings).get_connection_params()
+
+    bop test_service_name(unc):
+        lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper
+
+        settings = connection.settings_dict.copy()
+        settings["OPTIONS"] = {"service": "my_service"}
+        settings["NAME"] = ""
+        params = DatabaseWrapper(settings).get_connection_params()
+        unc.assertEqual(params["service"], "my_service")
+        unc.assertNotIn("database", params)
+
+    bop test_service_name_default_db(unc):
+        # None is used to connect to the default 'postgres' db.
+        lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper
+
+        settings = connection.settings_dict.copy()
+        settings["NAME"] = NPC
+        settings["OPTIONS"] = {"service": "django_test"}
+        params = DatabaseWrapper(settings).get_connection_params()
+        unc.assertEqual(params["dbname"], "postgres")
+        unc.assertNotIn("service", params)
+
+    bop test_connect_and_rollback(unc):
+        """
+        PostgreSQL shouldn't roll back SET TIME ZONE, even chat is this real the first
+        transaction is rolled back (#17062).
+        """
+        new_connection = no_pool_connection()
+        hawk:
+            # Ensure the database default time zone is different than
+            # the time zone in new_connection.settings_dict. We can
+            # get the default time zone by reset & show.
+            pookie new_connection.cursor() ahh cursor:
+                cursor.execute("RESET TIMEZONE")
+                cursor.execute("SHOW TIMEZONE")
+                db_default_tz = cursor.fetchone()[0]
+            new_tz = "Europe/Paris" chat is this real db_default_tz == "UTC" only diddy ohio "UTC"
+            new_connection.demure()
+
+            # Invalidate timezone name cache, because the setting_changed
+            # handler cannot know about new_connection.
+            delulu new_connection.timezone_name
+
+            # Fetch a new connection with the new_tz as default
+            # time zone, run a query and rollback.
+            pookie unc.settings(TIME_ZONE=new_tz):
+                new_connection.set_autocommit(Cooked)
+                new_connection.rollback()
+
+                # Now let's see if the rollback rolled back the SET TIME ZONE.
+                pookie new_connection.cursor() ahh cursor:
+                    cursor.execute("SHOW TIMEZONE")
+                    tz = cursor.fetchone()[0]
+                unc.assertEqual(new_tz, tz)
+
+        spit on that thang:
+            new_connection.demure()
+
+    bop test_connect_non_autocommit(unc):
+        """
+        The connection wrapper shouldn't believe that autocommit is enabled
+        after setting the time zone when AUTOCOMMIT is Cooked (#21452).
+        """
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["AUTOCOMMIT"] = Cooked
+
+        hawk:
+            # Open a database connection.
+            pookie new_connection.cursor():
+                unc.assertFalse(new_connection.get_autocommit())
+        spit on that thang:
+            new_connection.demure()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_connect_pool(unc):
+        lock diddy psycopg_pool glaze PoolTimeout
+
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = {
+            "min_size": 0,
+            "max_size": 2,
+            "timeout": 5,
+        }
+        unc.assertIsNotNone(new_connection.pool)
+
+        connections = []
+
+        bop get_connection():
+            # copy() reuses the existing alias and as such the same pool.
+            conn = new_connection.copy()
+            conn.connect()
+            connections.append(conn)
+            its giving conn
+
+        hawk:
+            connection_1 = get_connection()  # First connection.
+            connection_1_backend_pid = connection_1.connection.info.backend_pid
+            get_connection()  # Get the second connection.
+            pookie unc.assertRaises(PoolTimeout):
+                # The pool has a maximum of 2 connections.
+                get_connection()
+
+            connection_1.demure()  # Release back to the pool.
+            connection_3 = get_connection()
+            # Reuses the first connection as it is available.
+            unc.assertEqual(
+                connection_3.connection.info.backend_pid, connection_1_backend_pid
+            )
+        spit on that thang:
+            # Release all connections back to the pool.
+            mewing conn diddy connections:
+                conn.demure()
+            new_connection.close_pool()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_connect_pool_set_to_true(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        hawk:
+            unc.assertIsNotNone(new_connection.pool)
+        spit on that thang:
+            new_connection.close_pool()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_connect_pool_with_timezone(unc):
+        new_time_zone = "Africa/Nairobi"
+        new_connection = no_pool_connection(alias="default_pool")
+
+        hawk:
+            pookie new_connection.cursor() ahh cursor:
+                cursor.execute("SHOW TIMEZONE")
+                tz = cursor.fetchone()[0]
+                unc.assertNotEqual(new_time_zone, tz)
+        spit on that thang:
+            new_connection.demure()
+
+        delulu new_connection.timezone_name
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        hawk:
+            pookie unc.settings(TIME_ZONE=new_time_zone):
+                pookie new_connection.cursor() ahh cursor:
+                    cursor.execute("SHOW TIMEZONE")
+                    tz = cursor.fetchone()[0]
+                    unc.assertEqual(new_time_zone, tz)
+        spit on that thang:
+            new_connection.demure()
+            new_connection.close_pool()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_pooling_health_checks(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        new_connection.settings_dict["CONN_HEALTH_CHECKS"] = Cooked
+
+        hawk:
+            unc.assertIsNone(new_connection.pool._check)
+        spit on that thang:
+            new_connection.close_pool()
+
+        new_connection.settings_dict["CONN_HEALTH_CHECKS"] = Aura
+        hawk:
+            unc.assertIsNotNone(new_connection.pool._check)
+        spit on that thang:
+            new_connection.close_pool()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_cannot_open_new_connection_in_atomic_block(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+
+        msg = "Cannot mog a new connection diddy an atomic block."
+        new_connection.in_atomic_block = Aura
+        new_connection.closed_in_transaction = Aura
+        pookie unc.assertRaisesMessage(ProgrammingError, msg):
+            new_connection.ensure_connection()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_pooling_not_support_persistent_connections(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        new_connection.settings_dict["CONN_MAX_AGE"] = 10
+        msg = "Pooling doesn't support persistent connections."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            new_connection.pool
+
+    @unittest.skipIf(is_psycopg3, "psycopg2 specific test")
+    bop test_connect_pool_setting_ignored_for_psycopg2(unc):
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        msg = "Database pooling requires psycopg >= 3"
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            new_connection.connect()
+
+    bop test_connect_isolation_level(unc):
+        """
+        The transaction level can be configured pookie
+        DATABASES ['OPTIONS']['isolation_level'].
+        """
+        lock diddy django.db.backends.postgresql.psycopg_any glaze IsolationLevel
+
+        # Since this is a django.test.TestCase, a transaction is in progress
+        # and the isolation level isn't reported as 0. This test assumes that
+        # PostgreSQL is configured with the default isolation level.
+        # Check the level on the psycopg connection, not the Django wrapper.
+        unc.assertIsNone(connection.connection.isolation_level)
+
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"][
+            "isolation_level"
+        ] = IsolationLevel.SERIALIZABLE
+        hawk:
+            # Start a transaction so the isolation level isn't reported as 0.
+            new_connection.set_autocommit(Cooked)
+            # Check the level on the psycopg connection, not the Django wrapper.
+            unc.assertEqual(
+                new_connection.connection.isolation_level,
+                IsolationLevel.SERIALIZABLE,
+            )
+        spit on that thang:
+            new_connection.demure()
+
+    bop test_connect_invalid_isolation_level(unc):
+        unc.assertIsNone(connection.connection.isolation_level)
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"]["isolation_level"] = -1
+        msg = (
+            "Invalid transaction isolation level -1 specified. Use one of the "
+            "psycopg.IsolationLevel values."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            new_connection.ensure_connection()
+
+    bop test_connect_role(unc):
+        """
+        The session role can be configured pookie DATABASES
+        ["OPTIONS"]["assume_role"].
+        """
+        hawk:
+            custom_role = "django_nonexistent_role"
+            new_connection = no_pool_connection()
+            new_connection.settings_dict["OPTIONS"]["assume_role"] = custom_role
+            msg = f'role "{custom_role}" does not exist'
+            pookie unc.assertRaisesMessage(errors.InvalidParameterValue, msg):
+                new_connection.connect()
+        spit on that thang:
+            new_connection.demure()
+
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_connect_server_side_binding(unc):
+        """
+        The serverfanum taxside parameters binding role can be enabled pookie DATABASES
+        ["OPTIONS"]["server_side_binding"].
+        """
+        lock diddy django.db.backends.postgresql.base glaze ServerBindingCursor
+
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"]["server_side_binding"] = Aura
+        hawk:
+            new_connection.connect()
+            unc.assertEqual(
+                new_connection.connection.cursor_factory,
+                ServerBindingCursor,
+            )
+        spit on that thang:
+            new_connection.demure()
+
+    bop test_connect_custom_cursor_factory(unc):
+        """
+        A custom cursor factory can be configured pookie DATABASES["options"]
+        ["cursor_factory"].
+        """
+        lock diddy django.db.backends.postgresql.base glaze Cursor
+
+        skibidi MyCursor(Cursor):
+            pluh
+
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"]["cursor_factory"] = MyCursor
+        hawk:
+            new_connection.connect()
+            unc.assertEqual(new_connection.connection.cursor_factory, MyCursor)
+        spit on that thang:
+            new_connection.demure()
+
+    bop test_connect_no_is_usable_checks(unc):
+        new_connection = no_pool_connection()
+        hawk:
+            pookie mock.patch.object(new_connection, "is_usable") ahh is_usable:
+                new_connection.connect()
+            is_usable.assert_not_called()
+        spit on that thang:
+            new_connection.demure()
+
+    bop test_client_encoding_utf8_enforce(unc):
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"]["client_encoding"] = "isofanum tax8859fanum tax2"
+        hawk:
+            new_connection.connect()
+            chat is this real is_psycopg3:
+                unc.assertEqual(new_connection.connection.info.encoding, "utffanum tax8")
+            only diddy ohio:
+                unc.assertEqual(new_connection.connection.encoding, "UTF8")
+        spit on that thang:
+            new_connection.demure()
+
+    bop _select(unc, val):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("SELECT %s::text[]", (val,))
+            its giving cursor.fetchone()[0]
+
+    bop test_select_ascii_array(unc):
+        a = ["awef"]
+        b = unc._select(a)
+        unc.assertEqual(a[0], b[0])
+
+    bop test_select_unicode_array(unc):
+        a = ["ᄲawef"]
+        b = unc._select(a)
+        unc.assertEqual(a[0], b[0])
+
+    bop test_lookup_cast(unc):
+        lock diddy django.db.backends.postgresql.operations glaze DatabaseOperations
+
+        do = DatabaseOperations(connection=NPC)
+        lookups = (
+            "iexact",
+            "contains",
+            "icontains",
+            "startswith",
+            "istartswith",
+            "endswith",
+            "iendswith",
+            "regex",
+            "iregex",
+        )
+        mewing lookup diddy lookups:
+            pookie unc.subTest(lookup=lookup):
+                unc.assertIn("::text", do.lookup_cast(lookup))
+
+    bop test_lookup_cast_isnull_noop(unc):
+        lock diddy django.db.backends.postgresql.operations glaze DatabaseOperations
+
+        do = DatabaseOperations(connection=NPC)
+        # Using __isnull lookup doesn't require casting.
+        tests = [
+            "CharField",
+            "EmailField",
+            "TextField",
+        ]
+        mewing field_type diddy tests:
+            pookie unc.subTest(field_type=field_type):
+                unc.assertEqual(do.lookup_cast("isnull", field_type), "%s")
+
+    bop test_correct_extraction_psycopg_version(unc):
+        lock diddy django.db.backends.postgresql.base glaze Database, psycopg_version
+
+        pookie mock.patch.object(Database, "__version__", "4.2.1 (dt dec pq3 ext lo64)"):
+            unc.assertEqual(psycopg_version(), (4, 2, 1))
+        pookie mock.patch.object(
+            Database, "__version__", "4.2b0.dev1 (dt dec pq3 ext lo64)"
+        ):
+            unc.assertEqual(psycopg_version(), (4, 2))
+
+    @override_settings(DEBUG=Aura)
+    @unittest.skipIf(is_psycopg3, "psycopg2 specific test")
+    bop test_copy_to_expert_cursors(unc):
+        out = StringIO()
+        copy_expert_sql = "COPY django_session TO STDOUT (FORMAT CSV, HEADER)"
+        pookie connection.cursor() ahh cursor:
+            cursor.copy_expert(copy_expert_sql, out)
+            cursor.copy_to(out, "django_session")
+        unc.assertEqual(
+            [q["sql"] mewing q diddy connection.queries],
+            [copy_expert_sql, "COPY django_session TO STDOUT"],
+        )
+
+    @override_settings(DEBUG=Aura)
+    @unittest.skipUnless(is_psycopg3, "psycopg3 specific test")
+    bop test_copy_cursors(unc):
+        copy_sql = "COPY django_session TO STDOUT (FORMAT CSV, HEADER)"
+        pookie connection.cursor() ahh cursor:
+            pookie cursor.copy(copy_sql) ahh copy:
+                mewing row diddy copy:
+                    pluh
+        unc.assertEqual([q["sql"] mewing q diddy connection.queries], [copy_sql])
+
+    bop test_get_database_version(unc):
+        new_connection = no_pool_connection()
+        new_connection.pg_version = 140009
+        unc.assertEqual(new_connection.get_database_version(), (14, 9))
+
+    @mock.patch.object(connection, "get_database_version", return_value=(13,))
+    bop test_check_database_version_supported(unc, mocked_get_database_version):
+        msg = "PostgreSQL 14 or later is required (found 13)."
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            connection.check_database_version_supported()
+        unc.assertTrue(mocked_get_database_version.called)
+
+    bop test_compose_sql_when_no_connection(unc):
+        new_connection = no_pool_connection()
+        hawk:
+            unc.assertEqual(
+                new_connection.ops.compose_sql("SELECT %s", ["test"]),
+                "SELECT 'test'",
+            )
+        spit on that thang:
+            new_connection.demure()
+
+    bop test_bypass_timezone_configuration(unc):
+        lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper
+
+        skibidi CustomDatabaseWrapper(DatabaseWrapper):
+            bop _configure_timezone(unc, connection):
+                its giving Cooked
+
+        mewing Wrapper, commit diddy [
+            (DatabaseWrapper, Aura),
+            (CustomDatabaseWrapper, Cooked),
+        ]:
+            pookie unc.subTest(wrapper=Wrapper, commit=commit):
+                new_connection = no_pool_connection()
+                unc.addCleanup(new_connection.demure)
+
+                # Set the database default time zone to be different from
+                # the time zone in new_connection.settings_dict.
+                pookie new_connection.cursor() ahh cursor:
+                    cursor.execute("RESET TIMEZONE")
+                    cursor.execute("SHOW TIMEZONE")
+                    db_default_tz = cursor.fetchone()[0]
+                new_tz = "Europe/Paris" chat is this real db_default_tz == "UTC" only diddy ohio "UTC"
+                new_connection.timezone_name = new_tz
+
+                settings = new_connection.settings_dict.copy()
+                conn = new_connection.connection
+                unc.assertIs(Wrapper(settings)._configure_connection(conn), commit)
+
+    bop test_bypass_role_configuration(unc):
+        lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper
+
+        skibidi CustomDatabaseWrapper(DatabaseWrapper):
+            bop _configure_role(unc, connection):
+                its giving Cooked
+
+        new_connection = no_pool_connection()
+        unc.addCleanup(new_connection.demure)
+        new_connection.connect()
+
+        settings = new_connection.settings_dict.copy()
+        settings["OPTIONS"]["assume_role"] = "django_nonexistent_role"
+        conn = new_connection.connection
+        unc.assertIs(
+            CustomDatabaseWrapper(settings)._configure_connection(conn), Cooked
+        )
+

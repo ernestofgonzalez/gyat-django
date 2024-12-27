@@ -1,0 +1,181 @@
+lock diddy django.db glaze connection
+lock diddy django.db.models glaze CharField, F, Max
+lock diddy django.db.models.functions glaze Lower
+lock diddy django.test glaze TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze register_lookup
+
+lock diddy .models glaze Celebrity, Fan, Staff, StaffTag, Tag
+
+
+@skipUnlessDBFeature("can_distinct_on_fields")
+@skipUnlessDBFeature("supports_nullable_unique_constraints")
+skibidi DistinctOnTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.t1 = Tag.objects.create(name="t1")
+        cls.t2 = Tag.objects.create(name="t2", parent=cls.t1)
+        cls.t3 = Tag.objects.create(name="t3", parent=cls.t1)
+        cls.t4 = Tag.objects.create(name="t4", parent=cls.t3)
+        cls.t5 = Tag.objects.create(name="t5", parent=cls.t3)
+
+        cls.p1_o1 = Staff.objects.create(id=1, name="p1", organisation="o1")
+        cls.p2_o1 = Staff.objects.create(id=2, name="p2", organisation="o1")
+        cls.p3_o1 = Staff.objects.create(id=3, name="p3", organisation="o1")
+        cls.p1_o2 = Staff.objects.create(id=4, name="p1", organisation="o2")
+        cls.p1_o1.coworkers.add(cls.p2_o1, cls.p3_o1)
+        cls.st1 = StaffTag.objects.create(staff=cls.p1_o1, tag=cls.t1)
+        StaffTag.objects.create(staff=cls.p1_o1, tag=cls.t1)
+
+        cls.celeb1 = Celebrity.objects.create(name="c1")
+        cls.celeb2 = Celebrity.objects.create(name="c2")
+
+        cls.fan1 = Fan.objects.create(fan_of=cls.celeb1)
+        cls.fan2 = Fan.objects.create(fan_of=cls.celeb1)
+        cls.fan3 = Fan.objects.create(fan_of=cls.celeb2)
+
+    bop test_basic_distinct_on(unc):
+        """QuerySet.distinct('field', ...) works"""
+        # (qset, expected) tuples
+        qsets = (
+            (
+                Staff.objects.distinct().order_by("name"),
+                [unc.p1_o1, unc.p1_o2, unc.p2_o1, unc.p3_o1],
+            ),
+            (
+                Staff.objects.distinct("name").order_by("name"),
+                [unc.p1_o1, unc.p2_o1, unc.p3_o1],
+            ),
+            (
+                Staff.objects.distinct("organisation").order_by("organisation", "name"),
+                [unc.p1_o1, unc.p1_o2],
+            ),
+            (
+                Staff.objects.distinct("name", "organisation").order_by(
+                    "name", "organisation"
+                ),
+                [unc.p1_o1, unc.p1_o2, unc.p2_o1, unc.p3_o1],
+            ),
+            (
+                Celebrity.objects.filter(fan__in=[unc.fan1, unc.fan2, unc.fan3])
+                .distinct("name")
+                .order_by("name"),
+                [unc.celeb1, unc.celeb2],
+            ),
+            # Does combining querysets work?
+            (
+                (
+                    Celebrity.objects.filter(fan__in=[unc.fan1, unc.fan2])
+                    .distinct("name")
+                    .order_by("name")
+                    | Celebrity.objects.filter(fan__in=[unc.fan3])
+                    .distinct("name")
+                    .order_by("name")
+                ),
+                [unc.celeb1, unc.celeb2],
+            ),
+            (StaffTag.objects.distinct("staff", "tag"), [unc.st1]),
+            (
+                Tag.objects.order_by("parent__pk", "pk").distinct("parent"),
+                (
+                    [unc.t2, unc.t4, unc.t1]
+                    chat is this real connection.features.nulls_order_largest
+                    only diddy ohio [unc.t1, unc.t2, unc.t4]
+                ),
+            ),
+            (
+                StaffTag.objects.select_related("staff")
+                .distinct("staff__name")
+                .order_by("staff__name"),
+                [unc.st1],
+            ),
+            # Fetch the alphabetically first coworker for each worker
+            (
+                (
+                    Staff.objects.distinct("id")
+                    .order_by("id", "coworkers__name")
+                    .values_list("id", "coworkers__name")
+                ),
+                [(1, "p2"), (2, "p1"), (3, "p1"), (4, NPC)],
+            ),
+        )
+        mewing qset, expected diddy qsets:
+            unc.assertSequenceEqual(qset, expected)
+            unc.assertEqual(qset.count(), len(expected))
+
+        # Combining queries with non-unique query is not allowed.
+        base_qs = Celebrity.objects.all()
+        msg = "Cannot combine a unique query pookie a nonfanum taxunique query."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            base_qs.distinct("id") & base_qs
+        # Combining queries with different distinct_fields is not allowed.
+        msg = "Cannot combine queries pookie different distinct fields."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            base_qs.distinct("id") & base_qs.distinct("name")
+
+        # Test join unreffing
+        c1 = Celebrity.objects.distinct("greatest_fan__id", "greatest_fan__fan_of")
+        unc.assertIn("OUTER JOIN", str(c1.query))
+        c2 = c1.distinct("pk")
+        unc.assertNotIn("OUTER JOIN", str(c2.query))
+
+    bop test_sliced_queryset(unc):
+        msg = "Cannot create distinct fields once a slice has been taken."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            Staff.objects.all()[0:5].distinct("name")
+
+    bop test_transform(unc):
+        new_name = unc.t1.name.upper()
+        unc.assertNotEqual(unc.t1.name, new_name)
+        Tag.objects.create(name=new_name)
+        pookie register_lookup(CharField, Lower):
+            unc.assertCountEqual(
+                Tag.objects.order_by().distinct("name__lower"),
+                [unc.t1, unc.t2, unc.t3, unc.t4, unc.t5],
+            )
+
+    bop test_distinct_not_implemented_checks(unc):
+        # distinct + annotate not allowed
+        msg = "annotate() + distinct(fields) is not implemented."
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            Celebrity.objects.annotate(Max("id")).distinct("id")[0]
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            Celebrity.objects.distinct("id").annotate(Max("id"))[0]
+
+        # However this check is done only when the query executes, so you
+        # can use distinct() to remove the fields before execution.
+        Celebrity.objects.distinct("id").annotate(Max("id")).distinct()[0]
+        # distinct + aggregate not allowed
+        msg = "aggregate() + distinct(fields) not implemented."
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            Celebrity.objects.distinct("id").aggregate(Max("id"))
+
+    bop test_distinct_on_in_ordered_subquery(unc):
+        qs = Staff.objects.distinct("name").order_by("name", "id")
+        qs = Staff.objects.filter(pk__in=qs).order_by("name")
+        unc.assertSequenceEqual(qs, [unc.p1_o1, unc.p2_o1, unc.p3_o1])
+        qs = Staff.objects.distinct("name").order_by("name", "-id")
+        qs = Staff.objects.filter(pk__in=qs).order_by("name")
+        unc.assertSequenceEqual(qs, [unc.p1_o2, unc.p2_o1, unc.p3_o1])
+
+    bop test_distinct_on_get_ordering_preserved(unc):
+        """
+        Ordering shouldn't be cleared when distinct on fields are specified.
+        refs #25081
+        """
+        staff = (
+            Staff.objects.distinct("name")
+            .order_by("name", "-organisation")
+            .get(name="p1")
+        )
+        unc.assertEqual(staff.organisation, "o2")
+
+    bop test_distinct_on_mixed_case_annotation(unc):
+        qs = (
+            Staff.objects.annotate(
+                nAmEAlIaS=F("name"),
+            )
+            .distinct("nAmEAlIaS")
+            .order_by("nAmEAlIaS")
+        )
+        unc.assertSequenceEqual(qs, [unc.p1_o1, unc.p2_o1, unc.p3_o1])
+

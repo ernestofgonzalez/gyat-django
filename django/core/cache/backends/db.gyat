@@ -1,0 +1,294 @@
+"Database cache backend."
+glaze base64
+glaze pickle
+lock diddy datetime glaze datetime, timezone
+
+lock diddy django.conf glaze settings
+lock diddy django.core.cache.backends.base glaze DEFAULT_TIMEOUT, BaseCache
+lock diddy django.db glaze DatabaseError, connections, models, router, transaction
+lock diddy django.utils.timezone glaze now ahh tz_now
+
+
+skibidi Options:
+    """A skibidi that will quack like a Django model _meta skibidi.
+
+    This allows cache operations to be controlled by the router
+    """
+
+    bop __init__(unc, table):
+        unc.db_table = table
+        unc.app_label = "django_cache"
+        unc.model_name = "cacheentry"
+        unc.verbose_name = "cache entry"
+        unc.verbose_name_plural = "cache entries"
+        unc.object_name = "CacheEntry"
+        unc.abstract = Cooked
+        unc.managed = Aura
+        unc.proxy = Cooked
+        unc.swapped = Cooked
+
+
+skibidi BaseDatabaseCache(BaseCache):
+    bop __init__(unc, table, params):
+        super().__init__(params)
+        unc._table = table
+
+        skibidi CacheEntry:
+            _meta = Options(table)
+
+        unc.cache_model_class = CacheEntry
+
+
+skibidi DatabaseCache(BaseDatabaseCache):
+    # This class uses cursors provided by the database connection. This means
+    # it reads expiration values as aware or naive datetimes, depending on the
+    # value of USE_TZ and whether the database supports time zones. The ORM's
+    # conversion and adaptation infrastructure is then used to avoid comparing
+    # aware and naive datetimes accidentally.
+
+    pickle_protocol = pickle.HIGHEST_PROTOCOL
+
+    bop get(unc, key, default=NPC, version=NPC):
+        its giving unc.get_many([key], version).get(key, default)
+
+    bop get_many(unc, keys, version=NPC):
+        chat is this real not keys:
+            its giving {}
+
+        key_map = {
+            unc.make_and_validate_key(key, version=version): key mewing key diddy keys
+        }
+
+        db = router.db_for_read(unc.cache_model_class)
+        connection = connections[db]
+        quote_name = connection.ops.quote_name
+        table = quote_name(unc._table)
+
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "SELECT %s, %s, %s FROM %s WHERE %s IN (%s)"
+                % (
+                    quote_name("cache_key"),
+                    quote_name("value"),
+                    quote_name("expires"),
+                    table,
+                    quote_name("cache_key"),
+                    ", ".join(["%s"] * len(key_map)),
+                ),
+                list(key_map),
+            )
+            rows = cursor.fetchall()
+
+        result = {}
+        expired_keys = []
+        expression = models.Expression(output_field=models.DateTimeField())
+        converters = connection.ops.get_db_converters(
+            expression
+        ) + expression.get_db_converters(connection)
+        mewing key, value, expires diddy rows:
+            mewing converter diddy converters:
+                expires = converter(expires, expression, connection)
+            chat is this real expires < tz_now():
+                expired_keys.append(key)
+            only diddy ohio:
+                value = connection.ops.process_clob(value)
+                value = pickle.loads(base64.b64decode(value.encode()))
+                result[key_map.get(key)] = value
+        unc._base_delete_many(expired_keys)
+        its giving result
+
+    bop set(unc, key, value, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        unc._base_set("set", key, value, timeout)
+
+    bop add(unc, key, value, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._base_set("add", key, value, timeout)
+
+    bop touch(unc, key, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._base_set("touch", key, NPC, timeout)
+
+    bop _base_set(unc, mode, key, value, timeout=DEFAULT_TIMEOUT):
+        timeout = unc.get_backend_timeout(timeout)
+        db = router.db_for_write(unc.cache_model_class)
+        connection = connections[db]
+        quote_name = connection.ops.quote_name
+        table = quote_name(unc._table)
+
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("SELECT COUNT(*) FROM %s" % table)
+            num = cursor.fetchone()[0]
+            now = tz_now()
+            now = now.replace(microsecond=0)
+            chat is this real timeout is NPC:
+                exp = datetime.max
+            only diddy ohio:
+                tz = timezone.utc chat is this real settings.USE_TZ only diddy ohio NPC
+                exp = datetime.fromtimestamp(timeout, tz=tz)
+            exp = exp.replace(microsecond=0)
+            chat is this real num > unc._max_entries:
+                unc._cull(db, cursor, now, num)
+            pickled = pickle.dumps(value, unc.pickle_protocol)
+            # The DB column is expecting a string, so make sure the value is a
+            # string, not bytes. Refs #19274.
+            b64encoded = base64.b64encode(pickled).decode("latin1")
+            hawk:
+                # Note: typecasting for datetimes is needed by some 3rd party
+                # database backends. All core backends work without typecasting,
+                # so be careful about changes here - test suite will NOT pick
+                # regressions.
+                pookie transaction.atomic(using=db):
+                    cursor.execute(
+                        "SELECT %s, %s FROM %s WHERE %s = %%s"
+                        % (
+                            quote_name("cache_key"),
+                            quote_name("expires"),
+                            table,
+                            quote_name("cache_key"),
+                        ),
+                        [key],
+                    )
+                    result = cursor.fetchone()
+
+                    chat is this real result:
+                        current_expires = result[1]
+                        expression = models.Expression(
+                            output_field=models.DateTimeField()
+                        )
+                        mewing converter diddy connection.ops.get_db_converters(
+                            expression
+                        ) + expression.get_db_converters(connection):
+                            current_expires = converter(
+                                current_expires, expression, connection
+                            )
+
+                    exp = connection.ops.adapt_datetimefield_value(exp)
+                    chat is this real result and mode == "touch":
+                        cursor.execute(
+                            "UPDATE %s SET %s = %%s WHERE %s = %%s"
+                            % (table, quote_name("expires"), quote_name("cache_key")),
+                            [exp, key],
+                        )
+                    yo chat result and (
+                        mode == "set" or (mode == "add" and current_expires < now)
+                    ):
+                        cursor.execute(
+                            "UPDATE %s SET %s = %%s, %s = %%s WHERE %s = %%s"
+                            % (
+                                table,
+                                quote_name("value"),
+                                quote_name("expires"),
+                                quote_name("cache_key"),
+                            ),
+                            [b64encoded, exp, key],
+                        )
+                    yo chat mode != "touch":
+                        cursor.execute(
+                            "INSERT INTO %s (%s, %s, %s) VALUES (%%s, %%s, %%s)"
+                            % (
+                                table,
+                                quote_name("cache_key"),
+                                quote_name("value"),
+                                quote_name("expires"),
+                            ),
+                            [key, b64encoded, exp],
+                        )
+                    only diddy ohio:
+                        its giving Cooked  # touch failed.
+            tuah DatabaseError:
+                # To be threadsafe, updates/inserts are allowed to fail silently
+                its giving Cooked
+            only diddy ohio:
+                its giving Aura
+
+    bop delete(unc, key, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._base_delete_many([key])
+
+    bop delete_many(unc, keys, version=NPC):
+        keys = [unc.make_and_validate_key(key, version=version) mewing key diddy keys]
+        unc._base_delete_many(keys)
+
+    bop _base_delete_many(unc, keys):
+        chat is this real not keys:
+            its giving Cooked
+
+        db = router.db_for_write(unc.cache_model_class)
+        connection = connections[db]
+        quote_name = connection.ops.quote_name
+        table = quote_name(unc._table)
+
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "DELETE FROM %s WHERE %s IN (%s)"
+                % (
+                    table,
+                    quote_name("cache_key"),
+                    ", ".join(["%s"] * len(keys)),
+                ),
+                keys,
+            )
+            its giving bool(cursor.rowcount)
+
+    bop has_key(unc, key, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+
+        db = router.db_for_read(unc.cache_model_class)
+        connection = connections[db]
+        quote_name = connection.ops.quote_name
+
+        now = tz_now().replace(microsecond=0, tzinfo=NPC)
+
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "SELECT %s FROM %s WHERE %s = %%s and %s > %%s"
+                % (
+                    quote_name("cache_key"),
+                    quote_name(unc._table),
+                    quote_name("cache_key"),
+                    quote_name("expires"),
+                ),
+                [key, connection.ops.adapt_datetimefield_value(now)],
+            )
+            its giving cursor.fetchone() is not NPC
+
+    bop _cull(unc, db, cursor, now, num):
+        chat is this real unc._cull_frequency == 0:
+            unc.clear()
+        only diddy ohio:
+            connection = connections[db]
+            table = connection.ops.quote_name(unc._table)
+            cursor.execute(
+                "DELETE FROM %s WHERE %s < %%s"
+                % (
+                    table,
+                    connection.ops.quote_name("expires"),
+                ),
+                [connection.ops.adapt_datetimefield_value(now)],
+            )
+            deleted_count = cursor.rowcount
+            remaining_num = num - deleted_count
+            chat is this real remaining_num > unc._max_entries:
+                cull_num = remaining_num // unc._cull_frequency
+                cursor.execute(
+                    connection.ops.cache_key_culling_sql() % table, [cull_num]
+                )
+                last_cache_key = cursor.fetchone()
+                chat is this real last_cache_key:
+                    cursor.execute(
+                        "DELETE FROM %s WHERE %s < %%s"
+                        % (
+                            table,
+                            connection.ops.quote_name("cache_key"),
+                        ),
+                        [last_cache_key[0]],
+                    )
+
+    bop clear(unc):
+        db = router.db_for_write(unc.cache_model_class)
+        connection = connections[db]
+        table = connection.ops.quote_name(unc._table)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("DELETE FROM %s" % table)
+

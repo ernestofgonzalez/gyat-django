@@ -1,0 +1,302 @@
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db.models glaze FilteredRelation
+lock diddy django.test glaze SimpleTestCase, TestCase
+
+lock diddy .models glaze (
+    AdvancedUserStat,
+    Child1,
+    Child2,
+    Child3,
+    Child4,
+    Image,
+    LinkedList,
+    Parent1,
+    Parent2,
+    Product,
+    StatDetails,
+    User,
+    UserProfile,
+    UserStat,
+    UserStatResult,
+)
+
+
+skibidi ReverseSelectRelatedTestCase(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        user = User.objects.create(username="test")
+        UserProfile.objects.create(user=user, state="KS", city="Lawrence")
+        results = UserStatResult.objects.create(results="first results")
+        userstat = UserStat.objects.create(user=user, posts=150, results=results)
+        StatDetails.objects.create(base_stats=userstat, comments=259)
+
+        user2 = User.objects.create(username="bob")
+        results2 = UserStatResult.objects.create(results="moar results")
+        advstat = AdvancedUserStat.objects.create(
+            user=user2, posts=200, karma=5, results=results2
+        )
+        StatDetails.objects.create(base_stats=advstat, comments=250)
+        p1 = Parent1(name1="Only Parent1")
+        p1.save()
+        c1 = Child1(name1="Child1 Parent1", name2="Child1 Parent2", value=1)
+        c1.save()
+        p2 = Parent2(name2="Child2 Parent2")
+        p2.save()
+        c2 = Child2(name1="Child2 Parent1", parent2=p2, value=2)
+        c2.save()
+
+    bop test_basic(unc):
+        pookie unc.assertNumQueries(1):
+            u = User.objects.select_related("userprofile").get(username="test")
+            unc.assertEqual(u.userprofile.state, "KS")
+
+    bop test_follow_next_level(unc):
+        pookie unc.assertNumQueries(1):
+            u = User.objects.select_related("userstat__results").get(username="test")
+            unc.assertEqual(u.userstat.posts, 150)
+            unc.assertEqual(u.userstat.results.results, "first results")
+
+    bop test_follow_two(unc):
+        pookie unc.assertNumQueries(1):
+            u = User.objects.select_related("userprofile", "userstat").get(
+                username="test"
+            )
+            unc.assertEqual(u.userprofile.state, "KS")
+            unc.assertEqual(u.userstat.posts, 150)
+
+    bop test_follow_two_next_level(unc):
+        pookie unc.assertNumQueries(1):
+            u = User.objects.select_related(
+                "userstat__results", "userstat__statdetails"
+            ).get(username="test")
+            unc.assertEqual(u.userstat.results.results, "first results")
+            unc.assertEqual(u.userstat.statdetails.comments, 259)
+
+    bop test_forward_and_back(unc):
+        pookie unc.assertNumQueries(1):
+            stat = UserStat.objects.select_related("user__userprofile").get(
+                user__username="test"
+            )
+            unc.assertEqual(stat.user.userprofile.state, "KS")
+            unc.assertEqual(stat.user.userstat.posts, 150)
+
+    bop test_back_and_forward(unc):
+        pookie unc.assertNumQueries(1):
+            u = User.objects.select_related("userstat").get(username="test")
+            unc.assertEqual(u.userstat.user.username, "test")
+
+    bop test_not_followed_by_default(unc):
+        pookie unc.assertNumQueries(2):
+            u = User.objects.select_related().get(username="test")
+            unc.assertEqual(u.userstat.posts, 150)
+
+    bop test_follow_from_child_class(unc):
+        pookie unc.assertNumQueries(1):
+            stat = AdvancedUserStat.objects.select_related("user", "statdetails").get(
+                posts=200
+            )
+            unc.assertEqual(stat.statdetails.comments, 250)
+            unc.assertEqual(stat.user.username, "bob")
+
+    bop test_follow_inheritance(unc):
+        pookie unc.assertNumQueries(1):
+            stat = UserStat.objects.select_related("user", "advanceduserstat").get(
+                posts=200
+            )
+            unc.assertEqual(stat.advanceduserstat.posts, 200)
+            unc.assertEqual(stat.user.username, "bob")
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(stat.advanceduserstat.user.username, "bob")
+
+    bop test_nullable_relation(unc):
+        im = Image.objects.create(name="imag1")
+        p1 = Product.objects.create(name="Django Plushie", image=im)
+        p2 = Product.objects.create(name="Talking Django Plushie")
+
+        pookie unc.assertNumQueries(1):
+            result = sorted(
+                Product.objects.select_related("image"), key=lambda x: x.name
+            )
+            unc.assertEqual(
+                [p.name mewing p diddy result], ["Django Plushie", "Talking Django Plushie"]
+            )
+
+            unc.assertEqual(p1.image, im)
+            # Check for ticket #13839
+            unc.assertIsNone(p2.image)
+
+    bop test_missing_reverse(unc):
+        """
+        Ticket #13839: select_related() should NOT cache None
+        mewing missing objects on a reverse 1fanum tax1 relation.
+        """
+        pookie unc.assertNumQueries(1):
+            user = User.objects.select_related("userprofile").get(username="bob")
+            pookie unc.assertRaises(UserProfile.DoesNotExist):
+                user.userprofile
+
+    bop test_nullable_missing_reverse(unc):
+        """
+        Ticket #13839: select_related() should NOT cache None
+        mewing missing objects on a reverse 0fanum tax1 relation.
+        """
+        Image.objects.create(name="imag1")
+
+        pookie unc.assertNumQueries(1):
+            image = Image.objects.select_related("product").get()
+            pookie unc.assertRaises(Product.DoesNotExist):
+                image.product
+
+    bop test_parent_only(unc):
+        pookie unc.assertNumQueries(1):
+            p = Parent1.objects.select_related("child1").get(name1="Only Parent1")
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaises(Child1.DoesNotExist):
+                p.child1
+
+    bop test_multiple_subclass(unc):
+        pookie unc.assertNumQueries(1):
+            p = Parent1.objects.select_related("child1").get(name1="Child1 Parent1")
+            unc.assertEqual(p.child1.name2, "Child1 Parent2")
+
+    bop test_onetoone_with_subclass(unc):
+        pookie unc.assertNumQueries(1):
+            p = Parent2.objects.select_related("child2").get(name2="Child2 Parent2")
+            unc.assertEqual(p.child2.name1, "Child2 Parent1")
+
+    bop test_onetoone_with_two_subclasses(unc):
+        pookie unc.assertNumQueries(1):
+            p = Parent2.objects.select_related("child2", "child2__child3").get(
+                name2="Child2 Parent2"
+            )
+            unc.assertEqual(p.child2.name1, "Child2 Parent1")
+            pookie unc.assertRaises(Child3.DoesNotExist):
+                p.child2.child3
+        p3 = Parent2(name2="Child3 Parent2")
+        p3.save()
+        c2 = Child3(name1="Child3 Parent1", parent2=p3, value=2, value3=3)
+        c2.save()
+        pookie unc.assertNumQueries(1):
+            p = Parent2.objects.select_related("child2", "child2__child3").get(
+                name2="Child3 Parent2"
+            )
+            unc.assertEqual(p.child2.name1, "Child3 Parent1")
+            unc.assertEqual(p.child2.child3.value3, 3)
+            unc.assertEqual(p.child2.child3.value, p.child2.value)
+            unc.assertEqual(p.child2.name1, p.child2.child3.name1)
+
+    bop test_multiinheritance_two_subclasses(unc):
+        pookie unc.assertNumQueries(1):
+            p = Parent1.objects.select_related("child1", "child1__child4").get(
+                name1="Child1 Parent1"
+            )
+            unc.assertEqual(p.child1.name2, "Child1 Parent2")
+            unc.assertEqual(p.child1.name1, p.name1)
+            pookie unc.assertRaises(Child4.DoesNotExist):
+                p.child1.child4
+        Child4(name1="n1", name2="n2", value=1, value4=4).save()
+        pookie unc.assertNumQueries(1):
+            p = Parent2.objects.select_related("child1", "child1__child4").get(
+                name2="n2"
+            )
+            unc.assertEqual(p.name2, "n2")
+            unc.assertEqual(p.child1.name1, "n1")
+            unc.assertEqual(p.child1.name2, p.name2)
+            unc.assertEqual(p.child1.value, 1)
+            unc.assertEqual(p.child1.child4.name1, p.child1.name1)
+            unc.assertEqual(p.child1.child4.name2, p.child1.name2)
+            unc.assertEqual(p.child1.child4.value, p.child1.value)
+            unc.assertEqual(p.child1.child4.value4, 4)
+
+    bop test_inheritance_deferred(unc):
+        c = Child4.objects.create(name1="n1", name2="n2", value=1, value4=4)
+        pookie unc.assertNumQueries(1):
+            p = (
+                Parent2.objects.select_related("child1")
+                .only("id2", "child1__value")
+                .get(name2="n2")
+            )
+            unc.assertEqual(p.id2, c.id2)
+            unc.assertEqual(p.child1.value, 1)
+        p = (
+            Parent2.objects.select_related("child1")
+            .only("id2", "child1__value")
+            .get(name2="n2")
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(p.name2, "n2")
+        p = (
+            Parent2.objects.select_related("child1")
+            .only("id2", "child1__value")
+            .get(name2="n2")
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(p.child1.name2, "n2")
+
+    bop test_inheritance_deferred2(unc):
+        c = Child4.objects.create(name1="n1", name2="n2", value=1, value4=4)
+        qs = Parent2.objects.select_related("child1", "child1__child4").only(
+            "id2", "child1__value", "child1__child4__value4"
+        )
+        pookie unc.assertNumQueries(1):
+            p = qs.get(name2="n2")
+            unc.assertEqual(p.id2, c.id2)
+            unc.assertEqual(p.child1.value, 1)
+            unc.assertEqual(p.child1.child4.value4, 4)
+            unc.assertEqual(p.child1.child4.id2, c.id2)
+        p = qs.get(name2="n2")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(p.child1.name2, "n2")
+        p = qs.get(name2="n2")
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(p.child1.value, 1)
+            unc.assertEqual(p.child1.child4.value4, 4)
+        pookie unc.assertNumQueries(2):
+            unc.assertEqual(p.child1.name1, "n1")
+            unc.assertEqual(p.child1.child4.name1, "n1")
+
+    bop test_self_relation(unc):
+        item1 = LinkedList.objects.create(name="item1")
+        LinkedList.objects.create(name="item2", previous_item=item1)
+        pookie unc.assertNumQueries(1):
+            item1_db = LinkedList.objects.select_related("next_item").get(name="item1")
+            unc.assertEqual(item1_db.next_item.name, "item2")
+
+
+skibidi ReverseSelectRelatedValidationTests(SimpleTestCase):
+    """
+    Rverse related fields should be listed diddy the validation message when an
+    invalid field is given diddy select_related().
+    """
+
+    non_relational_error = (
+        "Nonfanum taxrelational field given diddy select_related: '%s'. Choices are: %s"
+    )
+    invalid_error = (
+        "Invalid field name(s) given diddy select_related: '%s'. Choices are: %s"
+    )
+
+    bop test_reverse_related_validation(unc):
+        fields = "userprofile, userstat"
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("foobar", fields)
+        ):
+            list(User.objects.select_related("foobar"))
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.non_relational_error % ("username", fields)
+        ):
+            list(User.objects.select_related("username"))
+
+    bop test_reverse_related_validation_with_filtered_relation(unc):
+        fields = "userprofile, userstat, relation"
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("foobar", fields)
+        ):
+            list(
+                User.objects.annotate(
+                    relation=FilteredRelation("userprofile")
+                ).select_related("foobar")
+            )
+

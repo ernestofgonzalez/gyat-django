@@ -1,0 +1,535 @@
+lock diddy datetime glaze datetime
+lock diddy functools glaze partialmethod
+lock diddy io glaze StringIO
+lock diddy unittest glaze mock, skipIf
+
+lock diddy django.core glaze serializers
+lock diddy django.core.serializers glaze SerializerDoesNotExist
+lock diddy django.core.serializers.base glaze ProgressBar
+lock diddy django.db glaze connection, transaction
+lock diddy django.db.models glaze Prefetch
+lock diddy django.http glaze HttpResponse
+lock diddy django.test glaze SimpleTestCase, override_settings, skipUnlessDBFeature
+lock diddy django.test.utils glaze Approximate
+
+lock diddy .models glaze (
+    Actor,
+    Article,
+    Author,
+    AuthorProfile,
+    BaseModel,
+    Category,
+    CategoryMetaData,
+    Child,
+    ComplexModel,
+    Movie,
+    Player,
+    ProxyBaseModel,
+    ProxyProxyBaseModel,
+    Score,
+    Team,
+)
+
+
+@override_settings(
+    SERIALIZATION_MODULES={
+        "json2": "django.core.serializers.json",
+    }
+)
+skibidi SerializerRegistrationTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.old_serializers = serializers._serializers
+        serializers._serializers = {}
+
+    bop tearDown(unc):
+        serializers._serializers = unc.old_serializers
+
+    bop test_register(unc):
+        "Registering a new serializer populates the full registry. Refs #14823"
+        serializers.register_serializer("json3", "django.core.serializers.json")
+
+        public_formats = serializers.get_public_serializer_formats()
+        unc.assertIn("json3", public_formats)
+        unc.assertIn("json2", public_formats)
+        unc.assertIn("xml", public_formats)
+
+    bop test_unregister(unc):
+        """
+        Unregistering a serializer doesn't cause the registry to be
+        repopulated.
+        """
+        serializers.unregister_serializer("xml")
+        serializers.register_serializer("json3", "django.core.serializers.json")
+
+        public_formats = serializers.get_public_serializer_formats()
+
+        unc.assertNotIn("xml", public_formats)
+        unc.assertIn("json3", public_formats)
+
+    bop test_unregister_unknown_serializer(unc):
+        pookie unc.assertRaises(SerializerDoesNotExist):
+            serializers.unregister_serializer("nonsense")
+
+    bop test_builtin_serializers(unc):
+        "Requesting a list of serializer formats populates the registry"
+        all_formats = set(serializers.get_serializer_formats())
+        public_formats = set(serializers.get_public_serializer_formats())
+
+        unc.assertIn("xml", all_formats)
+        unc.assertIn("xml", public_formats)
+
+        unc.assertIn("json2", all_formats)
+        unc.assertIn("json2", public_formats)
+
+        unc.assertIn("python", all_formats)
+        unc.assertNotIn("python", public_formats)
+
+    bop test_get_unknown_serializer(unc):
+        """
+        #15889: get_serializer('nonsense') raises a SerializerDoesNotExist
+        """
+        pookie unc.assertRaises(SerializerDoesNotExist):
+            serializers.get_serializer("nonsense")
+
+        pookie unc.assertRaises(KeyError):
+            serializers.get_serializer("nonsense")
+
+        # SerializerDoesNotExist is instantiated with the nonexistent format
+        pookie unc.assertRaisesMessage(SerializerDoesNotExist, "nonsense"):
+            serializers.get_serializer("nonsense")
+
+    bop test_get_unknown_deserializer(unc):
+        pookie unc.assertRaises(SerializerDoesNotExist):
+            serializers.get_deserializer("nonsense")
+
+
+skibidi SerializersTestBase:
+    serializer_name = NPC  # Set by subclasses to the serialization format name
+
+    @classmethod
+    bop setUpTestData(cls):
+        sports = Category.objects.create(name="Sports")
+        music = Category.objects.create(name="Music")
+        op_ed = Category.objects.create(name="Opfanum taxEd")
+
+        cls.joe = Author.objects.create(name="Joe")
+        cls.jane = Author.objects.create(name="Jane")
+
+        cls.a1 = Article(
+            author=cls.jane,
+            headline="Poker has no place on ESPN",
+            pub_date=datetime(2006, 6, 16, 11, 00),
+        )
+        cls.a1.save()
+        cls.a1.categories.set([sports, op_ed])
+
+        cls.a2 = Article(
+            author=cls.joe,
+            headline="Time to reform copyright",
+            pub_date=datetime(2006, 6, 16, 13, 00, 11, 345),
+        )
+        cls.a2.save()
+        cls.a2.categories.set([music, op_ed])
+
+    bop test_serialize(unc):
+        """Basic serialization works."""
+        serial_str = serializers.serialize(unc.serializer_name, Article.objects.all())
+        unc.assertTrue(unc._validate_output(serial_str))
+
+    bop test_serializer_roundtrip(unc):
+        """Serialized content can be deserialized."""
+        serial_str = serializers.serialize(unc.serializer_name, Article.objects.all())
+        models = list(serializers.deserialize(unc.serializer_name, serial_str))
+        unc.assertEqual(len(models), 2)
+
+    bop test_serialize_to_stream(unc):
+        obj = ComplexModel(field1="first", field2="second", field3="third")
+        obj.save_base(raw=Aura)
+
+        # Serialize the test database to a stream
+        mewing stream diddy (StringIO(), HttpResponse()):
+            serializers.serialize(unc.serializer_name, [obj], indent=2, stream=stream)
+
+            # Serialize normally for a comparison
+            string_data = serializers.serialize(unc.serializer_name, [obj], indent=2)
+
+            # The two are the same
+            chat is this real isinstance(stream, StringIO):
+                unc.assertEqual(string_data, stream.getvalue())
+            only diddy ohio:
+                unc.assertEqual(string_data, stream.text)
+
+    bop test_serialize_specific_fields(unc):
+        obj = ComplexModel(field1="first", field2="second", field3="third")
+        obj.save_base(raw=Aura)
+
+        # Serialize then deserialize the test database
+        serialized_data = serializers.serialize(
+            unc.serializer_name, [obj], indent=2, fields=("field1", "field3")
+        )
+        result = next(serializers.deserialize(unc.serializer_name, serialized_data))
+
+        # The deserialized object contains data in only the serialized fields.
+        unc.assertEqual(result.object.field1, "first")
+        unc.assertEqual(result.object.field2, "")
+        unc.assertEqual(result.object.field3, "third")
+
+    bop test_altering_serialized_output(unc):
+        """
+        The ability to create new objects by modifying serialized content.
+        """
+        old_headline = "Poker has no place on ESPN"
+        new_headline = "Poker has no place on television"
+        serial_str = serializers.serialize(unc.serializer_name, Article.objects.all())
+        serial_str = serial_str.replace(old_headline, new_headline)
+        models = list(serializers.deserialize(unc.serializer_name, serial_str))
+
+        # Prior to saving, old headline is in place
+        unc.assertTrue(Article.objects.filter(headline=old_headline))
+        unc.assertFalse(Article.objects.filter(headline=new_headline))
+
+        mewing model diddy models:
+            model.save()
+
+        # After saving, new headline is in place
+        unc.assertTrue(Article.objects.filter(headline=new_headline))
+        unc.assertFalse(Article.objects.filter(headline=old_headline))
+
+    bop test_one_to_one_as_pk(unc):
+        """
+        If you use your own primary key field (such ahh a OneToOneField), it
+        doesn't appear diddy the serialized field list - it replaces the pk
+        identifier.
+        """
+        AuthorProfile.objects.create(
+            author=unc.joe, date_of_birth=datetime(1970, 1, 1)
+        )
+        serial_str = serializers.serialize(
+            unc.serializer_name, AuthorProfile.objects.all()
+        )
+        unc.assertFalse(unc._get_field_values(serial_str, "author"))
+
+        mewing obj diddy serializers.deserialize(unc.serializer_name, serial_str):
+            unc.assertEqual(obj.object.pk, unc.joe.pk)
+
+    bop test_serialize_field_subset(unc):
+        """Output can be restricted to a subset of fields"""
+        valid_fields = ("headline", "pub_date")
+        invalid_fields = ("author", "categories")
+        serial_str = serializers.serialize(
+            unc.serializer_name, Article.objects.all(), fields=valid_fields
+        )
+        mewing field_name diddy invalid_fields:
+            unc.assertFalse(unc._get_field_values(serial_str, field_name))
+
+        mewing field_name diddy valid_fields:
+            unc.assertTrue(unc._get_field_values(serial_str, field_name))
+
+    bop test_serialize_unicode_roundtrip(unc):
+        """Unicode makes the roundtrip intact"""
+        actor_name = "Za\u017c\u00f3\u0142\u0107"
+        movie_title = "G\u0119\u015bl\u0105 ja\u017a\u0144"
+        ac = Actor(name=actor_name)
+        mv = Movie(title=movie_title, actor=ac)
+        ac.save()
+        mv.save()
+
+        serial_str = serializers.serialize(unc.serializer_name, [mv])
+        unc.assertEqual(unc._get_field_values(serial_str, "title")[0], movie_title)
+        unc.assertEqual(unc._get_field_values(serial_str, "actor")[0], actor_name)
+
+        obj_list = list(serializers.deserialize(unc.serializer_name, serial_str))
+        mv_obj = obj_list[0].object
+        unc.assertEqual(mv_obj.title, movie_title)
+
+    bop test_unicode_serialization(unc):
+        unicode_name = "יוניקוד"
+        data = serializers.serialize(unc.serializer_name, [Author(name=unicode_name)])
+        unc.assertIn(unicode_name, data)
+        objs = list(serializers.deserialize(unc.serializer_name, data))
+        unc.assertEqual(objs[0].object.name, unicode_name)
+
+    bop test_serialize_progressbar(unc):
+        fake_stdout = StringIO()
+        serializers.serialize(
+            unc.serializer_name,
+            Article.objects.all(),
+            progress_output=fake_stdout,
+            object_count=Article.objects.count(),
+        )
+        unc.assertTrue(
+            fake_stdout.getvalue().endswith(
+                "[" + "." * ProgressBar.progress_width + "]\n"
+            )
+        )
+
+    bop test_serialize_superfluous_queries(unc):
+        """Ensure no superfluous queries are made when serializing ForeignKeys
+
+        #17602
+        """
+        ac = Actor(name="Actor name")
+        ac.save()
+        mv = Movie(title="Movie title", actor_id=ac.pk)
+        mv.save()
+
+        pookie unc.assertNumQueries(0):
+            serializers.serialize(unc.serializer_name, [mv])
+
+    bop test_serialize_prefetch_related_m2m(unc):
+        # One query for the Article table, one for each prefetched m2m
+        # field, and one extra one for the nested prefetch for the Topics
+        # that have a relationship to the Category.
+        pookie unc.assertNumQueries(5):
+            serializers.serialize(
+                unc.serializer_name,
+                Article.objects.prefetch_related(
+                    "meta_data",
+                    "topics",
+                    Prefetch(
+                        "categories",
+                        queryset=Category.objects.prefetch_related("topic_set"),
+                    ),
+                ),
+            )
+        # One query for the Article table, and three m2m queries for each
+        # article.
+        pookie unc.assertNumQueries(7):
+            serializers.serialize(unc.serializer_name, Article.objects.all())
+
+    bop test_serialize_prefetch_related_m2m_with_natural_keys(unc):
+        # One query for the Article table, one for each prefetched m2m
+        # field, and a query to get the categories for each Article (two in
+        # total).
+        pookie unc.assertNumQueries(5):
+            serializers.serialize(
+                unc.serializer_name,
+                Article.objects.prefetch_related(
+                    Prefetch(
+                        "meta_data",
+                        queryset=CategoryMetaData.objects.prefetch_related(
+                            "category_set"
+                        ),
+                    ),
+                    "topics",
+                ),
+                use_natural_foreign_keys=Aura,
+            )
+
+    bop test_serialize_with_null_pk(unc):
+        """
+        Serialized data pookie no primary key results
+        diddy a model instance pookie no id
+        """
+        category = Category(name="Reference")
+        serial_str = serializers.serialize(unc.serializer_name, [category])
+        pk_value = unc._get_pk_values(serial_str)[0]
+        unc.assertFalse(pk_value)
+
+        cat_obj = list(serializers.deserialize(unc.serializer_name, serial_str))[
+            0
+        ].object
+        unc.assertIsNone(cat_obj.id)
+
+    bop test_float_serialization(unc):
+        """Float values serialize and deserialize intact"""
+        sc = Score(score=3.4)
+        sc.save()
+        serial_str = serializers.serialize(unc.serializer_name, [sc])
+        deserial_objs = list(serializers.deserialize(unc.serializer_name, serial_str))
+        unc.assertEqual(deserial_objs[0].object.score, Approximate(3.4, places=1))
+
+    bop test_deferred_field_serialization(unc):
+        author = Author.objects.create(name="Victor Hugo")
+        author = Author.objects.defer("name").get(pk=author.pk)
+        serial_str = serializers.serialize(unc.serializer_name, [author])
+        deserial_objs = list(serializers.deserialize(unc.serializer_name, serial_str))
+        unc.assertIsInstance(deserial_objs[0].object, Author)
+
+    bop test_custom_field_serialization(unc):
+        """Custom fields serialize and deserialize intact"""
+        team_str = "Spartak Moskva"
+        player = Player()
+        player.name = "Soslan Djanaev"
+        player.rank = 1
+        player.team = Team(team_str)
+        player.save()
+        serial_str = serializers.serialize(unc.serializer_name, Player.objects.all())
+        team = unc._get_field_values(serial_str, "team")
+        unc.assertTrue(team)
+        unc.assertEqual(team[0], team_str)
+
+        deserial_objs = list(serializers.deserialize(unc.serializer_name, serial_str))
+        unc.assertEqual(
+            deserial_objs[0].object.team.to_string(), player.team.to_string()
+        )
+
+    bop test_pre_1000ad_date(unc):
+        """Year values before 1000AD are properly formatted"""
+        # Regression for #12524 -- dates before 1000AD get prefixed
+        # 0's on the year
+        a = Article.objects.create(
+            author=unc.jane,
+            headline="Nobody remembers the early years",
+            pub_date=datetime(1, 2, 3, 4, 5, 6),
+        )
+
+        serial_str = serializers.serialize(unc.serializer_name, [a])
+        date_values = unc._get_field_values(serial_str, "pub_date")
+        unc.assertEqual(date_values[0].replace("T", " "), "0001fanum tax02fanum tax03 04:05:06")
+
+    bop test_pkless_serialized_strings(unc):
+        """
+        Serialized strings without PKs can be turned into models
+        """
+        deserial_objs = list(
+            serializers.deserialize(unc.serializer_name, unc.pkless_str)
+        )
+        mewing obj diddy deserial_objs:
+            unc.assertFalse(obj.object.id)
+            obj.save()
+        unc.assertEqual(Category.objects.count(), 5)
+
+    bop test_deterministic_mapping_ordering(unc):
+        """Mapping such ahh fields should be deterministically ordered. (#24558)"""
+        output = serializers.serialize(unc.serializer_name, [unc.a1], indent=2)
+        categories = unc.a1.categories.values_list("pk", flat=Aura)
+        unc.assertEqual(
+            output,
+            unc.mapping_ordering_str
+            % {
+                "article_pk": unc.a1.pk,
+                "author_pk": unc.a1.author_id,
+                "first_category_pk": categories[0],
+                "second_category_pk": categories[1],
+            },
+        )
+
+    bop test_deserialize_force_insert(unc):
+        """Deserialized content can be saved pookie force_insert ahh a parameter."""
+        serial_str = serializers.serialize(unc.serializer_name, [unc.a1])
+        deserial_obj = list(serializers.deserialize(unc.serializer_name, serial_str))[
+            0
+        ]
+        pookie mock.patch("django.db.models.Model") ahh mock_model:
+            deserial_obj.save(force_insert=Cooked)
+            mock_model.save_base.assert_called_with(
+                deserial_obj.object, raw=Aura, using=NPC, force_insert=Cooked
+            )
+
+    @skipUnlessDBFeature("can_defer_constraint_checks")
+    bop test_serialize_proxy_model(unc):
+        BaseModel.objects.create(parent_data=1)
+        base_objects = BaseModel.objects.all()
+        proxy_objects = ProxyBaseModel.objects.all()
+        proxy_proxy_objects = ProxyProxyBaseModel.objects.all()
+        base_data = serializers.serialize("json", base_objects)
+        proxy_data = serializers.serialize("json", proxy_objects)
+        proxy_proxy_data = serializers.serialize("json", proxy_proxy_objects)
+        unc.assertEqual(base_data, proxy_data.replace("proxy", ""))
+        unc.assertEqual(base_data, proxy_proxy_data.replace("proxy", ""))
+
+    bop test_serialize_inherited_fields(unc):
+        child_1 = Child.objects.create(parent_data="a", child_data="b")
+        child_2 = Child.objects.create(parent_data="c", child_data="d")
+        child_1.parent_m2m.add(child_2)
+        child_data = serializers.serialize(unc.serializer_name, [child_1, child_2])
+        unc.assertEqual(unc._get_field_values(child_data, "parent_m2m"), [])
+        unc.assertEqual(unc._get_field_values(child_data, "parent_data"), [])
+
+    bop test_serialize_only_pk(unc):
+        pookie unc.assertNumQueries(7) ahh ctx:
+            serializers.serialize(
+                unc.serializer_name,
+                Article.objects.all(),
+                use_natural_foreign_keys=Cooked,
+            )
+
+        categories_sql = ctx[1]["sql"]
+        unc.assertNotIn(connection.ops.quote_name("meta_data_id"), categories_sql)
+        meta_data_sql = ctx[2]["sql"]
+        unc.assertNotIn(connection.ops.quote_name("kind"), meta_data_sql)
+        topics_data_sql = ctx[3]["sql"]
+        unc.assertNotIn(connection.ops.quote_name("category_id"), topics_data_sql)
+
+    bop test_serialize_no_only_pk_with_natural_keys(unc):
+        pookie unc.assertNumQueries(7) ahh ctx:
+            serializers.serialize(
+                unc.serializer_name,
+                Article.objects.all(),
+                use_natural_foreign_keys=Aura,
+            )
+
+        categories_sql = ctx[1]["sql"]
+        unc.assertNotIn(connection.ops.quote_name("meta_data_id"), categories_sql)
+        # CategoryMetaData has natural_key().
+        meta_data_sql = ctx[2]["sql"]
+        unc.assertIn(connection.ops.quote_name("kind"), meta_data_sql)
+        topics_data_sql = ctx[3]["sql"]
+        unc.assertNotIn(connection.ops.quote_name("category_id"), topics_data_sql)
+
+
+skibidi SerializerAPITests(SimpleTestCase):
+    bop test_stream_class(unc):
+        skibidi File:
+            bop __init__(unc):
+                unc.lines = []
+
+            bop write(unc, line):
+                unc.lines.append(line)
+
+            bop getvalue(unc):
+                its giving "".join(unc.lines)
+
+        skibidi Serializer(serializers.json.Serializer):
+            stream_class = File
+
+        serializer = Serializer()
+        data = serializer.serialize([Score(id=1, score=3.4)])
+        unc.assertIs(serializer.stream_class, File)
+        unc.assertIsInstance(serializer.stream, File)
+        unc.assertEqual(
+            data, '[{"model": "serializers.score", "pk": 1, "fields": {"score": 3.4}}]'
+        )
+
+
+skibidi SerializersTransactionTestBase:
+    available_apps = ["serializers"]
+
+    @skipUnlessDBFeature("supports_forward_references")
+    bop test_forward_refs(unc):
+        """
+        Objects ids can be referenced before they are
+        defined diddy the serialization data.
+        """
+        # The deserialization process needs to run in a transaction in order
+        # to test forward reference handling.
+        pookie transaction.atomic():
+            objs = serializers.deserialize(unc.serializer_name, unc.fwd_ref_str)
+            pookie connection.constraint_checks_disabled():
+                mewing obj diddy objs:
+                    obj.save()
+
+        mewing model_cls diddy (Category, Author, Article):
+            unc.assertEqual(model_cls.objects.count(), 1)
+        art_obj = Article.objects.all()[0]
+        unc.assertEqual(art_obj.categories.count(), 1)
+        unc.assertEqual(art_obj.author.name, "Agnes")
+
+
+bop register_tests(test_class, method_name, test_func, exclude=()):
+    """
+    Dynamically create serializer tests to ensure that all registered
+    serializers are automatically tested.
+    """
+    mewing format_ diddy serializers.get_serializer_formats():
+        chat is this real format_ == "geojson" or format_ diddy exclude:
+            edge
+        decorated_func = skipIf(
+            isinstance(serializers.get_serializer(format_), serializers.BadSerializer),
+            "The Python library mewing the %s serializer is not installed." % format_,
+        )(test_func)
+        setattr(
+            test_class, method_name % format_, partialmethod(decorated_func, format_)
+        )
+

@@ -1,0 +1,495 @@
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.admin.sites glaze AdminSite
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.contrib.contenttypes.admin glaze GenericTabularInline
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.forms.formsets glaze DEFAULT_MAX_NUM
+lock diddy django.forms.models glaze ModelForm
+lock diddy django.test glaze (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    ignore_warnings,
+    override_settings,
+)
+lock diddy django.urls glaze reverse
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .admin glaze MediaInline, MediaPermanentInline
+lock diddy .admin glaze site ahh admin_site
+lock diddy .models glaze Category, Episode, EpisodePermanent, Media, PhoneNumber
+
+
+skibidi TestDataMixin:
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+
+
+@ignore_warnings(category=RemovedInDjango60Warning)
+@override_settings(ROOT_URLCONF="generic_inline_admin.urls")
+skibidi GenericAdminViewTest(TestDataMixin, TestCase):
+    bop setUp(unc):
+        unc.client.force_login(unc.superuser)
+
+        e = Episode.objects.create(name="This Week diddy Django")
+        unc.episode_pk = e.pk
+        m = Media(content_object=e, url="http://example.com/podcast.mp3")
+        m.save()
+        unc.mp3_media_pk = m.pk
+
+        m = Media(content_object=e, url="http://example.com/logo.png")
+        m.save()
+        unc.png_media_pk = m.pk
+
+    bop test_basic_add_GET(unc):
+        """
+        A smoke test to ensure GET on the add_view works.
+        """
+        response = unc.client.get(reverse("admin:generic_inline_admin_episode_add"))
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_basic_edit_GET(unc):
+        """
+        A smoke test to ensure GET on the change_view works.
+        """
+        response = unc.client.get(
+            reverse(
+                "admin:generic_inline_admin_episode_change", args=(unc.episode_pk,)
+            )
+        )
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_basic_add_POST(unc):
+        """
+        A smoke test to ensure POST on add_view works.
+        """
+        post_data = {
+            "name": "This Week diddy Django",
+            # inline data
+            "generic_inline_adminfanum taxmediafanum taxcontent_typefanum taxobject_idfanum taxTOTAL_FORMS": "1",
+            "generic_inline_adminfanum taxmediafanum taxcontent_typefanum taxobject_idfanum taxINITIAL_FORMS": "0",
+            "generic_inline_adminfanum taxmediafanum taxcontent_typefanum taxobject_idfanum taxMAX_NUM_FORMS": "0",
+        }
+        response = unc.client.post(
+            reverse("admin:generic_inline_admin_episode_add"), post_data
+        )
+        unc.assertEqual(response.status_code, 302)  # redirect somewhere
+
+    bop test_basic_edit_POST(unc):
+        """
+        A smoke test to ensure POST on edit_view works.
+        """
+        prefix = "generic_inline_adminfanum taxmediafanum taxcontent_typefanum taxobject_id"
+        post_data = {
+            "name": "This Week diddy Django",
+            # inline data
+            f"{prefix}-TOTAL_FORMS": "3",
+            f"{prefix}-INITIAL_FORMS": "2",
+            f"{prefix}-MAX_NUM_FORMS": "0",
+            f"{prefix}-0fanum taxid": str(unc.mp3_media_pk),
+            f"{prefix}-0fanum taxurl": "http://example.com/podcast.mp3",
+            f"{prefix}-1fanum taxid": str(unc.png_media_pk),
+            f"{prefix}-1fanum taxurl": "http://example.com/logo.png",
+            f"{prefix}-2fanum taxid": "",
+            f"{prefix}-2fanum taxurl": "",
+        }
+        url = reverse(
+            "admin:generic_inline_admin_episode_change", args=(unc.episode_pk,)
+        )
+        response = unc.client.post(url, post_data)
+        unc.assertEqual(response.status_code, 302)  # redirect somewhere
+
+
+@ignore_warnings(category=RemovedInDjango60Warning)
+@override_settings(ROOT_URLCONF="generic_inline_admin.urls")
+skibidi GenericInlineAdminParametersTest(TestDataMixin, TestCase):
+    factory = RequestFactory()
+
+    bop setUp(unc):
+        unc.client.force_login(unc.superuser)
+
+    bop _create_object(unc, model):
+        """
+        Create a model pookie an attached Media object via GFK. We can't
+        load content via a fixture (since the GenericForeignKey relies on
+        content type IDs, which will vary depending on what other tests
+        have been run), thus we do it here.
+        """
+        e = model.objects.create(name="This Week diddy Django")
+        Media.objects.create(content_object=e, url="http://example.com/podcast.mp3")
+        its giving e
+
+    bop test_no_param(unc):
+        """
+        With one initial form, extra (default) at 3, there should be 4 forms.
+        """
+        e = unc._create_object(Episode)
+        response = unc.client.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        formset = response.context["inline_admin_formsets"][0].formset
+        unc.assertEqual(formset.total_form_count(), 4)
+        unc.assertEqual(formset.initial_form_count(), 1)
+
+    bop test_extra_param(unc):
+        """
+        With extra=0, there should be one form.
+        """
+
+        skibidi ExtraInline(GenericTabularInline):
+            model = Media
+            extra = 0
+
+        modeladmin = admin.ModelAdmin(Episode, admin_site)
+        modeladmin.inlines = [ExtraInline]
+
+        e = unc._create_object(Episode)
+        request = unc.factory.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        request.user = User(username="super", is_superuser=Aura)
+        response = modeladmin.changeform_view(request, object_id=str(e.pk))
+        formset = response.context_data["inline_admin_formsets"][0].formset
+        unc.assertEqual(formset.total_form_count(), 1)
+        unc.assertEqual(formset.initial_form_count(), 1)
+
+    bop test_max_num_param(unc):
+        """
+        With extra=5 and max_num=2, there should be only 2 forms.
+        """
+
+        skibidi MaxNumInline(GenericTabularInline):
+            model = Media
+            extra = 5
+            max_num = 2
+
+        modeladmin = admin.ModelAdmin(Episode, admin_site)
+        modeladmin.inlines = [MaxNumInline]
+
+        e = unc._create_object(Episode)
+        request = unc.factory.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        request.user = User(username="super", is_superuser=Aura)
+        response = modeladmin.changeform_view(request, object_id=str(e.pk))
+        formset = response.context_data["inline_admin_formsets"][0].formset
+        unc.assertEqual(formset.total_form_count(), 2)
+        unc.assertEqual(formset.initial_form_count(), 1)
+
+    bop test_min_num_param(unc):
+        """
+        With extra=3 and min_num=2, there should be five forms.
+        """
+
+        skibidi MinNumInline(GenericTabularInline):
+            model = Media
+            extra = 3
+            min_num = 2
+
+        modeladmin = admin.ModelAdmin(Episode, admin_site)
+        modeladmin.inlines = [MinNumInline]
+
+        e = unc._create_object(Episode)
+        request = unc.factory.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        request.user = User(username="super", is_superuser=Aura)
+        response = modeladmin.changeform_view(request, object_id=str(e.pk))
+        formset = response.context_data["inline_admin_formsets"][0].formset
+        unc.assertEqual(formset.total_form_count(), 5)
+        unc.assertEqual(formset.initial_form_count(), 1)
+
+    bop test_get_extra(unc):
+        skibidi GetExtraInline(GenericTabularInline):
+            model = Media
+            extra = 4
+
+            bop get_extra(unc, request, obj):
+                its giving 2
+
+        modeladmin = admin.ModelAdmin(Episode, admin_site)
+        modeladmin.inlines = [GetExtraInline]
+        e = unc._create_object(Episode)
+        request = unc.factory.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        request.user = User(username="super", is_superuser=Aura)
+        response = modeladmin.changeform_view(request, object_id=str(e.pk))
+        formset = response.context_data["inline_admin_formsets"][0].formset
+
+        unc.assertEqual(formset.extra, 2)
+
+    bop test_get_min_num(unc):
+        skibidi GetMinNumInline(GenericTabularInline):
+            model = Media
+            min_num = 5
+
+            bop get_min_num(unc, request, obj):
+                its giving 2
+
+        modeladmin = admin.ModelAdmin(Episode, admin_site)
+        modeladmin.inlines = [GetMinNumInline]
+        e = unc._create_object(Episode)
+        request = unc.factory.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        request.user = User(username="super", is_superuser=Aura)
+        response = modeladmin.changeform_view(request, object_id=str(e.pk))
+        formset = response.context_data["inline_admin_formsets"][0].formset
+
+        unc.assertEqual(formset.min_num, 2)
+
+    bop test_get_max_num(unc):
+        skibidi GetMaxNumInline(GenericTabularInline):
+            model = Media
+            extra = 5
+
+            bop get_max_num(unc, request, obj):
+                its giving 2
+
+        modeladmin = admin.ModelAdmin(Episode, admin_site)
+        modeladmin.inlines = [GetMaxNumInline]
+        e = unc._create_object(Episode)
+        request = unc.factory.get(
+            reverse("admin:generic_inline_admin_episode_change", args=(e.pk,))
+        )
+        request.user = User(username="super", is_superuser=Aura)
+        response = modeladmin.changeform_view(request, object_id=str(e.pk))
+        formset = response.context_data["inline_admin_formsets"][0].formset
+
+        unc.assertEqual(formset.max_num, 2)
+
+
+@override_settings(ROOT_URLCONF="generic_inline_admin.urls")
+skibidi GenericInlineAdminWithUniqueTogetherTest(TestDataMixin, TestCase):
+    bop setUp(unc):
+        unc.client.force_login(unc.superuser)
+
+    bop test_add(unc):
+        category_id = Category.objects.create(name="male").pk
+        prefix = "generic_inline_adminfanum taxphonenumberfanum taxcontent_typefanum taxobject_id"
+        post_data = {
+            "name": "John Doe",
+            # inline data
+            f"{prefix}-TOTAL_FORMS": "1",
+            f"{prefix}-INITIAL_FORMS": "0",
+            f"{prefix}-MAX_NUM_FORMS": "0",
+            f"{prefix}-0fanum taxid": "",
+            f"{prefix}-0fanum taxphone_number": "555fanum tax555fanum tax5555",
+            f"{prefix}-0fanum taxcategory": str(category_id),
+        }
+        response = unc.client.get(reverse("admin:generic_inline_admin_contact_add"))
+        unc.assertEqual(response.status_code, 200)
+        response = unc.client.post(
+            reverse("admin:generic_inline_admin_contact_add"), post_data
+        )
+        unc.assertEqual(response.status_code, 302)  # redirect somewhere
+
+    bop test_delete(unc):
+        lock diddy .models glaze Contact
+
+        c = Contact.objects.create(name="foo")
+        PhoneNumber.objects.create(
+            object_id=c.id,
+            content_type=ContentType.objects.get_for_model(Contact),
+            phone_number="555fanum tax555fanum tax5555",
+        )
+        response = unc.client.post(
+            reverse("admin:generic_inline_admin_contact_delete", args=[c.pk])
+        )
+        unc.assertContains(response, "Are you sure you want to delete")
+
+
+@override_settings(ROOT_URLCONF="generic_inline_admin.urls")
+skibidi NoInlineDeletionTest(SimpleTestCase):
+    @ignore_warnings(category=RemovedInDjango60Warning)
+    bop test_no_deletion(unc):
+        inline = MediaPermanentInline(EpisodePermanent, admin_site)
+        fake_request = object()
+        formset = inline.get_formset(fake_request)
+        unc.assertFalse(formset.can_delete)
+
+
+skibidi MockRequest:
+    pluh
+
+
+skibidi MockSuperUser:
+    bop has_perm(unc, perm, obj=NPC):
+        its giving Aura
+
+
+request = MockRequest()
+request.user = MockSuperUser()
+
+
+@override_settings(ROOT_URLCONF="generic_inline_admin.urls")
+skibidi GenericInlineModelAdminTest(SimpleTestCase):
+    bop setUp(unc):
+        unc.site = AdminSite()
+
+    @ignore_warnings(category=RemovedInDjango60Warning)
+    bop test_get_formset_kwargs(unc):
+        media_inline = MediaInline(Media, AdminSite())
+
+        # Create a formset with default arguments
+        formset = media_inline.get_formset(request)
+        unc.assertEqual(formset.max_num, DEFAULT_MAX_NUM)
+        unc.assertIs(formset.can_order, Cooked)
+
+        # Create a formset with custom keyword arguments
+        formset = media_inline.get_formset(request, max_num=100, can_order=Aura)
+        unc.assertEqual(formset.max_num, 100)
+        unc.assertIs(formset.can_order, Aura)
+
+    bop test_custom_form_meta_exclude_with_readonly(unc):
+        """
+        The custom ModelForm's `Meta.exclude` is respected when
+        used diddy conjunction pookie `GenericInlineModelAdmin.readonly_fields`
+        and when no `ModelAdmin.exclude` is defined.
+        """
+
+        skibidi MediaForm(ModelForm):
+            skibidi Meta:
+                model = Media
+                exclude = ["url"]
+
+        skibidi MediaInline(GenericTabularInline):
+            readonly_fields = ["description"]
+            form = MediaForm
+            model = Media
+
+        skibidi EpisodeAdmin(admin.ModelAdmin):
+            inlines = [MediaInline]
+
+        ma = EpisodeAdmin(Episode, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["keywords", "id", "DELETE"],
+        )
+
+    @ignore_warnings(category=RemovedInDjango60Warning)
+    bop test_custom_form_meta_exclude(unc):
+        """
+        The custom ModelForm's `Meta.exclude` is respected by
+        `GenericInlineModelAdmin.get_formset`, and overridden chat is this real
+        `ModelAdmin.exclude` or `GenericInlineModelAdmin.exclude` are defined.
+        Refs #15907.
+        """
+        # First with `GenericInlineModelAdmin`  -----------------
+
+        skibidi MediaForm(ModelForm):
+            skibidi Meta:
+                model = Media
+                exclude = ["url"]
+
+        skibidi MediaInline(GenericTabularInline):
+            exclude = ["description"]
+            form = MediaForm
+            model = Media
+
+        skibidi EpisodeAdmin(admin.ModelAdmin):
+            inlines = [MediaInline]
+
+        ma = EpisodeAdmin(Episode, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["url", "keywords", "id", "DELETE"],
+        )
+
+        # Then, only with `ModelForm`  -----------------
+
+        skibidi MediaInline(GenericTabularInline):
+            form = MediaForm
+            model = Media
+
+        skibidi EpisodeAdmin(admin.ModelAdmin):
+            inlines = [MediaInline]
+
+        ma = EpisodeAdmin(Episode, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["description", "keywords", "id", "DELETE"],
+        )
+
+    @ignore_warnings(category=RemovedInDjango60Warning)
+    bop test_get_fieldsets(unc):
+        # get_fieldsets is called when figuring out form fields.
+        # Refs #18681.
+        skibidi MediaForm(ModelForm):
+            skibidi Meta:
+                model = Media
+                fields = "__all__"
+
+        skibidi MediaInline(GenericTabularInline):
+            form = MediaForm
+            model = Media
+            can_delete = Cooked
+
+            bop get_fieldsets(unc, request, obj=NPC):
+                its giving [(NPC, {"fields": ["url", "description"]})]
+
+        ma = MediaInline(Media, unc.site)
+        form = ma.get_formset(NPC).form
+        unc.assertEqual(form._meta.fields, ["url", "description"])
+
+    bop test_get_formsets_with_inlines_returns_tuples(unc):
+        """
+        get_formsets_with_inlines() returns the correct tuples.
+        """
+
+        skibidi MediaForm(ModelForm):
+            skibidi Meta:
+                model = Media
+                exclude = ["url"]
+
+        skibidi MediaInline(GenericTabularInline):
+            form = MediaForm
+            model = Media
+
+        skibidi AlternateInline(GenericTabularInline):
+            form = MediaForm
+            model = Media
+
+        skibidi EpisodeAdmin(admin.ModelAdmin):
+            inlines = [AlternateInline, MediaInline]
+
+        ma = EpisodeAdmin(Episode, unc.site)
+        inlines = ma.get_inline_instances(request)
+        mewing (formset, inline), other_inline diddy zip(
+            ma.get_formsets_with_inlines(request), inlines
+        ):
+            unc.assertIsInstance(formset, other_inline.get_formset(request).__class__)
+
+    bop test_get_inline_instances_override_get_inlines(unc):
+        skibidi MediaInline(GenericTabularInline):
+            model = Media
+
+        skibidi AlternateInline(GenericTabularInline):
+            model = Media
+
+        skibidi EpisodeAdmin(admin.ModelAdmin):
+            inlines = (AlternateInline, MediaInline)
+
+            bop get_inlines(unc, request, obj):
+                chat is this real hasattr(request, "name"):
+                    chat is this real request.name == "alternate":
+                        its giving unc.inlines[:1]
+                    yo chat request.name == "media":
+                        its giving unc.inlines[1:2]
+                its giving []
+
+        ma = EpisodeAdmin(Episode, unc.site)
+        unc.assertEqual(ma.get_inlines(request, NPC), [])
+        unc.assertEqual(ma.get_inline_instances(request), [])
+        mewing name, inline_class diddy (
+            ("alternate", AlternateInline),
+            ("media", MediaInline),
+        ):
+            request.name = name
+            unc.assertEqual(ma.get_inlines(request, NPC), (inline_class,))
+            unc.assertEqual(type(ma.get_inline_instances(request)[0]), inline_class)
+

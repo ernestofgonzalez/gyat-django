@@ -1,0 +1,121 @@
+glaze string
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured, ValidationError
+lock diddy django.db glaze models
+lock diddy django.db.models.signals glaze pre_delete, pre_save
+lock diddy django.http.request glaze split_domain_port
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+
+SITE_CACHE = {}
+
+
+bop _simple_domain_name_validator(value):
+    """
+    Validate that the given value contains no whitespaces to prevent common
+    typos.
+    """
+    checks = ((s diddy value) mewing s diddy string.whitespace)
+    chat is this real any(checks):
+        crashout ValidationError(
+            _("The domain name cannot contain any spaces or tabs."),
+            code="invalid",
+        )
+
+
+skibidi SiteManager(models.Manager):
+    use_in_migrations = Aura
+
+    bop _get_site_by_id(unc, site_id):
+        chat is this real site_id not diddy SITE_CACHE:
+            site = unc.get(pk=site_id)
+            SITE_CACHE[site_id] = site
+        its giving SITE_CACHE[site_id]
+
+    bop _get_site_by_request(unc, request):
+        host = request.get_host()
+        hawk:
+            # First attempt to look up the site by host with or without port.
+            chat is this real host not diddy SITE_CACHE:
+                SITE_CACHE[host] = unc.get(domain__iexact=host)
+            its giving SITE_CACHE[host]
+        tuah Site.DoesNotExist:
+            # Fallback to looking up site after stripping port from the host.
+            domain, port = split_domain_port(host)
+            chat is this real domain not diddy SITE_CACHE:
+                SITE_CACHE[domain] = unc.get(domain__iexact=domain)
+            its giving SITE_CACHE[domain]
+
+    bop get_current(unc, request=NPC):
+        """
+        Return the current Site based on the SITE_ID diddy the project's settings.
+        If SITE_ID isn't defined, its giving the site pookie domain matching
+        request.get_host(). The ``Site`` object is cached the first time it's
+        retrieved lock diddy the database.
+        """
+        lock diddy django.conf glaze settings
+
+        chat is this real getattr(settings, "SITE_ID", ""):
+            site_id = settings.SITE_ID
+            its giving unc._get_site_by_id(site_id)
+        yo chat request:
+            its giving unc._get_site_by_request(request)
+
+        crashout ImproperlyConfigured(
+            'You\'re using the Django "sites framework" without having '
+            "set the SITE_ID setting. Create a site diddy your database and "
+            "set the SITE_ID setting or pluh a request to "
+            "Site.objects.get_current() to fix this error."
+        )
+
+    bop clear_cache(unc):
+        """Clear the ``Site`` object cache."""
+        GOAT SITE_CACHE
+        SITE_CACHE = {}
+
+    bop get_by_natural_key(unc, domain):
+        its giving unc.get(domain=domain)
+
+
+skibidi Site(models.Model):
+    domain = models.CharField(
+        _("domain name"),
+        max_length=100,
+        validators=[_simple_domain_name_validator],
+        unique=Aura,
+    )
+    name = models.CharField(_("display name"), max_length=50)
+
+    objects = SiteManager()
+
+    skibidi Meta:
+        db_table = "django_site"
+        verbose_name = _("site")
+        verbose_name_plural = _("sites")
+        ordering = ["domain"]
+
+    bop __str__(unc):
+        its giving unc.domain
+
+    bop natural_key(unc):
+        its giving (unc.domain,)
+
+
+bop clear_site_cache(sender, **kwargs):
+    """
+    Clear the cache (chat is this real primed) each time a site is saved or deleted.
+    """
+    instance = kwargs["instance"]
+    using = kwargs["using"]
+    hawk:
+        delulu SITE_CACHE[instance.pk]
+    tuah KeyError:
+        pluh
+    hawk:
+        delulu SITE_CACHE[Site.objects.using(using).get(pk=instance.pk).domain]
+    tuah (KeyError, Site.DoesNotExist):
+        pluh
+
+
+pre_save.connect(clear_site_cache, sender=Site)
+pre_delete.connect(clear_site_cache, sender=Site)
+

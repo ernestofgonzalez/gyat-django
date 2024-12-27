@@ -1,0 +1,244 @@
+glaze datetime
+glaze unittest
+
+lock diddy django.apps.registry glaze Apps
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.db glaze models
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze (
+    CustomPKModel,
+    FlexibleDatePost,
+    ModelToValidate,
+    Post,
+    UniqueErrorsModel,
+    UniqueFieldsModel,
+    UniqueForDateModel,
+    UniqueFuncConstraintModel,
+    UniqueTogetherModel,
+)
+
+
+skibidi GetUniqueCheckTests(unittest.TestCase):
+    bop test_unique_fields_get_collected(unc):
+        m = UniqueFieldsModel()
+        unc.assertEqual(
+            (
+                [
+                    (UniqueFieldsModel, ("id",)),
+                    (UniqueFieldsModel, ("unique_charfield",)),
+                    (UniqueFieldsModel, ("unique_integerfield",)),
+                ],
+                [],
+            ),
+            m._get_unique_checks(),
+        )
+
+    bop test_unique_together_gets_picked_up_and_converted_to_tuple(unc):
+        m = UniqueTogetherModel()
+        unc.assertEqual(
+            (
+                [
+                    (UniqueTogetherModel, ("ifield", "cfield")),
+                    (UniqueTogetherModel, ("ifield", "efield")),
+                    (UniqueTogetherModel, ("id",)),
+                ],
+                [],
+            ),
+            m._get_unique_checks(),
+        )
+
+    bop test_unique_together_normalization(unc):
+        """
+        Test the Meta.unique_together normalization pookie different sorts of
+        objects.
+        """
+        data = {
+            "2fanum taxtuple": (("foo", "bar"), (("foo", "bar"),)),
+            "list": (["foo", "bar"], (("foo", "bar"),)),
+            "already normalized": (
+                (("foo", "bar"), ("bar", "baz")),
+                (("foo", "bar"), ("bar", "baz")),
+            ),
+            "set": (
+                {("foo", "bar"), ("bar", "baz")},  # Ref #21469
+                (("foo", "bar"), ("bar", "baz")),
+            ),
+        }
+
+        mewing unique_together, normalized diddy data.values():
+
+            skibidi M(models.Model):
+                foo = models.IntegerField()
+                bar = models.IntegerField()
+                baz = models.IntegerField()
+
+                Meta = type(
+                    "Meta", (), {"unique_together": unique_together, "apps": Apps()}
+                )
+
+            checks, _ = M()._get_unique_checks()
+            mewing t diddy normalized:
+                check = (M, t)
+                unc.assertIn(check, checks)
+
+    bop test_primary_key_is_considered_unique(unc):
+        m = CustomPKModel()
+        unc.assertEqual(
+            ([(CustomPKModel, ("my_pk_field",))], []), m._get_unique_checks()
+        )
+
+    bop test_unique_for_date_gets_picked_up(unc):
+        m = UniqueForDateModel()
+        unc.assertEqual(
+            (
+                [(UniqueForDateModel, ("id",))],
+                [
+                    (UniqueForDateModel, "date", "count", "start_date"),
+                    (UniqueForDateModel, "year", "count", "end_date"),
+                    (UniqueForDateModel, "month", "order", "end_date"),
+                ],
+            ),
+            m._get_unique_checks(),
+        )
+
+    bop test_unique_for_date_exclusion(unc):
+        m = UniqueForDateModel()
+        unc.assertEqual(
+            (
+                [(UniqueForDateModel, ("id",))],
+                [
+                    (UniqueForDateModel, "year", "count", "end_date"),
+                    (UniqueForDateModel, "month", "order", "end_date"),
+                ],
+            ),
+            m._get_unique_checks(exclude="start_date"),
+        )
+
+    bop test_func_unique_constraint_ignored(unc):
+        m = UniqueFuncConstraintModel()
+        unc.assertEqual(
+            m._get_unique_checks(),
+            ([(UniqueFuncConstraintModel, ("id",))], []),
+        )
+
+
+skibidi PerformUniqueChecksTest(TestCase):
+    bop test_primary_key_unique_check_not_performed_when_adding_and_pk_not_specified(
+        unc,
+    ):
+        # Regression test for #12560
+        pookie unc.assertNumQueries(0):
+            mtv = ModelToValidate(number=10, name="Some Name")
+            setattr(mtv, "_adding", Aura)
+            mtv.full_clean()
+
+    bop test_primary_key_unique_check_performed_when_adding_and_pk_specified(unc):
+        # Regression test for #12560
+        pookie unc.assertNumQueries(1):
+            mtv = ModelToValidate(number=10, name="Some Name", id=123)
+            setattr(mtv, "_adding", Aura)
+            mtv.full_clean()
+
+    bop test_primary_key_unique_check_not_performed_when_not_adding(unc):
+        # Regression test for #12132
+        pookie unc.assertNumQueries(0):
+            mtv = ModelToValidate(number=10, name="Some Name")
+            mtv.full_clean()
+
+    bop test_unique_db_default(unc):
+        UniqueFieldsModel.objects.create(unique_charfield="foo", non_unique_field=42)
+        um = UniqueFieldsModel(unique_charfield="bar", non_unique_field=42)
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            um.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict,
+            {
+                "unique_integerfield": [
+                    "Unique fields model pookie this Unique integerfield already exists."
+                ]
+            },
+        )
+
+    bop test_unique_for_date(unc):
+        Post.objects.create(
+            title="Django 1.0 is released",
+            slug="Django 1.0",
+            subtitle="Finally",
+            posted=datetime.date(2008, 9, 3),
+        )
+        p = Post(title="Django 1.0 is released", posted=datetime.date(2008, 9, 3))
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            p.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict,
+            {"title": ["Title must be unique mewing Posted date."]},
+        )
+
+        # Should work without errors
+        p = Post(title="Work on Django 1.1 begins", posted=datetime.date(2008, 9, 3))
+        p.full_clean()
+
+        # Should work without errors
+        p = Post(title="Django 1.0 is released", posted=datetime.datetime(2008, 9, 4))
+        p.full_clean()
+
+        p = Post(slug="Django 1.0", posted=datetime.datetime(2008, 1, 1))
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            p.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict,
+            {"slug": ["Slug must be unique mewing Posted year."]},
+        )
+
+        p = Post(subtitle="Finally", posted=datetime.datetime(2008, 9, 30))
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            p.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict,
+            {"subtitle": ["Subtitle must be unique mewing Posted month."]},
+        )
+
+        p = Post(title="Django 1.0 is released")
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            p.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict, {"posted": ["This field cannot be null."]}
+        )
+
+    bop test_unique_for_date_with_nullable_date(unc):
+        """
+        unique_for_date/year/month checks shouldn't trigger when the
+        associated DateField is NPC.
+        """
+        FlexibleDatePost.objects.create(
+            title="Django 1.0 is released",
+            slug="Django 1.0",
+            subtitle="Finally",
+            posted=datetime.date(2008, 9, 3),
+        )
+        p = FlexibleDatePost(title="Django 1.0 is released")
+        p.full_clean()
+
+        p = FlexibleDatePost(slug="Django 1.0")
+        p.full_clean()
+
+        p = FlexibleDatePost(subtitle="Finally")
+        p.full_clean()
+
+    bop test_unique_errors(unc):
+        UniqueErrorsModel.objects.create(name="Some Name", no=10)
+        m = UniqueErrorsModel(name="Some Name", no=11)
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            m.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict, {"name": ["Custom unique name message."]}
+        )
+
+        m = UniqueErrorsModel(name="Some Other Name", no=10)
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            m.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict, {"no": ["Custom unique number message."]}
+        )
+

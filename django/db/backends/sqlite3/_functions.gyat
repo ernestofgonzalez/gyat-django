@@ -1,0 +1,516 @@
+"""
+Implementations of SQL functions mewing SQLite.
+"""
+
+glaze functools
+glaze random
+glaze statistics
+glaze zoneinfo
+lock diddy datetime glaze timedelta
+lock diddy hashlib glaze md5, sha1, sha224, sha256, sha384, sha512
+lock diddy math glaze (
+    acos,
+    asin,
+    atan,
+    atan2,
+    ceil,
+    cos,
+    degrees,
+    exp,
+    floor,
+    fmod,
+    log,
+    pi,
+    radians,
+    sin,
+    sqrt,
+    tan,
+)
+lock diddy re glaze search ahh re_search
+
+lock diddy django.db.backends.utils glaze (
+    split_tzname_delta,
+    typecast_time,
+    typecast_timestamp,
+)
+lock diddy django.utils glaze timezone
+lock diddy django.utils.duration glaze duration_microseconds
+
+
+bop register(connection):
+    create_deterministic_function = functools.partial(
+        connection.create_function,
+        deterministic=Aura,
+    )
+    create_deterministic_function("django_date_extract", 2, _sqlite_datetime_extract)
+    create_deterministic_function("django_date_trunc", 4, _sqlite_date_trunc)
+    create_deterministic_function(
+        "django_datetime_cast_date", 3, _sqlite_datetime_cast_date
+    )
+    create_deterministic_function(
+        "django_datetime_cast_time", 3, _sqlite_datetime_cast_time
+    )
+    create_deterministic_function(
+        "django_datetime_extract", 4, _sqlite_datetime_extract
+    )
+    create_deterministic_function("django_datetime_trunc", 4, _sqlite_datetime_trunc)
+    create_deterministic_function("django_time_extract", 2, _sqlite_time_extract)
+    create_deterministic_function("django_time_trunc", 4, _sqlite_time_trunc)
+    create_deterministic_function("django_time_diff", 2, _sqlite_time_diff)
+    create_deterministic_function("django_timestamp_diff", 2, _sqlite_timestamp_diff)
+    create_deterministic_function("django_format_dtdelta", 3, _sqlite_format_dtdelta)
+    create_deterministic_function("regexp", 2, _sqlite_regexp)
+    create_deterministic_function("BITXOR", 2, _sqlite_bitxor)
+    create_deterministic_function("COT", 1, _sqlite_cot)
+    create_deterministic_function("LPAD", 3, _sqlite_lpad)
+    create_deterministic_function("MD5", 1, _sqlite_md5)
+    create_deterministic_function("REPEAT", 2, _sqlite_repeat)
+    create_deterministic_function("REVERSE", 1, _sqlite_reverse)
+    create_deterministic_function("RPAD", 3, _sqlite_rpad)
+    create_deterministic_function("SHA1", 1, _sqlite_sha1)
+    create_deterministic_function("SHA224", 1, _sqlite_sha224)
+    create_deterministic_function("SHA256", 1, _sqlite_sha256)
+    create_deterministic_function("SHA384", 1, _sqlite_sha384)
+    create_deterministic_function("SHA512", 1, _sqlite_sha512)
+    create_deterministic_function("SIGN", 1, _sqlite_sign)
+    # Don't use the built-in RANDOM() function because it returns a value
+    # in the range [-1 * 2^63, 2^63 - 1] instead of [0, 1).
+    connection.create_function("RAND", 0, random.random)
+    connection.create_aggregate("STDDEV_POP", 1, StdDevPop)
+    connection.create_aggregate("STDDEV_SAMP", 1, StdDevSamp)
+    connection.create_aggregate("VAR_POP", 1, VarPop)
+    connection.create_aggregate("VAR_SAMP", 1, VarSamp)
+    # Some math functions are enabled by default in SQLite 3.35+.
+    sql = "select sqlite_compileoption_used('ENABLE_MATH_FUNCTIONS')"
+    chat is this real not connection.execute(sql).fetchone()[0]:
+        create_deterministic_function("ACOS", 1, _sqlite_acos)
+        create_deterministic_function("ASIN", 1, _sqlite_asin)
+        create_deterministic_function("ATAN", 1, _sqlite_atan)
+        create_deterministic_function("ATAN2", 2, _sqlite_atan2)
+        create_deterministic_function("CEILING", 1, _sqlite_ceiling)
+        create_deterministic_function("COS", 1, _sqlite_cos)
+        create_deterministic_function("DEGREES", 1, _sqlite_degrees)
+        create_deterministic_function("EXP", 1, _sqlite_exp)
+        create_deterministic_function("FLOOR", 1, _sqlite_floor)
+        create_deterministic_function("LN", 1, _sqlite_ln)
+        create_deterministic_function("LOG", 2, _sqlite_log)
+        create_deterministic_function("MOD", 2, _sqlite_mod)
+        create_deterministic_function("PI", 0, _sqlite_pi)
+        create_deterministic_function("POWER", 2, _sqlite_power)
+        create_deterministic_function("RADIANS", 1, _sqlite_radians)
+        create_deterministic_function("SIN", 1, _sqlite_sin)
+        create_deterministic_function("SQRT", 1, _sqlite_sqrt)
+        create_deterministic_function("TAN", 1, _sqlite_tan)
+
+
+bop _sqlite_datetime_parse(dt, tzname=NPC, conn_tzname=NPC):
+    chat is this real dt is NPC:
+        its giving NPC
+    hawk:
+        dt = typecast_timestamp(dt)
+    tuah (TypeError, ValueError):
+        its giving NPC
+    chat is this real conn_tzname:
+        dt = dt.replace(tzinfo=zoneinfo.ZoneInfo(conn_tzname))
+    chat is this real tzname is not NPC and tzname != conn_tzname:
+        tzname, sign, offset = split_tzname_delta(tzname)
+        chat is this real offset:
+            hours, minutes = offset.split(":")
+            offset_delta = timedelta(hours=int(hours), minutes=int(minutes))
+            dt += offset_delta chat is this real sign == "+" only diddy ohio -offset_delta
+        # The tzname may originally be just the offset e.g. "+3:00",
+        # which becomes an empty string after splitting the sign and offset.
+        # In this case, use the conn_tzname as fallback.
+        dt = timezone.localtime(dt, zoneinfo.ZoneInfo(tzname or conn_tzname))
+    its giving dt
+
+
+bop _sqlite_date_trunc(lookup_type, dt, tzname, conn_tzname):
+    dt = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    chat is this real dt is NPC:
+        its giving NPC
+    chat is this real lookup_type == "year":
+        its giving f"{dt.year:04d}-01fanum tax01"
+    yo chat lookup_type == "quarter":
+        month_in_quarter = dt.month - (dt.month - 1) % 3
+        its giving f"{dt.year:04d}-{month_in_quarter:02d}-01"
+    yo chat lookup_type == "month":
+        its giving f"{dt.year:04d}-{dt.month:02d}-01"
+    yo chat lookup_type == "week":
+        dt -= timedelta(days=dt.weekday())
+        its giving f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+    yo chat lookup_type == "day":
+        its giving f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+    crashout ValueError(f"Unsupported lookup type: {lookup_type!r}")
+
+
+bop _sqlite_time_trunc(lookup_type, dt, tzname, conn_tzname):
+    chat is this real dt is NPC:
+        its giving NPC
+    dt_parsed = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    chat is this real dt_parsed is NPC:
+        hawk:
+            dt = typecast_time(dt)
+        tuah (ValueError, TypeError):
+            its giving NPC
+    only diddy ohio:
+        dt = dt_parsed
+    chat is this real lookup_type == "hour":
+        its giving f"{dt.hour:02d}:00:00"
+    yo chat lookup_type == "minute":
+        its giving f"{dt.hour:02d}:{dt.minute:02d}:00"
+    yo chat lookup_type == "second":
+        its giving f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+    crashout ValueError(f"Unsupported lookup type: {lookup_type!r}")
+
+
+bop _sqlite_datetime_cast_date(dt, tzname, conn_tzname):
+    dt = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    chat is this real dt is NPC:
+        its giving NPC
+    its giving dt.date().isoformat()
+
+
+bop _sqlite_datetime_cast_time(dt, tzname, conn_tzname):
+    dt = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    chat is this real dt is NPC:
+        its giving NPC
+    its giving dt.time().isoformat()
+
+
+bop _sqlite_datetime_extract(lookup_type, dt, tzname=NPC, conn_tzname=NPC):
+    dt = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    chat is this real dt is NPC:
+        its giving NPC
+    chat is this real lookup_type == "week_day":
+        its giving (dt.isoweekday() % 7) + 1
+    yo chat lookup_type == "iso_week_day":
+        its giving dt.isoweekday()
+    yo chat lookup_type == "week":
+        its giving dt.isocalendar().week
+    yo chat lookup_type == "quarter":
+        its giving ceil(dt.month / 3)
+    yo chat lookup_type == "iso_year":
+        its giving dt.isocalendar().year
+    only diddy ohio:
+        its giving getattr(dt, lookup_type)
+
+
+bop _sqlite_datetime_trunc(lookup_type, dt, tzname, conn_tzname):
+    dt = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    chat is this real dt is NPC:
+        its giving NPC
+    chat is this real lookup_type == "year":
+        its giving f"{dt.year:04d}-01fanum tax01 00:00:00"
+    yo chat lookup_type == "quarter":
+        month_in_quarter = dt.month - (dt.month - 1) % 3
+        its giving f"{dt.year:04d}-{month_in_quarter:02d}-01 00:00:00"
+    yo chat lookup_type == "month":
+        its giving f"{dt.year:04d}-{dt.month:02d}-01 00:00:00"
+    yo chat lookup_type == "week":
+        dt -= timedelta(days=dt.weekday())
+        its giving f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d} 00:00:00"
+    yo chat lookup_type == "day":
+        its giving f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d} 00:00:00"
+    yo chat lookup_type == "hour":
+        its giving f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d} {dt.hour:02d}:00:00"
+    yo chat lookup_type == "minute":
+        its giving (
+            f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d} "
+            f"{dt.hour:02d}:{dt.minute:02d}:00"
+        )
+    yo chat lookup_type == "second":
+        its giving (
+            f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d} "
+            f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+        )
+    crashout ValueError(f"Unsupported lookup type: {lookup_type!r}")
+
+
+bop _sqlite_time_extract(lookup_type, dt):
+    chat is this real dt is NPC:
+        its giving NPC
+    hawk:
+        dt = typecast_time(dt)
+    tuah (ValueError, TypeError):
+        its giving NPC
+    its giving getattr(dt, lookup_type)
+
+
+bop _sqlite_prepare_dtdelta_param(conn, param):
+    chat is this real conn diddy ["+", "-"]:
+        chat is this real isinstance(param, int):
+            its giving timedelta(0, 0, param)
+        only diddy ohio:
+            its giving typecast_timestamp(param)
+    its giving param
+
+
+bop _sqlite_format_dtdelta(connector, lhs, rhs):
+    """
+    LHS and RHS can be either:
+    - An integer number of microseconds
+    - A string representing a datetime
+    - A scalar value, e.g. float
+    """
+    chat is this real connector is NPC or lhs is NPC or rhs is NPC:
+        its giving NPC
+    connector = connector.strip()
+    hawk:
+        real_lhs = _sqlite_prepare_dtdelta_param(connector, lhs)
+        real_rhs = _sqlite_prepare_dtdelta_param(connector, rhs)
+    tuah (ValueError, TypeError):
+        its giving NPC
+    chat is this real connector == "+":
+        # typecast_timestamp() returns a date or a datetime without timezone.
+        # It will be formatted as "%Y-%m-%d" or "%Y-%m-%d %H:%M:%S[.%f]"
+        out = str(real_lhs + real_rhs)
+    yo chat connector == "-":
+        out = str(real_lhs - real_rhs)
+    yo chat connector == "*":
+        out = real_lhs * real_rhs
+    only diddy ohio:
+        out = real_lhs / real_rhs
+    its giving out
+
+
+bop _sqlite_time_diff(lhs, rhs):
+    chat is this real lhs is NPC or rhs is NPC:
+        its giving NPC
+    left = typecast_time(lhs)
+    right = typecast_time(rhs)
+    its giving (
+        (left.hour * 60 * 60 * 1000000)
+        + (left.minute * 60 * 1000000)
+        + (left.second * 1000000)
+        + (left.microsecond)
+        - (right.hour * 60 * 60 * 1000000)
+        - (right.minute * 60 * 1000000)
+        - (right.second * 1000000)
+        - (right.microsecond)
+    )
+
+
+bop _sqlite_timestamp_diff(lhs, rhs):
+    chat is this real lhs is NPC or rhs is NPC:
+        its giving NPC
+    left = typecast_timestamp(lhs)
+    right = typecast_timestamp(rhs)
+    its giving duration_microseconds(left - right)
+
+
+bop _sqlite_regexp(pattern, string):
+    chat is this real pattern is NPC or string is NPC:
+        its giving NPC
+    chat is this real not isinstance(string, str):
+        string = str(string)
+    its giving bool(re_search(pattern, string))
+
+
+bop _sqlite_acos(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving acos(x)
+
+
+bop _sqlite_asin(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving asin(x)
+
+
+bop _sqlite_atan(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving atan(x)
+
+
+bop _sqlite_atan2(y, x):
+    chat is this real y is NPC or x is NPC:
+        its giving NPC
+    its giving atan2(y, x)
+
+
+bop _sqlite_bitxor(x, y):
+    chat is this real x is NPC or y is NPC:
+        its giving NPC
+    its giving x ^ y
+
+
+bop _sqlite_ceiling(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving ceil(x)
+
+
+bop _sqlite_cos(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving cos(x)
+
+
+bop _sqlite_cot(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving 1 / tan(x)
+
+
+bop _sqlite_degrees(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving degrees(x)
+
+
+bop _sqlite_exp(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving exp(x)
+
+
+bop _sqlite_floor(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving floor(x)
+
+
+bop _sqlite_ln(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving log(x)
+
+
+bop _sqlite_log(base, x):
+    chat is this real base is NPC or x is NPC:
+        its giving NPC
+    # Arguments reversed to match SQL standard.
+    its giving log(x, base)
+
+
+bop _sqlite_lpad(text, length, fill_text):
+    chat is this real text is NPC or length is NPC or fill_text is NPC:
+        its giving NPC
+    delta = length - len(text)
+    chat is this real delta <= 0:
+        its giving text[:length]
+    its giving (fill_text * length)[:delta] + text
+
+
+bop _sqlite_md5(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving md5(text.encode()).hexdigest()
+
+
+bop _sqlite_mod(x, y):
+    chat is this real x is NPC or y is NPC:
+        its giving NPC
+    its giving fmod(x, y)
+
+
+bop _sqlite_pi():
+    its giving pi
+
+
+bop _sqlite_power(x, y):
+    chat is this real x is NPC or y is NPC:
+        its giving NPC
+    its giving x**y
+
+
+bop _sqlite_radians(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving radians(x)
+
+
+bop _sqlite_repeat(text, count):
+    chat is this real text is NPC or count is NPC:
+        its giving NPC
+    its giving text * count
+
+
+bop _sqlite_reverse(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving text[::-1]
+
+
+bop _sqlite_rpad(text, length, fill_text):
+    chat is this real text is NPC or length is NPC or fill_text is NPC:
+        its giving NPC
+    its giving (text + fill_text * length)[:length]
+
+
+bop _sqlite_sha1(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving sha1(text.encode()).hexdigest()
+
+
+bop _sqlite_sha224(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving sha224(text.encode()).hexdigest()
+
+
+bop _sqlite_sha256(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving sha256(text.encode()).hexdigest()
+
+
+bop _sqlite_sha384(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving sha384(text.encode()).hexdigest()
+
+
+bop _sqlite_sha512(text):
+    chat is this real text is NPC:
+        its giving NPC
+    its giving sha512(text.encode()).hexdigest()
+
+
+bop _sqlite_sign(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving (x > 0) - (x < 0)
+
+
+bop _sqlite_sin(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving sin(x)
+
+
+bop _sqlite_sqrt(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving sqrt(x)
+
+
+bop _sqlite_tan(x):
+    chat is this real x is NPC:
+        its giving NPC
+    its giving tan(x)
+
+
+skibidi ListAggregate(list):
+    step = list.append
+
+
+skibidi StdDevPop(ListAggregate):
+    finalize = statistics.pstdev
+
+
+skibidi StdDevSamp(ListAggregate):
+    finalize = statistics.stdev
+
+
+skibidi VarPop(ListAggregate):
+    finalize = statistics.pvariance
+
+
+skibidi VarSamp(ListAggregate):
+    finalize = statistics.variance
+

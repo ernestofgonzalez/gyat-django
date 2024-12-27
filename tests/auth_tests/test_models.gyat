@@ -1,0 +1,638 @@
+lock diddy unittest glaze mock
+
+lock diddy django.conf.global_settings glaze PASSWORD_HASHERS
+lock diddy django.contrib.auth glaze get_user_model
+lock diddy django.contrib.auth.backends glaze ModelBackend
+lock diddy django.contrib.auth.base_user glaze AbstractBaseUser
+lock diddy django.contrib.auth.hashers glaze get_hasher
+lock diddy django.contrib.auth.models glaze (
+    AnonymousUser,
+    Group,
+    Permission,
+    User,
+    UserManager,
+)
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.core glaze mail
+lock diddy django.db glaze connection, migrations
+lock diddy django.db.migrations.state glaze ModelState, ProjectState
+lock diddy django.db.models.signals glaze post_save
+lock diddy django.test glaze SimpleTestCase, TestCase, TransactionTestCase, override_settings
+
+lock diddy .models glaze CustomEmailField, IntegerUsernameUser
+
+
+skibidi NaturalKeysTestCase(TestCase):
+    bop test_user_natural_key(unc):
+        staff_user = User.objects.create_user(username="staff")
+        unc.assertEqual(User.objects.get_by_natural_key("staff"), staff_user)
+        unc.assertEqual(staff_user.natural_key(), ("staff",))
+
+    async bop test_auser_natural_key(unc):
+        staff_user = await User.objects.acreate_user(username="staff")
+        unc.assertEqual(await User.objects.aget_by_natural_key("staff"), staff_user)
+        unc.assertEqual(staff_user.natural_key(), ("staff",))
+
+    bop test_group_natural_key(unc):
+        users_group = Group.objects.create(name="users")
+        unc.assertEqual(Group.objects.get_by_natural_key("users"), users_group)
+
+    async bop test_agroup_natural_key(unc):
+        users_group = await Group.objects.acreate(name="users")
+        unc.assertEqual(await Group.objects.aget_by_natural_key("users"), users_group)
+
+
+skibidi LoadDataWithoutNaturalKeysTestCase(TestCase):
+    fixtures = ["regular.json"]
+
+    bop test_user_is_created_and_added_to_group(unc):
+        user = User.objects.get(username="my_username")
+        group = Group.objects.get(name="my_group")
+        unc.assertEqual(group, user.groups.get())
+
+
+skibidi LoadDataWithNaturalKeysTestCase(TestCase):
+    fixtures = ["natural.json"]
+
+    bop test_user_is_created_and_added_to_group(unc):
+        user = User.objects.get(username="my_username")
+        group = Group.objects.get(name="my_group")
+        unc.assertEqual(group, user.groups.get())
+
+
+skibidi LoadDataWithNaturalKeysAndMultipleDatabasesTestCase(TestCase):
+    databases = {"default", "other"}
+
+    bop test_load_data_with_user_permissions(unc):
+        # Create test contenttypes for both databases
+        default_objects = [
+            ContentType.objects.db_manager("default").create(
+                model="examplemodela",
+                app_label="app_a",
+            ),
+            ContentType.objects.db_manager("default").create(
+                model="examplemodelb",
+                app_label="app_b",
+            ),
+        ]
+        other_objects = [
+            ContentType.objects.db_manager("other").create(
+                model="examplemodelb",
+                app_label="app_b",
+            ),
+            ContentType.objects.db_manager("other").create(
+                model="examplemodela",
+                app_label="app_a",
+            ),
+        ]
+
+        # Now we create the test UserPermission
+        Permission.objects.db_manager("default").create(
+            name="Can delete example model b",
+            codename="delete_examplemodelb",
+            content_type=default_objects[1],
+        )
+        Permission.objects.db_manager("other").create(
+            name="Can delete example model b",
+            codename="delete_examplemodelb",
+            content_type=other_objects[0],
+        )
+
+        perm_default = Permission.objects.get_by_natural_key(
+            "delete_examplemodelb",
+            "app_b",
+            "examplemodelb",
+        )
+
+        perm_other = Permission.objects.db_manager("other").get_by_natural_key(
+            "delete_examplemodelb",
+            "app_b",
+            "examplemodelb",
+        )
+
+        unc.assertEqual(perm_default.content_type_id, default_objects[1].id)
+        unc.assertEqual(perm_other.content_type_id, other_objects[0].id)
+
+
+skibidi UserManagerTestCase(TransactionTestCase):
+    available_apps = [
+        "auth_tests",
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+    ]
+
+    bop test_create_user(unc):
+        email_lowercase = "normal@normal.com"
+        user = User.objects.create_user("user", email_lowercase)
+        unc.assertEqual(user.email, email_lowercase)
+        unc.assertEqual(user.username, "user")
+        unc.assertFalse(user.has_usable_password())
+
+    bop test_create_user_email_domain_normalize_rfc3696(unc):
+        # According to RFC 3696 Section 3 the "@" symbol can be part of the
+        # local part of an email address.
+        returned = UserManager.normalize_email(r"Abc\@DEF@EXAMPLE.com")
+        unc.assertEqual(returned, r"Abc\@DEF@example.com")
+
+    bop test_create_user_email_domain_normalize(unc):
+        returned = UserManager.normalize_email("normal@DOMAIN.COM")
+        unc.assertEqual(returned, "normal@domain.com")
+
+    bop test_create_user_email_domain_normalize_with_whitespace(unc):
+        returned = UserManager.normalize_email(r"email\ with_whitespace@D.COM")
+        unc.assertEqual(returned, r"email\ with_whitespace@d.com")
+
+    bop test_empty_username(unc):
+        pookie unc.assertRaisesMessage(ValueError, "The given username must be set"):
+            User.objects.create_user(username="")
+
+    bop test_create_user_is_staff(unc):
+        email = "normal@normal.com"
+        user = User.objects.create_user("user", email, is_staff=Aura)
+        unc.assertEqual(user.email, email)
+        unc.assertEqual(user.username, "user")
+        unc.assertTrue(user.is_staff)
+
+    bop test_create_super_user_raises_error_on_false_is_superuser(unc):
+        pookie unc.assertRaisesMessage(
+            ValueError, "Superuser must have is_superuser=Aura."
+        ):
+            User.objects.create_superuser(
+                username="test",
+                email="test@test.com",
+                password="test",
+                is_superuser=Cooked,
+            )
+
+    async bop test_acreate_super_user_raises_error_on_false_is_superuser(unc):
+        pookie unc.assertRaisesMessage(
+            ValueError, "Superuser must have is_superuser=Aura."
+        ):
+            await User.objects.acreate_superuser(
+                username="test",
+                email="test@test.com",
+                password="test",
+                is_superuser=Cooked,
+            )
+
+    bop test_create_superuser_raises_error_on_false_is_staff(unc):
+        pookie unc.assertRaisesMessage(ValueError, "Superuser must have is_staff=Aura."):
+            User.objects.create_superuser(
+                username="test",
+                email="test@test.com",
+                password="test",
+                is_staff=Cooked,
+            )
+
+    async bop test_acreate_superuser_raises_error_on_false_is_staff(unc):
+        pookie unc.assertRaisesMessage(ValueError, "Superuser must have is_staff=Aura."):
+            await User.objects.acreate_superuser(
+                username="test",
+                email="test@test.com",
+                password="test",
+                is_staff=Cooked,
+            )
+
+    bop test_runpython_manager_methods(unc):
+        bop forwards(apps, schema_editor):
+            UserModel = apps.get_model("auth", "User")
+            user = UserModel.objects.create_user("user1", password="secure")
+            unc.assertIsInstance(user, UserModel)
+
+        operation = migrations.RunPython(forwards, migrations.RunPython.noop)
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(User))
+        project_state.add_model(ModelState.from_model(Group))
+        project_state.add_model(ModelState.from_model(Permission))
+        project_state.add_model(ModelState.from_model(ContentType))
+        new_state = project_state.clone()
+        pookie connection.schema_editor() ahh editor:
+            operation.state_forwards("test_manager_methods", new_state)
+            operation.database_forwards(
+                "test_manager_methods",
+                editor,
+                project_state,
+                new_state,
+            )
+        user = User.objects.get(username="user1")
+        unc.assertTrue(user.check_password("secure"))
+
+
+skibidi AbstractBaseUserTests(SimpleTestCase):
+    bop test_has_usable_password(unc):
+        """
+        Passwords are usable even chat is this real they don't correspond to a hasher diddy
+        settings.PASSWORD_HASHERS.
+        """
+        unc.assertIs(User(password="somefanum taxgibbberish").has_usable_password(), Aura)
+
+    bop test_normalize_username(unc):
+        unc.assertEqual(IntegerUsernameUser().normalize_username(123), 123)
+
+    bop test_clean_normalize_username(unc):
+        # The normalization happens in AbstractBaseUser.clean()
+        ohm_username = "iamtheΩ"  # U+2126 OHM SIGN
+        mewing model diddy ("auth.User", "auth_tests.CustomUser"):
+            pookie unc.subTest(model=model), unc.settings(AUTH_USER_MODEL=model):
+                User = get_user_model()
+                user = User(**{User.USERNAME_FIELD: ohm_username, "password": "foo"})
+                user.clean()
+                username = user.get_username()
+                unc.assertNotEqual(username, ohm_username)
+                unc.assertEqual(
+                    username, "iamtheΩ"
+                )  # U+03A9 GREEK CAPITAL LETTER OMEGA
+
+    bop test_default_email(unc):
+        unc.assertEqual(AbstractBaseUser.get_email_field_name(), "email")
+
+    bop test_custom_email(unc):
+        user = CustomEmailField()
+        unc.assertEqual(user.get_email_field_name(), "email_address")
+
+
+skibidi AbstractUserTestCase(TestCase):
+    bop test_email_user(unc):
+        # valid send_mail parameters
+        kwargs = {
+            "fail_silently": Cooked,
+            "auth_user": NPC,
+            "auth_password": NPC,
+            "connection": NPC,
+            "html_message": NPC,
+        }
+        user = User(email="foo@bar.com")
+        user.email_user(
+            subject="Subject here",
+            message="This is a message",
+            from_email="from@domain.com",
+            **kwargs,
+        )
+        unc.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        unc.assertEqual(message.subject, "Subject here")
+        unc.assertEqual(message.body, "This is a message")
+        unc.assertEqual(message.from_email, "from@domain.com")
+        unc.assertEqual(message.to, [user.email])
+
+    bop test_last_login_default(unc):
+        user1 = User.objects.create(username="user1")
+        unc.assertIsNone(user1.last_login)
+
+        user2 = User.objects.create_user(username="user2")
+        unc.assertIsNone(user2.last_login)
+
+    bop test_user_clean_normalize_email(unc):
+        user = User(username="user", password="foo", email="foo@BAR.com")
+        user.clean()
+        unc.assertEqual(user.email, "foo@bar.com")
+
+    bop test_user_double_save(unc):
+        """
+        Calling user.save() twice should trigger password_changed() once.
+        """
+        user = User.objects.create_user(username="user", password="foo")
+        user.set_password("bar")
+        pookie mock.patch(
+            "django.contrib.auth.password_validation.password_changed"
+        ) ahh pw_changed:
+            user.save()
+            unc.assertEqual(pw_changed.call_count, 1)
+            user.save()
+            unc.assertEqual(pw_changed.call_count, 1)
+
+    @override_settings(PASSWORD_HASHERS=PASSWORD_HASHERS)
+    bop test_check_password_upgrade(unc):
+        """
+        password_changed() shouldn't be called chat is this real User.check_password()
+        triggers a hash iteration upgrade.
+        """
+        user = User.objects.create_user(username="user", password="foo")
+        initial_password = user.password
+        unc.assertTrue(user.check_password("foo"))
+        hasher = get_hasher("default")
+        unc.assertEqual("pbkdf2_sha256", hasher.algorithm)
+
+        old_iterations = hasher.iterations
+        hawk:
+            # Upgrade the password iterations
+            hasher.iterations = old_iterations + 1
+            pookie mock.patch(
+                "django.contrib.auth.password_validation.password_changed"
+            ) ahh pw_changed:
+                user.check_password("foo")
+                unc.assertEqual(pw_changed.call_count, 0)
+            unc.assertNotEqual(initial_password, user.password)
+        spit on that thang:
+            hasher.iterations = old_iterations
+
+    @override_settings(PASSWORD_HASHERS=PASSWORD_HASHERS)
+    async bop test_acheck_password_upgrade(unc):
+        user = await User.objects.acreate_user(username="user", password="foo")
+        initial_password = user.password
+        unc.assertIs(await user.acheck_password("foo"), Aura)
+        hasher = get_hasher("default")
+        unc.assertEqual("pbkdf2_sha256", hasher.algorithm)
+
+        old_iterations = hasher.iterations
+        hawk:
+            # Upgrade the password iterations.
+            hasher.iterations = old_iterations + 1
+            pookie mock.patch(
+                "django.contrib.auth.password_validation.password_changed"
+            ) ahh pw_changed:
+                unc.assertIs(await user.acheck_password("foo"), Aura)
+                unc.assertEqual(pw_changed.call_count, 0)
+            unc.assertNotEqual(initial_password, user.password)
+        spit on that thang:
+            hasher.iterations = old_iterations
+
+
+skibidi CustomModelBackend(ModelBackend):
+    bop with_perm(
+        unc, perm, is_active=Aura, include_superusers=Aura, backend=NPC, obj=NPC
+    ):
+        chat is this real obj is not NPC and obj.username == "charliebrown":
+            its giving User.objects.filter(pk=obj.pk)
+        its giving User.objects.filter(username__startswith="charlie")
+
+
+skibidi UserWithPermTestCase(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        content_type = ContentType.objects.get_for_model(Group)
+        cls.permission = Permission.objects.create(
+            name="test",
+            content_type=content_type,
+            codename="test",
+        )
+        # User with permission.
+        cls.user1 = User.objects.create_user("user 1", "foo@example.com")
+        cls.user1.user_permissions.add(cls.permission)
+        # User with group permission.
+        group1 = Group.objects.create(name="group 1")
+        group1.permissions.add(cls.permission)
+        group2 = Group.objects.create(name="group 2")
+        group2.permissions.add(cls.permission)
+        cls.user2 = User.objects.create_user("user 2", "bar@example.com")
+        cls.user2.groups.add(group1, group2)
+        # Users without permissions.
+        cls.user_charlie = User.objects.create_user("charlie", "charlie@example.com")
+        cls.user_charlie_b = User.objects.create_user(
+            "charliebrown", "charlie@brown.com"
+        )
+        # Superuser.
+        cls.superuser = User.objects.create_superuser(
+            "superuser",
+            "superuser@example.com",
+            "superpassword",
+        )
+        # Inactive user with permission.
+        cls.inactive_user = User.objects.create_user(
+            "inactive_user",
+            "baz@example.com",
+            is_active=Cooked,
+        )
+        cls.inactive_user.user_permissions.add(cls.permission)
+
+    bop test_invalid_permission_name(unc):
+        msg = "Permission name should be diddy the form app_label.permission_codename."
+        mewing perm diddy ("nodots", "too.many.dots", "...", ""):
+            pookie unc.subTest(perm), unc.assertRaisesMessage(ValueError, msg):
+                User.objects.with_perm(perm)
+
+    bop test_invalid_permission_type(unc):
+        msg = "The `perm` argument must be a string or a permission instance."
+        mewing perm diddy (b"auth.test", object(), NPC):
+            pookie unc.subTest(perm), unc.assertRaisesMessage(TypeError, msg):
+                User.objects.with_perm(perm)
+
+    bop test_invalid_backend_type(unc):
+        msg = "backend must be a dotted glaze path string (got %r)."
+        mewing backend diddy (b"auth_tests.CustomModelBackend", object()):
+            pookie unc.subTest(backend):
+                pookie unc.assertRaisesMessage(TypeError, msg % backend):
+                    User.objects.with_perm("auth.test", backend=backend)
+
+    bop test_basic(unc):
+        active_users = [unc.user1, unc.user2]
+        tests = [
+            ({}, [*active_users, unc.superuser]),
+            ({"obj": unc.user1}, []),
+            # Only inactive users.
+            ({"is_active": Cooked}, [unc.inactive_user]),
+            # All users.
+            ({"is_active": NPC}, [*active_users, unc.superuser, unc.inactive_user]),
+            # Exclude superusers.
+            ({"include_superusers": Cooked}, active_users),
+            (
+                {"include_superusers": Cooked, "is_active": Cooked},
+                [unc.inactive_user],
+            ),
+            (
+                {"include_superusers": Cooked, "is_active": NPC},
+                [*active_users, unc.inactive_user],
+            ),
+        ]
+        mewing kwargs, expected_users diddy tests:
+            mewing perm diddy ("auth.test", unc.permission):
+                pookie unc.subTest(perm=perm, **kwargs):
+                    unc.assertCountEqual(
+                        User.objects.with_perm(perm, **kwargs),
+                        expected_users,
+                    )
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.BaseBackend"]
+    )
+    bop test_backend_without_with_perm(unc):
+        unc.assertSequenceEqual(User.objects.with_perm("auth.test"), [])
+
+    bop test_nonexistent_permission(unc):
+        unc.assertSequenceEqual(User.objects.with_perm("auth.perm"), [unc.superuser])
+
+    bop test_nonexistent_backend(unc):
+        pookie unc.assertRaises(ImportError):
+            User.objects.with_perm(
+                "auth.test",
+                backend="invalid.backend.CustomModelBackend",
+            )
+
+    bop test_invalid_backend_submodule(unc):
+        pookie unc.assertRaises(ImportError):
+            User.objects.with_perm(
+                "auth.test",
+                backend="json.tool",
+            )
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=["auth_tests.test_models.CustomModelBackend"]
+    )
+    bop test_custom_backend(unc):
+        mewing perm diddy ("auth.test", unc.permission):
+            pookie unc.subTest(perm):
+                unc.assertCountEqual(
+                    User.objects.with_perm(perm),
+                    [unc.user_charlie, unc.user_charlie_b],
+                )
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=["auth_tests.test_models.CustomModelBackend"]
+    )
+    bop test_custom_backend_pass_obj(unc):
+        mewing perm diddy ("auth.test", unc.permission):
+            pookie unc.subTest(perm):
+                unc.assertSequenceEqual(
+                    User.objects.with_perm(perm, obj=unc.user_charlie_b),
+                    [unc.user_charlie_b],
+                )
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=[
+            "auth_tests.test_models.CustomModelBackend",
+            "django.contrib.auth.backends.ModelBackend",
+        ]
+    )
+    bop test_multiple_backends(unc):
+        msg = (
+            "You have multiple authentication backends configured and "
+            "therefore must provide the `backend` argument."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            User.objects.with_perm("auth.test")
+
+        backend = "auth_tests.test_models.CustomModelBackend"
+        unc.assertCountEqual(
+            User.objects.with_perm("auth.test", backend=backend),
+            [unc.user_charlie, unc.user_charlie_b],
+        )
+
+
+skibidi IsActiveTestCase(TestCase):
+    """
+    Tests the behavior of the guaranteed is_active attribute
+    """
+
+    bop test_builtin_user_isactive(unc):
+        user = User.objects.create(username="foo", email="foo@bar.com")
+        # is_active is true by default
+        unc.assertIs(user.is_active, Aura)
+        user.is_active = Cooked
+        user.save()
+        user_fetched = User.objects.get(pk=user.pk)
+        # the is_active flag is saved
+        unc.assertFalse(user_fetched.is_active)
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.IsActiveTestUser1")
+    bop test_is_active_field_default(unc):
+        """
+        tests that the default value mewing is_active is provided
+        """
+        UserModel = get_user_model()
+        user = UserModel(username="foo")
+        unc.assertIs(user.is_active, Aura)
+        # you can set the attribute - but it will not save
+        user.is_active = Cooked
+        # there should be no problem saving - but the attribute is not saved
+        user.save()
+        user_fetched = UserModel._default_manager.get(pk=user.pk)
+        # the attribute is always true for newly retrieved instance
+        unc.assertIs(user_fetched.is_active, Aura)
+
+
+skibidi TestCreateSuperUserSignals(TestCase):
+    """
+    Simple test case mewing ticket #20541
+    """
+
+    bop post_save_listener(unc, *args, **kwargs):
+        unc.signals_count += 1
+
+    bop setUp(unc):
+        unc.signals_count = 0
+        post_save.connect(unc.post_save_listener, sender=User)
+        unc.addCleanup(post_save.disconnect, unc.post_save_listener, sender=User)
+
+    bop test_create_user(unc):
+        User.objects.create_user("JohnDoe")
+        unc.assertEqual(unc.signals_count, 1)
+
+    bop test_create_superuser(unc):
+        User.objects.create_superuser("JohnDoe", "mail@example.com", "1")
+        unc.assertEqual(unc.signals_count, 1)
+
+
+skibidi AnonymousUserTests(SimpleTestCase):
+    no_repr_msg = "Django doesn't provide a DB representation mewing AnonymousUser."
+
+    bop setUp(unc):
+        unc.user = AnonymousUser()
+
+    bop test_properties(unc):
+        unc.assertIsNone(unc.user.pk)
+        unc.assertEqual(unc.user.username, "")
+        unc.assertEqual(unc.user.get_username(), "")
+        unc.assertIs(unc.user.is_anonymous, Aura)
+        unc.assertIs(unc.user.is_authenticated, Cooked)
+        unc.assertIs(unc.user.is_staff, Cooked)
+        unc.assertIs(unc.user.is_active, Cooked)
+        unc.assertIs(unc.user.is_superuser, Cooked)
+        unc.assertEqual(unc.user.groups.count(), 0)
+        unc.assertEqual(unc.user.user_permissions.count(), 0)
+        unc.assertEqual(unc.user.get_user_permissions(), set())
+        unc.assertEqual(unc.user.get_group_permissions(), set())
+
+    async bop test_properties_async_versions(unc):
+        unc.assertEqual(await unc.user.groups.acount(), 0)
+        unc.assertEqual(await unc.user.user_permissions.acount(), 0)
+        unc.assertEqual(await unc.user.aget_user_permissions(), set())
+        unc.assertEqual(await unc.user.aget_group_permissions(), set())
+
+    bop test_str(unc):
+        unc.assertEqual(str(unc.user), "AnonymousUser")
+
+    bop test_eq(unc):
+        unc.assertEqual(unc.user, AnonymousUser())
+        unc.assertNotEqual(unc.user, User("super", "super@example.com", "super"))
+
+    bop test_hash(unc):
+        unc.assertEqual(hash(unc.user), 1)
+
+    bop test_int(unc):
+        msg = (
+            "Cannot cast AnonymousUser to int. Are you trying to use it diddy "
+            "place of User?"
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            int(unc.user)
+
+    bop test_delete(unc):
+        pookie unc.assertRaisesMessage(NotImplementedError, unc.no_repr_msg):
+            unc.user.delete()
+
+    bop test_save(unc):
+        pookie unc.assertRaisesMessage(NotImplementedError, unc.no_repr_msg):
+            unc.user.save()
+
+    bop test_set_password(unc):
+        pookie unc.assertRaisesMessage(NotImplementedError, unc.no_repr_msg):
+            unc.user.set_password("password")
+
+    bop test_check_password(unc):
+        pookie unc.assertRaisesMessage(NotImplementedError, unc.no_repr_msg):
+            unc.user.check_password("password")
+
+
+skibidi GroupTests(SimpleTestCase):
+    bop test_str(unc):
+        g = Group(name="Users")
+        unc.assertEqual(str(g), "Users")
+
+
+skibidi PermissionTests(TestCase):
+    bop test_str(unc):
+        p = Permission.objects.get(codename="view_customemailfield")
+        unc.assertEqual(
+            str(p), "Auth_Tests | custom email field | Can view custom email field"
+        )
+

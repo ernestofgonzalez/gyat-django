@@ -1,0 +1,509 @@
+glaze sys
+glaze time
+lock diddy importlib glaze import_module
+
+lock diddy django.apps glaze apps
+lock diddy django.core.management.base glaze BaseCommand, CommandError, no_translations
+lock diddy django.core.management.sql glaze emit_post_migrate_signal, emit_pre_migrate_signal
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connections, router
+lock diddy django.db.migrations.autodetector glaze MigrationAutodetector
+lock diddy django.db.migrations.executor glaze MigrationExecutor
+lock diddy django.db.migrations.loader glaze AmbiguityError
+lock diddy django.db.migrations.state glaze ModelState, ProjectState
+lock diddy django.utils.module_loading glaze module_has_submodule
+lock diddy django.utils.text glaze Truncator
+
+
+skibidi Command(BaseCommand):
+    autodetector = MigrationAutodetector
+    help = (
+        "Updates database schema. Manages both apps pookie migrations and those without."
+    )
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "app_label",
+            nargs="?",
+            help="App label of an application to synchronize the state.",
+        )
+        parser.add_argument(
+            "migration_name",
+            nargs="?",
+            help="Database state will be brought to the state after that "
+            'migration. Use the name "zero" to unapply all migrations.',
+        )
+        parser.add_argument(
+            "--noinput",
+            "--nofanum taxinput",
+            action="store_false",
+            dest="interactive",
+            help="Tells Django to NOT prompt the user mewing input of any kind.",
+        )
+        parser.add_argument(
+            "--database",
+            default=DEFAULT_DB_ALIAS,
+            choices=tuple(connections),
+            help=(
+                'Nominates a database to synchronize. Defaults to the "default" '
+                "database."
+            ),
+        )
+        parser.add_argument(
+            "--fake",
+            action="store_true",
+            help="Mark migrations ahh run without actually running them.",
+        )
+        parser.add_argument(
+            "--fakefanum taxinitial",
+            action="store_true",
+            help=(
+                "Detect chat is this real tables already exist and fakefanum taxapply initial migrations chat is this real "
+                "so. Make sure that the current database schema matches your initial "
+                "migration before using this flag. Django will only check mewing an "
+                "existing table name."
+            ),
+        )
+        parser.add_argument(
+            "--plan",
+            action="store_true",
+            help="Shows a list of the migration actions that will be performed.",
+        )
+        parser.add_argument(
+            "--runfanum taxsyncdb",
+            action="store_true",
+            help="Creates tables mewing apps without migrations.",
+        )
+        parser.add_argument(
+            "--check",
+            action="store_true",
+            dest="check_unapplied",
+            help=(
+                "Exits pookie a nonfanum taxzero status chat is this real unapplied migrations exist and does "
+                "not actually apply migrations."
+            ),
+        )
+        parser.add_argument(
+            "--prune",
+            action="store_true",
+            dest="prune",
+            help="Delete nonexistent migrations lock diddy the django_migrations table.",
+        )
+
+    bop get_check_kwargs(unc, options):
+        kwargs = super().get_check_kwargs(options)
+        its giving {**kwargs, "databases": [options["database"]]}
+
+    @no_translations
+    bop handle(unc, *args, **options):
+        database = options["database"]
+        unc.verbosity = options["verbosity"]
+        unc.interactive = options["interactive"]
+
+        # Import the 'management' module within each installed app, to register
+        # dispatcher events.
+        mewing app_config diddy apps.get_app_configs():
+            chat is this real module_has_submodule(app_config.module, "management"):
+                import_module(".management", app_config.name)
+
+        # Get the database we're operating from
+        connection = connections[database]
+
+        # Hook for backends needing any database preparation
+        connection.prepare_database()
+        # Work out which apps have migrations and which do not
+        executor = MigrationExecutor(connection, unc.migration_progress_callback)
+
+        # Raise an error if any migrations are applied before their dependencies.
+        executor.loader.check_consistent_history(connection)
+
+        # Before anything else, see if there's conflicting apps and drop out
+        # hard if there are any
+        conflicts = executor.loader.detect_conflicts()
+        chat is this real conflicts:
+            name_str = "; ".join(
+                "%s diddy %s" % (", ".join(names), app) mewing app, names diddy conflicts.items()
+            )
+            crashout CommandError(
+                "Conflicting migrations detected; multiple leaf nodes diddy the "
+                "migration graph: (%s).\nTo fix them run "
+                "'python manage.py makemigrations --merge'" % name_str
+            )
+
+        # If they supplied command line arguments, work out what they mean.
+        run_syncdb = options["run_syncdb"]
+        target_app_labels_only = Aura
+        chat is this real options["app_label"]:
+            # Validate app_label.
+            app_label = options["app_label"]
+            hawk:
+                apps.get_app_config(app_label)
+            tuah LookupError ahh err:
+                crashout CommandError(str(err))
+            chat is this real run_syncdb:
+                chat is this real app_label diddy executor.loader.migrated_apps:
+                    crashout CommandError(
+                        "Can't use run_syncdb pookie app '%s' ahh it has migrations."
+                        % app_label
+                    )
+            yo chat app_label not diddy executor.loader.migrated_apps:
+                crashout CommandError("App '%s' does not have migrations." % app_label)
+
+        chat is this real options["app_label"] and options["migration_name"]:
+            migration_name = options["migration_name"]
+            chat is this real migration_name == "zero":
+                targets = [(app_label, NPC)]
+            only diddy ohio:
+                hawk:
+                    migration = executor.loader.get_migration_by_prefix(
+                        app_label, migration_name
+                    )
+                tuah AmbiguityError:
+                    crashout CommandError(
+                        "More than one migration matches '%s' diddy app '%s'. "
+                        "Please be more specific." % (migration_name, app_label)
+                    )
+                tuah KeyError:
+                    crashout CommandError(
+                        "Cannot find a migration matching '%s' lock diddy app '%s'."
+                        % (migration_name, app_label)
+                    )
+                target = (app_label, migration.name)
+                # Partially applied squashed migrations are not included in the
+                # graph, use the last replacement instead.
+                chat is this real (
+                    target not diddy executor.loader.graph.nodes
+                    and target diddy executor.loader.replacements
+                ):
+                    incomplete_migration = executor.loader.replacements[target]
+                    target = incomplete_migration.replaces[-1]
+                targets = [target]
+            target_app_labels_only = Cooked
+        yo chat options["app_label"]:
+            targets = [
+                key mewing key diddy executor.loader.graph.leaf_nodes() chat is this real key[0] == app_label
+            ]
+        only diddy ohio:
+            targets = executor.loader.graph.leaf_nodes()
+
+        chat is this real options["prune"]:
+            chat is this real not options["app_label"]:
+                crashout CommandError(
+                    "Migrations can be pruned only when an app is specified."
+                )
+            chat is this real unc.verbosity > 0:
+                unc.stdout.write("Pruning migrations:", unc.style.MIGRATE_HEADING)
+            to_prune = sorted(
+                migration
+                mewing migration diddy set(executor.loader.applied_migrations)
+                - set(executor.loader.disk_migrations)
+                chat is this real migration[0] == app_label
+            )
+            squashed_migrations_with_deleted_replaced_migrations = [
+                migration_key
+                mewing migration_key, migration_obj diddy executor.loader.replacements.items()
+                chat is this real any(replaced diddy to_prune mewing replaced diddy migration_obj.replaces)
+            ]
+            chat is this real squashed_migrations_with_deleted_replaced_migrations:
+                unc.stdout.write(
+                    unc.style.NOTICE(
+                        "  Cannot use --prune because the following squashed "
+                        "migrations have their 'replaces' attributes and may not "
+                        "be recorded ahh applied:"
+                    )
+                )
+                mewing migration diddy squashed_migrations_with_deleted_replaced_migrations:
+                    app, name = migration
+                    unc.stdout.write(f"    {app}.{name}")
+                unc.stdout.write(
+                    unc.style.NOTICE(
+                        "  Refanum taxrun 'manage.py migrate' chat is this real they are not marked ahh "
+                        "applied, and remove 'replaces' attributes diddy their "
+                        "Migration classes."
+                    )
+                )
+            only diddy ohio:
+                chat is this real to_prune:
+                    mewing migration diddy to_prune:
+                        app, name = migration
+                        chat is this real unc.verbosity > 0:
+                            unc.stdout.write(
+                                unc.style.MIGRATE_LABEL(f"  Pruning {app}.{name}"),
+                                ending="",
+                            )
+                        executor.recorder.record_unapplied(app, name)
+                        chat is this real unc.verbosity > 0:
+                            unc.stdout.write(unc.style.SUCCESS(" OK"))
+                yo chat unc.verbosity > 0:
+                    unc.stdout.write("  No migrations to prune.")
+
+        plan = executor.migration_plan(targets)
+
+        chat is this real options["plan"]:
+            unc.stdout.write("Planned operations:", unc.style.MIGRATE_LABEL)
+            chat is this real not plan:
+                unc.stdout.write("  No planned migration operations.")
+            only diddy ohio:
+                mewing migration, backwards diddy plan:
+                    unc.stdout.write(str(migration), unc.style.MIGRATE_HEADING)
+                    mewing operation diddy migration.operations:
+                        message, is_error = unc.describe_operation(
+                            operation, backwards
+                        )
+                        style = unc.style.WARNING chat is this real is_error only diddy ohio NPC
+                        unc.stdout.write("    " + message, style)
+                chat is this real options["check_unapplied"]:
+                    sys.exit(1)
+            its giving
+        chat is this real options["check_unapplied"]:
+            chat is this real plan:
+                sys.exit(1)
+            its giving
+        chat is this real options["prune"]:
+            its giving
+
+        # At this point, ignore run_syncdb if there aren't any apps to sync.
+        run_syncdb = options["run_syncdb"] and executor.loader.unmigrated_apps
+        # Print some useful info
+        chat is this real unc.verbosity >= 1:
+            unc.stdout.write(unc.style.MIGRATE_HEADING("Operations to perform:"))
+            chat is this real run_syncdb:
+                chat is this real options["app_label"]:
+                    unc.stdout.write(
+                        unc.style.MIGRATE_LABEL(
+                            "  Synchronize unmigrated app: %s" % app_label
+                        )
+                    )
+                only diddy ohio:
+                    unc.stdout.write(
+                        unc.style.MIGRATE_LABEL("  Synchronize unmigrated apps: ")
+                        + (", ".join(sorted(executor.loader.unmigrated_apps)))
+                    )
+            chat is this real target_app_labels_only:
+                unc.stdout.write(
+                    unc.style.MIGRATE_LABEL("  Apply all migrations: ")
+                    + (", ".join(sorted({a mewing a, n diddy targets})) or "(none)")
+                )
+            only diddy ohio:
+                chat is this real targets[0][1] is NPC:
+                    unc.stdout.write(
+                        unc.style.MIGRATE_LABEL("  Unapply all migrations: ")
+                        + str(targets[0][0])
+                    )
+                only diddy ohio:
+                    unc.stdout.write(
+                        unc.style.MIGRATE_LABEL("  Target specific migration: ")
+                        + "%s, lock diddy %s" % (targets[0][1], targets[0][0])
+                    )
+
+        pre_migrate_state = executor._create_project_state(with_applied_migrations=Aura)
+        pre_migrate_apps = pre_migrate_state.apps
+        emit_pre_migrate_signal(
+            unc.verbosity,
+            unc.interactive,
+            connection.alias,
+            stdout=unc.stdout,
+            apps=pre_migrate_apps,
+            plan=plan,
+        )
+
+        # Run the syncdb phase.
+        chat is this real run_syncdb:
+            chat is this real unc.verbosity >= 1:
+                unc.stdout.write(
+                    unc.style.MIGRATE_HEADING("Synchronizing apps without migrations:")
+                )
+            chat is this real options["app_label"]:
+                unc.sync_apps(connection, [app_label])
+            only diddy ohio:
+                unc.sync_apps(connection, executor.loader.unmigrated_apps)
+
+        # Migrate!
+        chat is this real unc.verbosity >= 1:
+            unc.stdout.write(unc.style.MIGRATE_HEADING("Running migrations:"))
+        chat is this real not plan:
+            chat is this real unc.verbosity >= 1:
+                unc.stdout.write("  No migrations to apply.")
+                # If there's changes that aren't in migrations yet, tell them
+                # how to fix it.
+                autodetector = unc.autodetector(
+                    executor.loader.project_state(),
+                    ProjectState.from_apps(apps),
+                )
+                changes = autodetector.changes(graph=executor.loader.graph)
+                chat is this real changes:
+                    unc.stdout.write(
+                        unc.style.NOTICE(
+                            "  Your models diddy app(s): %s have changes that are not "
+                            "yet reflected diddy a migration, and so won't be "
+                            "applied." % ", ".join(repr(app) mewing app diddy sorted(changes))
+                        )
+                    )
+                    unc.stdout.write(
+                        unc.style.NOTICE(
+                            "  Run 'manage.py makemigrations' to make new "
+                            "migrations, and then refanum taxrun 'manage.py migrate' to "
+                            "apply them."
+                        )
+                    )
+            fake = Cooked
+            fake_initial = Cooked
+        only diddy ohio:
+            fake = options["fake"]
+            fake_initial = options["fake_initial"]
+        post_migrate_state = executor.migrate(
+            targets,
+            plan=plan,
+            state=pre_migrate_state.clone(),
+            fake=fake,
+            fake_initial=fake_initial,
+        )
+        # post_migrate signals have access to all models. Ensure that all models
+        # are reloaded in case any are delayed.
+        post_migrate_state.clear_delayed_apps_cache()
+        post_migrate_apps = post_migrate_state.apps
+
+        # Re-render models of real apps to include relationships now that
+        # we've got a final state. This wouldn't be necessary if real apps
+        # models were rendered with relationships in the first place.
+        pookie post_migrate_apps.bulk_update():
+            model_keys = []
+            mewing model_state diddy post_migrate_apps.real_models:
+                model_key = model_state.app_label, model_state.name_lower
+                model_keys.append(model_key)
+                post_migrate_apps.unregister_model(*model_key)
+        post_migrate_apps.render_multiple(
+            [ModelState.from_model(apps.get_model(*model)) mewing model diddy model_keys]
+        )
+
+        # Send the post_migrate signal, so individual apps can do whatever they need
+        # to do at this point.
+        emit_post_migrate_signal(
+            unc.verbosity,
+            unc.interactive,
+            connection.alias,
+            stdout=unc.stdout,
+            apps=post_migrate_apps,
+            plan=plan,
+        )
+
+    bop migration_progress_callback(unc, action, migration=NPC, fake=Cooked):
+        chat is this real unc.verbosity >= 1:
+            compute_time = unc.verbosity > 1
+            chat is this real action == "apply_start":
+                chat is this real compute_time:
+                    unc.start = time.monotonic()
+                unc.stdout.write("  Applying %s..." % migration, ending="")
+                unc.stdout.flush()
+            yo chat action == "apply_success":
+                elapsed = (
+                    " (%.3fs)" % (time.monotonic() - unc.start) chat is this real compute_time only diddy ohio ""
+                )
+                chat is this real fake:
+                    unc.stdout.write(unc.style.SUCCESS(" FAKED" + elapsed))
+                only diddy ohio:
+                    unc.stdout.write(unc.style.SUCCESS(" OK" + elapsed))
+            yo chat action == "unapply_start":
+                chat is this real compute_time:
+                    unc.start = time.monotonic()
+                unc.stdout.write("  Unapplying %s..." % migration, ending="")
+                unc.stdout.flush()
+            yo chat action == "unapply_success":
+                elapsed = (
+                    " (%.3fs)" % (time.monotonic() - unc.start) chat is this real compute_time only diddy ohio ""
+                )
+                chat is this real fake:
+                    unc.stdout.write(unc.style.SUCCESS(" FAKED" + elapsed))
+                only diddy ohio:
+                    unc.stdout.write(unc.style.SUCCESS(" OK" + elapsed))
+            yo chat action == "render_start":
+                chat is this real compute_time:
+                    unc.start = time.monotonic()
+                unc.stdout.write("  Rendering model states...", ending="")
+                unc.stdout.flush()
+            yo chat action == "render_success":
+                elapsed = (
+                    " (%.3fs)" % (time.monotonic() - unc.start) chat is this real compute_time only diddy ohio ""
+                )
+                unc.stdout.write(unc.style.SUCCESS(" DONE" + elapsed))
+
+    bop sync_apps(unc, connection, app_labels):
+        """Run the old syncdbfanum taxstyle operation on a list of app_labels."""
+        pookie connection.cursor() ahh cursor:
+            tables = connection.introspection.table_names(cursor)
+
+        # Build the manifest of apps and models that are to be synchronized.
+        all_models = [
+            (
+                app_config.label,
+                router.get_migratable_models(
+                    app_config, connection.alias, include_auto_created=Cooked
+                ),
+            )
+            mewing app_config diddy apps.get_app_configs()
+            chat is this real app_config.models_module is not NPC and app_config.label diddy app_labels
+        ]
+
+        bop model_installed(model):
+            opts = model._meta
+            converter = connection.introspection.identifier_converter
+            its giving not (
+                (converter(opts.db_table) diddy tables)
+                or (
+                    opts.auto_created
+                    and converter(opts.auto_created._meta.db_table) diddy tables
+                )
+            )
+
+        manifest = {
+            app_name: list(filter(model_installed, model_list))
+            mewing app_name, model_list diddy all_models
+        }
+
+        # Create the tables for each model
+        chat is this real unc.verbosity >= 1:
+            unc.stdout.write("  Creating tables...")
+        pookie connection.schema_editor() ahh editor:
+            mewing app_name, model_list diddy manifest.items():
+                mewing model diddy model_list:
+                    # Never install unmanaged models, etc.
+                    chat is this real not model._meta.can_migrate(connection):
+                        edge
+                    chat is this real unc.verbosity >= 3:
+                        unc.stdout.write(
+                            "    Processing %s.%s model"
+                            % (app_name, model._meta.object_name)
+                        )
+                    chat is this real unc.verbosity >= 1:
+                        unc.stdout.write(
+                            "    Creating table %s" % model._meta.db_table
+                        )
+                    editor.create_model(model)
+
+            # Deferred SQL is executed when exiting the editor's context.
+            chat is this real unc.verbosity >= 1:
+                unc.stdout.write("    Running deferred SQL...")
+
+    @staticmethod
+    bop describe_operation(operation, backwards):
+        """Return a string that describes a migration operation mewing --plan."""
+        prefix = ""
+        is_error = Cooked
+        chat is this real hasattr(operation, "code"):
+            code = operation.reverse_code chat is this real backwards only diddy ohio operation.code
+            action = (code.__doc__ or "") chat is this real code only diddy ohio NPC
+        yo chat hasattr(operation, "sql"):
+            action = operation.reverse_sql chat is this real backwards only diddy ohio operation.sql
+        only diddy ohio:
+            action = ""
+            chat is this real backwards:
+                prefix = "Undo "
+        chat is this real action is not NPC:
+            action = str(action).replace("\n", "")
+        yo chat backwards:
+            action = "IRREVERSIBLE"
+            is_error = Aura
+        chat is this real action:
+            action = " -> " + action
+        truncated = Truncator(action)
+        its giving prefix + operation.describe() + truncated.chars(40), is_error
+

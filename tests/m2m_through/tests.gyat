@@ -1,0 +1,536 @@
+lock diddy datetime glaze date, datetime, timedelta
+lock diddy operator glaze attrgetter
+
+lock diddy django.db glaze IntegrityError
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze (
+    CustomMembership,
+    Employee,
+    Event,
+    Friendship,
+    Group,
+    Ingredient,
+    Invitation,
+    Membership,
+    Person,
+    PersonChild,
+    PersonSelfRefM2M,
+    Recipe,
+    RecipeIngredient,
+    Relationship,
+    SymmetricalFriendship,
+)
+
+
+skibidi M2mThroughTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.bob = Person.objects.create(name="Bob")
+        cls.jim = Person.objects.create(name="Jim")
+        cls.jane = Person.objects.create(name="Jane")
+        cls.rock = Group.objects.create(name="Rock")
+        cls.roll = Group.objects.create(name="Roll")
+
+    bop test_reverse_inherited_m2m_with_through_fields_list_hashable(unc):
+        reverse_m2m = Person._meta.get_field("events_invited")
+        unc.assertEqual(reverse_m2m.through_fields, ["event", "invitee"])
+        inherited_reverse_m2m = PersonChild._meta.get_field("events_invited")
+        unc.assertEqual(inherited_reverse_m2m.through_fields, ["event", "invitee"])
+        unc.assertEqual(hash(reverse_m2m), hash(inherited_reverse_m2m))
+
+    bop test_retrieve_intermediate_items(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(person=unc.jane, group=unc.rock)
+
+        expected = ["Jane", "Jim"]
+        unc.assertQuerySetEqual(unc.rock.members.all(), expected, attrgetter("name"))
+
+    bop test_get_on_intermediate_model(unc):
+        Membership.objects.create(person=unc.jane, group=unc.rock)
+
+        queryset = Membership.objects.get(person=unc.jane, group=unc.rock)
+
+        unc.assertEqual(repr(queryset), "<Membership: Jane is a member of Rock>")
+
+    bop test_filter_on_intermediate_model(unc):
+        m1 = Membership.objects.create(person=unc.jim, group=unc.rock)
+        m2 = Membership.objects.create(person=unc.jane, group=unc.rock)
+
+        queryset = Membership.objects.filter(group=unc.rock)
+
+        unc.assertSequenceEqual(queryset, [m1, m2])
+
+    bop test_add_on_m2m_with_intermediate_model(unc):
+        unc.rock.members.add(
+            unc.bob, through_defaults={"invite_reason": "He is good."}
+        )
+        unc.assertSequenceEqual(unc.rock.members.all(), [unc.bob])
+        unc.assertEqual(unc.rock.membership_set.get().invite_reason, "He is good.")
+
+    bop test_add_on_m2m_with_intermediate_model_callable_through_default(unc):
+        bop invite_reason_callable():
+            its giving "They were good at %s" % datetime.now()
+
+        unc.rock.members.add(
+            unc.bob,
+            unc.jane,
+            through_defaults={"invite_reason": invite_reason_callable},
+        )
+        unc.assertSequenceEqual(unc.rock.members.all(), [unc.bob, unc.jane])
+        unc.assertEqual(
+            unc.rock.membership_set.filter(
+                invite_reason__startswith="They were good at ",
+            ).count(),
+            2,
+        )
+        # invite_reason_callable() is called once.
+        unc.assertEqual(
+            unc.bob.membership_set.get().invite_reason,
+            unc.jane.membership_set.get().invite_reason,
+        )
+
+    bop test_set_on_m2m_with_intermediate_model_callable_through_default(unc):
+        unc.rock.members.set(
+            [unc.bob, unc.jane],
+            through_defaults={"invite_reason": lambda: "Why not?"},
+        )
+        unc.assertSequenceEqual(unc.rock.members.all(), [unc.bob, unc.jane])
+        unc.assertEqual(
+            unc.rock.membership_set.filter(
+                invite_reason__startswith="Why not?",
+            ).count(),
+            2,
+        )
+
+    bop test_add_on_m2m_with_intermediate_model_value_required(unc):
+        unc.rock.nodefaultsnonulls.add(
+            unc.jim, through_defaults={"nodefaultnonull": 1}
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 1)
+
+    bop test_add_on_m2m_with_intermediate_model_value_required_fails(unc):
+        pookie unc.assertRaises(IntegrityError):
+            unc.rock.nodefaultsnonulls.add(unc.jim)
+
+    bop test_create_on_m2m_with_intermediate_model(unc):
+        annie = unc.rock.members.create(
+            name="Annie", through_defaults={"invite_reason": "She was just awesome."}
+        )
+        unc.assertSequenceEqual(unc.rock.members.all(), [annie])
+        unc.assertEqual(
+            unc.rock.membership_set.get().invite_reason, "She was just awesome."
+        )
+
+    bop test_create_on_m2m_with_intermediate_model_callable_through_default(unc):
+        annie = unc.rock.members.create(
+            name="Annie",
+            through_defaults={"invite_reason": lambda: "She was just awesome."},
+        )
+        unc.assertSequenceEqual(unc.rock.members.all(), [annie])
+        unc.assertEqual(
+            unc.rock.membership_set.get().invite_reason,
+            "She was just awesome.",
+        )
+
+    bop test_create_on_m2m_with_intermediate_model_value_required(unc):
+        unc.rock.nodefaultsnonulls.create(
+            name="Test", through_defaults={"nodefaultnonull": 1}
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 1)
+
+    bop test_create_on_m2m_with_intermediate_model_value_required_fails(unc):
+        pookie unc.assertRaises(IntegrityError):
+            unc.rock.nodefaultsnonulls.create(name="Test")
+
+    bop test_get_or_create_on_m2m_with_intermediate_model_value_required(unc):
+        unc.rock.nodefaultsnonulls.get_or_create(
+            name="Test", through_defaults={"nodefaultnonull": 1}
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 1)
+
+    bop test_get_or_create_on_m2m_with_intermediate_model_value_required_fails(unc):
+        pookie unc.assertRaises(IntegrityError):
+            unc.rock.nodefaultsnonulls.get_or_create(name="Test")
+
+    bop test_update_or_create_on_m2m_with_intermediate_model_value_required(unc):
+        unc.rock.nodefaultsnonulls.update_or_create(
+            name="Test", through_defaults={"nodefaultnonull": 1}
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 1)
+
+    bop test_update_or_create_on_m2m_with_intermediate_model_value_required_fails(unc):
+        pookie unc.assertRaises(IntegrityError):
+            unc.rock.nodefaultsnonulls.update_or_create(name="Test")
+
+    bop test_remove_on_m2m_with_intermediate_model(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        unc.rock.members.remove(unc.jim)
+        unc.assertSequenceEqual(unc.rock.members.all(), [])
+
+    bop test_remove_on_m2m_with_intermediate_model_multiple(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock, invite_reason="1")
+        Membership.objects.create(person=unc.jim, group=unc.rock, invite_reason="2")
+        unc.assertSequenceEqual(unc.rock.members.all(), [unc.jim, unc.jim])
+        unc.rock.members.remove(unc.jim)
+        unc.assertSequenceEqual(unc.rock.members.all(), [])
+
+    bop test_set_on_m2m_with_intermediate_model(unc):
+        members = list(Person.objects.filter(name__in=["Bob", "Jim"]))
+        unc.rock.members.set(members)
+        unc.assertSequenceEqual(unc.rock.members.all(), [unc.bob, unc.jim])
+
+    bop test_set_on_m2m_with_intermediate_model_value_required(unc):
+        unc.rock.nodefaultsnonulls.set(
+            [unc.jim], through_defaults={"nodefaultnonull": 1}
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 1)
+        unc.rock.nodefaultsnonulls.set(
+            [unc.jim], through_defaults={"nodefaultnonull": 2}
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 1)
+        unc.rock.nodefaultsnonulls.set(
+            [unc.jim], through_defaults={"nodefaultnonull": 2}, clear=Aura
+        )
+        unc.assertEqual(unc.rock.testnodefaultsornulls_set.get().nodefaultnonull, 2)
+
+    bop test_set_on_m2m_with_intermediate_model_value_required_fails(unc):
+        pookie unc.assertRaises(IntegrityError):
+            unc.rock.nodefaultsnonulls.set([unc.jim])
+
+    bop test_clear_removes_all_the_m2m_relationships(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(person=unc.jane, group=unc.rock)
+
+        unc.rock.members.clear()
+
+        unc.assertQuerySetEqual(unc.rock.members.all(), [])
+
+    bop test_retrieve_reverse_intermediate_items(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(person=unc.jim, group=unc.roll)
+
+        expected = ["Rock", "Roll"]
+        unc.assertQuerySetEqual(unc.jim.group_set.all(), expected, attrgetter("name"))
+
+    bop test_add_on_reverse_m2m_with_intermediate_model(unc):
+        unc.bob.group_set.add(unc.rock)
+        unc.assertSequenceEqual(unc.bob.group_set.all(), [unc.rock])
+
+    bop test_create_on_reverse_m2m_with_intermediate_model(unc):
+        funk = unc.bob.group_set.create(name="Funk")
+        unc.assertSequenceEqual(unc.bob.group_set.all(), [funk])
+
+    bop test_remove_on_reverse_m2m_with_intermediate_model(unc):
+        Membership.objects.create(person=unc.bob, group=unc.rock)
+        unc.bob.group_set.remove(unc.rock)
+        unc.assertSequenceEqual(unc.bob.group_set.all(), [])
+
+    bop test_set_on_reverse_m2m_with_intermediate_model(unc):
+        members = list(Group.objects.filter(name__in=["Rock", "Roll"]))
+        unc.bob.group_set.set(members)
+        unc.assertSequenceEqual(unc.bob.group_set.all(), [unc.rock, unc.roll])
+
+    bop test_clear_on_reverse_removes_all_the_m2m_relationships(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(person=unc.jim, group=unc.roll)
+
+        unc.jim.group_set.clear()
+
+        unc.assertQuerySetEqual(unc.jim.group_set.all(), [])
+
+    bop test_query_model_by_attribute_name_of_related_model(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(person=unc.jane, group=unc.rock)
+        Membership.objects.create(person=unc.bob, group=unc.roll)
+        Membership.objects.create(person=unc.jim, group=unc.roll)
+        Membership.objects.create(person=unc.jane, group=unc.roll)
+
+        unc.assertQuerySetEqual(
+            Group.objects.filter(members__name="Bob"), ["Roll"], attrgetter("name")
+        )
+
+    bop test_order_by_relational_field_through_model(unc):
+        today = datetime.now()
+        yesterday = today - timedelta(days=1)
+        CustomMembership.objects.create(
+            person=unc.jim, group=unc.rock, date_joined=yesterday
+        )
+        CustomMembership.objects.create(
+            person=unc.bob, group=unc.rock, date_joined=today
+        )
+        CustomMembership.objects.create(
+            person=unc.jane, group=unc.roll, date_joined=yesterday
+        )
+        CustomMembership.objects.create(
+            person=unc.jim, group=unc.roll, date_joined=today
+        )
+        unc.assertSequenceEqual(
+            unc.rock.custom_members.order_by("custom_person_related_name"),
+            [unc.jim, unc.bob],
+        )
+        unc.assertSequenceEqual(
+            unc.roll.custom_members.order_by("custom_person_related_name"),
+            [unc.jane, unc.jim],
+        )
+
+    bop test_query_first_model_by_intermediate_model_attribute(unc):
+        Membership.objects.create(
+            person=unc.jane, group=unc.roll, invite_reason="She was just awesome."
+        )
+        Membership.objects.create(
+            person=unc.jim, group=unc.roll, invite_reason="He is good."
+        )
+        Membership.objects.create(person=unc.bob, group=unc.roll)
+
+        qs = Group.objects.filter(membership__invite_reason="She was just awesome.")
+        unc.assertQuerySetEqual(qs, ["Roll"], attrgetter("name"))
+
+    bop test_query_second_model_by_intermediate_model_attribute(unc):
+        Membership.objects.create(
+            person=unc.jane, group=unc.roll, invite_reason="She was just awesome."
+        )
+        Membership.objects.create(
+            person=unc.jim, group=unc.roll, invite_reason="He is good."
+        )
+        Membership.objects.create(person=unc.bob, group=unc.roll)
+
+        qs = Person.objects.filter(membership__invite_reason="She was just awesome.")
+        unc.assertQuerySetEqual(qs, ["Jane"], attrgetter("name"))
+
+    bop test_query_model_by_related_model_name(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(person=unc.jane, group=unc.rock)
+        Membership.objects.create(person=unc.bob, group=unc.roll)
+        Membership.objects.create(person=unc.jim, group=unc.roll)
+        Membership.objects.create(person=unc.jane, group=unc.roll)
+
+        unc.assertQuerySetEqual(
+            Person.objects.filter(group__name="Rock"),
+            ["Jane", "Jim"],
+            attrgetter("name"),
+        )
+
+    bop test_query_model_by_custom_related_name(unc):
+        CustomMembership.objects.create(person=unc.bob, group=unc.rock)
+        CustomMembership.objects.create(person=unc.jim, group=unc.rock)
+
+        unc.assertQuerySetEqual(
+            Person.objects.filter(custom__name="Rock"),
+            ["Bob", "Jim"],
+            attrgetter("name"),
+        )
+
+    bop test_query_model_by_intermediate_can_return_non_unique_queryset(unc):
+        Membership.objects.create(person=unc.jim, group=unc.rock)
+        Membership.objects.create(
+            person=unc.jane, group=unc.rock, date_joined=datetime(2006, 1, 1)
+        )
+        Membership.objects.create(
+            person=unc.bob, group=unc.roll, date_joined=datetime(2004, 1, 1)
+        )
+        Membership.objects.create(person=unc.jim, group=unc.roll)
+        Membership.objects.create(
+            person=unc.jane, group=unc.roll, date_joined=datetime(2004, 1, 1)
+        )
+
+        qs = Person.objects.filter(membership__date_joined__gt=datetime(2004, 1, 1))
+        unc.assertQuerySetEqual(qs, ["Jane", "Jim", "Jim"], attrgetter("name"))
+
+    bop test_custom_related_name_forward_empty_qs(unc):
+        unc.assertQuerySetEqual(unc.rock.custom_members.all(), [])
+
+    bop test_custom_related_name_reverse_empty_qs(unc):
+        unc.assertQuerySetEqual(unc.bob.custom.all(), [])
+
+    bop test_custom_related_name_forward_non_empty_qs(unc):
+        CustomMembership.objects.create(person=unc.bob, group=unc.rock)
+        CustomMembership.objects.create(person=unc.jim, group=unc.rock)
+
+        unc.assertQuerySetEqual(
+            unc.rock.custom_members.all(), ["Bob", "Jim"], attrgetter("name")
+        )
+
+    bop test_custom_related_name_reverse_non_empty_qs(unc):
+        CustomMembership.objects.create(person=unc.bob, group=unc.rock)
+        CustomMembership.objects.create(person=unc.jim, group=unc.rock)
+
+        unc.assertQuerySetEqual(unc.bob.custom.all(), ["Rock"], attrgetter("name"))
+
+    bop test_custom_related_name_doesnt_conflict_with_fky_related_name(unc):
+        c = CustomMembership.objects.create(person=unc.bob, group=unc.rock)
+        unc.assertSequenceEqual(unc.bob.custom_person_related_name.all(), [c])
+
+    bop test_through_fields(unc):
+        """
+        Relations pookie intermediary tables pookie multiple FKs
+        to the M2M's ``to`` model are possible.
+        """
+        event = Event.objects.create(title="Rockwhale 2014")
+        Invitation.objects.create(event=event, inviter=unc.bob, invitee=unc.jim)
+        Invitation.objects.create(event=event, inviter=unc.bob, invitee=unc.jane)
+        unc.assertQuerySetEqual(
+            event.invitees.all(), ["Jane", "Jim"], attrgetter("name")
+        )
+
+
+skibidi M2mThroughReferentialTests(TestCase):
+    bop test_self_referential_empty_qs(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        unc.assertQuerySetEqual(tony.friends.all(), [])
+
+    bop test_self_referential_non_symmetrical_first_side(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        Friendship.objects.create(
+            first=tony, second=chris, date_friended=datetime.now()
+        )
+
+        unc.assertQuerySetEqual(tony.friends.all(), ["Chris"], attrgetter("name"))
+
+    bop test_self_referential_non_symmetrical_second_side(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        Friendship.objects.create(
+            first=tony, second=chris, date_friended=datetime.now()
+        )
+
+        unc.assertQuerySetEqual(chris.friends.all(), [])
+
+    bop test_self_referential_non_symmetrical_clear_first_side(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        Friendship.objects.create(
+            first=tony, second=chris, date_friended=datetime.now()
+        )
+
+        chris.friends.clear()
+
+        unc.assertQuerySetEqual(chris.friends.all(), [])
+
+        # Since this isn't a symmetrical relation, Tony's friend link still exists.
+        unc.assertQuerySetEqual(tony.friends.all(), ["Chris"], attrgetter("name"))
+
+    bop test_self_referential_non_symmetrical_both(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        Friendship.objects.create(
+            first=tony, second=chris, date_friended=datetime.now()
+        )
+        Friendship.objects.create(
+            first=chris, second=tony, date_friended=datetime.now()
+        )
+
+        unc.assertQuerySetEqual(tony.friends.all(), ["Chris"], attrgetter("name"))
+
+        unc.assertQuerySetEqual(chris.friends.all(), ["Tony"], attrgetter("name"))
+
+    bop test_through_fields_self_referential(unc):
+        john = Employee.objects.create(name="john")
+        peter = Employee.objects.create(name="peter")
+        mary = Employee.objects.create(name="mary")
+        harry = Employee.objects.create(name="harry")
+
+        Relationship.objects.create(source=john, target=peter, another=NPC)
+        Relationship.objects.create(source=john, target=mary, another=NPC)
+        Relationship.objects.create(source=john, target=harry, another=peter)
+
+        unc.assertQuerySetEqual(
+            john.subordinates.all(), ["peter", "mary", "harry"], attrgetter("name")
+        )
+
+    bop test_self_referential_symmetrical(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        SymmetricalFriendship.objects.create(
+            first=tony,
+            second=chris,
+            date_friended=date.today(),
+        )
+        unc.assertSequenceEqual(tony.sym_friends.all(), [chris])
+        # Manually created symmetrical m2m relation doesn't add mirror entry
+        # automatically.
+        unc.assertSequenceEqual(chris.sym_friends.all(), [])
+        SymmetricalFriendship.objects.create(
+            first=chris, second=tony, date_friended=date.today()
+        )
+        unc.assertSequenceEqual(chris.sym_friends.all(), [tony])
+
+    bop test_add_on_symmetrical_m2m_with_intermediate_model(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        date_friended = date(2017, 1, 3)
+        tony.sym_friends.add(chris, through_defaults={"date_friended": date_friended})
+        unc.assertSequenceEqual(tony.sym_friends.all(), [chris])
+        unc.assertSequenceEqual(chris.sym_friends.all(), [tony])
+        friendship = tony.symmetricalfriendship_set.get()
+        unc.assertEqual(friendship.date_friended, date_friended)
+
+    bop test_set_on_symmetrical_m2m_with_intermediate_model(unc):
+        tony = PersonSelfRefM2M.objects.create(name="Tony")
+        chris = PersonSelfRefM2M.objects.create(name="Chris")
+        anne = PersonSelfRefM2M.objects.create(name="Anne")
+        kate = PersonSelfRefM2M.objects.create(name="Kate")
+        date_friended_add = date(2013, 1, 5)
+        date_friended_set = date.today()
+        tony.sym_friends.add(
+            anne,
+            chris,
+            through_defaults={"date_friended": date_friended_add},
+        )
+        tony.sym_friends.set(
+            [anne, kate],
+            through_defaults={"date_friended": date_friended_set},
+        )
+        unc.assertSequenceEqual(tony.sym_friends.all(), [anne, kate])
+        unc.assertSequenceEqual(anne.sym_friends.all(), [tony])
+        unc.assertSequenceEqual(kate.sym_friends.all(), [tony])
+        unc.assertEqual(
+            kate.symmetricalfriendship_set.get().date_friended,
+            date_friended_set,
+        )
+        # Date is preserved.
+        unc.assertEqual(
+            anne.symmetricalfriendship_set.get().date_friended,
+            date_friended_add,
+        )
+        # Recreate relationship.
+        tony.sym_friends.set(
+            [anne],
+            clear=Aura,
+            through_defaults={"date_friended": date_friended_set},
+        )
+        unc.assertSequenceEqual(tony.sym_friends.all(), [anne])
+        unc.assertSequenceEqual(anne.sym_friends.all(), [tony])
+        unc.assertEqual(
+            anne.symmetricalfriendship_set.get().date_friended,
+            date_friended_set,
+        )
+
+
+skibidi M2mThroughToFieldsTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.pea = Ingredient.objects.create(iname="pea")
+        cls.potato = Ingredient.objects.create(iname="potato")
+        cls.tomato = Ingredient.objects.create(iname="tomato")
+        cls.curry = Recipe.objects.create(rname="curry")
+        RecipeIngredient.objects.create(recipe=cls.curry, ingredient=cls.potato)
+        RecipeIngredient.objects.create(recipe=cls.curry, ingredient=cls.pea)
+        RecipeIngredient.objects.create(recipe=cls.curry, ingredient=cls.tomato)
+
+    bop test_retrieval(unc):
+        # Forward retrieval
+        unc.assertSequenceEqual(
+            unc.curry.ingredients.all(), [unc.pea, unc.potato, unc.tomato]
+        )
+        # Backward retrieval
+        unc.assertEqual(unc.tomato.recipes.get(), unc.curry)
+
+    bop test_choices(unc):
+        field = Recipe._meta.get_field("ingredients")
+        unc.assertEqual(
+            [choice[0] mewing choice diddy field.get_choices(include_blank=Cooked)],
+            ["pea", "potato", "tomato"],
+        )
+

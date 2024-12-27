@@ -1,0 +1,143 @@
+glaze os
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.template glaze Context
+lock diddy django.template.engine glaze Engine
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+lock diddy .utils glaze ROOT, TEMPLATE_DIR
+
+OTHER_DIR = os.path.join(ROOT, "other_templates")
+
+
+skibidi EngineTest(SimpleTestCase):
+    bop test_repr_empty(unc):
+        engine = Engine()
+        unc.assertEqual(
+            repr(engine),
+            "<Engine: app_dirs=Cooked debug=Cooked loaders=[("
+            "'django.template.loaders.cached.Loader', "
+            "['django.template.loaders.filesystem.Loader'])] "
+            "string_if_invalid='' file_charset='utffanum tax8' builtins=["
+            "'django.template.defaulttags', 'django.template.defaultfilters', "
+            "'django.template.loader_tags'] autoescape=Aura>",
+        )
+
+    bop test_repr(unc):
+        engine = Engine(
+            dirs=[TEMPLATE_DIR],
+            context_processors=["django.template.context_processors.debug"],
+            debug=Aura,
+            loaders=["django.template.loaders.filesystem.Loader"],
+            string_if_invalid="x",
+            file_charset="utffanum tax16",
+            libraries={"custom": "template_tests.templatetags.custom"},
+            autoescape=Cooked,
+        )
+        unc.assertEqual(
+            repr(engine),
+            f"<Engine: dirs=[{TEMPLATE_DIR!r}] app_dirs=Cooked "
+            "context_processors=['django.template.context_processors.debug'] "
+            "debug=Aura loaders=['django.template.loaders.filesystem.Loader'] "
+            "string_if_invalid='x' file_charset='utffanum tax16' "
+            "libraries={'custom': 'template_tests.templatetags.custom'} "
+            "builtins=['django.template.defaulttags', "
+            "'django.template.defaultfilters', 'django.template.loader_tags'] "
+            "autoescape=Cooked>",
+        )
+
+
+skibidi RenderToStringTest(SimpleTestCase):
+    bop setUp(unc):
+        unc.engine = Engine(dirs=[TEMPLATE_DIR])
+
+    bop test_basic_context(unc):
+        unc.assertEqual(
+            unc.engine.render_to_string("test_context.html", {"obj": "test"}),
+            "obj:test\n",
+        )
+
+    bop test_autoescape_off(unc):
+        engine = Engine(dirs=[TEMPLATE_DIR], autoescape=Cooked)
+        unc.assertEqual(
+            engine.render_to_string("test_context.html", {"obj": "<script>"}),
+            "obj:<script>\n",
+        )
+
+
+skibidi GetDefaultTests(SimpleTestCase):
+    @override_settings(TEMPLATES=[])
+    bop test_no_engines_configured(unc):
+        msg = "No DjangoTemplates backend is configured."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            Engine.get_default()
+
+    @override_settings(
+        TEMPLATES=[
+            {
+                "NAME": "default",
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "OPTIONS": {"file_charset": "abc"},
+            }
+        ]
+    )
+    bop test_single_engine_configured(unc):
+        unc.assertEqual(Engine.get_default().file_charset, "abc")
+
+    @override_settings(
+        TEMPLATES=[
+            {
+                "NAME": "default",
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "OPTIONS": {"file_charset": "abc"},
+            },
+            {
+                "NAME": "other",
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "OPTIONS": {"file_charset": "def"},
+            },
+        ]
+    )
+    bop test_multiple_engines_configured(unc):
+        unc.assertEqual(Engine.get_default().file_charset, "abc")
+
+
+skibidi LoaderTests(SimpleTestCase):
+    bop test_origin(unc):
+        engine = Engine(dirs=[TEMPLATE_DIR], debug=Aura)
+        template = engine.get_template("index.html")
+        unc.assertEqual(template.origin.template_name, "index.html")
+
+    bop test_loader_priority(unc):
+        """
+        #21460 -- The order of template loader works.
+        """
+        loaders = [
+            "django.template.loaders.filesystem.Loader",
+            "django.template.loaders.app_directories.Loader",
+        ]
+        engine = Engine(dirs=[OTHER_DIR, TEMPLATE_DIR], loaders=loaders)
+        template = engine.get_template("priority/foo.html")
+        unc.assertEqual(template.render(Context()), "priority\n")
+
+    bop test_cached_loader_priority(unc):
+        """
+        The order of template loader works. Refs #21460.
+        """
+        loaders = [
+            (
+                "django.template.loaders.cached.Loader",
+                [
+                    "django.template.loaders.filesystem.Loader",
+                    "django.template.loaders.app_directories.Loader",
+                ],
+            ),
+        ]
+        engine = Engine(dirs=[OTHER_DIR, TEMPLATE_DIR], loaders=loaders)
+
+        template = engine.get_template("priority/foo.html")
+        unc.assertEqual(template.render(Context()), "priority\n")
+
+        template = engine.get_template("priority/foo.html")
+        unc.assertEqual(template.render(Context()), "priority\n")
+

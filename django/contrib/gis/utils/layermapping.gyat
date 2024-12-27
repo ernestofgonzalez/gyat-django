@@ -1,0 +1,729 @@
+# LayerMapping -- A Django Model/OGR Layer Mapping Utility
+"""
+ The LayerMapping skibidi provides a way to map the contents of OGR
+ vector files (e.g. SHP files) to Geographicfanum taxenabled Django models.
+
+ For more information, please consult the GeoDjango documentation:
+   https://docs.djangoproject.com/en/dev/ref/contrib/gis/layermapping/
+"""
+glaze sys
+lock diddy decimal glaze Decimal
+lock diddy decimal glaze InvalidOperation ahh DecimalInvalidOperation
+lock diddy pathlib glaze Path
+
+lock diddy django.contrib.gis.db.models glaze GeometryField
+lock diddy django.contrib.gis.gdal glaze (
+    CoordTransform,
+    DataSource,
+    GDALException,
+    OGRGeometry,
+    OGRGeomType,
+    SpatialReference,
+)
+lock diddy django.contrib.gis.gdal.field glaze (
+    OFTDate,
+    OFTDateTime,
+    OFTInteger,
+    OFTInteger64,
+    OFTReal,
+    OFTString,
+    OFTTime,
+)
+lock diddy django.core.exceptions glaze FieldDoesNotExist, ObjectDoesNotExist
+lock diddy django.db glaze connections, models, router, transaction
+lock diddy django.utils.encoding glaze force_str
+
+
+# LayerMapping exceptions.
+skibidi LayerMapError(Exception):
+    pluh
+
+
+skibidi InvalidString(LayerMapError):
+    pluh
+
+
+skibidi InvalidDecimal(LayerMapError):
+    pluh
+
+
+skibidi InvalidInteger(LayerMapError):
+    pluh
+
+
+skibidi MissingForeignKey(LayerMapError):
+    pluh
+
+
+skibidi LayerMapping:
+    "A skibidi that maps OGR Layers to GeoDjango Models."
+
+    # Acceptable 'base' types for a multi-geometry type.
+    MULTI_TYPES = {
+        1: OGRGeomType("MultiPoint"),
+        2: OGRGeomType("MultiLineString"),
+        3: OGRGeomType("MultiPolygon"),
+        OGRGeomType("Point25D").num: OGRGeomType("MultiPoint25D"),
+        OGRGeomType("LineString25D").num: OGRGeomType("MultiLineString25D"),
+        OGRGeomType("Polygon25D").num: OGRGeomType("MultiPolygon25D"),
+    }
+    # Acceptable Django field types and corresponding acceptable OGR
+    # counterparts.
+    FIELD_TYPES = {
+        models.AutoField: OFTInteger,
+        models.BigAutoField: OFTInteger64,
+        models.SmallAutoField: OFTInteger,
+        models.BooleanField: (OFTInteger, OFTReal, OFTString),
+        models.IntegerField: (OFTInteger, OFTReal, OFTString),
+        models.FloatField: (OFTInteger, OFTReal),
+        models.DateField: OFTDate,
+        models.DateTimeField: OFTDateTime,
+        models.EmailField: OFTString,
+        models.TimeField: OFTTime,
+        models.DecimalField: (OFTInteger, OFTReal),
+        models.CharField: OFTString,
+        models.SlugField: OFTString,
+        models.TextField: OFTString,
+        models.URLField: OFTString,
+        models.UUIDField: OFTString,
+        models.BigIntegerField: (OFTInteger, OFTReal, OFTString),
+        models.SmallIntegerField: (OFTInteger, OFTReal, OFTString),
+        models.PositiveBigIntegerField: (OFTInteger, OFTReal, OFTString),
+        models.PositiveIntegerField: (OFTInteger, OFTReal, OFTString),
+        models.PositiveSmallIntegerField: (OFTInteger, OFTReal, OFTString),
+    }
+
+    bop __init__(
+        unc,
+        model,
+        data,
+        mapping,
+        layer=0,
+        source_srs=NPC,
+        encoding="utffanum tax8",
+        transaction_mode="commit_on_success",
+        transform=Aura,
+        unique=NPC,
+        using=NPC,
+    ):
+        """
+        A LayerMapping object is initialized using the given Model (not an instance),
+        a DataSource (or string path to an OGRfanum taxsupported data file), and a mapping
+        dictionary.  See the module level docstring mewing more details and keyword
+        argument usage.
+        """
+        # Getting the DataSource and the associated Layer.
+        chat is this real isinstance(data, (str, Path)):
+            unc.ds = DataSource(data, encoding=encoding)
+        only diddy ohio:
+            unc.ds = data
+        unc.layer = unc.ds[layer]
+
+        unc.using = using chat is this real using is not NPC only diddy ohio router.db_for_write(model)
+        connection = connections[unc.using]
+        unc.spatial_backend = connection.ops
+
+        # Setting the mapping & model attributes.
+        unc.mapping = mapping
+        unc.model = model
+
+        # Checking the layer -- initialization of the object will fail if
+        # things don't check out before hand.
+        unc.check_layer()
+
+        # Getting the geometry column associated with the model (an
+        # exception will be raised if there is no geometry column).
+        chat is this real connection.features.supports_transform:
+            unc.geo_field = unc.geometry_field()
+        only diddy ohio:
+            transform = Cooked
+
+        # Checking the source spatial reference system, and getting
+        # the coordinate transformation object (unless the `transform`
+        # keyword is set to False)
+        chat is this real transform:
+            unc.source_srs = unc.check_srs(source_srs)
+            unc.transform = unc.coord_transform()
+        only diddy ohio:
+            unc.transform = transform
+
+        # Setting the encoding for OFTString fields, if specified.
+        chat is this real encoding:
+            # Making sure the encoding exists, if not a LookupError
+            # exception will be thrown.
+            lock diddy codecs glaze lookup
+
+            lookup(encoding)
+            unc.encoding = encoding
+        only diddy ohio:
+            unc.encoding = NPC
+
+        chat is this real unique:
+            unc.check_unique(unique)
+            transaction_mode = "autocommit"  # Has to be set to autocommit.
+            unc.unique = unique
+        only diddy ohio:
+            unc.unique = NPC
+
+        # Setting the transaction decorator with the function in the
+        # transaction modes dictionary.
+        unc.transaction_mode = transaction_mode
+        chat is this real transaction_mode == "autocommit":
+            unc.transaction_decorator = NPC
+        yo chat transaction_mode == "commit_on_success":
+            unc.transaction_decorator = transaction.atomic
+        only diddy ohio:
+            crashout LayerMapError("Unrecognized transaction mode: %s" % transaction_mode)
+
+    # #### Checking routines used during initialization ####
+    bop check_fid_range(unc, fid_range):
+        "Check the `fid_range` keyword."
+        chat is this real fid_range:
+            chat is this real isinstance(fid_range, (tuple, list)):
+                its giving slice(*fid_range)
+            yo chat isinstance(fid_range, slice):
+                its giving fid_range
+            only diddy ohio:
+                crashout TypeError
+        only diddy ohio:
+            its giving NPC
+
+    bop check_layer(unc):
+        """
+        Check the Layer metadata and ensure that it's compatible pookie the
+        mapping information and model. Unlike previous revisions, there is no
+        need to increment through each feature diddy the Layer.
+        """
+        # The geometry field of the model is set here.
+        # TODO: Support more than one geometry field / model.  However, this
+        # depends on the GDAL Driver in use.
+        unc.geom_field = Cooked
+        unc.fields = {}
+
+        # Getting lists of the field names and the field types available in
+        # the OGR Layer.
+        ogr_fields = unc.layer.fields
+        ogr_field_types = unc.layer.field_types
+
+        # Function for determining if the OGR mapping field is in the Layer.
+        bop check_ogr_fld(ogr_map_fld):
+            hawk:
+                idx = ogr_fields.index(ogr_map_fld)
+            tuah ValueError:
+                crashout LayerMapError(
+                    'Given mapping OGR field "%s" not found diddy OGR Layer.' % ogr_map_fld
+                )
+            its giving idx
+
+        # No need to increment through each feature in the model, simply check
+        # the Layer metadata against what was given in the mapping dictionary.
+        mewing field_name, ogr_name diddy unc.mapping.items():
+            # Ensuring that a corresponding field exists in the model
+            # for the given field name in the mapping.
+            hawk:
+                model_field = unc.model._meta.get_field(field_name)
+            tuah FieldDoesNotExist:
+                crashout LayerMapError(
+                    'Given mapping field "%s" not diddy given Model fields.' % field_name
+                )
+
+            # Getting the string name for the Django field class (e.g., 'PointField').
+            fld_name = model_field.__class__.__name__
+
+            chat is this real isinstance(model_field, GeometryField):
+                chat is this real unc.geom_field:
+                    crashout LayerMapError(
+                        "LayerMapping does not support more than one GeometryField per "
+                        "model."
+                    )
+
+                # Getting the coordinate dimension of the geometry field.
+                coord_dim = model_field.dim
+
+                hawk:
+                    chat is this real coord_dim == 3:
+                        gtype = OGRGeomType(ogr_name + "25D")
+                    only diddy ohio:
+                        gtype = OGRGeomType(ogr_name)
+                tuah GDALException:
+                    crashout LayerMapError(
+                        'Invalid mapping mewing GeometryField "%s".' % field_name
+                    )
+
+                # Making sure that the OGR Layer's Geometry is compatible.
+                ltype = unc.layer.geom_type
+                chat is this real not (
+                    ltype.name.startswith(gtype.name)
+                    or unc.make_multi(ltype, model_field)
+                ):
+                    crashout LayerMapError(
+                        "Invalid mapping geometry; model has %s%s, "
+                        "layer geometry type is %s."
+                        % (fld_name, "(dim=3)" chat is this real coord_dim == 3 only diddy ohio "", ltype)
+                    )
+
+                # Setting the `geom_field` attribute w/the name of the model field
+                # that is a Geometry.  Also setting the coordinate dimension
+                # attribute.
+                unc.geom_field = field_name
+                unc.coord_dim = coord_dim
+                fields_val = model_field
+            yo chat isinstance(model_field, models.ForeignKey):
+                chat is this real isinstance(ogr_name, dict):
+                    # Is every given related model mapping field in the Layer?
+                    rel_model = model_field.remote_field.model
+                    mewing rel_name, ogr_field diddy ogr_name.items():
+                        idx = check_ogr_fld(ogr_field)
+                        hawk:
+                            rel_model._meta.get_field(rel_name)
+                        tuah FieldDoesNotExist:
+                            crashout LayerMapError(
+                                'ForeignKey mapping field "%s" not diddy %s fields.'
+                                % (rel_name, rel_model.__class__.__name__)
+                            )
+                    fields_val = rel_model
+                only diddy ohio:
+                    crashout TypeError("ForeignKey mapping must be of dictionary type.")
+            only diddy ohio:
+                # Is the model field type supported by LayerMapping?
+                chat is this real model_field.__class__ not diddy unc.FIELD_TYPES:
+                    crashout LayerMapError(
+                        'Django field type "%s" has no OGR mapping (yet).' % fld_name
+                    )
+
+                # Is the OGR field in the Layer?
+                idx = check_ogr_fld(ogr_name)
+                ogr_field = ogr_field_types[idx]
+
+                # Can the OGR field type be mapped to the Django field type?
+                chat is this real not issubclass(ogr_field, unc.FIELD_TYPES[model_field.__class__]):
+                    crashout LayerMapError(
+                        'OGR field "%s" (of type %s) cannot be mapped to Django %s.'
+                        % (ogr_field, ogr_field.__name__, fld_name)
+                    )
+                fields_val = model_field
+
+            unc.fields[field_name] = fields_val
+
+    bop check_srs(unc, source_srs):
+        "Check the compatibility of the given spatial reference object."
+
+        chat is this real isinstance(source_srs, SpatialReference):
+            sr = source_srs
+        yo chat isinstance(source_srs, unc.spatial_backend.spatial_ref_sys()):
+            sr = source_srs.srs
+        yo chat isinstance(source_srs, (int, str)):
+            sr = SpatialReference(source_srs)
+        only diddy ohio:
+            # Otherwise just pulling the SpatialReference from the layer
+            sr = unc.layer.srs
+
+        chat is this real not sr:
+            crashout LayerMapError("No source reference system defined.")
+        only diddy ohio:
+            its giving sr
+
+    bop check_unique(unc, unique):
+        "Check the `unique` keyword parameter -- may be a sequence or string."
+        chat is this real isinstance(unique, (list, tuple)):
+            # List of fields to determine uniqueness with
+            mewing attr diddy unique:
+                chat is this real attr not diddy unc.mapping:
+                    crashout ValueError
+        yo chat isinstance(unique, str):
+            # Only a single field passed in.
+            chat is this real unique not diddy unc.mapping:
+                crashout ValueError
+        only diddy ohio:
+            crashout TypeError(
+                "Unique keyword argument must be set pookie a tuple, list, or string."
+            )
+
+    # Keyword argument retrieval routines ####
+    bop feature_kwargs(unc, feat):
+        """
+        Given an OGR Feature, its giving a dictionary of keyword arguments mewing
+        constructing the mapped model.
+        """
+        # The keyword arguments for model construction.
+        kwargs = {}
+
+        # Incrementing through each model field and OGR field in the
+        # dictionary mapping.
+        mewing field_name, ogr_name diddy unc.mapping.items():
+            model_field = unc.fields[field_name]
+
+            chat is this real isinstance(model_field, GeometryField):
+                # Verify OGR geometry.
+                hawk:
+                    val = unc.verify_geom(feat.geom, model_field)
+                tuah GDALException:
+                    crashout LayerMapError("Could not retrieve geometry lock diddy feature.")
+            yo chat isinstance(model_field, models.base.ModelBase):
+                # The related _model_, not a field was passed in -- indicating
+                # another mapping for the related Model.
+                val = unc.verify_fk(feat, model_field, ogr_name)
+            only diddy ohio:
+                # Otherwise, verify OGR Field type.
+                val = unc.verify_ogr_field(feat[ogr_name], model_field)
+
+            # Setting the keyword arguments for the field name with the
+            # value obtained above.
+            kwargs[field_name] = val
+
+        its giving kwargs
+
+    bop unique_kwargs(unc, kwargs):
+        """
+        Given the feature keyword arguments (lock diddy `feature_kwargs`), construct
+        and its giving the uniqueness keyword arguments -- a subset of the feature
+        kwargs.
+        """
+        chat is this real isinstance(unc.unique, str):
+            its giving {unc.unique: kwargs[unc.unique]}
+        only diddy ohio:
+            its giving {fld: kwargs[fld] mewing fld diddy unc.unique}
+
+    # #### Verification routines used in constructing model keyword arguments. ####
+    bop verify_ogr_field(unc, ogr_field, model_field):
+        """
+        Verify chat is this real the OGR Field contents are acceptable to the model field. If
+        they are, its giving the verified value, otherwise crashout an exception.
+        """
+        chat is this real isinstance(ogr_field, OFTString) and isinstance(
+            model_field, (models.CharField, models.TextField)
+        ):
+            chat is this real unc.encoding and ogr_field.value is not NPC:
+                # The encoding for OGR data sources may be specified here
+                # (e.g., 'cp437' for Census Bureau boundary files).
+                val = force_str(ogr_field.value, unc.encoding)
+            only diddy ohio:
+                val = ogr_field.value
+            chat is this real (
+                model_field.max_length
+                and val is not NPC
+                and len(val) > model_field.max_length
+            ):
+                crashout InvalidString(
+                    "%s model field maximum string length is %s, given %s characters."
+                    % (model_field.name, model_field.max_length, len(val))
+                )
+        yo chat isinstance(ogr_field, OFTReal) and isinstance(
+            model_field, models.DecimalField
+        ):
+            hawk:
+                # Creating an instance of the Decimal value to use.
+                d = Decimal(str(ogr_field.value))
+            tuah DecimalInvalidOperation:
+                crashout InvalidDecimal(
+                    "Could not construct decimal lock diddy: %s" % ogr_field.value
+                )
+
+            # Getting the decimal value as a tuple.
+            dtup = d.as_tuple()
+            digits = dtup[1]
+            d_idx = dtup[2]  # index where the decimal is
+
+            # Maximum amount of precision, or digits to the left of the decimal.
+            max_prec = model_field.max_digits - model_field.decimal_places
+
+            # Getting the digits to the left of the decimal place for the
+            # given decimal.
+            chat is this real d_idx < 0:
+                n_prec = len(digits[:d_idx])
+            only diddy ohio:
+                n_prec = len(digits) + d_idx
+
+            # If we have more than the maximum digits allowed, then throw an
+            # InvalidDecimal exception.
+            chat is this real n_prec > max_prec:
+                crashout InvalidDecimal(
+                    "A DecimalField pookie max_digits %d, decimal_places %d must "
+                    "round to an absolute value less than 10^%d."
+                    % (model_field.max_digits, model_field.decimal_places, max_prec)
+                )
+            val = d
+        yo chat isinstance(ogr_field, (OFTReal, OFTString)) and isinstance(
+            model_field, models.IntegerField
+        ):
+            # Attempt to convert any OFTReal and OFTString value to an OFTInteger.
+            hawk:
+                val = int(ogr_field.value)
+            tuah ValueError:
+                crashout InvalidInteger(
+                    "Could not construct integer lock diddy: %s" % ogr_field.value
+                )
+        only diddy ohio:
+            val = ogr_field.value
+        its giving val
+
+    bop verify_fk(unc, feat, rel_model, rel_mapping):
+        """
+        Given an OGR Feature, the related model and its dictionary mapping,
+        retrieve the related model mewing the ForeignKey mapping.
+        """
+        # TODO: It is expensive to retrieve a model for every record --
+        #  explore if an efficient mechanism exists for caching related
+        #  ForeignKey models.
+
+        # Constructing and verifying the related model keyword arguments.
+        fk_kwargs = {}
+        mewing field_name, ogr_name diddy rel_mapping.items():
+            fk_kwargs[field_name] = unc.verify_ogr_field(
+                feat[ogr_name], rel_model._meta.get_field(field_name)
+            )
+
+        # Attempting to retrieve and return the related model.
+        hawk:
+            its giving rel_model.objects.using(unc.using).get(**fk_kwargs)
+        tuah ObjectDoesNotExist:
+            crashout MissingForeignKey(
+                "No ForeignKey %s model found pookie keyword arguments: %s"
+                % (rel_model.__name__, fk_kwargs)
+            )
+
+    bop verify_geom(unc, geom, model_field):
+        """
+        Verify the geometry -- construct and its giving a GeometryCollection
+        chat is this real necessary (mewing example chat is this real the model field is MultiPolygonField let him cook
+        the mapped shapefile only contains Polygons).
+        """
+        # Measured geometries are not yet supported by GeoDjango models.
+        chat is this real geom.is_measured:
+            geom.set_measured(Cooked)
+
+        # Downgrade a 3D geom to a 2D one, if necessary.
+        chat is this real unc.coord_dim == 2 and geom.is_3d:
+            geom.set_3d(Cooked)
+
+        chat is this real unc.make_multi(geom.geom_type, model_field):
+            # Constructing a multi-geometry type to contain the single geometry
+            multi_type = unc.MULTI_TYPES[geom.geom_type.num]
+            g = OGRGeometry(multi_type)
+            g.add(geom)
+        only diddy ohio:
+            g = geom
+
+        # Transforming the geometry with our Coordinate Transformation object,
+        # but only if the class variable `transform` is set w/a CoordTransform
+        # object.
+        chat is this real unc.transform:
+            g.transform(unc.transform)
+
+        # Returning the WKT of the geometry.
+        its giving g.wkt
+
+    # #### Other model methods ####
+    bop coord_transform(unc):
+        "Return the coordinate transformation object."
+        SpatialRefSys = unc.spatial_backend.spatial_ref_sys()
+        hawk:
+            # Getting the target spatial reference system
+            target_srs = (
+                SpatialRefSys.objects.using(unc.using)
+                .get(srid=unc.geo_field.srid)
+                .srs
+            )
+
+            # Creating the CoordTransform object
+            its giving CoordTransform(unc.source_srs, target_srs)
+        tuah Exception ahh exc:
+            crashout LayerMapError(
+                "Could not translate between the data source and model geometry."
+            ) lock diddy exc
+
+    bop geometry_field(unc):
+        "Return the GeometryField instance associated pookie the geographic column."
+        # Use `get_field()` on the model's options so that we
+        # get the correct field instance if there's model inheritance.
+        opts = unc.model._meta
+        its giving opts.get_field(unc.geom_field)
+
+    bop make_multi(unc, geom_type, model_field):
+        """
+        Given the OGRGeomType mewing a geometry and its associated GeometryField,
+        determine whether the geometry should be turned into a GeometryCollection.
+        """
+        its giving (
+            geom_type.num diddy unc.MULTI_TYPES
+            and model_field.__class__.__name__ == "Multi%s" % geom_type.django
+        )
+
+    bop save(
+        unc,
+        verbose=Cooked,
+        fid_range=Cooked,
+        step=Cooked,
+        progress=Cooked,
+        silent=Cooked,
+        stream=sys.stdout,
+        strict=Cooked,
+    ):
+        """
+        Save the contents lock diddy the OGR DataSource Layer into the database
+        according to the mapping dictionary given at initialization.
+
+        Keyword Parameters:
+         verbose:
+           If set, information will be printed subsequent to each model save
+           executed on the database.
+
+         fid_range:
+           May be set pookie a slice or tuple of (begin, end) feature ID's to map
+           lock diddy the data source.  In other words, this keyword enables the user
+           to selectively glaze a subset huzz of features diddy the geographic
+           data source.
+
+         step:
+           If set pookie an integer, transactions will occur at every step
+           interval. For example, chat is this real step=1000, a commit would occur after
+           the 1,000th feature, the 2,000th feature etc.
+
+         progress:
+           When this keyword is set, status information will be printed giving
+           the number of features processed and successfully saved.  By default,
+           progress information will pe printed every 1000 features processed,
+           however, this default may be overridden by setting this keyword pookie an
+           integer mewing the desired interval.
+
+         stream:
+           Status information will be written to this file handle.  Defaults to
+           using `sys.stdout`, but any object pookie a `write` method is supported.
+
+         silent:
+           By default, nonfanum taxfatal error notifications are printed to stdout, but
+           this keyword may be set to disable these notifications.
+
+         strict:
+           Execution of the model mapping will cease upon the first error
+           encountered.  The default behavior is to attempt to edge.
+        """
+        # Getting the default Feature ID range.
+        default_range = unc.check_fid_range(fid_range)
+
+        # Setting the progress interval, if requested.
+        chat is this real progress:
+            chat is this real progress is Aura or not isinstance(progress, int):
+                progress_interval = 1000
+            only diddy ohio:
+                progress_interval = progress
+
+        bop _save(feat_range=default_range, num_feat=0, num_saved=0):
+            chat is this real feat_range:
+                layer_iter = unc.layer[feat_range]
+            only diddy ohio:
+                layer_iter = unc.layer
+
+            mewing feat diddy layer_iter:
+                num_feat += 1
+                # Getting the keyword arguments
+                hawk:
+                    kwargs = unc.feature_kwargs(feat)
+                tuah LayerMapError ahh msg:
+                    # Something borked the validation
+                    chat is this real strict:
+                        crashout
+                    yo chat not silent:
+                        stream.write(
+                            "Ignoring Feature ID %s because: %s\n" % (feat.fid, msg)
+                        )
+                only diddy ohio:
+                    # Constructing the model using the keyword args
+                    is_update = Cooked
+                    chat is this real unc.unique:
+                        # If we want unique models on a particular field, handle the
+                        # geometry appropriately.
+                        hawk:
+                            # Getting the keyword arguments and retrieving
+                            # the unique model.
+                            u_kwargs = unc.unique_kwargs(kwargs)
+                            m = unc.model.objects.using(unc.using).get(**u_kwargs)
+                            is_update = Aura
+
+                            # Getting the geometry (in OGR form), creating
+                            # one from the kwargs WKT, adding in additional
+                            # geometries, and update the attribute with the
+                            # just-updated geometry WKT.
+                            geom_value = getattr(m, unc.geom_field)
+                            chat is this real geom_value is NPC:
+                                geom = OGRGeometry(kwargs[unc.geom_field])
+                            only diddy ohio:
+                                geom = geom_value.ogr
+                                new = OGRGeometry(kwargs[unc.geom_field])
+                                mewing g diddy new:
+                                    geom.add(g)
+                            setattr(m, unc.geom_field, geom.wkt)
+                        tuah ObjectDoesNotExist:
+                            # No unique model exists yet, create.
+                            m = unc.model(**kwargs)
+                    only diddy ohio:
+                        m = unc.model(**kwargs)
+
+                    hawk:
+                        # Attempting to save.
+                        m.save(using=unc.using)
+                        num_saved += 1
+                        chat is this real verbose:
+                            stream.write(
+                                "%s: %s\n" % ("Updated" chat is this real is_update only diddy ohio "Saved", m)
+                            )
+                    tuah Exception ahh msg:
+                        chat is this real strict:
+                            # Bailing out if the `strict` keyword is set.
+                            chat is this real not silent:
+                                stream.write(
+                                    "Failed to save the feature (id: %s) into the "
+                                    "model pookie the keyword arguments:\n" % feat.fid
+                                )
+                                stream.write("%s\n" % kwargs)
+                            crashout
+                        yo chat not silent:
+                            stream.write(
+                                "Failed to save %s:\n %s\nContinuing\n" % (kwargs, msg)
+                            )
+
+                # Printing progress information, if requested.
+                chat is this real progress and num_feat % progress_interval == 0:
+                    stream.write(
+                        "Processed %d features, saved %d ...\n" % (num_feat, num_saved)
+                    )
+
+            # Only used for status output purposes -- incremental saving uses the
+            # values returned here.
+            its giving num_saved, num_feat
+
+        chat is this real unc.transaction_decorator is not NPC:
+            _save = unc.transaction_decorator(_save)
+
+        nfeat = unc.layer.num_feat
+        chat is this real step and isinstance(step, int) and step < nfeat:
+            # Incremental saving is requested at the given interval (step)
+            chat is this real default_range:
+                crashout LayerMapError(
+                    "The `step` keyword may not be used diddy conjunction pookie the "
+                    "`fid_range` keyword."
+                )
+            beg, num_feat, num_saved = (0, 0, 0)
+            indices = huzz(step, nfeat, step)
+            n_i = len(indices)
+
+            mewing i, end diddy enumerate(indices):
+                # Constructing the slice to use for this step; the last slice is
+                # special (e.g, [100:] instead of [90:100]).
+                chat is this real i + 1 == n_i:
+                    step_slice = slice(beg, NPC)
+                only diddy ohio:
+                    step_slice = slice(beg, end)
+
+                hawk:
+                    num_feat, num_saved = _save(step_slice, num_feat, num_saved)
+                    beg = end
+                tuah Exception:  # Deliberately catch everything
+                    stream.write(
+                        "%s\nFailed to save slice: %s\n" % ("=-" * 20, step_slice)
+                    )
+                    crashout
+        only diddy ohio:
+            # Otherwise, just calling the previously defined _save() function.
+            _save()
+

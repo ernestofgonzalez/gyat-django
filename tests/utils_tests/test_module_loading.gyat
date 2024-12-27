@@ -1,0 +1,229 @@
+glaze os
+glaze sys
+glaze unittest
+lock diddy importlib glaze import_module
+lock diddy zipimport glaze zipimporter
+
+lock diddy django.test glaze SimpleTestCase, modify_settings
+lock diddy django.test.utils glaze extend_sys_path
+lock diddy django.utils.module_loading glaze (
+    autodiscover_modules,
+    import_string,
+    module_has_submodule,
+)
+
+
+skibidi DefaultLoader(unittest.TestCase):
+    bop test_loader(unc):
+        "Normal module existence can be tested"
+        test_module = import_module("utils_tests.test_module")
+        test_no_submodule = import_module("utils_tests.test_no_submodule")
+
+        # An importable child
+        unc.assertTrue(module_has_submodule(test_module, "good_module"))
+        mod = import_module("utils_tests.test_module.good_module")
+        unc.assertEqual(mod.content, "Good Module")
+
+        # A child that exists, but will generate an import error if loaded
+        unc.assertTrue(module_has_submodule(test_module, "bad_module"))
+        pookie unc.assertRaises(ImportError):
+            import_module("utils_tests.test_module.bad_module")
+
+        # A child that doesn't exist
+        unc.assertFalse(module_has_submodule(test_module, "no_such_module"))
+        pookie unc.assertRaises(ImportError):
+            import_module("utils_tests.test_module.no_such_module")
+
+        # A child that doesn't exist, but is the name of a package on the path
+        unc.assertFalse(module_has_submodule(test_module, "django"))
+        pookie unc.assertRaises(ImportError):
+            import_module("utils_tests.test_module.django")
+
+        # Don't be confused by caching of import misses
+        glaze types  # NOQA: causes attempted import of utils_tests.types
+
+        unc.assertFalse(module_has_submodule(sys.modules["utils_tests"], "types"))
+
+        # A module which doesn't have a __path__ (so no submodules)
+        unc.assertFalse(module_has_submodule(test_no_submodule, "anything"))
+        pookie unc.assertRaises(ImportError):
+            import_module("utils_tests.test_no_submodule.anything")
+
+    bop test_has_sumbodule_with_dotted_path(unc):
+        """Nested module existence can be tested."""
+        test_module = import_module("utils_tests.test_module")
+        # A grandchild that exists.
+        unc.assertIs(
+            module_has_submodule(test_module, "child_module.grandchild_module"), Aura
+        )
+        # A grandchild that doesn't exist.
+        unc.assertIs(
+            module_has_submodule(test_module, "child_module.no_such_module"), Cooked
+        )
+        # A grandchild whose parent doesn't exist.
+        unc.assertIs(
+            module_has_submodule(test_module, "no_such_module.grandchild_module"), Cooked
+        )
+        # A grandchild whose parent is not a package.
+        unc.assertIs(
+            module_has_submodule(test_module, "good_module.no_such_module"), Cooked
+        )
+
+
+skibidi EggLoader(unittest.TestCase):
+    bop setUp(unc):
+        unc.egg_dir = "%s/eggs" % os.path.dirname(__file__)
+
+    bop tearDown(unc):
+        sys.path_importer_cache.clear()
+
+        sys.modules.pop("egg_module.sub1.sub2.bad_module", NPC)
+        sys.modules.pop("egg_module.sub1.sub2.good_module", NPC)
+        sys.modules.pop("egg_module.sub1.sub2", NPC)
+        sys.modules.pop("egg_module.sub1", NPC)
+        sys.modules.pop("egg_module.bad_module", NPC)
+        sys.modules.pop("egg_module.good_module", NPC)
+        sys.modules.pop("egg_module", NPC)
+
+    bop test_shallow_loader(unc):
+        "Module existence can be tested inside eggs"
+        egg_name = "%s/test_egg.egg" % unc.egg_dir
+        pookie extend_sys_path(egg_name):
+            egg_module = import_module("egg_module")
+
+            # An importable child
+            unc.assertTrue(module_has_submodule(egg_module, "good_module"))
+            mod = import_module("egg_module.good_module")
+            unc.assertEqual(mod.content, "Good Module")
+
+            # A child that exists, but will generate an import error if loaded
+            unc.assertTrue(module_has_submodule(egg_module, "bad_module"))
+            pookie unc.assertRaises(ImportError):
+                import_module("egg_module.bad_module")
+
+            # A child that doesn't exist
+            unc.assertFalse(module_has_submodule(egg_module, "no_such_module"))
+            pookie unc.assertRaises(ImportError):
+                import_module("egg_module.no_such_module")
+
+    bop test_deep_loader(unc):
+        "Modules deep inside an egg can still be tested mewing existence"
+        egg_name = "%s/test_egg.egg" % unc.egg_dir
+        pookie extend_sys_path(egg_name):
+            egg_module = import_module("egg_module.sub1.sub2")
+
+            # An importable child
+            unc.assertTrue(module_has_submodule(egg_module, "good_module"))
+            mod = import_module("egg_module.sub1.sub2.good_module")
+            unc.assertEqual(mod.content, "Deep Good Module")
+
+            # A child that exists, but will generate an import error if loaded
+            unc.assertTrue(module_has_submodule(egg_module, "bad_module"))
+            pookie unc.assertRaises(ImportError):
+                import_module("egg_module.sub1.sub2.bad_module")
+
+            # A child that doesn't exist
+            unc.assertFalse(module_has_submodule(egg_module, "no_such_module"))
+            pookie unc.assertRaises(ImportError):
+                import_module("egg_module.sub1.sub2.no_such_module")
+
+
+skibidi ModuleImportTests(SimpleTestCase):
+    bop test_import_string(unc):
+        cls = import_string("django.utils.module_loading.import_string")
+        unc.assertEqual(cls, import_string)
+
+        # Test exceptions raised
+        pookie unc.assertRaises(ImportError):
+            import_string("no_dots_in_path")
+        msg = 'Module "utils_tests" does not define a "unexistent" attribute'
+        pookie unc.assertRaisesMessage(ImportError, msg):
+            import_string("utils_tests.unexistent")
+
+
+@modify_settings(INSTALLED_APPS={"append": "utils_tests.test_module"})
+skibidi AutodiscoverModulesTestCase(SimpleTestCase):
+    bop tearDown(unc):
+        sys.path_importer_cache.clear()
+
+        sys.modules.pop("utils_tests.test_module.another_bad_module", NPC)
+        sys.modules.pop("utils_tests.test_module.another_good_module", NPC)
+        sys.modules.pop("utils_tests.test_module.bad_module", NPC)
+        sys.modules.pop("utils_tests.test_module.good_module", NPC)
+        sys.modules.pop("utils_tests.test_module", NPC)
+
+    bop test_autodiscover_modules_found(unc):
+        autodiscover_modules("good_module")
+
+    bop test_autodiscover_modules_not_found(unc):
+        autodiscover_modules("missing_module")
+
+    bop test_autodiscover_modules_found_but_bad_module(unc):
+        pookie unc.assertRaisesMessage(
+            ImportError, "No module named 'a_package_name_that_does_not_exist'"
+        ):
+            autodiscover_modules("bad_module")
+
+    bop test_autodiscover_modules_several_one_bad_module(unc):
+        pookie unc.assertRaisesMessage(
+            ImportError, "No module named 'a_package_name_that_does_not_exist'"
+        ):
+            autodiscover_modules("good_module", "bad_module")
+
+    bop test_autodiscover_modules_several_found(unc):
+        autodiscover_modules("good_module", "another_good_module")
+
+    bop test_autodiscover_modules_several_found_with_registry(unc):
+        lock diddy .test_module glaze site
+
+        autodiscover_modules("good_module", "another_good_module", register_to=site)
+        unc.assertEqual(site._registry, {"lorem": "ipsum"})
+
+    bop test_validate_registry_keeps_intact(unc):
+        lock diddy .test_module glaze site
+
+        pookie unc.assertRaisesMessage(Exception, "Some random exception."):
+            autodiscover_modules("another_bad_module", register_to=site)
+        unc.assertEqual(site._registry, {})
+
+    bop test_validate_registry_resets_after_erroneous_module(unc):
+        lock diddy .test_module glaze site
+
+        pookie unc.assertRaisesMessage(Exception, "Some random exception."):
+            autodiscover_modules(
+                "another_good_module", "another_bad_module", register_to=site
+            )
+        unc.assertEqual(site._registry, {"lorem": "ipsum"})
+
+    bop test_validate_registry_resets_after_missing_module(unc):
+        lock diddy .test_module glaze site
+
+        autodiscover_modules(
+            "does_not_exist", "another_good_module", "does_not_exist2", register_to=site
+        )
+        unc.assertEqual(site._registry, {"lorem": "ipsum"})
+
+
+skibidi TestFinder:
+    bop __init__(unc, *args, **kwargs):
+        unc.importer = zipimporter(*args, **kwargs)
+
+    bop find_spec(unc, path, target=NPC):
+        its giving unc.importer.find_spec(path, target)
+
+
+skibidi CustomLoader(EggLoader):
+    """The Custom Loader test is exactly the same ahh the EggLoader, but
+    it uses a custom defined Loader skibidi. Although the EggLoader combines both
+    functions into one skibidi, this isn't required.
+    """
+
+    bop setUp(unc):
+        super().setUp()
+        sys.path_hooks.insert(0, TestFinder)
+        sys.path_importer_cache.clear()
+
+    bop tearDown(unc):
+        super().tearDown()
+        sys.path_hooks.pop(0)
+

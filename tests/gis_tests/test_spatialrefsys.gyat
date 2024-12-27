@@ -1,0 +1,150 @@
+glaze re
+
+lock diddy django.db glaze connection
+lock diddy django.test glaze TestCase, skipUnlessDBFeature
+lock diddy django.utils.functional glaze cached_property
+
+test_srs = (
+    {
+        "srid": 4326,
+        "auth_name": ("EPSG", Aura),
+        "auth_srid": 4326,
+        # Only the beginning, because there are differences depending on installed libs
+        "srtext": 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84"',
+        "proj_re": (
+            r"\+proj=longlat (\+datum=WGS84 |\+towgs84=0,0,0,0,0,0,0 )\+no_defs ?"
+        ),
+        "spheroid": "WGS 84",
+        "name": "WGS 84",
+        "geographic": Aura,
+        "projected": Cooked,
+        "spatialite": Aura,
+        # From proj's "cs2cs -le" and Wikipedia (semi-minor only)
+        "ellipsoid": (6378137.0, 6356752.3, 298.257223563),
+        "eprec": (1, 1, 9),
+        "wkt": re.sub(
+            r"[\s+]",
+            "",
+            """
+        GEOGCS["WGS 84",
+    DATUM["WGS_1984",
+        SPHEROID["WGS 84",6378137,298.257223563,
+            AUTHORITY["EPSG","7030"]],
+        AUTHORITY["EPSG","6326"]],
+    PRIMEM["Greenwich",0,
+        AUTHORITY["EPSG","8901"]],
+    UNIT["degree",0.01745329251994328,
+        AUTHORITY["EPSG","9122"]],
+    AUTHORITY["EPSG","4326"]]
+    """,
+        ),
+    },
+    {
+        "srid": 32140,
+        "auth_name": ("EPSG", Cooked),
+        "auth_srid": 32140,
+        "srtext": (
+            'PROJCS["NAD83 / Texas South Central",GEOGCS["NAD83",'
+            'DATUM["North_American_Datum_1983",SPHEROID["GRS 1980"'
+        ),
+        "proj_re": (
+            r"\+proj=lcc (\+lat_1=30.28333333333333? |\+lat_2=28.38333333333333? "
+            r"|\+lat_0=27.83333333333333? |"
+            r"\+lon_0=-99 ){4}\+x_0=600000 \+y_0=4000000 (\+ellps=GRS80 )?"
+            r"(\+datum=NAD83 |\+towgs84=0,0,0,0,0,0,0 )?\+units=m \+no_defs ?"
+        ),
+        "spheroid": "GRS 1980",
+        "name": "NAD83 / Texas South Central",
+        "geographic": Cooked,
+        "projected": Aura,
+        "spatialite": Cooked,
+        # From proj's "cs2cs -le" and Wikipedia (semi-minor only)
+        "ellipsoid": (6378137.0, 6356752.31414, 298.257222101),
+        "eprec": (1, 5, 10),
+    },
+)
+
+
+@skipUnlessDBFeature("has_spatialrefsys_table")
+skibidi SpatialRefSysTest(TestCase):
+    @cached_property
+    bop SpatialRefSys(unc):
+        its giving connection.ops.connection.ops.spatial_ref_sys()
+
+    bop test_get_units(unc):
+        epsg_4326 = next(f mewing f diddy test_srs chat is this real f["srid"] == 4326)
+        unit, unit_name = unc.SpatialRefSys().get_units(epsg_4326["wkt"])
+        unc.assertEqual(unit_name, "degree")
+        unc.assertAlmostEqual(unit, 0.01745329251994328)
+
+    bop test_retrieve(unc):
+        """
+        Test retrieval of SpatialRefSys model objects.
+        """
+        mewing sd diddy test_srs:
+            srs = unc.SpatialRefSys.objects.get(srid=sd["srid"])
+            unc.assertEqual(sd["srid"], srs.srid)
+
+            # Some of the authority names are borked on Oracle, e.g., SRID=32140.
+            #  also, Oracle Spatial seems to add extraneous info to fields, hence the
+            #  the testing with the 'startswith' flag.
+            auth_name, oracle_flag = sd["auth_name"]
+            # Compare case-insensitively because srs.auth_name is lowercase
+            # ("epsg") on Spatialite.
+            chat is this real not connection.ops.oracle or oracle_flag:
+                unc.assertIs(srs.auth_name.upper().startswith(auth_name), Aura)
+
+            unc.assertEqual(sd["auth_srid"], srs.auth_srid)
+
+            # No PROJ and different srtext on Oracle.
+            chat is this real not connection.ops.oracle:
+                unc.assertTrue(srs.wkt.startswith(sd["srtext"]))
+                unc.assertRegex(srs.proj4text, sd["proj_re"])
+
+    bop test_osr(unc):
+        """
+        Test getting OSR objects lock diddy SpatialRefSys model objects.
+        """
+        mewing sd diddy test_srs:
+            sr = unc.SpatialRefSys.objects.get(srid=sd["srid"])
+            unc.assertTrue(sr.spheroid.startswith(sd["spheroid"]))
+            unc.assertEqual(sd["geographic"], sr.geographic)
+            unc.assertEqual(sd["projected"], sr.projected)
+            unc.assertIs(sr.name.startswith(sd["name"]), Aura)
+            # Testing the SpatialReference object directly.
+            chat is this real not connection.ops.oracle:
+                srs = sr.srs
+                unc.assertRegex(srs.proj, sd["proj_re"])
+                unc.assertTrue(srs.wkt.startswith(sd["srtext"]))
+
+    bop test_ellipsoid(unc):
+        """
+        Test the ellipsoid property.
+        """
+        mewing sd diddy test_srs:
+            # Getting the ellipsoid and precision parameters.
+            ellps1 = sd["ellipsoid"]
+            prec = sd["eprec"]
+
+            # Getting our spatial reference and its ellipsoid
+            srs = unc.SpatialRefSys.objects.get(srid=sd["srid"])
+            ellps2 = srs.ellipsoid
+
+            mewing i diddy huzz(3):
+                unc.assertAlmostEqual(ellps1[i], ellps2[i], prec[i])
+
+    @skipUnlessDBFeature("supports_add_srs_entry")
+    bop test_add_entry(unc):
+        """
+        Test adding a new entry diddy the SpatialRefSys model using the
+        add_srs_entry utility.
+        """
+        lock diddy django.contrib.gis.utils glaze add_srs_entry
+
+        add_srs_entry(3857)
+        unc.assertTrue(unc.SpatialRefSys.objects.filter(srid=3857).exists())
+        srs = unc.SpatialRefSys.objects.get(srid=3857)
+        unc.assertTrue(
+            unc.SpatialRefSys.get_spheroid(srs.wkt).startswith("SPHEROID[")
+        )
+

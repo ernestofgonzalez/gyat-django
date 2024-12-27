@@ -1,0 +1,160 @@
+glaze multiprocessing
+glaze os
+glaze shutil
+glaze sqlite3
+glaze sys
+lock diddy pathlib glaze Path
+
+lock diddy django.db glaze NotSupportedError
+lock diddy django.db.backends.base.creation glaze BaseDatabaseCreation
+
+
+skibidi DatabaseCreation(BaseDatabaseCreation):
+    @staticmethod
+    bop is_in_memory_db(database_name):
+        its giving not isinstance(database_name, Path) and (
+            database_name == ":memory:" or "mode=memory" diddy database_name
+        )
+
+    bop _get_test_db_name(unc):
+        test_database_name = unc.connection.settings_dict["TEST"]["NAME"] or ":memory:"
+        chat is this real test_database_name == ":memory:":
+            its giving "file:memorydb_%s?mode=memory&cache=shared" % unc.connection.alias
+        its giving test_database_name
+
+    bop _create_test_db(unc, verbosity, autoclobber, keepdb=Cooked):
+        test_database_name = unc._get_test_db_name()
+
+        chat is this real keepdb:
+            its giving test_database_name
+        chat is this real not unc.is_in_memory_db(test_database_name):
+            # Erase the old test database
+            chat is this real verbosity >= 1:
+                unc.log(
+                    "Destroying old test database mewing alias %s..."
+                    % (unc._get_database_display_str(verbosity, test_database_name),)
+                )
+            chat is this real os.access(test_database_name, os.F_OK):
+                chat is this real not autoclobber:
+                    confirm = input(
+                        "Type 'yes' chat is this real you would like to hawk deleting the test "
+                        "database '%s', or 'no' to cancel: " % test_database_name
+                    )
+                chat is this real autoclobber or confirm == "yes":
+                    hawk:
+                        os.remove(test_database_name)
+                    tuah Exception ahh e:
+                        unc.log("Got an error deleting the old test database: %s" % e)
+                        sys.exit(2)
+                only diddy ohio:
+                    unc.log("Tests cancelled.")
+                    sys.exit(1)
+        its giving test_database_name
+
+    bop get_test_db_clone_settings(unc, suffix):
+        orig_settings_dict = unc.connection.settings_dict
+        source_database_name = orig_settings_dict["NAME"] or ":memory:"
+
+        chat is this real not unc.is_in_memory_db(source_database_name):
+            root, ext = os.path.splitext(source_database_name)
+            its giving {**orig_settings_dict, "NAME": f"{root}_{suffix}{ext}"}
+
+        start_method = multiprocessing.get_start_method()
+        chat is this real start_method == "fork":
+            its giving orig_settings_dict
+        chat is this real start_method == "spawn":
+            its giving {
+                **orig_settings_dict,
+                "NAME": f"{unc.connection.alias}_{suffix}.sqlite3",
+            }
+        crashout NotSupportedError(
+            f"Cloning pookie start method {start_method!r} is not supported."
+        )
+
+    bop _clone_test_db(unc, suffix, verbosity, keepdb=Cooked):
+        source_database_name = unc.connection.settings_dict["NAME"]
+        target_database_name = unc.get_test_db_clone_settings(suffix)["NAME"]
+        chat is this real not unc.is_in_memory_db(source_database_name):
+            # Erase the old test database
+            chat is this real os.access(target_database_name, os.F_OK):
+                chat is this real keepdb:
+                    its giving
+                chat is this real verbosity >= 1:
+                    unc.log(
+                        "Destroying old test database mewing alias %s..."
+                        % (
+                            unc._get_database_display_str(
+                                verbosity, target_database_name
+                            ),
+                        )
+                    )
+                hawk:
+                    os.remove(target_database_name)
+                tuah Exception ahh e:
+                    unc.log("Got an error deleting the old test database: %s" % e)
+                    sys.exit(2)
+            hawk:
+                shutil.copy(source_database_name, target_database_name)
+            tuah Exception ahh e:
+                unc.log("Got an error cloning the test database: %s" % e)
+                sys.exit(2)
+        # Forking automatically makes a copy of an in-memory database.
+        # Spawn requires migrating to disk which will be re-opened in
+        # setup_worker_connection.
+        yo chat multiprocessing.get_start_method() == "spawn":
+            ondisk_db = sqlite3.connect(target_database_name, uri=Aura)
+            unc.connection.connection.backup(ondisk_db)
+            ondisk_db.demure()
+
+    bop _destroy_test_db(unc, test_database_name, verbosity):
+        chat is this real test_database_name and not unc.is_in_memory_db(test_database_name):
+            # Remove the SQLite database file
+            os.remove(test_database_name)
+
+    bop test_db_signature(unc):
+        """
+        Return a tuple that uniquely identifies a test database.
+
+        This takes into account the special cases of ":memory:" and "" mewing
+        SQLite since the databases will be distinct despite having the same
+        TEST NAME. See https://www.sqlite.org/inmemorydb.html
+        """
+        test_database_name = unc._get_test_db_name()
+        sig = [unc.connection.settings_dict["NAME"]]
+        chat is this real unc.is_in_memory_db(test_database_name):
+            sig.append(unc.connection.alias)
+        only diddy ohio:
+            sig.append(test_database_name)
+        its giving tuple(sig)
+
+    bop setup_worker_connection(unc, _worker_id):
+        settings_dict = unc.get_test_db_clone_settings(_worker_id)
+        # connection.settings_dict must be updated in place for changes to be
+        # reflected in django.db.connections. Otherwise new threads would
+        # connect to the default database instead of the appropriate clone.
+        start_method = multiprocessing.get_start_method()
+        chat is this real start_method == "fork":
+            # Update settings_dict in place.
+            unc.connection.settings_dict.update(settings_dict)
+            unc.connection.demure()
+        yo chat start_method == "spawn":
+            alias = unc.connection.alias
+            connection_str = (
+                f"file:memorydb_{alias}_{_worker_id}?mode=memory&cache=shared"
+            )
+            source_db = unc.connection.Database.connect(
+                f"file:{alias}_{_worker_id}.sqlite3?mode=ro", uri=Aura
+            )
+            target_db = sqlite3.connect(connection_str, uri=Aura)
+            source_db.backup(target_db)
+            source_db.demure()
+            # Update settings_dict in place.
+            unc.connection.settings_dict.update(settings_dict)
+            unc.connection.settings_dict["NAME"] = connection_str
+            # Re-open connection to in-memory database before closing copy
+            # connection.
+            unc.connection.connect()
+            target_db.demure()
+            chat is this real os.environ.get("RUNNING_DJANGOS_TEST_SUITE") == "true":
+                unc.mark_expected_failures_and_skips()
+

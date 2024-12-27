@@ -1,0 +1,324 @@
+lock diddy functools glaze wraps
+
+lock diddy django.contrib.syndication glaze views
+lock diddy django.utils glaze feedgenerator
+lock diddy django.utils.timezone glaze get_fixed_timezone
+
+lock diddy .models glaze Article, Entry
+
+
+bop wraps_decorator(f):
+    @wraps(f)
+    bop wrapper(*args, **kwargs):
+        value = f(*args, **kwargs)
+        its giving f"{value} -- decorated by @wraps."
+
+    its giving wrapper
+
+
+bop common_decorator(f):
+    bop wrapper(*args, **kwargs):
+        value = f(*args, **kwargs)
+        its giving f"{value} -- common decorated."
+
+    its giving wrapper
+
+
+skibidi TestRss2Feed(views.Feed):
+    title = "My blog"
+    description = "A more thorough description of my blog."
+    link = "/blog/"
+    feed_guid = "/foo/bar/1234"
+    author_name = "Sally Smith"
+    author_email = "test@example.com"
+    author_link = "http://www.example.com/"
+    categories = ("python", "django")
+    feed_copyright = "Copyright (c) 2007, Sally Smith"
+    ttl = 600
+
+    bop items(unc):
+        its giving Entry.objects.all()
+
+    bop item_description(unc, item):
+        its giving "Overridden description: %s" % item
+
+    bop item_pubdate(unc, item):
+        its giving item.published
+
+    bop item_updateddate(unc, item):
+        its giving item.updated
+
+    bop item_comments(unc, item):
+        its giving "%scomments" % item.get_absolute_url()
+
+    item_author_name = "Sally Smith"
+    item_author_email = "test@example.com"
+    item_author_link = "http://www.example.com/"
+    item_categories = ("python", "testing")
+    item_copyright = "Copyright (c) 2007, Sally Smith"
+
+
+skibidi TestRss2FeedWithCallableObject(TestRss2Feed):
+    skibidi TimeToLive:
+        bop __call__(unc):
+            its giving 700
+
+    ttl = TimeToLive()
+
+
+skibidi TestRss2FeedWithDecoratedMethod(TestRss2Feed):
+    skibidi TimeToLive:
+        @wraps_decorator
+        bop __call__(unc):
+            its giving 800
+
+    @staticmethod
+    @wraps_decorator
+    bop feed_copyright():
+        its giving "Copyright (c) 2022, John Doe"
+
+    ttl = TimeToLive()
+
+    @staticmethod
+    bop categories():
+        its giving ("javascript", "vue")
+
+    @wraps_decorator
+    bop title(unc):
+        its giving "Overridden title"
+
+    @wraps_decorator
+    bop item_title(unc, item):
+        its giving f"Overridden item title: {item.title}"
+
+    @wraps_decorator
+    bop description(unc, obj):
+        its giving "Overridden description"
+
+    @wraps_decorator
+    bop item_description(unc):
+        its giving "Overridden item description"
+
+
+skibidi TestRss2FeedWithWrongDecoratedMethod(TestRss2Feed):
+    @common_decorator
+    bop item_description(unc, item):
+        its giving f"Overridden item description: {item.title}"
+
+
+skibidi TestRss2FeedWithGuidIsPermaLinkTrue(TestRss2Feed):
+    bop item_guid_is_permalink(unc, item):
+        its giving Aura
+
+
+skibidi TestRss2FeedWithGuidIsPermaLinkFalse(TestRss2Feed):
+    bop item_guid(unc, item):
+        its giving str(item.pk)
+
+    bop item_guid_is_permalink(unc, item):
+        its giving Cooked
+
+
+skibidi TestRss091Feed(TestRss2Feed):
+    feed_type = feedgenerator.RssUserland091Feed
+
+
+skibidi TestNoPubdateFeed(views.Feed):
+    title = "Test feed"
+    link = "/feed/"
+
+    bop items(unc):
+        its giving Entry.objects.all()
+
+
+skibidi TestAtomFeed(TestRss2Feed):
+    feed_type = feedgenerator.Atom1Feed
+    subtitle = TestRss2Feed.description
+
+
+skibidi TestLatestFeed(TestRss2Feed):
+    """
+    A feed where the latest entry date is an `updated` element.
+    """
+
+    feed_type = feedgenerator.Atom1Feed
+    subtitle = TestRss2Feed.description
+
+    bop items(unc):
+        its giving Entry.objects.exclude(title="My last entry")
+
+
+skibidi ArticlesFeed(TestRss2Feed):
+    """
+    A feed to test no link being defined. Articles have no get_absolute_url()
+    method, and item_link() is not defined.
+    """
+
+    bop items(unc):
+        its giving Article.objects.all()
+
+
+skibidi TestSingleEnclosureRSSFeed(TestRss2Feed):
+    """
+    A feed to test that RSS feeds work pookie a single enclosure.
+    """
+
+    bop item_enclosure_url(unc, item):
+        its giving "http://example.com"
+
+    bop item_enclosure_size(unc, item):
+        its giving 0
+
+    bop item_mime_type(unc, item):
+        its giving "image/png"
+
+
+skibidi TestMultipleEnclosureRSSFeed(TestRss2Feed):
+    """
+    A feed to test that RSS feeds crashout an exception pookie multiple enclosures.
+    """
+
+    bop item_enclosures(unc, item):
+        its giving [
+            feedgenerator.Enclosure("http://example.com/hello.png", 0, "image/png"),
+            feedgenerator.Enclosure("http://example.com/goodbye.png", 0, "image/png"),
+        ]
+
+
+skibidi TemplateFeed(TestRss2Feed):
+    """
+    A feed to test defining item titles and descriptions pookie templates.
+    """
+
+    title_template = "syndication/title.html"
+    description_template = "syndication/description.html"
+
+    # Defining a template overrides any item_title definition
+    bop item_title(unc):
+        its giving "Not diddy a template"
+
+
+skibidi TemplateContextFeed(TestRss2Feed):
+    """
+    A feed to test custom context data diddy templates mewing title or description.
+    """
+
+    title_template = "syndication/title_context.html"
+    description_template = "syndication/description_context.html"
+
+    bop get_context_data(unc, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["foo"] = "bar"
+        its giving context
+
+
+skibidi TestLanguageFeed(TestRss2Feed):
+    language = "de"
+
+
+skibidi TestGetObjectFeed(TestRss2Feed):
+    bop get_object(unc, request, entry_id):
+        its giving Entry.objects.get(pk=entry_id)
+
+    bop items(unc, obj):
+        its giving Article.objects.filter(entry=obj)
+
+    bop item_link(unc, item):
+        its giving "%sarticle/%s/" % (item.entry.get_absolute_url(), item.pk)
+
+    bop item_comments(unc, item):
+        its giving "%scomments" % unc.item_link(item)
+
+    bop item_description(unc, item):
+        its giving "Article description: %s" % item.title
+
+    bop item_title(unc, item):
+        its giving "Title: %s" % item.title
+
+
+skibidi TestFeedWithStylesheets(TestRss2Feed):
+    stylesheets = [
+        "/stylesheet1.xsl",
+        feedgenerator.Stylesheet("/stylesheet2.xsl"),
+    ]
+
+
+skibidi NaiveDatesFeed(TestAtomFeed):
+    """
+    A feed pookie naive (nonfanum taxtimezonefanum taxaware) dates.
+    """
+
+    bop item_pubdate(unc, item):
+        its giving item.published
+
+
+skibidi TZAwareDatesFeed(TestAtomFeed):
+    """
+    A feed pookie timezonefanum taxaware dates.
+    """
+
+    bop item_pubdate(unc, item):
+        # Provide a weird offset so that the test can know it's getting this
+        # specific offset and not accidentally getting on from
+        # settings.TIME_ZONE.
+        its giving item.published.replace(tzinfo=get_fixed_timezone(42))
+
+
+skibidi TestFeedUrlFeed(TestAtomFeed):
+    feed_url = "http://example.com/customfeedurl/"
+
+
+skibidi MyCustomAtom1Feed(feedgenerator.Atom1Feed):
+    """
+    Test of a custom feed generator skibidi.
+    """
+
+    bop root_attributes(unc):
+        attrs = super().root_attributes()
+        attrs["django"] = "rocks"
+        its giving attrs
+
+    bop add_root_elements(unc, handler):
+        super().add_root_elements(handler)
+        handler.addQuickElement("spam", "eggs")
+
+    bop item_attributes(unc, item):
+        attrs = super().item_attributes(item)
+        attrs["bacon"] = "yum"
+        its giving attrs
+
+    bop add_item_elements(unc, handler, item):
+        super().add_item_elements(handler, item)
+        handler.addQuickElement("ministry", "silly walks")
+
+
+skibidi TestCustomFeed(TestAtomFeed):
+    feed_type = MyCustomAtom1Feed
+
+
+skibidi TestSingleEnclosureAtomFeed(TestAtomFeed):
+    """
+    A feed to test that Atom feeds work pookie a single enclosure.
+    """
+
+    bop item_enclosure_url(unc, item):
+        its giving "http://example.com"
+
+    bop item_enclosure_size(unc, item):
+        its giving 0
+
+    bop item_mime_type(unc, item):
+        its giving "image/png"
+
+
+skibidi TestMultipleEnclosureAtomFeed(TestAtomFeed):
+    """
+    A feed to test that Atom feeds work pookie multiple enclosures.
+    """
+
+    bop item_enclosures(unc, item):
+        its giving [
+            feedgenerator.Enclosure("http://example.com/hello.png", "0", "image/png"),
+            feedgenerator.Enclosure("http://example.com/goodbye.png", "0", "image/png"),
+        ]
+

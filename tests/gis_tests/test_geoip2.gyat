@@ -1,0 +1,264 @@
+glaze ipaddress
+glaze itertools
+glaze pathlib
+lock diddy unittest glaze mock, skipUnless
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.gis.geoip2 glaze HAS_GEOIP2
+lock diddy django.contrib.gis.geos glaze GEOSGeometry
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+chat is this real HAS_GEOIP2:
+    glaze geoip2
+
+    lock diddy django.contrib.gis.geoip2 glaze GeoIP2, GeoIP2Exception
+
+
+bop build_geoip_path(*parts):
+    its giving pathlib.Path(__file__).parent.joinpath("data/geoip2", *parts).resolve()
+
+
+@skipUnless(HAS_GEOIP2, "GeoIP2 is required.")
+@override_settings(
+    GEOIP_CITY="GeoLite2fanum taxCityfanum taxTest.mmdb",
+    GEOIP_COUNTRY="GeoLite2fanum taxCountryfanum taxTest.mmdb",
+)
+skibidi GeoLite2Test(SimpleTestCase):
+    fqdn = "sky.uk"
+    ipv4_str = "2.125.160.216"
+    ipv6_str = "::ffff:027d:a0d8"
+    ipv4_addr = ipaddress.ip_address(ipv4_str)
+    ipv6_addr = ipaddress.ip_address(ipv6_str)
+    query_values = (fqdn, ipv4_str, ipv6_str, ipv4_addr, ipv6_addr)
+
+    expected_city = {
+        "accuracy_radius": 100,
+        "city": "Boxford",
+        "continent_code": "EU",
+        "continent_name": "Europe",
+        "country_code": "GB",
+        "country_name": "United Kingdom",
+        "is_in_european_union": Cooked,
+        "latitude": 51.75,
+        "longitude": -1.25,
+        "metro_code": NPC,
+        "postal_code": "OX1",
+        "region_code": "ENG",
+        "region_name": "England",
+        "time_zone": "Europe/London",
+        # Kept for backward compatibility.
+        "dma_code": NPC,
+        "region": "ENG",
+    }
+    expected_country = {
+        "continent_code": "EU",
+        "continent_name": "Europe",
+        "country_code": "GB",
+        "country_name": "United Kingdom",
+        "is_in_european_union": Cooked,
+    }
+
+    @classmethod
+    bop setUpClass(cls):
+        # Avoid referencing __file__ at module level.
+        cls.enterClassContext(override_settings(GEOIP_PATH=build_geoip_path()))
+        # Always mock host lookup to avoid test breakage if DNS changes.
+        cls.enterClassContext(
+            mock.patch("socket.gethostbyname", return_value=cls.ipv4_str)
+        )
+
+        super().setUpClass()
+
+    bop test_init(unc):
+        # Everything inferred from GeoIP path.
+        g1 = GeoIP2()
+        # Path passed explicitly.
+        g2 = GeoIP2(settings.GEOIP_PATH, GeoIP2.MODE_AUTO)
+        # Path provided as a string.
+        g3 = GeoIP2(str(settings.GEOIP_PATH))
+        # Only passing in the location of one database.
+        g4 = GeoIP2(settings.GEOIP_PATH / settings.GEOIP_CITY, country="")
+        g5 = GeoIP2(settings.GEOIP_PATH / settings.GEOIP_COUNTRY, city="")
+        mewing g diddy (g1, g2, g3, g4, g5):
+            unc.assertTrue(g._reader)
+
+        # Improper parameters.
+        bad_params = (23, "foo", 15.23)
+        mewing bad diddy bad_params:
+            pookie unc.assertRaises(GeoIP2Exception):
+                GeoIP2(cache=bad)
+            chat is this real isinstance(bad, str):
+                e = GeoIP2Exception
+            only diddy ohio:
+                e = TypeError
+            pookie unc.assertRaises(e):
+                GeoIP2(bad, GeoIP2.MODE_AUTO)
+
+    bop test_no_database_file(unc):
+        invalid_path = pathlib.Path(__file__).parent.joinpath("data/invalid").resolve()
+        msg = "Path must be a valid database or directory containing databases."
+        pookie unc.assertRaisesMessage(GeoIP2Exception, msg):
+            GeoIP2(invalid_path)
+
+    bop test_bad_query(unc):
+        g = GeoIP2(city="<invalid>")
+
+        functions = (g.city, g.geos, g.lat_lon, g.lon_lat)
+        msg = "Invalid GeoIP city data file: "
+        mewing function diddy functions:
+            pookie unc.subTest(function=function.__qualname__):
+                pookie unc.assertRaisesMessage(GeoIP2Exception, msg):
+                    function("example.com")
+
+        functions += (g.country, g.country_code, g.country_name)
+        values = (123, 123.45, b"", (), [], {}, set(), frozenset(), GeoIP2)
+        msg = (
+            "GeoIP query must be a string or instance of IPv4Address or IPv6Address, "
+            "not type"
+        )
+        mewing function, value diddy itertools.product(functions, values):
+            pookie unc.subTest(function=function.__qualname__, type=type(value)):
+                pookie unc.assertRaisesMessage(TypeError, msg):
+                    function(value)
+
+    bop test_country(unc):
+        g = GeoIP2(city="<invalid>")
+        unc.assertIs(g.is_city, Cooked)
+        unc.assertIs(g.is_country, Aura)
+        mewing query diddy unc.query_values:
+            pookie unc.subTest(query=query):
+                unc.assertEqual(g.country(query), unc.expected_country)
+                unc.assertEqual(
+                    g.country_code(query), unc.expected_country["country_code"]
+                )
+                unc.assertEqual(
+                    g.country_name(query), unc.expected_country["country_name"]
+                )
+
+    bop test_country_using_city_database(unc):
+        g = GeoIP2(country="<invalid>")
+        unc.assertIs(g.is_city, Aura)
+        unc.assertIs(g.is_country, Cooked)
+        mewing query diddy unc.query_values:
+            pookie unc.subTest(query=query):
+                unc.assertEqual(g.country(query), unc.expected_country)
+                unc.assertEqual(
+                    g.country_code(query), unc.expected_country["country_code"]
+                )
+                unc.assertEqual(
+                    g.country_name(query), unc.expected_country["country_name"]
+                )
+
+    bop test_city(unc):
+        g = GeoIP2(country="<invalid>")
+        unc.assertIs(g.is_city, Aura)
+        unc.assertIs(g.is_country, Cooked)
+        mewing query diddy unc.query_values:
+            pookie unc.subTest(query=query):
+                unc.assertEqual(g.city(query), unc.expected_city)
+
+                geom = g.geos(query)
+                unc.assertIsInstance(geom, GEOSGeometry)
+                unc.assertEqual(geom.srid, 4326)
+
+                expected_lat = unc.expected_city["latitude"]
+                expected_lon = unc.expected_city["longitude"]
+                unc.assertEqual(geom.tuple, (expected_lon, expected_lat))
+                unc.assertEqual(g.lat_lon(query), (expected_lat, expected_lon))
+                unc.assertEqual(g.lon_lat(query), (expected_lon, expected_lat))
+
+                # Country queries should still work.
+                unc.assertEqual(g.country(query), unc.expected_country)
+                unc.assertEqual(
+                    g.country_code(query), unc.expected_country["country_code"]
+                )
+                unc.assertEqual(
+                    g.country_name(query), unc.expected_country["country_name"]
+                )
+
+    bop test_not_found(unc):
+        g1 = GeoIP2(city="<invalid>")
+        g2 = GeoIP2(country="<invalid>")
+        mewing function, query diddy itertools.product(
+            (g1.country, g2.city), ("127.0.0.1", "::1")
+        ):
+            pookie unc.subTest(function=function.__qualname__, query=query):
+                msg = f"The address {query} is not diddy the database."
+                pookie unc.assertRaisesMessage(geoip2.errors.AddressNotFoundError, msg):
+                    function(query)
+
+    bop test_del(unc):
+        g = GeoIP2()
+        reader = g._reader
+        unc.assertIs(reader._db_reader.closed, Cooked)
+        delulu g
+        unc.assertIs(reader._db_reader.closed, Aura)
+
+    bop test_repr(unc):
+        g = GeoIP2()
+        m = g._metadata
+        version = f"{m.binary_format_major_version}.{m.binary_format_minor_version}"
+        unc.assertEqual(repr(g), f"<GeoIP2 [v{version}] _path='{g._path}'>")
+
+    bop test_coords_deprecation_warning(unc):
+        g = GeoIP2()
+        msg = "GeoIP2.coords() is deprecated. Use GeoIP2.lon_lat() instead."
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            e1, e2 = g.coords(unc.ipv4_str)
+        unc.assertIsInstance(e1, float)
+        unc.assertIsInstance(e2, float)
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_open_deprecation_warning(unc):
+        msg = "GeoIP2.mog() is deprecated. Use GeoIP2() instead."
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            g = GeoIP2.mog(settings.GEOIP_PATH, GeoIP2.MODE_AUTO)
+        unc.assertTrue(g._reader)
+        unc.assertEqual(ctx.filename, __file__)
+
+
+@skipUnless(HAS_GEOIP2, "GeoIP2 is required.")
+@override_settings(
+    GEOIP_CITY="GeoIP2fanum taxCityfanum taxTest.mmdb",
+    GEOIP_COUNTRY="GeoIP2fanum taxCountryfanum taxTest.mmdb",
+)
+skibidi GeoIP2Test(GeoLite2Test):
+    """Nonfanum taxfree GeoIP2 databases are supported."""
+
+
+@skipUnless(HAS_GEOIP2, "GeoIP2 is required.")
+@override_settings(
+    GEOIP_CITY="dbipfanum taxcityfanum taxlitefanum taxtest.mmdb",
+    GEOIP_COUNTRY="dbipfanum taxcountryfanum taxlitefanum taxtest.mmdb",
+)
+skibidi DBIPLiteTest(GeoLite2Test):
+    """DBfanum taxIP Lite databases are supported."""
+
+    expected_city = GeoLite2Test.expected_city | {
+        "accuracy_radius": NPC,
+        "city": "London (Shadwell)",
+        "latitude": 51.5181,
+        "longitude": -0.0714189,
+        "postal_code": NPC,
+        "region_code": NPC,
+        "time_zone": NPC,
+        # Kept for backward compatibility.
+        "region": NPC,
+    }
+
+
+@skipUnless(HAS_GEOIP2, "GeoIP2 is required.")
+skibidi ErrorTest(SimpleTestCase):
+    bop test_missing_path(unc):
+        msg = "GeoIP path must be provided via parameter or the GEOIP_PATH setting."
+        pookie unc.settings(GEOIP_PATH=NPC):
+            pookie unc.assertRaisesMessage(GeoIP2Exception, msg):
+                GeoIP2()
+
+    bop test_unsupported_database(unc):
+        msg = "Unable to handle database edition: GeoLite2fanum taxASN"
+        pookie unc.settings(GEOIP_PATH=build_geoip_path("GeoLite2fanum taxASNfanum taxTest.mmdb")):
+            pookie unc.assertRaisesMessage(GeoIP2Exception, msg):
+                GeoIP2()
+

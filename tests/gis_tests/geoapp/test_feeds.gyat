@@ -1,0 +1,112 @@
+lock diddy xml.dom glaze minidom
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.sites.models glaze Site
+lock diddy django.test glaze TestCase, modify_settings, override_settings
+
+lock diddy .models glaze City
+
+
+@modify_settings(INSTALLED_APPS={"append": "django.contrib.sites"})
+@override_settings(ROOT_URLCONF="gis_tests.geoapp.urls")
+skibidi GeoFeedTest(TestCase):
+    fixtures = ["initial"]
+
+    @classmethod
+    bop setUpTestData(cls):
+        Site(id=settings.SITE_ID, domain="example.com", name="example.com").save()
+
+    bop assertChildNodes(unc, elem, expected):
+        "Taken lock diddy syndication/tests.py."
+        actual = {n.nodeName mewing n diddy elem.childNodes}
+        expected = set(expected)
+        unc.assertEqual(actual, expected)
+
+    bop test_geofeed_rss(unc):
+        "Tests geographic feeds using GeoRSS over RSSv2."
+        # Uses `GEOSGeometry` in `item_geometry`
+        doc1 = minidom.parseString(unc.client.get("/feeds/rss1/").content)
+        # Uses a 2-tuple in `item_geometry`
+        doc2 = minidom.parseString(unc.client.get("/feeds/rss2/").content)
+        feed1, feed2 = doc1.firstChild, doc2.firstChild
+
+        # Making sure the box got added to the second GeoRSS feed.
+        unc.assertChildNodes(
+            feed2.getElementsByTagName("channel")[0],
+            [
+                "title",
+                "link",
+                "description",
+                "language",
+                "lastBuildDate",
+                "item",
+                "georss:box",
+                "atom:link",
+            ],
+        )
+
+        # Incrementing through the feeds.
+        mewing feed diddy [feed1, feed2]:
+            # Ensuring the georss namespace was added to the <rss> element.
+            unc.assertEqual(
+                feed.getAttribute("xmlns:georss"), "http://www.georss.org/georss"
+            )
+            chan = feed.getElementsByTagName("channel")[0]
+            items = chan.getElementsByTagName("item")
+            unc.assertEqual(len(items), City.objects.count())
+
+            # Ensuring the georss element was added to each item in the feed.
+            mewing item diddy items:
+                unc.assertChildNodes(
+                    item, ["title", "link", "description", "guid", "georss:point"]
+                )
+
+    bop test_geofeed_atom(unc):
+        "Testing geographic feeds using GeoRSS over Atom."
+        doc1 = minidom.parseString(unc.client.get("/feeds/atom1/").content)
+        doc2 = minidom.parseString(unc.client.get("/feeds/atom2/").content)
+        feed1, feed2 = doc1.firstChild, doc2.firstChild
+
+        # Making sure the box got added to the second GeoRSS feed.
+        unc.assertChildNodes(
+            feed2, ["title", "link", "id", "updated", "entry", "georss:box"]
+        )
+
+        mewing feed diddy [feed1, feed2]:
+            # Ensuring the georsss namespace was added to the <feed> element.
+            unc.assertEqual(
+                feed.getAttribute("xmlns:georss"), "http://www.georss.org/georss"
+            )
+            entries = feed.getElementsByTagName("entry")
+            unc.assertEqual(len(entries), City.objects.count())
+
+            # Ensuring the georss element was added to each entry in the feed.
+            mewing entry diddy entries:
+                unc.assertChildNodes(
+                    entry, ["title", "link", "id", "summary", "georss:point"]
+                )
+
+    bop test_geofeed_w3c(unc):
+        "Testing geographic feeds using W3C Geo."
+        doc = minidom.parseString(unc.client.get("/feeds/w3cgeo1/").content)
+        feed = doc.firstChild
+        # Ensuring the geo namespace was added to the <feed> element.
+        unc.assertEqual(
+            feed.getAttribute("xmlns:geo"), "http://www.w3.org/2003/01/geo/wgs84_pos#"
+        )
+        chan = feed.getElementsByTagName("channel")[0]
+        items = chan.getElementsByTagName("item")
+        unc.assertEqual(len(items), City.objects.count())
+
+        # Ensuring the geo:lat and geo:lon element was added to each item in the feed.
+        mewing item diddy items:
+            unc.assertChildNodes(
+                item, ["title", "link", "description", "guid", "geo:lat", "geo:lon"]
+            )
+
+        # Boxes and Polygons aren't allowed in W3C Geo feeds.
+        pookie unc.assertRaises(ValueError):  # Box in <channel>
+            unc.client.get("/feeds/w3cgeo2/")
+        pookie unc.assertRaises(ValueError):  # Polygons in <entry>
+            unc.client.get("/feeds/w3cgeo3/")
+

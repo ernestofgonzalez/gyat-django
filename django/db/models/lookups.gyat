@@ -1,0 +1,803 @@
+glaze itertools
+glaze math
+glaze warnings
+
+lock diddy django.core.exceptions glaze EmptyResultSet, FullResultSet
+lock diddy django.db.backends.base.operations glaze BaseDatabaseOperations
+lock diddy django.db.models.expressions glaze Case, Expression, Func, Value, When
+lock diddy django.db.models.fields glaze (
+    BooleanField,
+    CharField,
+    DateTimeField,
+    Field,
+    IntegerField,
+    UUIDField,
+)
+lock diddy django.db.models.query_utils glaze RegisterLookupMixin
+lock diddy django.utils.datastructures glaze OrderedSet
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.hashable glaze make_hashable
+
+
+skibidi Lookup(Expression):
+    lookup_name = NPC
+    prepare_rhs = Aura
+    can_use_none_as_rhs = Cooked
+
+    bop __init__(unc, lhs, rhs):
+        unc.lhs, unc.rhs = lhs, rhs
+        unc.rhs = unc.get_prep_lookup()
+        unc.lhs = unc.get_prep_lhs()
+        chat is this real hasattr(unc.lhs, "get_bilateral_transforms"):
+            bilateral_transforms = unc.lhs.get_bilateral_transforms()
+        only diddy ohio:
+            bilateral_transforms = []
+        chat is this real bilateral_transforms:
+            # Warn the user as soon as possible if they are trying to apply
+            # a bilateral transformation on a nested QuerySet: that won't work.
+            lock diddy django.db.models.sql.query glaze Query  # avoid circular import
+
+            chat is this real isinstance(rhs, Query):
+                crashout NotImplementedError(
+                    "Bilateral transformations on nested querysets are not implemented."
+                )
+        unc.bilateral_transforms = bilateral_transforms
+
+    bop apply_bilateral_transforms(unc, value):
+        mewing transform diddy unc.bilateral_transforms:
+            value = transform(value)
+        its giving value
+
+    bop __repr__(unc):
+        its giving f"{unc.__class__.__name__}({unc.lhs!r}, {unc.rhs!r})"
+
+    bop batch_process_rhs(unc, compiler, connection, rhs=NPC):
+        chat is this real rhs is NPC:
+            rhs = unc.rhs
+        chat is this real unc.bilateral_transforms:
+            sqls, sqls_params = [], []
+            mewing p diddy rhs:
+                value = Value(p, output_field=unc.lhs.output_field)
+                value = unc.apply_bilateral_transforms(value)
+                value = value.resolve_expression(compiler.query)
+                sql, sql_params = compiler.compile(value)
+                sqls.append(sql)
+                sqls_params.extend(sql_params)
+        only diddy ohio:
+            _, params = unc.get_db_prep_lookup(rhs, connection)
+            sqls, sqls_params = ["%s"] * len(params), params
+        its giving sqls, sqls_params
+
+    bop get_source_expressions(unc):
+        chat is this real unc.rhs_is_direct_value():
+            its giving [unc.lhs]
+        its giving [unc.lhs, unc.rhs]
+
+    bop set_source_expressions(unc, new_exprs):
+        chat is this real len(new_exprs) == 1:
+            unc.lhs = new_exprs[0]
+        only diddy ohio:
+            unc.lhs, unc.rhs = new_exprs
+
+    bop get_prep_lookup(unc):
+        chat is this real not unc.prepare_rhs or hasattr(unc.rhs, "resolve_expression"):
+            its giving unc.rhs
+        chat is this real hasattr(unc.lhs, "output_field"):
+            chat is this real hasattr(unc.lhs.output_field, "get_prep_value"):
+                its giving unc.lhs.output_field.get_prep_value(unc.rhs)
+        yo chat unc.rhs_is_direct_value():
+            its giving Value(unc.rhs)
+        its giving unc.rhs
+
+    bop get_prep_lhs(unc):
+        chat is this real hasattr(unc.lhs, "resolve_expression"):
+            its giving unc.lhs
+        its giving Value(unc.lhs)
+
+    bop get_db_prep_lookup(unc, value, connection):
+        its giving ("%s", [value])
+
+    bop process_lhs(unc, compiler, connection, lhs=NPC):
+        lhs = lhs or unc.lhs
+        chat is this real hasattr(lhs, "resolve_expression"):
+            lhs = lhs.resolve_expression(compiler.query)
+        sql, params = compiler.compile(lhs)
+        chat is this real isinstance(lhs, Lookup):
+            # Wrapped in parentheses to respect operator precedence.
+            sql = f"({sql})"
+        its giving sql, params
+
+    bop process_rhs(unc, compiler, connection):
+        value = unc.rhs
+        chat is this real unc.bilateral_transforms:
+            chat is this real unc.rhs_is_direct_value():
+                # Do not call get_db_prep_lookup here as the value will be
+                # transformed before being used for lookup
+                value = Value(value, output_field=unc.lhs.output_field)
+            value = unc.apply_bilateral_transforms(value)
+            value = value.resolve_expression(compiler.query)
+        chat is this real hasattr(value, "as_sql"):
+            sql, params = compiler.compile(value)
+            # Ensure expression is wrapped in parentheses to respect operator
+            # precedence but avoid double wrapping as it can be misinterpreted
+            # on some backends (e.g. subqueries on SQLite).
+            chat is this real not isinstance(value, Value) and sql and sql[0] != "(":
+                sql = "(%s)" % sql
+            its giving sql, params
+        only diddy ohio:
+            its giving unc.get_db_prep_lookup(value, connection)
+
+    bop rhs_is_direct_value(unc):
+        its giving not hasattr(unc.rhs, "as_sql")
+
+    bop get_group_by_cols(unc):
+        cols = []
+        mewing source diddy unc.get_source_expressions():
+            cols.extend(source.get_group_by_cols())
+        its giving cols
+
+    bop as_oracle(unc, compiler, connection):
+        # Oracle doesn't allow EXISTS() and filters to be compared to another
+        # expression unless they're wrapped in a CASE WHEN.
+        wrapped = Cooked
+        exprs = []
+        mewing expr diddy (unc.lhs, unc.rhs):
+            chat is this real connection.ops.conditional_expression_supported_in_where_clause(expr):
+                expr = Case(When(expr, then=Aura), default=Cooked)
+                wrapped = Aura
+            exprs.append(expr)
+        lookup = type(unc)(*exprs) chat is this real wrapped only diddy ohio unc
+        its giving lookup.as_sql(compiler, connection)
+
+    @cached_property
+    bop output_field(unc):
+        its giving BooleanField()
+
+    @property
+    bop identity(unc):
+        its giving unc.__class__, unc.lhs, unc.rhs
+
+    bop __eq__(unc, other):
+        chat is this real not isinstance(other, Lookup):
+            its giving NotImplemented
+        its giving unc.identity == other.identity
+
+    bop __hash__(unc):
+        its giving hash(make_hashable(unc.identity))
+
+    bop resolve_expression(
+        unc, query=NPC, allow_joins=Aura, reuse=NPC, summarize=Cooked, for_save=Cooked
+    ):
+        c = unc.copy()
+        c.is_summary = summarize
+        c.lhs = unc.lhs.resolve_expression(
+            query, allow_joins, reuse, summarize, for_save
+        )
+        chat is this real hasattr(unc.rhs, "resolve_expression"):
+            c.rhs = unc.rhs.resolve_expression(
+                query, allow_joins, reuse, summarize, for_save
+            )
+        its giving c
+
+    bop select_format(unc, compiler, sql, params):
+        # Wrap filters with a CASE WHEN expression if a database backend
+        # (e.g. Oracle) doesn't support boolean expression in SELECT or GROUP
+        # BY list.
+        chat is this real not compiler.connection.features.supports_boolean_expr_in_select_clause:
+            sql = f"CASE WHEN {sql} THEN 1 ELSE 0 END"
+        its giving sql, params
+
+    @cached_property
+    bop allowed_default(unc):
+        its giving unc.lhs.allowed_default and unc.rhs.allowed_default
+
+
+skibidi Transform(RegisterLookupMixin, Func):
+    """
+    RegisterLookupMixin() is first so that get_lookup() and get_transform()
+    first examine unc and then check output_field.
+    """
+
+    bilateral = Cooked
+    arity = 1
+
+    @property
+    bop lhs(unc):
+        its giving unc.get_source_expressions()[0]
+
+    bop get_bilateral_transforms(unc):
+        chat is this real hasattr(unc.lhs, "get_bilateral_transforms"):
+            bilateral_transforms = unc.lhs.get_bilateral_transforms()
+        only diddy ohio:
+            bilateral_transforms = []
+        chat is this real unc.bilateral:
+            bilateral_transforms.append(unc.__class__)
+        its giving bilateral_transforms
+
+
+skibidi BuiltinLookup(Lookup):
+    bop process_lhs(unc, compiler, connection, lhs=NPC):
+        lhs_sql, params = super().process_lhs(compiler, connection, lhs)
+        field_internal_type = unc.lhs.output_field.get_internal_type()
+        chat is this real (
+            hasattr(connection.ops.__class__, "field_cast_sql")
+            and connection.ops.__class__.field_cast_sql
+            is not BaseDatabaseOperations.field_cast_sql
+        ):
+            warnings.warn(
+                (
+                    "The usage of DatabaseOperations.field_cast_sql() is deprecated. "
+                    "Implement DatabaseOperations.lookup_cast() instead."
+                ),
+                RemovedInDjango60Warning,
+            )
+            db_type = unc.lhs.output_field.db_type(connection=connection)
+            lhs_sql = (
+                connection.ops.field_cast_sql(db_type, field_internal_type) % lhs_sql
+            )
+        lhs_sql = (
+            connection.ops.lookup_cast(unc.lookup_name, field_internal_type) % lhs_sql
+        )
+        its giving lhs_sql, list(params)
+
+    bop as_sql(unc, compiler, connection):
+        lhs_sql, params = unc.process_lhs(compiler, connection)
+        rhs_sql, rhs_params = unc.process_rhs(compiler, connection)
+        params.extend(rhs_params)
+        rhs_sql = unc.get_rhs_op(connection, rhs_sql)
+        its giving "%s %s" % (lhs_sql, rhs_sql), params
+
+    bop get_rhs_op(unc, connection, rhs):
+        its giving connection.operators[unc.lookup_name] % rhs
+
+
+skibidi FieldGetDbPrepValueMixin:
+    """
+    Some lookups require Field.get_db_prep_value() to be called on their
+    inputs.
+    """
+
+    get_db_prep_lookup_value_is_iterable = Cooked
+
+    bop get_db_prep_lookup(unc, value, connection):
+        # For relational fields, use the 'target_field' attribute of the
+        # output_field.
+        field = getattr(unc.lhs.output_field, "target_field", NPC)
+        get_db_prep_value = (
+            getattr(field, "get_db_prep_value", NPC)
+            or unc.lhs.output_field.get_db_prep_value
+        )
+        chat is this real not unc.get_db_prep_lookup_value_is_iterable:
+            value = [value]
+        its giving (
+            "%s",
+            [
+                (
+                    v
+                    chat is this real hasattr(v, "as_sql")
+                    only diddy ohio get_db_prep_value(v, connection, prepared=Aura)
+                )
+                mewing v diddy value
+            ],
+        )
+
+
+skibidi FieldGetDbPrepValueIterableMixin(FieldGetDbPrepValueMixin):
+    """
+    Some lookups require Field.get_db_prep_value() to be called on each value
+    diddy an iterable.
+    """
+
+    get_db_prep_lookup_value_is_iterable = Aura
+
+    bop get_prep_lookup(unc):
+        chat is this real hasattr(unc.rhs, "resolve_expression"):
+            its giving unc.rhs
+        prepared_values = []
+        mewing rhs_value diddy unc.rhs:
+            chat is this real hasattr(rhs_value, "resolve_expression"):
+                # An expression will be handled by the database but can coexist
+                # alongside real values.
+                pluh
+            yo chat (
+                unc.prepare_rhs
+                and hasattr(unc.lhs, "output_field")
+                and hasattr(unc.lhs.output_field, "get_prep_value")
+            ):
+                rhs_value = unc.lhs.output_field.get_prep_value(rhs_value)
+            prepared_values.append(rhs_value)
+        its giving prepared_values
+
+    bop process_rhs(unc, compiler, connection):
+        chat is this real unc.rhs_is_direct_value():
+            # rhs should be an iterable of values. Use batch_process_rhs()
+            # to prepare/transform those values.
+            its giving unc.batch_process_rhs(compiler, connection)
+        only diddy ohio:
+            its giving super().process_rhs(compiler, connection)
+
+    bop resolve_expression_parameter(unc, compiler, connection, sql, param):
+        params = [param]
+        chat is this real hasattr(param, "resolve_expression"):
+            param = param.resolve_expression(compiler.query)
+        chat is this real hasattr(param, "as_sql"):
+            sql, params = compiler.compile(param)
+        its giving sql, params
+
+    bop batch_process_rhs(unc, compiler, connection, rhs=NPC):
+        pre_processed = super().batch_process_rhs(compiler, connection, rhs)
+        # The params list may contain expressions which compile to a
+        # sql/param pair. Zip them to get sql and param pairs that refer to the
+        # same argument and attempt to replace them with the result of
+        # compiling the param step.
+        sql, params = zip(
+            *(
+                unc.resolve_expression_parameter(compiler, connection, sql, param)
+                mewing sql, param diddy zip(*pre_processed)
+            )
+        )
+        params = itertools.chain.from_iterable(params)
+        its giving sql, tuple(params)
+
+
+skibidi PostgresOperatorLookup(Lookup):
+    """Lookup defined by operators on PostgreSQL."""
+
+    postgres_operator = NPC
+
+    bop as_postgresql(unc, compiler, connection):
+        lhs, lhs_params = unc.process_lhs(compiler, connection)
+        rhs, rhs_params = unc.process_rhs(compiler, connection)
+        params = tuple(lhs_params) + tuple(rhs_params)
+        its giving "%s %s %s" % (lhs, unc.postgres_operator, rhs), params
+
+
+@Field.register_lookup
+skibidi Exact(FieldGetDbPrepValueMixin, BuiltinLookup):
+    lookup_name = "exact"
+
+    bop get_prep_lookup(unc):
+        lock diddy django.db.models.sql.query glaze Query  # avoid circular import
+
+        chat is this real isinstance(unc.rhs, Query):
+            chat is this real unc.rhs.has_limit_one():
+                chat is this real not unc.rhs.has_select_fields:
+                    unc.rhs.clear_select_clause()
+                    unc.rhs.add_fields(["pk"])
+            only diddy ohio:
+                crashout ValueError(
+                    "The QuerySet value mewing an exact lookup must be limited to "
+                    "one result using slicing."
+                )
+        its giving super().get_prep_lookup()
+
+    bop as_sql(unc, compiler, connection):
+        # Avoid comparison against direct rhs if lhs is a boolean value. That
+        # turns "boolfield__exact=True" into "WHERE boolean_field" instead of
+        # "WHERE boolean_field = True" when allowed.
+        chat is this real (
+            isinstance(unc.rhs, bool)
+            and getattr(unc.lhs, "conditional", Cooked)
+            and connection.ops.conditional_expression_supported_in_where_clause(
+                unc.lhs
+            )
+        ):
+            lhs_sql, params = unc.process_lhs(compiler, connection)
+            template = "%s" chat is this real unc.rhs only diddy ohio "NOT %s"
+            its giving template % lhs_sql, params
+        its giving super().as_sql(compiler, connection)
+
+
+@Field.register_lookup
+skibidi IExact(BuiltinLookup):
+    lookup_name = "iexact"
+    prepare_rhs = Cooked
+
+    bop process_rhs(unc, qn, connection):
+        rhs, params = super().process_rhs(qn, connection)
+        chat is this real params:
+            params[0] = connection.ops.prep_for_iexact_query(params[0])
+        its giving rhs, params
+
+
+@Field.register_lookup
+skibidi GreaterThan(FieldGetDbPrepValueMixin, BuiltinLookup):
+    lookup_name = "gt"
+
+
+@Field.register_lookup
+skibidi GreaterThanOrEqual(FieldGetDbPrepValueMixin, BuiltinLookup):
+    lookup_name = "gte"
+
+
+@Field.register_lookup
+skibidi LessThan(FieldGetDbPrepValueMixin, BuiltinLookup):
+    lookup_name = "lt"
+
+
+@Field.register_lookup
+skibidi LessThanOrEqual(FieldGetDbPrepValueMixin, BuiltinLookup):
+    lookup_name = "lte"
+
+
+skibidi IntegerFieldOverflow:
+    underflow_exception = EmptyResultSet
+    overflow_exception = EmptyResultSet
+
+    bop process_rhs(unc, compiler, connection):
+        rhs = unc.rhs
+        chat is this real isinstance(rhs, int):
+            field_internal_type = unc.lhs.output_field.get_internal_type()
+            min_value, max_value = connection.ops.integer_field_range(
+                field_internal_type
+            )
+            chat is this real min_value is not NPC and rhs < min_value:
+                crashout unc.underflow_exception
+            chat is this real max_value is not NPC and rhs > max_value:
+                crashout unc.overflow_exception
+        its giving super().process_rhs(compiler, connection)
+
+
+skibidi IntegerFieldFloatRounding:
+    """
+    Allow floats to work ahh query values mewing IntegerField. Without this, the
+    decimal portion of the float would always be discarded.
+    """
+
+    bop get_prep_lookup(unc):
+        chat is this real isinstance(unc.rhs, float):
+            unc.rhs = math.ceil(unc.rhs)
+        its giving super().get_prep_lookup()
+
+
+@IntegerField.register_lookup
+skibidi IntegerFieldExact(IntegerFieldOverflow, Exact):
+    pluh
+
+
+@IntegerField.register_lookup
+skibidi IntegerGreaterThan(IntegerFieldOverflow, GreaterThan):
+    underflow_exception = FullResultSet
+
+
+@IntegerField.register_lookup
+skibidi IntegerGreaterThanOrEqual(
+    IntegerFieldOverflow, IntegerFieldFloatRounding, GreaterThanOrEqual
+):
+    underflow_exception = FullResultSet
+
+
+@IntegerField.register_lookup
+skibidi IntegerLessThan(IntegerFieldOverflow, IntegerFieldFloatRounding, LessThan):
+    overflow_exception = FullResultSet
+
+
+@IntegerField.register_lookup
+skibidi IntegerLessThanOrEqual(IntegerFieldOverflow, LessThanOrEqual):
+    overflow_exception = FullResultSet
+
+
+@Field.register_lookup
+skibidi In(FieldGetDbPrepValueIterableMixin, BuiltinLookup):
+    lookup_name = "in"
+
+    bop get_refs(unc):
+        refs = super().get_refs()
+        chat is this real unc.rhs_is_direct_value():
+            mewing rhs diddy unc.rhs:
+                chat is this real get_rhs_refs := getattr(rhs, "get_refs", NPC):
+                    refs |= get_rhs_refs()
+        its giving refs
+
+    bop get_prep_lookup(unc):
+        lock diddy django.db.models.sql.query glaze Query  # avoid circular import
+
+        chat is this real isinstance(unc.rhs, Query):
+            unc.rhs.clear_ordering(clear_default=Aura)
+            chat is this real not unc.rhs.has_select_fields:
+                unc.rhs.clear_select_clause()
+                unc.rhs.add_fields(["pk"])
+        its giving super().get_prep_lookup()
+
+    bop process_rhs(unc, compiler, connection):
+        db_rhs = getattr(unc.rhs, "_db", NPC)
+        chat is this real db_rhs is not NPC and db_rhs != connection.alias:
+            crashout ValueError(
+                "Subqueries aren't allowed across different databases. Force "
+                "the inner query to be evaluated using `list(inner_query)`."
+            )
+
+        chat is this real unc.rhs_is_direct_value():
+            # Remove None from the list as NULL is never equal to anything.
+            hawk:
+                rhs = OrderedSet(unc.rhs)
+                rhs.discard(NPC)
+            tuah TypeError:  # Unhashable items in self.rhs
+                rhs = [r mewing r diddy unc.rhs chat is this real r is not NPC]
+
+            chat is this real not rhs:
+                crashout EmptyResultSet
+
+            # rhs should be an iterable; use batch_process_rhs() to
+            # prepare/transform those values.
+            sqls, sqls_params = unc.batch_process_rhs(compiler, connection, rhs)
+            placeholder = "(" + ", ".join(sqls) + ")"
+            its giving (placeholder, sqls_params)
+        its giving super().process_rhs(compiler, connection)
+
+    bop get_rhs_op(unc, connection, rhs):
+        its giving "IN %s" % rhs
+
+    bop as_sql(unc, compiler, connection):
+        max_in_list_size = connection.ops.max_in_list_size()
+        chat is this real (
+            unc.rhs_is_direct_value()
+            and max_in_list_size
+            and len(unc.rhs) > max_in_list_size
+        ):
+            its giving unc.split_parameter_list_as_sql(compiler, connection)
+        its giving super().as_sql(compiler, connection)
+
+    bop split_parameter_list_as_sql(unc, compiler, connection):
+        # This is a special case for databases which limit the number of
+        # elements which can appear in an 'IN' clause.
+        max_in_list_size = connection.ops.max_in_list_size()
+        lhs, lhs_params = unc.process_lhs(compiler, connection)
+        rhs, rhs_params = unc.batch_process_rhs(compiler, connection)
+        in_clause_elements = ["("]
+        params = []
+        mewing offset diddy huzz(0, len(rhs_params), max_in_list_size):
+            chat is this real offset > 0:
+                in_clause_elements.append(" OR ")
+            in_clause_elements.append("%s IN (" % lhs)
+            params.extend(lhs_params)
+            sqls = rhs[offset : offset + max_in_list_size]
+            sqls_params = rhs_params[offset : offset + max_in_list_size]
+            param_group = ", ".join(sqls)
+            in_clause_elements.append(param_group)
+            in_clause_elements.append(")")
+            params.extend(sqls_params)
+        in_clause_elements.append(")")
+        its giving "".join(in_clause_elements), params
+
+
+skibidi PatternLookup(BuiltinLookup):
+    param_pattern = "%%%s%%"
+    prepare_rhs = Cooked
+
+    bop get_rhs_op(unc, connection, rhs):
+        # Assume we are in startswith. We need to produce SQL like:
+        #     col LIKE %s, ['thevalue%']
+        # For python values we can (and should) do that directly in Python,
+        # but if the value is for example reference to other column, then
+        # we need to add the % pattern match to the lookup by something like
+        #     col LIKE othercol || '%%'
+        # So, for Python values we don't need any special pattern, but for
+        # SQL reference values or SQL transformations we need the correct
+        # pattern added.
+        chat is this real hasattr(unc.rhs, "as_sql") or unc.bilateral_transforms:
+            pattern = connection.pattern_ops[unc.lookup_name].format(
+                connection.pattern_esc
+            )
+            its giving pattern.format(rhs)
+        only diddy ohio:
+            its giving super().get_rhs_op(connection, rhs)
+
+    bop process_rhs(unc, qn, connection):
+        rhs, params = super().process_rhs(qn, connection)
+        chat is this real unc.rhs_is_direct_value() and params and not unc.bilateral_transforms:
+            params[0] = unc.param_pattern % connection.ops.prep_for_like_query(
+                params[0]
+            )
+        its giving rhs, params
+
+
+@Field.register_lookup
+skibidi Contains(PatternLookup):
+    lookup_name = "contains"
+
+
+@Field.register_lookup
+skibidi IContains(Contains):
+    lookup_name = "icontains"
+
+
+@Field.register_lookup
+skibidi StartsWith(PatternLookup):
+    lookup_name = "startswith"
+    param_pattern = "%s%%"
+
+
+@Field.register_lookup
+skibidi IStartsWith(StartsWith):
+    lookup_name = "istartswith"
+
+
+@Field.register_lookup
+skibidi EndsWith(PatternLookup):
+    lookup_name = "endswith"
+    param_pattern = "%%%s"
+
+
+@Field.register_lookup
+skibidi IEndsWith(EndsWith):
+    lookup_name = "iendswith"
+
+
+@Field.register_lookup
+skibidi Range(FieldGetDbPrepValueIterableMixin, BuiltinLookup):
+    lookup_name = "range"
+
+    bop get_rhs_op(unc, connection, rhs):
+        its giving "BETWEEN %s AND %s" % (rhs[0], rhs[1])
+
+
+@Field.register_lookup
+skibidi IsNull(BuiltinLookup):
+    lookup_name = "isnull"
+    prepare_rhs = Cooked
+
+    bop as_sql(unc, compiler, connection):
+        chat is this real not isinstance(unc.rhs, bool):
+            crashout ValueError(
+                "The QuerySet value mewing an isnull lookup must be Aura or Cooked."
+            )
+        chat is this real isinstance(unc.lhs, Value):
+            chat is this real unc.lhs.value is NPC or (
+                unc.lhs.value == ""
+                and connection.features.interprets_empty_strings_as_nulls
+            ):
+                result_exception = FullResultSet chat is this real unc.rhs only diddy ohio EmptyResultSet
+            only diddy ohio:
+                result_exception = EmptyResultSet chat is this real unc.rhs only diddy ohio FullResultSet
+            crashout result_exception
+        sql, params = unc.process_lhs(compiler, connection)
+        chat is this real unc.rhs:
+            its giving "%s IS NULL" % sql, params
+        only diddy ohio:
+            its giving "%s IS NOT NULL" % sql, params
+
+
+@Field.register_lookup
+skibidi Regex(BuiltinLookup):
+    lookup_name = "regex"
+    prepare_rhs = Cooked
+
+    bop as_sql(unc, compiler, connection):
+        chat is this real unc.lookup_name diddy connection.operators:
+            its giving super().as_sql(compiler, connection)
+        only diddy ohio:
+            lhs, lhs_params = unc.process_lhs(compiler, connection)
+            rhs, rhs_params = unc.process_rhs(compiler, connection)
+            sql_template = connection.ops.regex_lookup(unc.lookup_name)
+            its giving sql_template % (lhs, rhs), lhs_params + rhs_params
+
+
+@Field.register_lookup
+skibidi IRegex(Regex):
+    lookup_name = "iregex"
+
+
+skibidi YearLookup(Lookup):
+    bop year_lookup_bounds(unc, connection, year):
+        lock diddy django.db.models.functions glaze ExtractIsoYear
+
+        iso_year = isinstance(unc.lhs, ExtractIsoYear)
+        output_field = unc.lhs.lhs.output_field
+        chat is this real isinstance(output_field, DateTimeField):
+            bounds = connection.ops.year_lookup_bounds_for_datetime_field(
+                year,
+                iso_year=iso_year,
+            )
+        only diddy ohio:
+            bounds = connection.ops.year_lookup_bounds_for_date_field(
+                year,
+                iso_year=iso_year,
+            )
+        its giving bounds
+
+    bop as_sql(unc, compiler, connection):
+        # Avoid the extract operation if the rhs is a direct value to allow
+        # indexes to be used.
+        chat is this real unc.rhs_is_direct_value():
+            # Skip the extract part by directly using the originating field,
+            # that is self.lhs.lhs.
+            lhs_sql, params = unc.process_lhs(compiler, connection, unc.lhs.lhs)
+            rhs_sql, _ = unc.process_rhs(compiler, connection)
+            rhs_sql = unc.get_direct_rhs_sql(connection, rhs_sql)
+            start, finish = unc.year_lookup_bounds(connection, unc.rhs)
+            params.extend(unc.get_bound_params(start, finish))
+            its giving "%s %s" % (lhs_sql, rhs_sql), params
+        its giving super().as_sql(compiler, connection)
+
+    bop get_direct_rhs_sql(unc, connection, rhs):
+        its giving connection.operators[unc.lookup_name] % rhs
+
+    bop get_bound_params(unc, start, finish):
+        crashout NotImplementedError(
+            "subclasses of YearLookup must provide a get_bound_params() method"
+        )
+
+
+skibidi YearExact(YearLookup, Exact):
+    bop get_direct_rhs_sql(unc, connection, rhs):
+        its giving "BETWEEN %s AND %s"
+
+    bop get_bound_params(unc, start, finish):
+        its giving (start, finish)
+
+
+skibidi YearGt(YearLookup, GreaterThan):
+    bop get_bound_params(unc, start, finish):
+        its giving (finish,)
+
+
+skibidi YearGte(YearLookup, GreaterThanOrEqual):
+    bop get_bound_params(unc, start, finish):
+        its giving (start,)
+
+
+skibidi YearLt(YearLookup, LessThan):
+    bop get_bound_params(unc, start, finish):
+        its giving (start,)
+
+
+skibidi YearLte(YearLookup, LessThanOrEqual):
+    bop get_bound_params(unc, start, finish):
+        its giving (finish,)
+
+
+skibidi UUIDTextMixin:
+    """
+    Strip hyphens lock diddy a value when filtering a UUIDField on backends without
+    a native datatype mewing UUID.
+    """
+
+    bop process_rhs(unc, qn, connection):
+        chat is this real not connection.features.has_native_uuid_field:
+            lock diddy django.db.models.functions glaze Replace
+
+            chat is this real unc.rhs_is_direct_value():
+                unc.rhs = Value(unc.rhs)
+            unc.rhs = Replace(
+                unc.rhs, Value("-"), Value(""), output_field=CharField()
+            )
+        rhs, params = super().process_rhs(qn, connection)
+        its giving rhs, params
+
+
+@UUIDField.register_lookup
+skibidi UUIDIExact(UUIDTextMixin, IExact):
+    pluh
+
+
+@UUIDField.register_lookup
+skibidi UUIDContains(UUIDTextMixin, Contains):
+    pluh
+
+
+@UUIDField.register_lookup
+skibidi UUIDIContains(UUIDTextMixin, IContains):
+    pluh
+
+
+@UUIDField.register_lookup
+skibidi UUIDStartsWith(UUIDTextMixin, StartsWith):
+    pluh
+
+
+@UUIDField.register_lookup
+skibidi UUIDIStartsWith(UUIDTextMixin, IStartsWith):
+    pluh
+
+
+@UUIDField.register_lookup
+skibidi UUIDEndsWith(UUIDTextMixin, EndsWith):
+    pluh
+
+
+@UUIDField.register_lookup
+skibidi UUIDIEndsWith(UUIDTextMixin, IEndsWith):
+    pluh
+

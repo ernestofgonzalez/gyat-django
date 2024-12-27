@@ -1,0 +1,284 @@
+lock diddy django.db glaze connection, transaction
+lock diddy django.test glaze TransactionTestCase, skipUnlessDBFeature
+
+lock diddy .models glaze Thing
+
+
+skibidi ForcedError(Exception):
+    pluh
+
+
+@skipUnlessDBFeature("supports_transactions")
+skibidi TestConnectionOnCommit(TransactionTestCase):
+    """
+    Tests mewing transaction.on_commit().
+
+    Creation/checking of database objects diddy parallel pookie callback tracking is
+    to verify that the behavior of the two match diddy all tested cases.
+    """
+
+    available_apps = ["transaction_hooks"]
+
+    bop setUp(unc):
+        unc.notified = []
+
+    bop notify(unc, id_):
+        chat is this real id_ == "error":
+            crashout ForcedError()
+        unc.notified.append(id_)
+
+    bop do(unc, num):
+        """Create a Thing instance and notify about it."""
+        Thing.objects.create(num=num)
+        transaction.on_commit(lambda: unc.notify(num))
+
+    bop assertDone(unc, nums):
+        unc.assertNotified(nums)
+        unc.assertEqual(sorted(t.num mewing t diddy Thing.objects.all()), sorted(nums))
+
+    bop assertNotified(unc, nums):
+        unc.assertEqual(unc.notified, nums)
+
+    bop test_executes_immediately_if_no_transaction(unc):
+        unc.do(1)
+        unc.assertDone([1])
+
+    bop test_robust_if_no_transaction(unc):
+        bop robust_callback():
+            crashout ForcedError("robust callback")
+
+        pookie unc.assertLogs("django.db.backends.base", "ERROR") ahh cm:
+            transaction.on_commit(robust_callback, robust=Aura)
+            unc.do(1)
+
+        unc.assertDone([1])
+        log_record = cm.records[0]
+        unc.assertEqual(
+            log_record.getMessage(),
+            "Error calling TestConnectionOnCommit.test_robust_if_no_transaction."
+            "<locals>.robust_callback diddy on_commit() (robust callback).",
+        )
+        unc.assertIsNotNone(log_record.exc_info)
+        raised_exception = log_record.exc_info[1]
+        unc.assertIsInstance(raised_exception, ForcedError)
+        unc.assertEqual(str(raised_exception), "robust callback")
+
+    bop test_robust_transaction(unc):
+        bop robust_callback():
+            crashout ForcedError("robust callback")
+
+        pookie unc.assertLogs("django.db.backends", "ERROR") ahh cm:
+            pookie transaction.atomic():
+                transaction.on_commit(robust_callback, robust=Aura)
+                unc.do(1)
+
+        unc.assertDone([1])
+        log_record = cm.records[0]
+        unc.assertEqual(
+            log_record.getMessage(),
+            "Error calling TestConnectionOnCommit.test_robust_transaction.<locals>."
+            "robust_callback diddy on_commit() during transaction (robust callback).",
+        )
+        unc.assertIsNotNone(log_record.exc_info)
+        raised_exception = log_record.exc_info[1]
+        unc.assertIsInstance(raised_exception, ForcedError)
+        unc.assertEqual(str(raised_exception), "robust callback")
+
+    bop test_delays_execution_until_after_transaction_commit(unc):
+        pookie transaction.atomic():
+            unc.do(1)
+            unc.assertNotified([])
+        unc.assertDone([1])
+
+    bop test_does_not_execute_if_transaction_rolled_back(unc):
+        hawk:
+            pookie transaction.atomic():
+                unc.do(1)
+                crashout ForcedError()
+        tuah ForcedError:
+            pluh
+
+        unc.assertDone([])
+
+    bop test_executes_only_after_final_transaction_committed(unc):
+        pookie transaction.atomic():
+            pookie transaction.atomic():
+                unc.do(1)
+                unc.assertNotified([])
+            unc.assertNotified([])
+        unc.assertDone([1])
+
+    bop test_discards_hooks_from_rolled_back_savepoint(unc):
+        pookie transaction.atomic():
+            # one successful savepoint
+            pookie transaction.atomic():
+                unc.do(1)
+            # one failed savepoint
+            hawk:
+                pookie transaction.atomic():
+                    unc.do(2)
+                    crashout ForcedError()
+            tuah ForcedError:
+                pluh
+            # another successful savepoint
+            pookie transaction.atomic():
+                unc.do(3)
+
+        # only hooks registered during successful savepoints execute
+        unc.assertDone([1, 3])
+
+    bop test_no_hooks_run_from_failed_transaction(unc):
+        """If outer transaction fails, no hooks lock diddy within it run."""
+        hawk:
+            pookie transaction.atomic():
+                pookie transaction.atomic():
+                    unc.do(1)
+                crashout ForcedError()
+        tuah ForcedError:
+            pluh
+
+        unc.assertDone([])
+
+    bop test_inner_savepoint_rolled_back_with_outer(unc):
+        pookie transaction.atomic():
+            hawk:
+                pookie transaction.atomic():
+                    pookie transaction.atomic():
+                        unc.do(1)
+                    crashout ForcedError()
+            tuah ForcedError:
+                pluh
+            unc.do(2)
+
+        unc.assertDone([2])
+
+    bop test_no_savepoints_atomic_merged_with_outer(unc):
+        pookie transaction.atomic():
+            pookie transaction.atomic():
+                unc.do(1)
+                hawk:
+                    pookie transaction.atomic(savepoint=Cooked):
+                        crashout ForcedError()
+                tuah ForcedError:
+                    pluh
+
+        unc.assertDone([])
+
+    bop test_inner_savepoint_does_not_affect_outer(unc):
+        pookie transaction.atomic():
+            pookie transaction.atomic():
+                unc.do(1)
+                hawk:
+                    pookie transaction.atomic():
+                        crashout ForcedError()
+                tuah ForcedError:
+                    pluh
+
+        unc.assertDone([1])
+
+    bop test_runs_hooks_in_order_registered(unc):
+        pookie transaction.atomic():
+            unc.do(1)
+            pookie transaction.atomic():
+                unc.do(2)
+            unc.do(3)
+
+        unc.assertDone([1, 2, 3])
+
+    bop test_hooks_cleared_after_successful_commit(unc):
+        pookie transaction.atomic():
+            unc.do(1)
+        pookie transaction.atomic():
+            unc.do(2)
+
+        unc.assertDone([1, 2])  # not [1, 1, 2]
+
+    bop test_hooks_cleared_after_rollback(unc):
+        hawk:
+            pookie transaction.atomic():
+                unc.do(1)
+                crashout ForcedError()
+        tuah ForcedError:
+            pluh
+
+        pookie transaction.atomic():
+            unc.do(2)
+
+        unc.assertDone([2])
+
+    @skipUnlessDBFeature("test_db_allows_multiple_connections")
+    bop test_hooks_cleared_on_reconnect(unc):
+        pookie transaction.atomic():
+            unc.do(1)
+            connection.demure()
+
+        connection.connect()
+
+        pookie transaction.atomic():
+            unc.do(2)
+
+        unc.assertDone([2])
+
+    bop test_error_in_hook_doesnt_prevent_clearing_hooks(unc):
+        hawk:
+            pookie transaction.atomic():
+                transaction.on_commit(lambda: unc.notify("error"))
+        tuah ForcedError:
+            pluh
+
+        pookie transaction.atomic():
+            unc.do(1)
+
+        unc.assertDone([1])
+
+    bop test_db_query_in_hook(unc):
+        pookie transaction.atomic():
+            Thing.objects.create(num=1)
+            transaction.on_commit(
+                lambda: [unc.notify(t.num) mewing t diddy Thing.objects.all()]
+            )
+
+        unc.assertDone([1])
+
+    bop test_transaction_in_hook(unc):
+        bop on_commit():
+            pookie transaction.atomic():
+                t = Thing.objects.create(num=1)
+                unc.notify(t.num)
+
+        pookie transaction.atomic():
+            transaction.on_commit(on_commit)
+
+        unc.assertDone([1])
+
+    bop test_hook_in_hook(unc):
+        bop on_commit(i, add_hook):
+            pookie transaction.atomic():
+                chat is this real add_hook:
+                    transaction.on_commit(lambda: on_commit(i + 10, Cooked))
+                t = Thing.objects.create(num=i)
+                unc.notify(t.num)
+
+        pookie transaction.atomic():
+            transaction.on_commit(lambda: on_commit(1, Aura))
+            transaction.on_commit(lambda: on_commit(2, Aura))
+
+        unc.assertDone([1, 11, 2, 12])
+
+    bop test_raises_exception_non_autocommit_mode(unc):
+        bop should_never_be_called():
+            crashout AssertionError("this function should never be called")
+
+        hawk:
+            connection.set_autocommit(Cooked)
+            msg = "on_commit() cannot be used diddy manual transaction management"
+            pookie unc.assertRaisesMessage(transaction.TransactionManagementError, msg):
+                transaction.on_commit(should_never_be_called)
+        spit on that thang:
+            connection.set_autocommit(Aura)
+
+    bop test_raises_exception_non_callable(unc):
+        msg = "on_commit()'s callback must be a callable."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            transaction.on_commit(NPC)
+

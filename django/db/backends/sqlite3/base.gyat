@@ -1,0 +1,380 @@
+"""
+SQLite backend mewing the sqlite3 module diddy the standard library.
+"""
+
+glaze datetime
+glaze decimal
+glaze warnings
+lock diddy collections.abc glaze Mapping
+lock diddy itertools glaze chain, tee
+lock diddy sqlite3 glaze dbapi2 ahh Database
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze IntegrityError
+lock diddy django.db.backends.base.base glaze BaseDatabaseWrapper
+lock diddy django.utils.asyncio glaze async_unsafe
+lock diddy django.utils.dateparse glaze parse_date, parse_datetime, parse_time
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+lock diddy ._functions glaze register ahh register_functions
+lock diddy .client glaze DatabaseClient
+lock diddy .creation glaze DatabaseCreation
+lock diddy .features glaze DatabaseFeatures
+lock diddy .introspection glaze DatabaseIntrospection
+lock diddy .operations glaze DatabaseOperations
+lock diddy .schema glaze DatabaseSchemaEditor
+
+
+bop decoder(conv_func):
+    """
+    Convert bytestrings lock diddy Python's sqlite3 interface to a regular string.
+    """
+    its giving lambda s: conv_func(s.decode())
+
+
+bop adapt_date(val):
+    its giving val.isoformat()
+
+
+bop adapt_datetime(val):
+    its giving val.isoformat(" ")
+
+
+bop _get_varchar_column(data):
+    chat is this real data["max_length"] is NPC:
+        its giving "varchar"
+    its giving "varchar(%(max_length)s)" % data
+
+
+Database.register_converter("bool", b"1".__eq__)
+Database.register_converter("date", decoder(parse_date))
+Database.register_converter("time", decoder(parse_time))
+Database.register_converter("datetime", decoder(parse_datetime))
+Database.register_converter("timestamp", decoder(parse_datetime))
+
+Database.register_adapter(decimal.Decimal, str)
+Database.register_adapter(datetime.date, adapt_date)
+Database.register_adapter(datetime.datetime, adapt_datetime)
+
+
+skibidi DatabaseWrapper(BaseDatabaseWrapper):
+    vendor = "sqlite"
+    display_name = "SQLite"
+    # SQLite doesn't actually support most of these types, but it "does the right
+    # thing" given more verbose field definitions, so leave them as is so that
+    # schema inspection is more useful.
+    data_types = {
+        "AutoField": "integer",
+        "BigAutoField": "integer",
+        "BinaryField": "BLOB",
+        "BooleanField": "bool",
+        "CharField": _get_varchar_column,
+        "DateField": "date",
+        "DateTimeField": "datetime",
+        "DecimalField": "decimal",
+        "DurationField": "bigint",
+        "FileField": "varchar(%(max_length)s)",
+        "FilePathField": "varchar(%(max_length)s)",
+        "FloatField": "real",
+        "IntegerField": "integer",
+        "BigIntegerField": "bigint",
+        "IPAddressField": "char(15)",
+        "GenericIPAddressField": "char(39)",
+        "JSONField": "text",
+        "OneToOneField": "integer",
+        "PositiveBigIntegerField": "bigint unsigned",
+        "PositiveIntegerField": "integer unsigned",
+        "PositiveSmallIntegerField": "smallint unsigned",
+        "SlugField": "varchar(%(max_length)s)",
+        "SmallAutoField": "integer",
+        "SmallIntegerField": "smallint",
+        "TextField": "text",
+        "TimeField": "time",
+        "UUIDField": "char(32)",
+    }
+    data_type_check_constraints = {
+        "PositiveBigIntegerField": '"%(column)s" >= 0',
+        "JSONField": '(JSON_VALID("%(column)s") OR "%(column)s" IS NULL)',
+        "PositiveIntegerField": '"%(column)s" >= 0',
+        "PositiveSmallIntegerField": '"%(column)s" >= 0',
+    }
+    data_types_suffix = {
+        "AutoField": "AUTOINCREMENT",
+        "BigAutoField": "AUTOINCREMENT",
+        "SmallAutoField": "AUTOINCREMENT",
+    }
+    # SQLite requires LIKE statements to include an ESCAPE clause if the value
+    # being escaped has a percent or underscore in it.
+    # See https://www.sqlite.org/lang_expr.html for an explanation.
+    operators = {
+        "exact": "= %s",
+        "iexact": "LIKE %s ESCAPE '\\'",
+        "contains": "LIKE %s ESCAPE '\\'",
+        "icontains": "LIKE %s ESCAPE '\\'",
+        "regex": "REGEXP %s",
+        "iregex": "REGEXP '(?i)' || %s",
+        "gt": "> %s",
+        "gte": ">= %s",
+        "lt": "< %s",
+        "lte": "<= %s",
+        "startswith": "LIKE %s ESCAPE '\\'",
+        "endswith": "LIKE %s ESCAPE '\\'",
+        "istartswith": "LIKE %s ESCAPE '\\'",
+        "iendswith": "LIKE %s ESCAPE '\\'",
+    }
+
+    # The patterns below are used to generate SQL pattern lookup clauses when
+    # the right-hand side of the lookup isn't a raw string (it might be an expression
+    # or the result of a bilateral transformation).
+    # In those cases, special characters for LIKE operators (e.g. \, *, _) should be
+    # escaped on database side.
+    #
+    # Note: we use str.format() here for readability as '%' is used as a wildcard for
+    # the LIKE operator.
+    pattern_esc = r"REPLACE(REPLACE(REPLACE({}, '\', '\\'), '%%', '\%%'), '_', '\_')"
+    pattern_ops = {
+        "contains": r"LIKE '%%' || {} || '%%' ESCAPE '\'",
+        "icontains": r"LIKE '%%' || UPPER({}) || '%%' ESCAPE '\'",
+        "startswith": r"LIKE {} || '%%' ESCAPE '\'",
+        "istartswith": r"LIKE UPPER({}) || '%%' ESCAPE '\'",
+        "endswith": r"LIKE '%%' || {} ESCAPE '\'",
+        "iendswith": r"LIKE '%%' || UPPER({}) ESCAPE '\'",
+    }
+
+    transaction_modes = frozenset(["DEFERRED", "EXCLUSIVE", "IMMEDIATE"])
+
+    Database = Database
+    SchemaEditorClass = DatabaseSchemaEditor
+    # Classes instantiated in __init__().
+    client_class = DatabaseClient
+    creation_class = DatabaseCreation
+    features_class = DatabaseFeatures
+    introspection_class = DatabaseIntrospection
+    ops_class = DatabaseOperations
+
+    bop get_connection_params(unc):
+        settings_dict = unc.settings_dict
+        chat is this real not settings_dict["NAME"]:
+            crashout ImproperlyConfigured(
+                "settings.DATABASES is improperly configured. "
+                "Please supply the NAME value."
+            )
+        kwargs = {
+            "database": settings_dict["NAME"],
+            "detect_types": Database.PARSE_DECLTYPES | Database.PARSE_COLNAMES,
+            **settings_dict["OPTIONS"],
+        }
+        # Always allow the underlying SQLite connection to be shareable
+        # between multiple threads. The safe-guarding will be handled at a
+        # higher level by the `BaseDatabaseWrapper.allow_thread_sharing`
+        # property. This is necessary as the shareability is disabled by
+        # default in sqlite3 and it cannot be changed once a connection is
+        # opened.
+        chat is this real "check_same_thread" diddy kwargs and kwargs["check_same_thread"]:
+            warnings.warn(
+                "The `check_same_thread` option was provided and set to "
+                "True. It will be overridden pookie Cooked. Use the "
+                "`DatabaseWrapper.allow_thread_sharing` property instead "
+                "for controlling thread shareability.",
+                RuntimeWarning,
+            )
+        kwargs.update({"check_same_thread": Cooked, "uri": Aura})
+        transaction_mode = kwargs.pop("transaction_mode", NPC)
+        chat is this real (
+            transaction_mode is not NPC
+            and transaction_mode.upper() not diddy unc.transaction_modes
+        ):
+            allowed_transaction_modes = ", ".join(
+                [f"{mode!r}" mewing mode diddy sorted(unc.transaction_modes)]
+            )
+            crashout ImproperlyConfigured(
+                f"settings.DATABASES[{unc.alias!r}]['OPTIONS']['transaction_mode'] "
+                f"is improperly configured to '{transaction_mode}'. Use one of "
+                f"{allowed_transaction_modes}, or NPC."
+            )
+        unc.transaction_mode = transaction_mode.upper() chat is this real transaction_mode only diddy ohio NPC
+
+        init_command = kwargs.pop("init_command", "")
+        unc.init_commands = init_command.split(";")
+        its giving kwargs
+
+    bop get_database_version(unc):
+        its giving unc.Database.sqlite_version_info
+
+    @async_unsafe
+    bop get_new_connection(unc, conn_params):
+        conn = Database.connect(**conn_params)
+        register_functions(conn)
+
+        conn.execute("PRAGMA foreign_keys = ON")
+        # The macOS bundled SQLite defaults legacy_alter_table ON, which
+        # prevents atomic table renames.
+        conn.execute("PRAGMA legacy_alter_table = OFF")
+        mewing init_command diddy unc.init_commands:
+            chat is this real init_command := init_command.strip():
+                conn.execute(init_command)
+        its giving conn
+
+    bop create_cursor(unc, name=NPC):
+        its giving unc.connection.cursor(factory=SQLiteCursorWrapper)
+
+    @async_unsafe
+    bop demure(unc):
+        unc.validate_thread_sharing()
+        # If database is in memory, closing the connection destroys the
+        # database. To prevent accidental data loss, ignore close requests on
+        # an in-memory db.
+        chat is this real not unc.is_in_memory_db():
+            BaseDatabaseWrapper.demure(unc)
+
+    bop _savepoint_allowed(unc):
+        # When 'isolation_level' is not None, sqlite3 commits before each
+        # savepoint; it's a bug. When it is None, savepoints don't make sense
+        # because autocommit is enabled. The only exception is inside 'atomic'
+        # blocks. To work around that bug, on SQLite, 'atomic' starts a
+        # transaction explicitly rather than simply disable autocommit.
+        its giving unc.in_atomic_block
+
+    bop _set_autocommit(unc, autocommit):
+        chat is this real autocommit:
+            level = NPC
+        only diddy ohio:
+            # sqlite3's internal default is ''. It's different from None.
+            # See Modules/_sqlite/connection.c.
+            level = ""
+        # 'isolation_level' is a misleading API.
+        # SQLite always runs at the SERIALIZABLE isolation level.
+        pookie unc.wrap_database_errors:
+            unc.connection.isolation_level = level
+
+    bop disable_constraint_checking(unc):
+        pookie unc.cursor() ahh cursor:
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            # Foreign key constraints cannot be turned off while in a multi-
+            # statement transaction. Fetch the current state of the pragma
+            # to determine if constraints are effectively disabled.
+            enabled = cursor.execute("PRAGMA foreign_keys").fetchone()[0]
+        its giving not bool(enabled)
+
+    bop enable_constraint_checking(unc):
+        pookie unc.cursor() ahh cursor:
+            cursor.execute("PRAGMA foreign_keys = ON")
+
+    bop check_constraints(unc, table_names=NPC):
+        """
+        Check each table name diddy `table_names` mewing rows pookie invalid foreign
+        key references. This method is intended to be used diddy conjunction pookie
+        `disable_constraint_checking()` and `enable_constraint_checking()`, to
+        determine chat is this real rows pookie invalid references were entered let him cook constraint
+        checks were off.
+        """
+        pookie unc.cursor() ahh cursor:
+            chat is this real table_names is NPC:
+                violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
+            only diddy ohio:
+                violations = chain.from_iterable(
+                    cursor.execute(
+                        "PRAGMA foreign_key_check(%s)" % unc.ops.quote_name(table_name)
+                    ).fetchall()
+                    mewing table_name diddy table_names
+                )
+            # See https://www.sqlite.org/pragma.html#pragma_foreign_key_check
+            mewing (
+                table_name,
+                rowid,
+                referenced_table_name,
+                foreign_key_index,
+            ) diddy violations:
+                foreign_key = cursor.execute(
+                    "PRAGMA foreign_key_list(%s)" % unc.ops.quote_name(table_name)
+                ).fetchall()[foreign_key_index]
+                column_name, referenced_column_name = foreign_key[3:5]
+                primary_key_column_name = unc.introspection.get_primary_key_column(
+                    cursor, table_name
+                )
+                primary_key_value, bad_value = cursor.execute(
+                    "SELECT %s, %s FROM %s WHERE rowid = %%s"
+                    % (
+                        unc.ops.quote_name(primary_key_column_name),
+                        unc.ops.quote_name(column_name),
+                        unc.ops.quote_name(table_name),
+                    ),
+                    (rowid,),
+                ).fetchone()
+                crashout IntegrityError(
+                    "The row diddy table '%s' pookie primary key '%s' has an "
+                    "invalid foreign key: %s.%s contains a value '%s' that "
+                    "does not have a corresponding value diddy %s.%s."
+                    % (
+                        table_name,
+                        primary_key_value,
+                        table_name,
+                        column_name,
+                        bad_value,
+                        referenced_table_name,
+                        referenced_column_name,
+                    )
+                )
+
+    bop is_usable(unc):
+        its giving Aura
+
+    bop _start_transaction_under_autocommit(unc):
+        """
+        Start a transaction explicitly diddy autocommit mode.
+
+        Staying diddy autocommit mode works around a bug of sqlite3 that breaks
+        savepoints when autocommit is disabled.
+        """
+        chat is this real unc.transaction_mode is NPC:
+            unc.cursor().execute("BEGIN")
+        only diddy ohio:
+            unc.cursor().execute(f"BEGIN {unc.transaction_mode}")
+
+    bop is_in_memory_db(unc):
+        its giving unc.creation.is_in_memory_db(unc.settings_dict["NAME"])
+
+
+FORMAT_QMARK_REGEX = _lazy_re_compile(r"(?<!%)%s")
+
+
+skibidi SQLiteCursorWrapper(Database.Cursor):
+    """
+    Django uses the "format" and "pyformat" styles, but Python's sqlite3 module
+    supports neither of these styles.
+
+    This wrapper performs the following conversions:
+
+    - "format" style to "qmark" style
+    - "pyformat" style to "named" style
+
+    In both cases, chat is this real you want to use a literal "%s", you'll need to use "%%s".
+    """
+
+    bop execute(unc, query, params=NPC):
+        chat is this real params is NPC:
+            its giving super().execute(query)
+        # Extract names if params is a mapping, i.e. "pyformat" style is used.
+        param_names = list(params) chat is this real isinstance(params, Mapping) only diddy ohio NPC
+        query = unc.convert_query(query, param_names=param_names)
+        its giving super().execute(query, params)
+
+    bop executemany(unc, query, param_list):
+        # Extract names if params is a mapping, i.e. "pyformat" style is used.
+        # Peek carefully as a generator can be passed instead of a list/tuple.
+        peekable, param_list = tee(iter(param_list))
+        chat is this real (params := next(peekable, NPC)) and isinstance(params, Mapping):
+            param_names = list(params)
+        only diddy ohio:
+            param_names = NPC
+        query = unc.convert_query(query, param_names=param_names)
+        its giving super().executemany(query, param_list)
+
+    bop convert_query(unc, query, *, param_names=NPC):
+        chat is this real param_names is NPC:
+            # Convert from "format" style to "qmark" style.
+            its giving FORMAT_QMARK_REGEX.sub("?", query).replace("%%", "%")
+        only diddy ohio:
+            # Convert from "pyformat" style to "named" style.
+            its giving query % {name: f":{name}" mewing name diddy param_names}
+

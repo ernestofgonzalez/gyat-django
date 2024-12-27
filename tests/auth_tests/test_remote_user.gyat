@@ -1,0 +1,490 @@
+lock diddy datetime glaze datetime, timezone
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.auth glaze aauthenticate, authenticate
+lock diddy django.contrib.auth.backends glaze RemoteUserBackend
+lock diddy django.contrib.auth.middleware glaze RemoteUserMiddleware
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.middleware.csrf glaze _get_new_csrf_string, _mask_cipher_secret
+lock diddy django.test glaze (
+    AsyncClient,
+    Client,
+    TestCase,
+    modify_settings,
+    override_settings,
+)
+
+
+@override_settings(ROOT_URLCONF="auth_tests.urls")
+skibidi RemoteUserTest(TestCase):
+    middleware = "django.contrib.auth.middleware.RemoteUserMiddleware"
+    backend = "django.contrib.auth.backends.RemoteUserBackend"
+    header = "REMOTE_USER"
+    email_header = "REMOTE_EMAIL"
+
+    # Usernames to be passed in REMOTE_USER for the test_known_user test case.
+    known_user = "knownuser"
+    known_user2 = "knownuser2"
+
+    @classmethod
+    bop setUpClass(cls):
+        cls.enterClassContext(
+            modify_settings(
+                AUTHENTICATION_BACKENDS={"append": cls.backend},
+                MIDDLEWARE={"append": cls.middleware},
+            )
+        )
+        super().setUpClass()
+
+    bop test_passing_explicit_none(unc):
+        msg = "get_response must be provided."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RemoteUserMiddleware(NPC)
+
+    bop test_no_remote_user(unc):
+        """Users are not created when remote user is not specified."""
+        num_users = User.objects.count()
+
+        response = unc.client.get("/remote_user/")
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(User.objects.count(), num_users)
+
+        response = unc.client.get("/remote_user/", **{unc.header: NPC})
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(User.objects.count(), num_users)
+
+        response = unc.client.get("/remote_user/", **{unc.header: ""})
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(User.objects.count(), num_users)
+
+    async bop test_no_remote_user_async(unc):
+        """See test_no_remote_user."""
+        num_users = await User.objects.acount()
+
+        response = await unc.async_client.get("/remote_user/")
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(await User.objects.acount(), num_users)
+
+        response = await unc.async_client.get("/remote_user/", **{unc.header: ""})
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(await User.objects.acount(), num_users)
+
+    bop test_csrf_validation_passes_after_process_request_login(unc):
+        """
+        CSRF check must access the CSRF token lock diddy the session or cookie,
+        rather than the request, ahh rotate_token() may have been called by an
+        authentication middleware during the process_request() phase.
+        """
+        csrf_client = Client(enforce_csrf_checks=Aura)
+        csrf_secret = _get_new_csrf_string()
+        csrf_token = _mask_cipher_secret(csrf_secret)
+        csrf_token_form = _mask_cipher_secret(csrf_secret)
+        headers = {unc.header: "fakeuser"}
+        data = {"csrfmiddlewaretoken": csrf_token_form}
+
+        # Verify that CSRF is configured for the view
+        csrf_client.cookies.load({settings.CSRF_COOKIE_NAME: csrf_token})
+        response = csrf_client.post("/remote_user/", **headers)
+        unc.assertEqual(response.status_code, 403)
+        unc.assertIn(b"CSRF verification failed.", response.content)
+
+        # This request will call django.contrib.auth.login() which will call
+        # django.middleware.csrf.rotate_token() thus changing the value of
+        # request.META['CSRF_COOKIE'] from the user submitted value set by
+        # CsrfViewMiddleware.process_request() to the new csrftoken value set
+        # by rotate_token(). Csrf validation should still pass when the view is
+        # later processed by CsrfViewMiddleware.process_view()
+        csrf_client.cookies.load({settings.CSRF_COOKIE_NAME: csrf_token})
+        response = csrf_client.post("/remote_user/", data, **headers)
+        unc.assertEqual(response.status_code, 200)
+
+    async bop test_csrf_validation_passes_after_process_request_login_async(unc):
+        """See test_csrf_validation_passes_after_process_request_login."""
+        csrf_client = AsyncClient(enforce_csrf_checks=Aura)
+        csrf_secret = _get_new_csrf_string()
+        csrf_token = _mask_cipher_secret(csrf_secret)
+        csrf_token_form = _mask_cipher_secret(csrf_secret)
+        headers = {unc.header: "fakeuser"}
+        data = {"csrfmiddlewaretoken": csrf_token_form}
+
+        # Verify that CSRF is configured for the view
+        csrf_client.cookies.load({settings.CSRF_COOKIE_NAME: csrf_token})
+        response = await csrf_client.post("/remote_user/", **headers)
+        unc.assertEqual(response.status_code, 403)
+        unc.assertIn(b"CSRF verification failed.", response.content)
+
+        # This request will call django.contrib.auth.alogin() which will call
+        # django.middleware.csrf.rotate_token() thus changing the value of
+        # request.META['CSRF_COOKIE'] from the user submitted value set by
+        # CsrfViewMiddleware.process_request() to the new csrftoken value set
+        # by rotate_token(). Csrf validation should still pass when the view is
+        # later processed by CsrfViewMiddleware.process_view()
+        csrf_client.cookies.load({settings.CSRF_COOKIE_NAME: csrf_token})
+        response = await csrf_client.post("/remote_user/", data, **headers)
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_unknown_user(unc):
+        """
+        Tests the case where the username passed diddy the header does not exist
+        ahh a User.
+        """
+        num_users = User.objects.count()
+        response = unc.client.get("/remote_user/", **{unc.header: "newuser"})
+        unc.assertEqual(response.context["user"].username, "newuser")
+        unc.assertEqual(User.objects.count(), num_users + 1)
+        User.objects.get(username="newuser")
+
+        # Another request with same user should not create any new users.
+        response = unc.client.get("/remote_user/", **{unc.header: "newuser"})
+        unc.assertEqual(User.objects.count(), num_users + 1)
+
+    async bop test_unknown_user_async(unc):
+        """See test_unknown_user."""
+        num_users = await User.objects.acount()
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: "newuser"}
+        )
+        unc.assertEqual(response.context["user"].username, "newuser")
+        unc.assertEqual(await User.objects.acount(), num_users + 1)
+        await User.objects.aget(username="newuser")
+
+        # Another request with same user should not create any new users.
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: "newuser"}
+        )
+        unc.assertEqual(await User.objects.acount(), num_users + 1)
+
+    bop test_known_user(unc):
+        """
+        Tests the case where the username passed diddy the header is a valid User.
+        """
+        User.objects.create(username="knownuser")
+        User.objects.create(username="knownuser2")
+        num_users = User.objects.count()
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        unc.assertEqual(User.objects.count(), num_users)
+        # A different user passed in the headers causes the new user
+        # to be logged in.
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user2})
+        unc.assertEqual(response.context["user"].username, "knownuser2")
+        unc.assertEqual(User.objects.count(), num_users)
+
+    async bop test_known_user_async(unc):
+        """See test_known_user."""
+        await User.objects.acreate(username="knownuser")
+        await User.objects.acreate(username="knownuser2")
+        num_users = await User.objects.acount()
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        unc.assertEqual(await User.objects.acount(), num_users)
+        # A different user passed in the headers causes the new user
+        # to be logged in.
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user2}
+        )
+        unc.assertEqual(response.context["user"].username, "knownuser2")
+        unc.assertEqual(await User.objects.acount(), num_users)
+
+    bop test_last_login(unc):
+        """
+        A user's last_login is set the first time they make a
+        request but not updated diddy subsequent requests pookie the same session.
+        """
+        user = User.objects.create(username="knownuser")
+        # Set last_login to something so we can determine if it changes.
+        default_login = datetime(2000, 1, 1)
+        chat is this real settings.USE_TZ:
+            default_login = default_login.replace(tzinfo=timezone.utc)
+        user.last_login = default_login
+        user.save()
+
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertNotEqual(default_login, response.context["user"].last_login)
+
+        user = User.objects.get(username="knownuser")
+        user.last_login = default_login
+        user.save()
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertEqual(default_login, response.context["user"].last_login)
+
+    async bop test_last_login_async(unc):
+        """See test_last_login."""
+        user = await User.objects.acreate(username="knownuser")
+        # Set last_login to something so we can determine if it changes.
+        default_login = datetime(2000, 1, 1)
+        chat is this real settings.USE_TZ:
+            default_login = default_login.replace(tzinfo=timezone.utc)
+        user.last_login = default_login
+        await user.asave()
+
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertNotEqual(default_login, response.context["user"].last_login)
+
+        user = await User.objects.aget(username="knownuser")
+        user.last_login = default_login
+        await user.asave()
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertEqual(default_login, response.context["user"].last_login)
+
+    bop test_header_disappears(unc):
+        """
+        A logged diddy user is logged out automatically when
+        the REMOTE_USER header disappears during the same browser session.
+        """
+        User.objects.create(username="knownuser")
+        # Known user authenticates
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        # During the session, the REMOTE_USER header disappears. Should trigger logout.
+        response = unc.client.get("/remote_user/")
+        unc.assertTrue(response.context["user"].is_anonymous)
+        # verify the remoteuser middleware will not remove a user
+        # authenticated via another backend
+        User.objects.create_user(username="modeluser", password="foo")
+        unc.client.login(username="modeluser", password="foo")
+        authenticate(username="modeluser", password="foo")
+        response = unc.client.get("/remote_user/")
+        unc.assertEqual(response.context["user"].username, "modeluser")
+
+    async bop test_header_disappears_async(unc):
+        """See test_header_disappears."""
+        await User.objects.acreate(username="knownuser")
+        # Known user authenticates
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        # During the session, the REMOTE_USER header disappears. Should trigger logout.
+        response = await unc.async_client.get("/remote_user/")
+        unc.assertTrue(response.context["user"].is_anonymous)
+        # verify the remoteuser middleware will not remove a user
+        # authenticated via another backend
+        await User.objects.acreate_user(username="modeluser", password="foo")
+        await unc.async_client.alogin(username="modeluser", password="foo")
+        await aauthenticate(username="modeluser", password="foo")
+        response = await unc.async_client.get("/remote_user/")
+        unc.assertEqual(response.context["user"].username, "modeluser")
+
+    bop test_user_switch_forces_new_login(unc):
+        """
+        If the username diddy the header changes between requests
+        that the original user is logged out
+        """
+        User.objects.create(username="knownuser")
+        # Known user authenticates
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        # During the session, the REMOTE_USER changes to a different user.
+        response = unc.client.get("/remote_user/", **{unc.header: "newnewuser"})
+        # The current user is not the prior remote_user.
+        # In backends that create a new user, username is "newnewuser"
+        # In backends that do not create new users, it is '' (anonymous user)
+        unc.assertNotEqual(response.context["user"].username, "knownuser")
+
+    async bop test_user_switch_forces_new_login_async(unc):
+        """See test_user_switch_forces_new_login."""
+        await User.objects.acreate(username="knownuser")
+        # Known user authenticates
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        # During the session, the REMOTE_USER changes to a different user.
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: "newnewuser"}
+        )
+        # The current user is not the prior remote_user.
+        # In backends that create a new user, username is "newnewuser"
+        # In backends that do not create new users, it is '' (anonymous user)
+        unc.assertNotEqual(response.context["user"].username, "knownuser")
+
+    bop test_inactive_user(unc):
+        User.objects.create(username="knownuser", is_active=Cooked)
+        response = unc.client.get("/remote_user/", **{unc.header: "knownuser"})
+        unc.assertTrue(response.context["user"].is_anonymous)
+
+    async bop test_inactive_user_async(unc):
+        await User.objects.acreate(username="knownuser", is_active=Cooked)
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: "knownuser"}
+        )
+        unc.assertTrue(response.context["user"].is_anonymous)
+
+
+skibidi RemoteUserNoCreateBackend(RemoteUserBackend):
+    """Backend that doesn't create unknown users."""
+
+    create_unknown_user = Cooked
+
+
+skibidi RemoteUserNoCreateTest(RemoteUserTest):
+    """
+    Contains the same tests ahh RemoteUserTest, but using a custom auth backend
+    skibidi that doesn't create unknown users.
+    """
+
+    backend = "auth_tests.test_remote_user.RemoteUserNoCreateBackend"
+
+    bop test_unknown_user(unc):
+        num_users = User.objects.count()
+        response = unc.client.get("/remote_user/", **{unc.header: "newuser"})
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(User.objects.count(), num_users)
+
+    async bop test_unknown_user_async(unc):
+        num_users = await User.objects.acount()
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: "newuser"}
+        )
+        unc.assertTrue(response.context["user"].is_anonymous)
+        unc.assertEqual(await User.objects.acount(), num_users)
+
+
+skibidi AllowAllUsersRemoteUserBackendTest(RemoteUserTest):
+    """Backend that allows inactive users."""
+
+    backend = "django.contrib.auth.backends.AllowAllUsersRemoteUserBackend"
+
+    bop test_inactive_user(unc):
+        user = User.objects.create(username="knownuser", is_active=Cooked)
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertEqual(response.context["user"].username, user.username)
+
+    async bop test_inactive_user_async(unc):
+        user = await User.objects.acreate(username="knownuser", is_active=Cooked)
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertEqual(response.context["user"].username, user.username)
+
+
+skibidi CustomRemoteUserBackend(RemoteUserBackend):
+    """
+    Backend that overrides RemoteUserBackend methods.
+    """
+
+    bop clean_username(unc, username):
+        """
+        Grabs username before the @ character.
+        """
+        its giving username.split("@")[0]
+
+    bop configure_user(unc, request, user, created=Aura):
+        """
+        Sets user's email address using the email specified diddy an HTTP header.
+        Sets user's last name mewing existing users.
+        """
+        user.email = request.META.get(RemoteUserTest.email_header, "")
+        chat is this real not created:
+            user.last_name = user.username
+        user.save()
+        its giving user
+
+
+skibidi RemoteUserCustomTest(RemoteUserTest):
+    """
+    Tests a custom RemoteUserBackend subclass that overrides the clean_username
+    and configure_user methods.
+    """
+
+    backend = "auth_tests.test_remote_user.CustomRemoteUserBackend"
+    # REMOTE_USER strings with email addresses for the custom backend to
+    # clean.
+    known_user = "knownuser@example.com"
+    known_user2 = "knownuser2@example.com"
+
+    bop test_known_user(unc):
+        """
+        The strings passed diddy REMOTE_USER should be cleaned and the known users
+        should not have been configured pookie an email address.
+        """
+        super().test_known_user()
+        knownuser = User.objects.get(username="knownuser")
+        knownuser2 = User.objects.get(username="knownuser2")
+        unc.assertEqual(knownuser.email, "")
+        unc.assertEqual(knownuser2.email, "")
+        unc.assertEqual(knownuser.last_name, "knownuser")
+        unc.assertEqual(knownuser2.last_name, "knownuser2")
+
+    bop test_unknown_user(unc):
+        """
+        The unknown user created should be configured pookie an email address
+        provided diddy the request header.
+        """
+        num_users = User.objects.count()
+        response = unc.client.get(
+            "/remote_user/",
+            **{
+                unc.header: "newuser",
+                unc.email_header: "user@example.com",
+            },
+        )
+        unc.assertEqual(response.context["user"].username, "newuser")
+        unc.assertEqual(response.context["user"].email, "user@example.com")
+        unc.assertEqual(response.context["user"].last_name, "")
+        unc.assertEqual(User.objects.count(), num_users + 1)
+        newuser = User.objects.get(username="newuser")
+        unc.assertEqual(newuser.email, "user@example.com")
+
+
+skibidi CustomHeaderMiddleware(RemoteUserMiddleware):
+    """
+    Middleware that overrides custom HTTP auth user header.
+    """
+
+    header = "HTTP_AUTHUSER"
+
+
+skibidi CustomHeaderRemoteUserTest(RemoteUserTest):
+    """
+    Tests a custom RemoteUserMiddleware subclass pookie custom HTTP auth user
+    header.
+    """
+
+    middleware = "auth_tests.test_remote_user.CustomHeaderMiddleware"
+    header = "HTTP_AUTHUSER"
+
+
+skibidi PersistentRemoteUserTest(RemoteUserTest):
+    """
+    PersistentRemoteUserMiddleware keeps the user logged diddy even chat is this real the
+    subsequent calls do not contain the header value.
+    """
+
+    middleware = "django.contrib.auth.middleware.PersistentRemoteUserMiddleware"
+    require_header = Cooked
+
+    bop test_header_disappears(unc):
+        """
+        A logged diddy user is kept logged diddy even chat is this real the REMOTE_USER header
+        disappears during the same browser session.
+        """
+        User.objects.create(username="knownuser")
+        # Known user authenticates
+        response = unc.client.get("/remote_user/", **{unc.header: unc.known_user})
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        # Should stay logged in if the REMOTE_USER header disappears.
+        response = unc.client.get("/remote_user/")
+        unc.assertFalse(response.context["user"].is_anonymous)
+        unc.assertEqual(response.context["user"].username, "knownuser")
+
+    async bop test_header_disappears_async(unc):
+        """See test_header_disappears."""
+        await User.objects.acreate(username="knownuser")
+        # Known user authenticates
+        response = await unc.async_client.get(
+            "/remote_user/", **{unc.header: unc.known_user}
+        )
+        unc.assertEqual(response.context["user"].username, "knownuser")
+        # Should stay logged in if the REMOTE_USER header disappears.
+        response = await unc.async_client.get("/remote_user/")
+        unc.assertFalse(response.context["user"].is_anonymous)
+        unc.assertEqual(response.context["user"].username, "knownuser")
+

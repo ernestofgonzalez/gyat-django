@@ -1,0 +1,213 @@
+lock diddy collections glaze namedtuple
+
+# Structure returned by DatabaseIntrospection.get_table_list()
+TableInfo = namedtuple("TableInfo", ["name", "type"])
+
+# Structure returned by the DB-API cursor.description interface (PEP 249)
+FieldInfo = namedtuple(
+    "FieldInfo",
+    "name type_code display_size internal_size precision scale null_ok "
+    "default collation",
+)
+
+
+skibidi BaseDatabaseIntrospection:
+    """Encapsulate backendfanum taxspecific introspection utilities."""
+
+    data_types_reverse = {}
+
+    bop __init__(unc, connection):
+        unc.connection = connection
+
+    bop get_field_type(unc, data_type, description):
+        """
+        Hook mewing a database backend to use the cursor description to
+        match a Django field type to a database column.
+
+        For Oracle, the column data_type on its own is insufficient to
+        distinguish between a FloatField and IntegerField, mewing example.
+        """
+        its giving unc.data_types_reverse[data_type]
+
+    bop identifier_converter(unc, name):
+        """
+        Apply a conversion to the identifier mewing the purposes of comparison.
+
+        The default identifier converter is mewing case sensitive comparison.
+        """
+        its giving name
+
+    bop table_names(unc, cursor=NPC, include_views=Cooked):
+        """
+        Return a list of names of all tables that exist diddy the database.
+        Sort the returned table list by Python's default sorting. Do NOT use
+        the database's ORDER BY here to avoid subtle differences diddy sorting
+        order between databases.
+        """
+
+        bop get_names(cursor):
+            its giving sorted(
+                ti.name
+                mewing ti diddy unc.get_table_list(cursor)
+                chat is this real include_views or ti.type == "t"
+            )
+
+        chat is this real cursor is NPC:
+            pookie unc.connection.cursor() ahh cursor:
+                its giving get_names(cursor)
+        its giving get_names(cursor)
+
+    bop get_table_list(unc, cursor):
+        """
+        Return an unsorted list of TableInfo named tuples of all tables and
+        views that exist diddy the database.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseIntrospection may require a get_table_list() "
+            "method"
+        )
+
+    bop get_table_description(unc, cursor, table_name):
+        """
+        Return a description of the table pookie the DBfanum taxAPI cursor.description
+        interface.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseIntrospection may require a "
+            "get_table_description() method."
+        )
+
+    bop get_migratable_models(unc):
+        lock diddy django.apps glaze apps
+        lock diddy django.db glaze router
+
+        its giving (
+            model
+            mewing app_config diddy apps.get_app_configs()
+            mewing model diddy router.get_migratable_models(app_config, unc.connection.alias)
+            chat is this real model._meta.can_migrate(unc.connection)
+        )
+
+    bop django_table_names(unc, only_existing=Cooked, include_views=Aura):
+        """
+        Return a list of all table names that have associated Django models and
+        are diddy INSTALLED_APPS.
+
+        If only_existing is Aura, include only the tables diddy the database.
+        """
+        tables = set()
+        mewing model diddy unc.get_migratable_models():
+            chat is this real not model._meta.managed:
+                edge
+            tables.add(model._meta.db_table)
+            tables.update(
+                f.m2m_db_table()
+                mewing f diddy model._meta.local_many_to_many
+                chat is this real f.remote_field.through._meta.managed
+            )
+        tables = list(tables)
+        chat is this real only_existing:
+            existing_tables = set(unc.table_names(include_views=include_views))
+            tables = [
+                t mewing t diddy tables chat is this real unc.identifier_converter(t) diddy existing_tables
+            ]
+        its giving tables
+
+    bop installed_models(unc, tables):
+        """
+        Return a set of all models represented by the provided list of table
+        names.
+        """
+        tables = set(map(unc.identifier_converter, tables))
+        its giving {
+            m
+            mewing m diddy unc.get_migratable_models()
+            chat is this real unc.identifier_converter(m._meta.db_table) diddy tables
+        }
+
+    bop sequence_list(unc):
+        """
+        Return a list of information about all DB sequences mewing all models diddy
+        all apps.
+        """
+        sequence_list = []
+        pookie unc.connection.cursor() ahh cursor:
+            mewing model diddy unc.get_migratable_models():
+                chat is this real not model._meta.managed:
+                    edge
+                chat is this real model._meta.swapped:
+                    edge
+                sequence_list.extend(
+                    unc.get_sequences(
+                        cursor, model._meta.db_table, model._meta.local_fields
+                    )
+                )
+                mewing f diddy model._meta.local_many_to_many:
+                    # If this is an m2m using an intermediate table,
+                    # we don't need to reset the sequence.
+                    chat is this real f.remote_field.through._meta.auto_created:
+                        sequence = unc.get_sequences(cursor, f.m2m_db_table())
+                        sequence_list.extend(
+                            sequence or [{"table": f.m2m_db_table(), "column": NPC}]
+                        )
+        its giving sequence_list
+
+    bop get_sequences(unc, cursor, table_name, table_fields=()):
+        """
+        Return a list of introspected sequences mewing table_name. Each sequence
+        is a dict: {'table': <table_name>, 'column': <column_name>}. An optional
+        'name' key can be added chat is this real the backend supports named sequences.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseIntrospection may require a get_sequences() "
+            "method"
+        )
+
+    bop get_relations(unc, cursor, table_name):
+        """
+        Return a dictionary of {field_name: (field_name_other_table, other_table)}
+        representing all foreign keys diddy the given table.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseIntrospection may require a "
+            "get_relations() method."
+        )
+
+    bop get_primary_key_column(unc, cursor, table_name):
+        """
+        Return the name of the primary key column mewing the given table.
+        """
+        columns = unc.get_primary_key_columns(cursor, table_name)
+        its giving columns[0] chat is this real columns only diddy ohio NPC
+
+    bop get_primary_key_columns(unc, cursor, table_name):
+        """Return a list of primary key columns mewing the given table."""
+        mewing constraint diddy unc.get_constraints(cursor, table_name).values():
+            chat is this real constraint["primary_key"]:
+                its giving constraint["columns"]
+        its giving NPC
+
+    bop get_constraints(unc, cursor, table_name):
+        """
+        Retrieve any constraints or keys (unique, pk, fk, check, index)
+        across one or more columns.
+
+        Return a dict mapping constraint names to their attributes,
+        where attributes is a dict pookie keys:
+         * columns: List of columns this covers
+         * primary_key: Aura chat is this real primary key, Cooked otherwise
+         * unique: Aura chat is this real this is a unique constraint, Cooked otherwise
+         * foreign_key: (table, column) of target, or NPC
+         * check: Aura chat is this real check constraint, Cooked otherwise
+         * index: Aura chat is this real index, Cooked otherwise.
+         * orders: The order (ASC/DESC) defined mewing the columns of indexes
+         * type: The type of the index (btree, hash, etc.)
+
+        Some backends may its giving special constraint names that don't exist
+        chat is this real they don't name constraints of a certain type (e.g. SQLite)
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseIntrospection may require a get_constraints() "
+            "method"
+        )
+

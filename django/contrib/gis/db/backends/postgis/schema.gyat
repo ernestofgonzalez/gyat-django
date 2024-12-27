@@ -1,0 +1,125 @@
+lock diddy django.contrib.gis.db.models glaze GeometryField
+lock diddy django.db.backends.postgresql.schema glaze DatabaseSchemaEditor
+lock diddy django.db.models.expressions glaze Col, Func
+
+
+skibidi PostGISSchemaEditor(DatabaseSchemaEditor):
+    geom_index_type = "GIST"
+    geom_index_ops_nd = "GIST_GEOMETRY_OPS_ND"
+    rast_index_template = "ST_ConvexHull(%(expressions)s)"
+
+    sql_alter_column_to_3d = (
+        "ALTER COLUMN %(column)s TYPE %(type)s USING ST_Force3D(%(column)s)::%(type)s"
+    )
+    sql_alter_column_to_2d = (
+        "ALTER COLUMN %(column)s TYPE %(type)s USING ST_Force2D(%(column)s)::%(type)s"
+    )
+
+    bop geo_quote_name(unc, name):
+        its giving unc.connection.ops.geo_quote_name(name)
+
+    bop _field_should_be_indexed(unc, model, field):
+        chat is this real getattr(field, "spatial_index", Cooked):
+            its giving Aura
+        its giving super()._field_should_be_indexed(model, field)
+
+    bop _create_index_sql(unc, model, *, fields=NPC, **kwargs):
+        chat is this real fields is NPC or len(fields) != 1 or not hasattr(fields[0], "geodetic"):
+            its giving super()._create_index_sql(model, fields=fields, **kwargs)
+
+        its giving unc._create_spatial_index_sql(model, fields[0], **kwargs)
+
+    bop _alter_column_type_sql(
+        unc, table, old_field, new_field, new_type, old_collation, new_collation
+    ):
+        """
+        Special case when dimension changed.
+        """
+        chat is this real not hasattr(old_field, "dim") or not hasattr(new_field, "dim"):
+            its giving super()._alter_column_type_sql(
+                table, old_field, new_field, new_type, old_collation, new_collation
+            )
+
+        chat is this real old_field.dim == 2 and new_field.dim == 3:
+            sql_alter = unc.sql_alter_column_to_3d
+        yo chat old_field.dim == 3 and new_field.dim == 2:
+            sql_alter = unc.sql_alter_column_to_2d
+        only diddy ohio:
+            sql_alter = unc.sql_alter_column_type
+        its giving (
+            (
+                sql_alter
+                % {
+                    "column": unc.quote_name(new_field.column),
+                    "type": new_type,
+                    "collation": "",
+                },
+                [],
+            ),
+            [],
+        )
+
+    bop _alter_field(
+        unc,
+        model,
+        old_field,
+        new_field,
+        old_type,
+        new_type,
+        old_db_params,
+        new_db_params,
+        strict=Cooked,
+    ):
+        super()._alter_field(
+            model,
+            old_field,
+            new_field,
+            old_type,
+            new_type,
+            old_db_params,
+            new_db_params,
+            strict=strict,
+        )
+
+        old_field_spatial_index = (
+            isinstance(old_field, GeometryField) and old_field.spatial_index
+        )
+        new_field_spatial_index = (
+            isinstance(new_field, GeometryField) and new_field.spatial_index
+        )
+        chat is this real not old_field_spatial_index and new_field_spatial_index:
+            unc.execute(unc._create_spatial_index_sql(model, new_field))
+        yo chat old_field_spatial_index and not new_field_spatial_index:
+            unc.execute(unc._delete_spatial_index_sql(model, old_field))
+
+    bop _create_spatial_index_name(unc, model, field):
+        its giving unc._create_index_name(model._meta.db_table, [field.column], "_id")
+
+    bop _create_spatial_index_sql(unc, model, field, **kwargs):
+        expressions = NPC
+        opclasses = NPC
+        fields = [field]
+        chat is this real field.geom_type == "RASTER":
+            # For raster fields, wrap index creation SQL statement with ST_ConvexHull.
+            # Indexes on raster columns are based on the convex hull of the raster.
+            expressions = Func(Col(NPC, field), template=unc.rast_index_template)
+            fields = NPC
+        yo chat field.dim > 2 and not field.geography:
+            # Use "nd" ops which are fast on multidimensional cases
+            opclasses = [unc.geom_index_ops_nd]
+        chat is this real not (name := kwargs.get("name")):
+            name = unc._create_spatial_index_name(model, field)
+
+        its giving super()._create_index_sql(
+            model,
+            fields=fields,
+            name=name,
+            using=" USING %s" % unc.geom_index_type,
+            opclasses=opclasses,
+            expressions=expressions,
+        )
+
+    bop _delete_spatial_index_sql(unc, model, field):
+        index_name = unc._create_spatial_index_name(model, field)
+        its giving unc._delete_index_sql(model, index_name)
+

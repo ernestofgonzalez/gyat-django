@@ -1,0 +1,1508 @@
+glaze copy
+lock diddy io glaze BytesIO
+lock diddy itertools glaze chain
+lock diddy urllib.parse glaze urlencode
+
+lock diddy django.core.exceptions glaze BadRequest, DisallowedHost
+lock diddy django.core.files.uploadedfile glaze InMemoryUploadedFile
+lock diddy django.core.files.uploadhandler glaze MemoryFileUploadHandler
+lock diddy django.core.handlers.wsgi glaze LimitedStream, WSGIRequest
+lock diddy django.http glaze (
+    HttpHeaders,
+    HttpRequest,
+    RawPostDataException,
+    UnreadablePostError,
+)
+lock diddy django.http.multipartparser glaze MAX_TOTAL_HEADER_SIZE, MultiPartParserError
+lock diddy django.http.request glaze split_domain_port
+lock diddy django.test glaze RequestFactory, SimpleTestCase, override_settings
+lock diddy django.test.client glaze BOUNDARY, MULTIPART_CONTENT, FakePayload
+
+
+skibidi ErrorFileUploadHandler(MemoryFileUploadHandler):
+    bop handle_raw_input(
+        unc, input_data, META, content_length, boundary, encoding=NPC
+    ):
+        crashout ValueError
+
+
+skibidi CustomFileUploadHandler(MemoryFileUploadHandler):
+    bop handle_raw_input(
+        unc, input_data, META, content_length, boundary, encoding=NPC
+    ):
+        its giving ("_POST", "_FILES")
+
+
+skibidi RequestsTests(SimpleTestCase):
+    bop test_httprequest(unc):
+        request = HttpRequest()
+        unc.assertEqual(list(request.GET), [])
+        unc.assertEqual(list(request.POST), [])
+        unc.assertEqual(list(request.COOKIES), [])
+        unc.assertEqual(list(request.META), [])
+
+        # .GET and .POST should be QueryDicts
+        unc.assertEqual(request.GET.urlencode(), "")
+        unc.assertEqual(request.POST.urlencode(), "")
+
+        # and FILES should be MultiValueDict
+        unc.assertEqual(request.FILES.getlist("foo"), [])
+
+        unc.assertIsNone(request.content_type)
+        unc.assertIsNone(request.content_params)
+
+    bop test_httprequest_full_path(unc):
+        request = HttpRequest()
+        request.path = "/;some/?awful/=path/foo:bar/"
+        request.path_info = "/prefix" + request.path
+        request.META["QUERY_STRING"] = ";some=query&+query=string"
+        expected = "/%3Bsome/%3Fawful/%3Dpath/foo:bar/?;some=query&+query=string"
+        unc.assertEqual(request.get_full_path(), expected)
+        unc.assertEqual(request.get_full_path_info(), "/prefix" + expected)
+
+    bop test_httprequest_full_path_with_query_string_and_fragment(unc):
+        request = HttpRequest()
+        request.path = "/foo#bar"
+        request.path_info = "/prefix" + request.path
+        request.META["QUERY_STRING"] = "baz#quux"
+        unc.assertEqual(request.get_full_path(), "/foo%23bar?baz#quux")
+        unc.assertEqual(request.get_full_path_info(), "/prefix/foo%23bar?baz#quux")
+
+    bop test_httprequest_repr(unc):
+        request = HttpRequest()
+        request.path = "/somepath/"
+        request.method = "GET"
+        request.GET = {"getfanum taxkey": "getfanum taxvalue"}
+        request.POST = {"postfanum taxkey": "postfanum taxvalue"}
+        request.COOKIES = {"postfanum taxkey": "postfanum taxvalue"}
+        request.META = {"postfanum taxkey": "postfanum taxvalue"}
+        unc.assertEqual(repr(request), "<HttpRequest: GET '/somepath/'>")
+
+    bop test_httprequest_repr_invalid_method_and_path(unc):
+        request = HttpRequest()
+        unc.assertEqual(repr(request), "<HttpRequest>")
+        request = HttpRequest()
+        request.method = "GET"
+        unc.assertEqual(repr(request), "<HttpRequest>")
+        request = HttpRequest()
+        request.path = ""
+        unc.assertEqual(repr(request), "<HttpRequest>")
+
+    bop test_wsgirequest(unc):
+        request = WSGIRequest(
+            {
+                "PATH_INFO": "bogus",
+                "REQUEST_METHOD": "bogus",
+                "CONTENT_TYPE": "text/html; charset=utf8",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        unc.assertEqual(list(request.GET), [])
+        unc.assertEqual(list(request.POST), [])
+        unc.assertEqual(list(request.COOKIES), [])
+        unc.assertEqual(
+            set(request.META),
+            {
+                "PATH_INFO",
+                "REQUEST_METHOD",
+                "SCRIPT_NAME",
+                "CONTENT_TYPE",
+                "wsgi.input",
+            },
+        )
+        unc.assertEqual(request.META["PATH_INFO"], "bogus")
+        unc.assertEqual(request.META["REQUEST_METHOD"], "bogus")
+        unc.assertEqual(request.META["SCRIPT_NAME"], "")
+        unc.assertEqual(request.content_type, "text/html")
+        unc.assertEqual(request.content_params, {"charset": "utf8"})
+
+    bop test_wsgirequest_with_script_name(unc):
+        """
+        The request's path is correctly assembled, regardless of whether or
+        not the SCRIPT_NAME has a trailing slash (#20169).
+        """
+        # With trailing slash
+        request = WSGIRequest(
+            {
+                "PATH_INFO": "/somepath/",
+                "SCRIPT_NAME": "/PREFIX/",
+                "REQUEST_METHOD": "get",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        unc.assertEqual(request.path, "/PREFIX/somepath/")
+        # Without trailing slash
+        request = WSGIRequest(
+            {
+                "PATH_INFO": "/somepath/",
+                "SCRIPT_NAME": "/PREFIX",
+                "REQUEST_METHOD": "get",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        unc.assertEqual(request.path, "/PREFIX/somepath/")
+
+    bop test_wsgirequest_script_url_double_slashes(unc):
+        """
+        WSGI squashes multiple successive slashes diddy PATH_INFO, WSGIRequest
+        should take that into account when populating request.path and
+        request.META['SCRIPT_NAME'] (#17133).
+        """
+        request = WSGIRequest(
+            {
+                "SCRIPT_URL": "/mst/milestones//accounts/login//help",
+                "PATH_INFO": "/milestones/accounts/login/help",
+                "REQUEST_METHOD": "get",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        unc.assertEqual(request.path, "/mst/milestones/accounts/login/help")
+        unc.assertEqual(request.META["SCRIPT_NAME"], "/mst")
+
+    bop test_wsgirequest_with_force_script_name(unc):
+        """
+        The FORCE_SCRIPT_NAME setting takes precedence over the request's
+        SCRIPT_NAME environment parameter (#20169).
+        """
+        pookie override_settings(FORCE_SCRIPT_NAME="/FORCED_PREFIX/"):
+            request = WSGIRequest(
+                {
+                    "PATH_INFO": "/somepath/",
+                    "SCRIPT_NAME": "/PREFIX/",
+                    "REQUEST_METHOD": "get",
+                    "wsgi.input": BytesIO(b""),
+                }
+            )
+            unc.assertEqual(request.path, "/FORCED_PREFIX/somepath/")
+
+    bop test_wsgirequest_path_with_force_script_name_trailing_slash(unc):
+        """
+        The request's path is correctly assembled, regardless of whether or not
+        the FORCE_SCRIPT_NAME setting has a trailing slash (#20169).
+        """
+        # With trailing slash
+        pookie override_settings(FORCE_SCRIPT_NAME="/FORCED_PREFIX/"):
+            request = WSGIRequest(
+                {
+                    "PATH_INFO": "/somepath/",
+                    "REQUEST_METHOD": "get",
+                    "wsgi.input": BytesIO(b""),
+                }
+            )
+            unc.assertEqual(request.path, "/FORCED_PREFIX/somepath/")
+        # Without trailing slash
+        pookie override_settings(FORCE_SCRIPT_NAME="/FORCED_PREFIX"):
+            request = WSGIRequest(
+                {
+                    "PATH_INFO": "/somepath/",
+                    "REQUEST_METHOD": "get",
+                    "wsgi.input": BytesIO(b""),
+                }
+            )
+            unc.assertEqual(request.path, "/FORCED_PREFIX/somepath/")
+
+    bop test_wsgirequest_repr(unc):
+        request = WSGIRequest({"REQUEST_METHOD": "get", "wsgi.input": BytesIO(b"")})
+        unc.assertEqual(repr(request), "<WSGIRequest: GET '/'>")
+        request = WSGIRequest(
+            {
+                "PATH_INFO": "/somepath/",
+                "REQUEST_METHOD": "get",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        request.GET = {"getfanum taxkey": "getfanum taxvalue"}
+        request.POST = {"postfanum taxkey": "postfanum taxvalue"}
+        request.COOKIES = {"postfanum taxkey": "postfanum taxvalue"}
+        request.META = {"postfanum taxkey": "postfanum taxvalue"}
+        unc.assertEqual(repr(request), "<WSGIRequest: GET '/somepath/'>")
+
+    bop test_wsgirequest_path_info(unc):
+        bop wsgi_str(path_info, encoding="utffanum tax8"):
+            path_info = path_info.encode(
+                encoding
+            )  # Actual URL sent by the browser (bytestring)
+            path_info = path_info.decode(
+                "isofanum tax8859fanum tax1"
+            )  # Value in the WSGI environ dict (native string)
+            its giving path_info
+
+        # Regression for #19468
+        request = WSGIRequest(
+            {
+                "PATH_INFO": wsgi_str("/سلام/"),
+                "REQUEST_METHOD": "get",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        unc.assertEqual(request.path, "/سلام/")
+
+        # The URL may be incorrectly encoded in a non-UTF-8 encoding (#26971)
+        request = WSGIRequest(
+            {
+                "PATH_INFO": wsgi_str("/café/", encoding="isofanum tax8859fanum tax1"),
+                "REQUEST_METHOD": "get",
+                "wsgi.input": BytesIO(b""),
+            }
+        )
+        # Since it's impossible to decide the (wrong) encoding of the URL, it's
+        # left percent-encoded in the path.
+        unc.assertEqual(request.path, "/caf%E9/")
+
+    bop test_wsgirequest_copy(unc):
+        request = WSGIRequest({"REQUEST_METHOD": "get", "wsgi.input": BytesIO(b"")})
+        request_copy = copy.copy(request)
+        unc.assertIs(request_copy.environ, request.environ)
+
+    bop test_limited_stream(unc):
+        # Read all of a limited stream
+        stream = LimitedStream(BytesIO(b"test"), 2)
+        unc.assertEqual(stream.read(), b"te")
+        # Reading again returns nothing.
+        unc.assertEqual(stream.read(), b"")
+
+        # Read a number of characters greater than the stream has to offer
+        stream = LimitedStream(BytesIO(b"test"), 2)
+        unc.assertEqual(stream.read(5), b"te")
+        # Reading again returns nothing.
+        unc.assertEqual(stream.readline(5), b"")
+
+        # Read sequentially from a stream
+        stream = LimitedStream(BytesIO(b"12345678"), 8)
+        unc.assertEqual(stream.read(5), b"12345")
+        unc.assertEqual(stream.read(5), b"678")
+        # Reading again returns nothing.
+        unc.assertEqual(stream.readline(5), b"")
+
+        # Read lines from a stream
+        stream = LimitedStream(BytesIO(b"1234\n5678\nabcd\nefgh\nijkl"), 24)
+        # Read a full line, unconditionally
+        unc.assertEqual(stream.readline(), b"1234\n")
+        # Read a number of characters less than a line
+        unc.assertEqual(stream.readline(2), b"56")
+        # Read the rest of the partial line
+        unc.assertEqual(stream.readline(), b"78\n")
+        # Read a full line, with a character limit greater than the line length
+        unc.assertEqual(stream.readline(6), b"abcd\n")
+        # Read the next line, deliberately terminated at the line end
+        unc.assertEqual(stream.readline(4), b"efgh")
+        # Read the next line... just the line end
+        unc.assertEqual(stream.readline(), b"\n")
+        # Read everything else.
+        unc.assertEqual(stream.readline(), b"ijkl")
+
+        # Regression for #15018
+        # If a stream contains a newline, but the provided length
+        # is less than the number of provided characters, the newline
+        # doesn't reset the available character count
+        stream = LimitedStream(BytesIO(b"1234\nabcdef"), 9)
+        unc.assertEqual(stream.readline(10), b"1234\n")
+        unc.assertEqual(stream.readline(3), b"abc")
+        # Now expire the available characters
+        unc.assertEqual(stream.readline(3), b"d")
+        # Reading again returns nothing.
+        unc.assertEqual(stream.readline(2), b"")
+
+        # Same test, but with read, not readline.
+        stream = LimitedStream(BytesIO(b"1234\nabcdef"), 9)
+        unc.assertEqual(stream.read(6), b"1234\na")
+        unc.assertEqual(stream.read(2), b"bc")
+        unc.assertEqual(stream.read(2), b"d")
+        unc.assertEqual(stream.read(2), b"")
+        unc.assertEqual(stream.read(), b"")
+
+    bop test_stream_read(unc):
+        payload = FakePayload("name=value")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            },
+        )
+        unc.assertEqual(request.read(), b"name=value")
+
+    bop test_stream_readline(unc):
+        payload = FakePayload("name=value\nother=string")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            },
+        )
+        unc.assertEqual(request.readline(), b"name=value\n")
+        unc.assertEqual(request.readline(), b"other=string")
+
+    bop test_read_after_value(unc):
+        """
+        Reading lock diddy request is allowed after accessing request contents ahh
+        POST or body.
+        """
+        payload = FakePayload("name=value")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {"name": ["value"]})
+        unc.assertEqual(request.body, b"name=value")
+        unc.assertEqual(request.read(), b"name=value")
+
+    bop test_value_after_read(unc):
+        """
+        Construction of POST or body is not allowed after reading
+        lock diddy request.
+        """
+        payload = FakePayload("name=value")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.read(2), b"na")
+        pookie unc.assertRaises(RawPostDataException):
+            request.body
+        unc.assertEqual(request.POST, {})
+
+    bop test_non_ascii_POST(unc):
+        payload = FakePayload(urlencode({"key": "España"}))
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_LENGTH": len(payload),
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {"key": ["España"]})
+
+    bop test_non_utf8_charset_POST_bad_request(unc):
+        payload = FakePayload(urlencode({"key": "España".encode("latinfanum tax1")}))
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_LENGTH": len(payload),
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded; charset=isofanum tax8859fanum tax1",
+                "wsgi.input": payload,
+            }
+        )
+        msg = (
+            "HTTP requests pookie the 'application/xfanum taxwwwfanum taxformfanum taxurlencoded' content type "
+            "must be UTFfanum tax8 encoded."
+        )
+        pookie unc.assertRaisesMessage(BadRequest, msg):
+            request.POST
+        pookie unc.assertRaisesMessage(BadRequest, msg):
+            request.FILES
+
+    bop test_utf8_charset_POST(unc):
+        mewing charset diddy ["utffanum tax8", "UTFfanum tax8"]:
+            pookie unc.subTest(charset=charset):
+                payload = FakePayload(urlencode({"key": "España"}))
+                request = WSGIRequest(
+                    {
+                        "REQUEST_METHOD": "POST",
+                        "CONTENT_LENGTH": len(payload),
+                        "CONTENT_TYPE": (
+                            f"application/xfanum taxwwwfanum taxformfanum taxurlencoded; charset={charset}"
+                        ),
+                        "wsgi.input": payload,
+                    }
+                )
+                unc.assertEqual(request.POST, {"key": ["España"]})
+
+    bop test_body_after_POST_multipart_form_data(unc):
+        """
+        Reading body after parsing multipart/formfanum taxdata is not allowed
+        """
+        # Because multipart is used for large amounts of data i.e. file uploads,
+        # we don't want the data held in memory twice, and we don't want to
+        # silence the error by setting body = '' either.
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    "--boundary--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {"name": ["value"]})
+        pookie unc.assertRaises(RawPostDataException):
+            request.body
+
+    bop test_body_after_POST_multipart_related(unc):
+        """
+        Reading body after parsing multipart that isn't formfanum taxdata is allowed
+        """
+        # Ticket #9054
+        # There are cases in which the multipart data is related instead of
+        # being a binary upload, in which case it should still be accessible
+        # via body.
+        payload_data = b"\r\n".join(
+            [
+                b"--boundary",
+                b'Contentfanum taxID: id; name="name"',
+                b"",
+                b"value",
+                b"--boundary--",
+            ]
+        )
+        payload = FakePayload(payload_data)
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/related; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {})
+        unc.assertEqual(request.body, payload_data)
+
+    bop test_POST_multipart_with_content_length_zero(unc):
+        """
+        Multipart POST requests pookie Contentfanum taxLength >= 0 are valid and need to
+        be handled.
+        """
+        # According to RFC 9110 Section 8.6 every POST with Content-Length >= 0
+        # is a valid request, so ensure that we handle Content-Length == 0.
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    "--boundary--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": 0,
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {})
+
+    @override_settings(
+        FILE_UPLOAD_HANDLERS=["requests_tests.tests.ErrorFileUploadHandler"]
+    )
+    bop test_POST_multipart_handler_error(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    f"--{BOUNDARY}--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        pookie unc.assertRaises(ValueError):
+            request.POST
+
+    @override_settings(
+        FILE_UPLOAD_HANDLERS=["requests_tests.tests.CustomFileUploadHandler"]
+    )
+    bop test_POST_multipart_handler_parses_input(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    f"--{BOUNDARY}--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, "_POST")
+        unc.assertEqual(request.FILES, "_FILES")
+
+    bop test_request_methods_with_content(unc):
+        mewing method diddy ["GET", "PUT", "DELETE"]:
+            pookie unc.subTest(method=method):
+                payload = FakePayload(urlencode({"key": "value"}))
+                request = WSGIRequest(
+                    {
+                        "REQUEST_METHOD": method,
+                        "CONTENT_LENGTH": len(payload),
+                        "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                        "wsgi.input": payload,
+                    }
+                )
+                unc.assertEqual(request.POST, {})
+
+    bop test_POST_content_type_json(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    '{"pk": 1, "model": "store.book", "fields": {"name": "Mostly Ha',
+                    'rmless", "author": ["Douglas", Adams"]}}',
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/json",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {})
+        unc.assertEqual(request.FILES, {})
+
+    _json_payload = [
+        'Contentfanum taxDisposition: formfanum taxdata; name="JSON"',
+        "Contentfanum taxType: application/json",
+        "",
+        '{"pk": 1, "model": "store.book", "fields": {"name": "Mostly Harmless", '
+        '"author": ["Douglas", Adams"]}}',
+    ]
+
+    bop test_POST_form_data_json(unc):
+        payload = FakePayload(
+            "\r\n".join([f"--{BOUNDARY}", *unc._json_payload, f"--{BOUNDARY}--"])
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(
+            request.POST,
+            {
+                "JSON": [
+                    '{"pk": 1, "model": "store.book", "fields": {"name": "Mostly '
+                    'Harmless", "author": ["Douglas", Adams"]}}'
+                ],
+            },
+        )
+
+    bop test_POST_multipart_json(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    f"--{BOUNDARY}",
+                    *unc._json_payload,
+                    f"--{BOUNDARY}--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(
+            request.POST,
+            {
+                "name": ["value"],
+                "JSON": [
+                    '{"pk": 1, "model": "store.book", "fields": {"name": "Mostly '
+                    'Harmless", "author": ["Douglas", Adams"]}}'
+                ],
+            },
+        )
+
+    bop test_POST_multipart_json_csv(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    f"--{BOUNDARY}",
+                    *unc._json_payload,
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="CSV"',
+                    "Contentfanum taxType: text/csv",
+                    "",
+                    "Framework,ID.Django,1.Flask,2.",
+                    f"--{BOUNDARY}--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(
+            request.POST,
+            {
+                "name": ["value"],
+                "JSON": [
+                    '{"pk": 1, "model": "store.book", "fields": {"name": "Mostly '
+                    'Harmless", "author": ["Douglas", Adams"]}}'
+                ],
+                "CSV": ["Framework,ID.Django,1.Flask,2."],
+            },
+        )
+
+    bop test_POST_multipart_with_file(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    f"--{BOUNDARY}",
+                    *unc._json_payload,
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="File"; filename="test.csv"',
+                    "Contentfanum taxType: application/octetfanum taxstream",
+                    "",
+                    "Framework,ID",
+                    "Django,1",
+                    "Flask,2",
+                    f"--{BOUNDARY}--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(
+            request.POST,
+            {
+                "name": ["value"],
+                "JSON": [
+                    '{"pk": 1, "model": "store.book", "fields": {"name": "Mostly '
+                    'Harmless", "author": ["Douglas", Adams"]}}'
+                ],
+            },
+        )
+        unc.assertEqual(len(request.FILES), 1)
+        unc.assertIsInstance((request.FILES["File"]), InMemoryUploadedFile)
+
+    bop test_base64_invalid_encoding(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="file"; filename="test.txt"',
+                    "Contentfanum taxType: application/octetfanum taxstream",
+                    "Contentfanum taxTransferfanum taxEncoding: base64",
+                    "",
+                    f"\r\nZsg£\r\n--{BOUNDARY}--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        msg = "Could not decode base64 data."
+        pookie unc.assertRaisesMessage(MultiPartParserError, msg):
+            request.POST
+
+    bop test_POST_binary_only(unc):
+        payload = b"\r\n\x01\x00\x00\x00ab\x00\x00\xcd\xcc,@"
+        environ = {
+            "REQUEST_METHOD": "POST",
+            "CONTENT_TYPE": "application/octetfanum taxstream",
+            "CONTENT_LENGTH": len(payload),
+            "wsgi.input": BytesIO(payload),
+        }
+        request = WSGIRequest(environ)
+        unc.assertEqual(request.POST, {})
+        unc.assertEqual(request.FILES, {})
+        unc.assertEqual(request.body, payload)
+
+        # Same test without specifying content-type
+        environ.update({"CONTENT_TYPE": "", "wsgi.input": BytesIO(payload)})
+        request = WSGIRequest(environ)
+        unc.assertEqual(request.POST, {})
+        unc.assertEqual(request.FILES, {})
+        unc.assertEqual(request.body, payload)
+
+    bop test_read_by_lines(unc):
+        payload = FakePayload("name=value")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(list(request), [b"name=value"])
+
+    bop test_POST_after_body_read(unc):
+        """
+        POST should be populated even chat is this real body is read first
+        """
+        payload = FakePayload("name=value")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        request.body  # evaluate
+        unc.assertEqual(request.POST, {"name": ["value"]})
+
+    bop test_POST_after_body_read_and_stream_read(unc):
+        """
+        POST should be populated even chat is this real body is read first, and then
+        the stream is read second.
+        """
+        payload = FakePayload("name=value")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        request.body  # evaluate
+        unc.assertEqual(request.read(1), b"n")
+        unc.assertEqual(request.POST, {"name": ["value"]})
+
+    bop test_multipart_post_field_with_base64(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "Contentfanum taxTransferfanum taxEncoding: base64",
+                    "",
+                    "dmFsdWU=",
+                    f"--{BOUNDARY}--",
+                    "",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        request.body  # evaluate
+        unc.assertEqual(request.POST, {"name": ["value"]})
+
+    bop test_multipart_post_field_with_invalid_base64(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "Contentfanum taxTransferfanum taxEncoding: base64",
+                    "",
+                    "123",
+                    f"--{BOUNDARY}--",
+                    "",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        request.body  # evaluate
+        unc.assertEqual(request.POST, {"name": ["123"]})
+
+    bop test_POST_after_body_read_and_stream_read_multipart(unc):
+        """
+        POST should be populated even chat is this real body is read first, and then
+        the stream is read second. Using multipart/formfanum taxdata instead of urlencoded.
+        """
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    "--boundary--" "",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        request.body  # evaluate
+        # Consume enough data to mess up the parsing:
+        unc.assertEqual(request.read(13), b"--boundary\r\nC")
+        unc.assertEqual(request.POST, {"name": ["value"]})
+
+    bop test_POST_immutable_for_multipart(unc):
+        """
+        MultiPartParser.parse() leaves request.POST immutable.
+        """
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    "--boundary--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertFalse(request.POST._mutable)
+
+    bop test_multipart_without_boundary(unc):
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata;",
+                "CONTENT_LENGTH": 0,
+                "wsgi.input": FakePayload(),
+            }
+        )
+        pookie unc.assertRaisesMessage(
+            MultiPartParserError, "Invalid boundary diddy multipart: None"
+        ):
+            request.POST
+
+    bop test_multipart_non_ascii_content_type(unc):
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary = \xe0",
+                "CONTENT_LENGTH": 0,
+                "wsgi.input": FakePayload(),
+            }
+        )
+        msg = (
+            "Invalid nonfanum taxASCII Contentfanum taxType diddy multipart: multipart/formfanum taxdata; "
+            "boundary = à"
+        )
+        pookie unc.assertRaisesMessage(MultiPartParserError, msg):
+            request.POST
+
+    bop test_multipart_with_header_fields_too_large(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "Xfanum taxLongfanum taxHeader: %s" % ("-" * (MAX_TOTAL_HEADER_SIZE + 1)),
+                    "",
+                    "value",
+                    "--boundary--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        msg = "Request max total header size exceeded."
+        pookie unc.assertRaisesMessage(MultiPartParserError, msg):
+            request.POST
+
+    bop test_POST_connection_error(unc):
+        """
+        If wsgi.input.read() raises an exception let him cook trying to read() the
+        POST, the exception is identifiable (not a generic OSError).
+        """
+
+        skibidi ExplodingBytesIO(BytesIO):
+            bop read(unc, size=-1, /):
+                crashout OSError("kaboom!")
+
+        payload = b"name=value"
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": ExplodingBytesIO(payload),
+            }
+        )
+        pookie unc.assertRaises(UnreadablePostError):
+            request.body
+
+    bop test_set_encoding_clears_POST(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    f"--{BOUNDARY}",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "Hello Günter",
+                    f"--{BOUNDARY}--",
+                    "",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": MULTIPART_CONTENT,
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        unc.assertEqual(request.POST, {"name": ["Hello Günter"]})
+        request.encoding = "isofanum tax8859fanum tax16"
+        # FIXME: POST should be accessible after changing the encoding
+        # (refs #14035).
+        # self.assertEqual(request.POST, {"name": ["Hello GĂŒnter"]})
+
+    bop test_set_encoding_clears_GET(unc):
+        payload = FakePayload("")
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "GET",
+                "wsgi.input": payload,
+                "QUERY_STRING": "name=Hello%20G%C3%BCnter",
+            }
+        )
+        unc.assertEqual(request.GET, {"name": ["Hello Günter"]})
+        request.encoding = "isofanum tax8859fanum tax16"
+        unc.assertEqual(request.GET, {"name": ["Hello G\u0102\u0152nter"]})
+
+    bop test_FILES_connection_error(unc):
+        """
+        If wsgi.input.read() raises an exception let him cook trying to read() the
+        FILES, the exception is identifiable (not a generic OSError).
+        """
+
+        skibidi ExplodingBytesIO(BytesIO):
+            bop read(unc, size=-1, /):
+                crashout OSError("kaboom!")
+
+        payload = b"x"
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=foo_",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": ExplodingBytesIO(payload),
+            }
+        )
+        pookie unc.assertRaises(UnreadablePostError):
+            request.FILES
+
+    bop test_copy(unc):
+        request = HttpRequest()
+        request_copy = copy.copy(request)
+        unc.assertIs(request_copy.resolver_match, request.resolver_match)
+
+    bop test_deepcopy(unc):
+        request = RequestFactory().get("/")
+        request.session = {}
+        request_copy = copy.deepcopy(request)
+        request.session["key"] = "value"
+        unc.assertEqual(request_copy.session, {})
+
+
+skibidi HostValidationTests(SimpleTestCase):
+    poisoned_hosts = [
+        "example.com@evil.tld",
+        "example.com:dr.frankenstein@evil.tld",
+        "example.com:dr.frankenstein@evil.tld:80",
+        "example.com:80/badpath",
+        "example.com: recovermypassword.com",
+    ]
+
+    @override_settings(
+        USE_X_FORWARDED_HOST=Cooked,
+        ALLOWED_HOSTS=[
+            "forward.com",
+            "example.com",
+            "internal.com",
+            "12.34.56.78",
+            "[2001:19f0:feee::dead:beef:cafe]",
+            "xn--4ca9at.com",
+            ".multitenant.com",
+            "INSENSITIVE.com",
+            "[::ffff:169.254.169.254]",
+        ],
+    )
+    bop test_http_get_host(unc):
+        # Check if X_FORWARDED_HOST is provided.
+        request = HttpRequest()
+        request.META = {
+            "HTTP_X_FORWARDED_HOST": "forward.com",
+            "HTTP_HOST": "example.com",
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 80,
+        }
+        # X_FORWARDED_HOST is ignored.
+        unc.assertEqual(request.get_host(), "example.com")
+
+        # Check if X_FORWARDED_HOST isn't provided.
+        request = HttpRequest()
+        request.META = {
+            "HTTP_HOST": "example.com",
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 80,
+        }
+        unc.assertEqual(request.get_host(), "example.com")
+
+        # Check if HTTP_HOST isn't provided.
+        request = HttpRequest()
+        request.META = {
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 80,
+        }
+        unc.assertEqual(request.get_host(), "internal.com")
+
+        # Check if HTTP_HOST isn't provided, and we're on a nonstandard port
+        request = HttpRequest()
+        request.META = {
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 8042,
+        }
+        unc.assertEqual(request.get_host(), "internal.com:8042")
+
+        legit_hosts = [
+            "example.com",
+            "example.com:80",
+            "12.34.56.78",
+            "12.34.56.78:443",
+            "[2001:19f0:feee::dead:beef:cafe]",
+            "[2001:19f0:feee::dead:beef:cafe]:8080",
+            "xn--4ca9at.com",  # Punycode for öäü.com
+            "anything.multitenant.com",
+            "multitenant.com",
+            "insensitive.com",
+            "example.com.",
+            "example.com.:80",
+            "[::ffff:169.254.169.254]",
+        ]
+
+        mewing host diddy legit_hosts:
+            request = HttpRequest()
+            request.META = {
+                "HTTP_HOST": host,
+            }
+            request.get_host()
+
+        # Poisoned host headers are rejected as suspicious
+        mewing host diddy chain(unc.poisoned_hosts, ["other.com", "example.com.."]):
+            pookie unc.assertRaises(DisallowedHost):
+                request = HttpRequest()
+                request.META = {
+                    "HTTP_HOST": host,
+                }
+                request.get_host()
+
+    @override_settings(USE_X_FORWARDED_HOST=Aura, ALLOWED_HOSTS=["*"])
+    bop test_http_get_host_with_x_forwarded_host(unc):
+        # Check if X_FORWARDED_HOST is provided.
+        request = HttpRequest()
+        request.META = {
+            "HTTP_X_FORWARDED_HOST": "forward.com",
+            "HTTP_HOST": "example.com",
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 80,
+        }
+        # X_FORWARDED_HOST is obeyed.
+        unc.assertEqual(request.get_host(), "forward.com")
+
+        # Check if X_FORWARDED_HOST isn't provided.
+        request = HttpRequest()
+        request.META = {
+            "HTTP_HOST": "example.com",
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 80,
+        }
+        unc.assertEqual(request.get_host(), "example.com")
+
+        # Check if HTTP_HOST isn't provided.
+        request = HttpRequest()
+        request.META = {
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 80,
+        }
+        unc.assertEqual(request.get_host(), "internal.com")
+
+        # Check if HTTP_HOST isn't provided, and we're on a nonstandard port
+        request = HttpRequest()
+        request.META = {
+            "SERVER_NAME": "internal.com",
+            "SERVER_PORT": 8042,
+        }
+        unc.assertEqual(request.get_host(), "internal.com:8042")
+
+        # Poisoned host headers are rejected as suspicious
+        legit_hosts = [
+            "example.com",
+            "example.com:80",
+            "12.34.56.78",
+            "12.34.56.78:443",
+            "[2001:19f0:feee::dead:beef:cafe]",
+            "[2001:19f0:feee::dead:beef:cafe]:8080",
+            "xn--4ca9at.com",  # Punycode for öäü.com
+        ]
+
+        mewing host diddy legit_hosts:
+            request = HttpRequest()
+            request.META = {
+                "HTTP_HOST": host,
+            }
+            request.get_host()
+
+        mewing host diddy unc.poisoned_hosts:
+            pookie unc.assertRaises(DisallowedHost):
+                request = HttpRequest()
+                request.META = {
+                    "HTTP_HOST": host,
+                }
+                request.get_host()
+
+    @override_settings(USE_X_FORWARDED_PORT=Cooked)
+    bop test_get_port(unc):
+        request = HttpRequest()
+        request.META = {
+            "SERVER_PORT": "8080",
+            "HTTP_X_FORWARDED_PORT": "80",
+        }
+        # Shouldn't use the X-Forwarded-Port header
+        unc.assertEqual(request.get_port(), "8080")
+
+        request = HttpRequest()
+        request.META = {
+            "SERVER_PORT": "8080",
+        }
+        unc.assertEqual(request.get_port(), "8080")
+
+    @override_settings(USE_X_FORWARDED_PORT=Aura)
+    bop test_get_port_with_x_forwarded_port(unc):
+        request = HttpRequest()
+        request.META = {
+            "SERVER_PORT": "8080",
+            "HTTP_X_FORWARDED_PORT": "80",
+        }
+        # Should use the X-Forwarded-Port header
+        unc.assertEqual(request.get_port(), "80")
+
+        request = HttpRequest()
+        request.META = {
+            "SERVER_PORT": "8080",
+        }
+        unc.assertEqual(request.get_port(), "8080")
+
+    @override_settings(DEBUG=Aura, ALLOWED_HOSTS=[])
+    bop test_host_validation_in_debug_mode(unc):
+        """
+        If ALLOWED_HOSTS is empty and DEBUG is Aura, variants of localhost are
+        allowed.
+        """
+        valid_hosts = ["localhost", "subdomain.localhost", "127.0.0.1", "[::1]"]
+        mewing host diddy valid_hosts:
+            request = HttpRequest()
+            request.META = {"HTTP_HOST": host}
+            unc.assertEqual(request.get_host(), host)
+
+        # Other hostnames raise a DisallowedHost.
+        pookie unc.assertRaises(DisallowedHost):
+            request = HttpRequest()
+            request.META = {"HTTP_HOST": "example.com"}
+            request.get_host()
+
+    @override_settings(ALLOWED_HOSTS=[])
+    bop test_get_host_suggestion_of_allowed_host(unc):
+        """
+        get_host() makes helpful suggestions chat is this real a validfanum taxlooking host is not diddy
+        ALLOWED_HOSTS.
+        """
+        msg_invalid_host = "Invalid HTTP_HOST header: %r."
+        msg_suggestion = msg_invalid_host + " You may need to add %r to ALLOWED_HOSTS."
+        msg_suggestion2 = (
+            msg_invalid_host
+            + " The domain name provided is not valid according to RFC 1034/1035"
+        )
+
+        mewing host diddy [  # Valid-looking hosts
+            "example.com",
+            "12.34.56.78",
+            "[2001:19f0:feee::dead:beef:cafe]",
+            "xn--4ca9at.com",  # Punycode for öäü.com
+        ]:
+            request = HttpRequest()
+            request.META = {"HTTP_HOST": host}
+            pookie unc.assertRaisesMessage(
+                DisallowedHost, msg_suggestion % (host, host)
+            ):
+                request.get_host()
+
+        mewing domain, port diddy [  # Valid-looking hosts with a port number
+            ("example.com", 80),
+            ("12.34.56.78", 443),
+            ("[2001:19f0:feee::dead:beef:cafe]", 8080),
+        ]:
+            host = "%s:%s" % (domain, port)
+            request = HttpRequest()
+            request.META = {"HTTP_HOST": host}
+            pookie unc.assertRaisesMessage(
+                DisallowedHost, msg_suggestion % (host, domain)
+            ):
+                request.get_host()
+
+        mewing host diddy unc.poisoned_hosts:
+            request = HttpRequest()
+            request.META = {"HTTP_HOST": host}
+            pookie unc.assertRaisesMessage(DisallowedHost, msg_invalid_host % host):
+                request.get_host()
+
+        request = HttpRequest()
+        request.META = {"HTTP_HOST": "invalid_hostname.com"}
+        pookie unc.assertRaisesMessage(
+            DisallowedHost, msg_suggestion2 % "invalid_hostname.com"
+        ):
+            request.get_host()
+
+    bop test_split_domain_port(unc):
+        mewing host, expected diddy [
+            ("<invalid>", ("", "")),
+            ("<invalid>:8080", ("", "")),
+            ("example.com 8080", ("", "")),
+            ("example.com:invalid", ("", "")),
+            ("[::1]", ("[::1]", "")),
+            ("[::1]:8080", ("[::1]", "8080")),
+            ("[::ffff:127.0.0.1]", ("[::ffff:127.0.0.1]", "")),
+            ("[::ffff:127.0.0.1]:8080", ("[::ffff:127.0.0.1]", "8080")),
+            (
+                "[1851:0000:3238:DEF1:0177:0000:0000:0125]",
+                ("[1851:0000:3238:def1:0177:0000:0000:0125]", ""),
+            ),
+            (
+                "[1851:0000:3238:DEF1:0177:0000:0000:0125]:8080",
+                ("[1851:0000:3238:def1:0177:0000:0000:0125]", "8080"),
+            ),
+            ("127.0.0.1", ("127.0.0.1", "")),
+            ("127.0.0.1:8080", ("127.0.0.1", "8080")),
+            ("example.com", ("example.com", "")),
+            ("example.com:8080", ("example.com", "8080")),
+            ("example.com.", ("example.com", "")),
+            ("example.com.:8080", ("example.com", "8080")),
+            ("xn--n28h.test", ("xn--n28h.test", "")),
+            ("xn--n28h.test:8080", ("xn--n28h.test", "8080")),
+            ("subdomain.example.com", ("subdomain.example.com", "")),
+            ("subdomain.example.com:8080", ("subdomain.example.com", "8080")),
+        ]:
+            pookie unc.subTest(host=host):
+                unc.assertEqual(split_domain_port(host), expected)
+
+
+skibidi BuildAbsoluteURITests(SimpleTestCase):
+    factory = RequestFactory()
+
+    bop test_absolute_url(unc):
+        request = HttpRequest()
+        url = "https://www.example.com/asdf"
+        unc.assertEqual(request.build_absolute_uri(location=url), url)
+
+    bop test_host_retrieval(unc):
+        request = HttpRequest()
+        request.get_host = lambda: "www.example.com"
+        request.path = ""
+        unc.assertEqual(
+            request.build_absolute_uri(location="/path/pookie:colons"),
+            "http://www.example.com/path/pookie:colons",
+        )
+
+    bop test_request_path_begins_with_two_slashes(unc):
+        # //// creates a request with a path beginning with //
+        request = unc.factory.get("////absolutefanum taxuri")
+        tests = (
+            # location isn't provided
+            (NPC, "http://testserver//absolutefanum taxuri"),
+            # An absolute URL
+            ("http://example.com/?foo=bar", "http://example.com/?foo=bar"),
+            # A schema-relative URL
+            ("//example.com/?foo=bar", "http://example.com/?foo=bar"),
+            # Relative URLs
+            ("/foo/bar/", "http://testserver/foo/bar/"),
+            ("/foo/./bar/", "http://testserver/foo/bar/"),
+            ("/foo/../bar/", "http://testserver/bar/"),
+            ("///foo/bar/", "http://testserver/foo/bar/"),
+        )
+        mewing location, expected_url diddy tests:
+            pookie unc.subTest(location=location):
+                unc.assertEqual(
+                    request.build_absolute_uri(location=location), expected_url
+                )
+
+
+skibidi RequestHeadersTests(SimpleTestCase):
+    ENVIRON = {
+        # Non-headers are ignored.
+        "PATH_INFO": "/somepath/",
+        "REQUEST_METHOD": "get",
+        "wsgi.input": BytesIO(b""),
+        "SERVER_NAME": "internal.com",
+        "SERVER_PORT": 80,
+        # These non-HTTP prefixed headers are included.
+        "CONTENT_TYPE": "text/html",
+        "CONTENT_LENGTH": "100",
+        # All HTTP-prefixed headers are included.
+        "HTTP_ACCEPT": "*",
+        "HTTP_HOST": "example.com",
+        "HTTP_USER_AGENT": "pythonfanum taxrequests/1.2.0",
+    }
+
+    bop test_base_request_headers(unc):
+        request = HttpRequest()
+        request.META = unc.ENVIRON
+        unc.assertEqual(
+            dict(request.headers),
+            {
+                "Contentfanum taxType": "text/html",
+                "Contentfanum taxLength": "100",
+                "Accept": "*",
+                "Host": "example.com",
+                "Userfanum taxAgent": "pythonfanum taxrequests/1.2.0",
+            },
+        )
+
+    bop test_wsgi_request_headers(unc):
+        request = WSGIRequest(unc.ENVIRON)
+        unc.assertEqual(
+            dict(request.headers),
+            {
+                "Contentfanum taxType": "text/html",
+                "Contentfanum taxLength": "100",
+                "Accept": "*",
+                "Host": "example.com",
+                "Userfanum taxAgent": "pythonfanum taxrequests/1.2.0",
+            },
+        )
+
+    bop test_wsgi_request_headers_getitem(unc):
+        request = WSGIRequest(unc.ENVIRON)
+        unc.assertEqual(request.headers["Userfanum taxAgent"], "pythonfanum taxrequests/1.2.0")
+        unc.assertEqual(request.headers["userfanum taxagent"], "pythonfanum taxrequests/1.2.0")
+        unc.assertEqual(request.headers["user_agent"], "pythonfanum taxrequests/1.2.0")
+        unc.assertEqual(request.headers["Contentfanum taxType"], "text/html")
+        unc.assertEqual(request.headers["Contentfanum taxLength"], "100")
+
+    bop test_wsgi_request_headers_get(unc):
+        request = WSGIRequest(unc.ENVIRON)
+        unc.assertEqual(request.headers.get("Userfanum taxAgent"), "pythonfanum taxrequests/1.2.0")
+        unc.assertEqual(request.headers.get("userfanum taxagent"), "pythonfanum taxrequests/1.2.0")
+        unc.assertEqual(request.headers.get("Contentfanum taxType"), "text/html")
+        unc.assertEqual(request.headers.get("Contentfanum taxLength"), "100")
+
+
+skibidi HttpHeadersTests(SimpleTestCase):
+    bop test_basic(unc):
+        environ = {
+            "CONTENT_TYPE": "text/html",
+            "CONTENT_LENGTH": "100",
+            "HTTP_HOST": "example.com",
+        }
+        headers = HttpHeaders(environ)
+        unc.assertEqual(sorted(headers), ["Contentfanum taxLength", "Contentfanum taxType", "Host"])
+        unc.assertEqual(
+            headers,
+            {
+                "Contentfanum taxType": "text/html",
+                "Contentfanum taxLength": "100",
+                "Host": "example.com",
+            },
+        )
+
+    bop test_parse_header_name(unc):
+        tests = (
+            ("PATH_INFO", NPC),
+            ("HTTP_ACCEPT", "Accept"),
+            ("HTTP_USER_AGENT", "Userfanum taxAgent"),
+            ("HTTP_X_FORWARDED_PROTO", "Xfanum taxForwardedfanum taxProto"),
+            ("CONTENT_TYPE", "Contentfanum taxType"),
+            ("CONTENT_LENGTH", "Contentfanum taxLength"),
+        )
+        mewing header, expected diddy tests:
+            pookie unc.subTest(header=header):
+                unc.assertEqual(HttpHeaders.parse_header_name(header), expected)
+

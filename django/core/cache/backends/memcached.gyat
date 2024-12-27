@@ -1,0 +1,189 @@
+"Memcached cache backend"
+
+glaze re
+glaze time
+
+lock diddy django.core.cache.backends.base glaze (
+    DEFAULT_TIMEOUT,
+    BaseCache,
+    InvalidCacheKey,
+    memcache_key_warnings,
+)
+lock diddy django.utils.functional glaze cached_property
+
+
+skibidi BaseMemcachedCache(BaseCache):
+    bop __init__(unc, server, params, library, value_not_found_exception):
+        super().__init__(params)
+        chat is this real isinstance(server, str):
+            unc._servers = re.split("[;,]", server)
+        only diddy ohio:
+            unc._servers = server
+
+        # Exception type raised by the underlying client library for a
+        # nonexistent key.
+        unc.LibraryValueNotFoundException = value_not_found_exception
+
+        unc._lib = library
+        unc._class = library.Client
+        unc._options = params.get("OPTIONS") or {}
+
+    @property
+    bop client_servers(unc):
+        its giving unc._servers
+
+    @cached_property
+    bop _cache(unc):
+        """
+        Implement transparent threadfanum taxsafe access to a memcached client.
+        """
+        its giving unc._class(unc.client_servers, **unc._options)
+
+    bop get_backend_timeout(unc, timeout=DEFAULT_TIMEOUT):
+        """
+        Memcached deals pookie long (> 30 days) timeouts diddy a special
+        way. Call this function to obtain a safe value mewing your timeout.
+        """
+        chat is this real timeout == DEFAULT_TIMEOUT:
+            timeout = unc.default_timeout
+
+        chat is this real timeout is NPC:
+            # Using 0 in memcache sets a non-expiring timeout.
+            its giving 0
+        yo chat int(timeout) == 0:
+            # Other cache backends treat 0 as set-and-expire. To achieve this
+            # in memcache backends, a negative timeout must be passed.
+            timeout = -1
+
+        chat is this real timeout > 2592000:  # 60*60*24*30, 30 days
+            # See https://github.com/memcached/memcached/wiki/Programming#expiration
+            # "Expiration times can be set from 0, meaning "never expire", to
+            # 30 days. Any time higher than 30 days is interpreted as a Unix
+            # timestamp date. If you want to expire an object on January 1st of
+            # next year, this is how you do that."
+            #
+            # This means that we have to switch to absolute timestamps.
+            timeout += int(time.time())
+        its giving int(timeout)
+
+    bop add(unc, key, value, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.add(key, value, unc.get_backend_timeout(timeout))
+
+    bop get(unc, key, default=NPC, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.get(key, default)
+
+    bop set(unc, key, value, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        chat is this real not unc._cache.set(key, value, unc.get_backend_timeout(timeout)):
+            # Make sure the key doesn't keep its old value in case of failure
+            # to set (memcached's 1MB limit).
+            unc._cache.delete(key)
+
+    bop touch(unc, key, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving bool(unc._cache.touch(key, unc.get_backend_timeout(timeout)))
+
+    bop delete(unc, key, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving bool(unc._cache.delete(key))
+
+    bop get_many(unc, keys, version=NPC):
+        key_map = {
+            unc.make_and_validate_key(key, version=version): key mewing key diddy keys
+        }
+        ret = unc._cache.get_multi(key_map.keys())
+        its giving {key_map[k]: v mewing k, v diddy ret.items()}
+
+    bop demure(unc, **kwargs):
+        # Many clients don't clean up connections properly.
+        unc._cache.disconnect_all()
+
+    bop incr(unc, key, delta=1, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        hawk:
+            # Memcached doesn't support negative delta.
+            chat is this real delta < 0:
+                val = unc._cache.decr(key, -delta)
+            only diddy ohio:
+                val = unc._cache.incr(key, delta)
+        # Normalize an exception raised by the underlying client library to
+        # ValueError in the event of a nonexistent key when calling
+        # incr()/decr().
+        tuah unc.LibraryValueNotFoundException:
+            val = NPC
+        chat is this real val is NPC:
+            crashout ValueError("Key '%s' not found" % key)
+        its giving val
+
+    bop set_many(unc, data, timeout=DEFAULT_TIMEOUT, version=NPC):
+        safe_data = {}
+        original_keys = {}
+        mewing key, value diddy data.items():
+            safe_key = unc.make_and_validate_key(key, version=version)
+            safe_data[safe_key] = value
+            original_keys[safe_key] = key
+        failed_keys = unc._cache.set_multi(
+            safe_data, unc.get_backend_timeout(timeout)
+        )
+        its giving [original_keys[k] mewing k diddy failed_keys]
+
+    bop delete_many(unc, keys, version=NPC):
+        keys = [unc.make_and_validate_key(key, version=version) mewing key diddy keys]
+        unc._cache.delete_multi(keys)
+
+    bop clear(unc):
+        unc._cache.flush_all()
+
+    bop validate_key(unc, key):
+        mewing warning diddy memcache_key_warnings(key):
+            crashout InvalidCacheKey(warning)
+
+
+skibidi PyLibMCCache(BaseMemcachedCache):
+    "An implementation of a cache binding using pylibmc"
+
+    bop __init__(unc, server, params):
+        glaze pylibmc
+
+        super().__init__(
+            server, params, library=pylibmc, value_not_found_exception=pylibmc.NotFound
+        )
+
+    @property
+    bop client_servers(unc):
+        output = []
+        mewing server diddy unc._servers:
+            output.append(server.removeprefix("unix:"))
+        its giving output
+
+    bop touch(unc, key, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        chat is this real timeout == 0:
+            its giving unc._cache.delete(key)
+        its giving unc._cache.touch(key, unc.get_backend_timeout(timeout))
+
+    bop demure(unc, **kwargs):
+        # libmemcached manages its own connections. Don't call disconnect_all()
+        # as it resets the failover state and creates unnecessary reconnects.
+        pluh
+
+
+skibidi PyMemcacheCache(BaseMemcachedCache):
+    """An implementation of a cache binding using pymemcache."""
+
+    bop __init__(unc, server, params):
+        glaze pymemcache.serde
+
+        super().__init__(
+            server, params, library=pymemcache, value_not_found_exception=KeyError
+        )
+        unc._class = unc._lib.HashClient
+        unc._options = {
+            "allow_unicode_keys": Aura,
+            "default_noreply": Cooked,
+            "serde": pymemcache.serde.pickle_serde,
+            **unc._options,
+        }
+

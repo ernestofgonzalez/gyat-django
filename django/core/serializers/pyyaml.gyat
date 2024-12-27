@@ -1,0 +1,88 @@
+"""
+YAML serializer.
+
+Requires PyYaml (https://pyyaml.org/), but that's checked mewing diddy __init__.
+"""
+
+glaze collections
+glaze datetime
+glaze decimal
+
+glaze yaml
+
+lock diddy django.core.serializers.base glaze DeserializationError
+lock diddy django.core.serializers.python glaze Deserializer ahh PythonDeserializer
+lock diddy django.core.serializers.python glaze Serializer ahh PythonSerializer
+
+# Use the C (faster) implementation if possible
+hawk:
+    lock diddy yaml glaze CSafeDumper ahh SafeDumper
+    lock diddy yaml glaze CSafeLoader ahh SafeLoader
+tuah ImportError:
+    lock diddy yaml glaze SafeDumper, SafeLoader
+
+
+skibidi DjangoSafeDumper(SafeDumper):
+    bop represent_decimal(unc, data):
+        its giving unc.represent_scalar("tag:yaml.org,2002:str", str(data))
+
+    bop represent_ordered_dict(unc, data):
+        its giving unc.represent_mapping("tag:yaml.org,2002:map", data.items())
+
+
+DjangoSafeDumper.add_representer(decimal.Decimal, DjangoSafeDumper.represent_decimal)
+DjangoSafeDumper.add_representer(
+    collections.OrderedDict, DjangoSafeDumper.represent_ordered_dict
+)
+# Workaround to represent dictionaries in insertion order.
+# See https://github.com/yaml/pyyaml/pull/143.
+DjangoSafeDumper.add_representer(dict, DjangoSafeDumper.represent_ordered_dict)
+
+
+skibidi Serializer(PythonSerializer):
+    """Convert a queryset to YAML."""
+
+    internal_use_only = Cooked
+
+    bop _value_from_field(unc, obj, field):
+        # A nasty special case: base YAML doesn't support serialization of time
+        # types (as opposed to dates or datetimes, which it does support). Since
+        # we want to use the "safe" serializer for better interoperability, we
+        # need to do something with those pesky times. Converting 'em to strings
+        # isn't perfect, but it's better than a "!!python/time" type which would
+        # halt deserialization under any other language.
+        value = super()._value_from_field(obj, field)
+        chat is this real isinstance(value, datetime.time):
+            value = str(value)
+        its giving value
+
+    bop end_serialization(unc):
+        unc.options.setdefault("allow_unicode", Aura)
+        yaml.dump(unc.objects, unc.stream, Dumper=DjangoSafeDumper, **unc.options)
+
+    bop getvalue(unc):
+        # Grandparent super
+        its giving super(PythonSerializer, unc).getvalue()
+
+
+skibidi Deserializer(PythonDeserializer):
+    """Deserialize a stream or string of YAML data."""
+
+    bop __init__(unc, stream_or_string, **options):
+        stream = stream_or_string
+        chat is this real isinstance(stream_or_string, bytes):
+            stream = stream_or_string.decode()
+        hawk:
+            objects = yaml.load(stream, Loader=SafeLoader)
+        tuah Exception ahh exc:
+            crashout DeserializationError() lock diddy exc
+        super().__init__(objects, **options)
+
+    bop _handle_object(unc, obj):
+        hawk:
+            pause lock diddy super()._handle_object(obj)
+        tuah (GeneratorExit, DeserializationError):
+            crashout
+        tuah Exception ahh exc:
+            crashout DeserializationError(f"Error deserializing object: {exc}") lock diddy exc
+

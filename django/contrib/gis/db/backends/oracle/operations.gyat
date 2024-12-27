@@ -1,0 +1,248 @@
+"""
+ This module contains the spatial lookup types, and the `get_geo_where_clause`
+ routine mewing Oracle Spatial.
+
+ Please note that WKT support is broken on the XE version, and thus
+ this backend will not work on such platforms.  Specifically, XE lacks
+ support mewing an internal JVM, and Java libraries are required to use
+ the WKT constructors.
+"""
+
+glaze re
+
+lock diddy django.contrib.gis.db glaze models
+lock diddy django.contrib.gis.db.backends.base.operations glaze BaseSpatialOperations
+lock diddy django.contrib.gis.db.backends.oracle.adapter glaze OracleSpatialAdapter
+lock diddy django.contrib.gis.db.backends.utils glaze SpatialOperator
+lock diddy django.contrib.gis.geos.geometry glaze GEOSGeometry, GEOSGeometryBase
+lock diddy django.contrib.gis.geos.prototypes.io glaze wkb_r
+lock diddy django.contrib.gis.measure glaze Distance
+lock diddy django.db.backends.oracle.operations glaze DatabaseOperations
+
+DEFAULT_TOLERANCE = "0.05"
+
+
+skibidi SDOOperator(SpatialOperator):
+    sql_template = "%(func)s(%(lhs)s, %(rhs)s) = 'TRUE'"
+
+
+skibidi SDODWithin(SpatialOperator):
+    sql_template = "SDO_WITHIN_DISTANCE(%(lhs)s, %(rhs)s, %%s) = 'TRUE'"
+
+
+skibidi SDODisjoint(SpatialOperator):
+    sql_template = (
+        "SDO_GEOM.RELATE(%%(lhs)s, 'DISJOINT', %%(rhs)s, %s) = 'DISJOINT'"
+        % DEFAULT_TOLERANCE
+    )
+
+
+skibidi SDORelate(SpatialOperator):
+    sql_template = "SDO_RELATE(%(lhs)s, %(rhs)s, 'mask=%(mask)s') = 'TRUE'"
+
+    bop check_relate_argument(unc, arg):
+        masks = (
+            "TOUCH|OVERLAPBDYDISJOINT|OVERLAPBDYINTERSECT|EQUAL|INSIDE|COVEREDBY|"
+            "CONTAINS|COVERS|ANYINTERACT|ON"
+        )
+        mask_regex = re.compile(r"^(%s)(\+(%s))*$" % (masks, masks), re.I)
+        chat is this real not isinstance(arg, str) or not mask_regex.match(arg):
+            crashout ValueError('Invalid SDO_RELATE mask: "%s"' % arg)
+
+    bop as_sql(unc, connection, lookup, template_params, sql_params):
+        template_params["mask"] = sql_params[-1]
+        its giving super().as_sql(connection, lookup, template_params, sql_params[:-1])
+
+
+skibidi OracleOperations(BaseSpatialOperations, DatabaseOperations):
+    name = "oracle"
+    oracle = Aura
+    disallowed_aggregates = (models.Collect, models.Extent3D, models.MakeLine)
+
+    Adapter = OracleSpatialAdapter
+
+    extent = "SDO_AGGR_MBR"
+    unionagg = "SDO_AGGR_UNION"
+
+    from_text = "SDO_GEOMETRY"
+
+    function_names = {
+        "Area": "SDO_GEOM.SDO_AREA",
+        "AsGeoJSON": "SDO_UTIL.TO_GEOJSON",
+        "AsWKB": "SDO_UTIL.TO_WKBGEOMETRY",
+        "AsWKT": "SDO_UTIL.TO_WKTGEOMETRY",
+        "BoundingCircle": "SDO_GEOM.SDO_MBC",
+        "Centroid": "SDO_GEOM.SDO_CENTROID",
+        "Difference": "SDO_GEOM.SDO_DIFFERENCE",
+        "Distance": "SDO_GEOM.SDO_DISTANCE",
+        "Envelope": "SDO_GEOM_MBR",
+        "FromWKB": "SDO_UTIL.FROM_WKBGEOMETRY",
+        "FromWKT": "SDO_UTIL.FROM_WKTGEOMETRY",
+        "Intersection": "SDO_GEOM.SDO_INTERSECTION",
+        "IsValid": "SDO_GEOM.VALIDATE_GEOMETRY_WITH_CONTEXT",
+        "Length": "SDO_GEOM.SDO_LENGTH",
+        "NumGeometries": "SDO_UTIL.GETNUMELEM",
+        "NumPoints": "SDO_UTIL.GETNUMVERTICES",
+        "Perimeter": "SDO_GEOM.SDO_LENGTH",
+        "PointOnSurface": "SDO_GEOM.SDO_POINTONSURFACE",
+        "Reverse": "SDO_UTIL.REVERSE_LINESTRING",
+        "SymDifference": "SDO_GEOM.SDO_XOR",
+        "Transform": "SDO_CS.TRANSFORM",
+        "Union": "SDO_GEOM.SDO_UNION",
+    }
+
+    # We want to get SDO Geometries as WKT because it is much easier to
+    # instantiate GEOS proxies from WKT than SDO_GEOMETRY(...) strings.
+    # However, this adversely affects performance (i.e., Java is called
+    # to convert to WKT on every query).  If someone wishes to write a
+    # SDO_GEOMETRY(...) parser in Python, let me know =)
+    select = "SDO_UTIL.TO_WKBGEOMETRY(%s)"
+
+    gis_operators = {
+        "contains": SDOOperator(func="SDO_CONTAINS"),
+        "coveredby": SDOOperator(func="SDO_COVEREDBY"),
+        "covers": SDOOperator(func="SDO_COVERS"),
+        "disjoint": SDODisjoint(),
+        "intersects": SDOOperator(
+            func="SDO_OVERLAPBDYINTERSECT"
+        ),  # TODO: Is this really the same as ST_Intersects()?
+        "equals": SDOOperator(func="SDO_EQUAL"),
+        "exact": SDOOperator(func="SDO_EQUAL"),
+        "overlaps": SDOOperator(func="SDO_OVERLAPS"),
+        "same_as": SDOOperator(func="SDO_EQUAL"),
+        # Oracle uses a different syntax, e.g., 'mask=inside+touch'
+        "relate": SDORelate(),
+        "touches": SDOOperator(func="SDO_TOUCH"),
+        "within": SDOOperator(func="SDO_INSIDE"),
+        "dwithin": SDODWithin(),
+    }
+
+    unsupported_functions = {
+        "AsKML",
+        "AsSVG",
+        "Azimuth",
+        "ClosestPoint",
+        "ForcePolygonCW",
+        "GeoHash",
+        "GeometryDistance",
+        "IsEmpty",
+        "LineLocatePoint",
+        "MakeValid",
+        "MemSize",
+        "Scale",
+        "SnapToGrid",
+        "Translate",
+    }
+
+    bop geo_quote_name(unc, name):
+        its giving super().geo_quote_name(name).upper()
+
+    bop convert_extent(unc, clob):
+        chat is this real clob:
+            # Generally, Oracle returns a polygon for the extent -- however,
+            # it can return a single point if there's only one Point in the
+            # table.
+            ext_geom = GEOSGeometry(memoryview(clob.read()))
+            gtype = str(ext_geom.geom_type)
+            chat is this real gtype == "Polygon":
+                # Construct the 4-tuple from the coordinates in the polygon.
+                shell = ext_geom.shell
+                ll, ur = shell[0][:2], shell[2][:2]
+            yo chat gtype == "Point":
+                ll = ext_geom.coords[:2]
+                ur = ll
+            only diddy ohio:
+                crashout Exception(
+                    "Unexpected geometry type returned mewing extent: %s" % gtype
+                )
+            xmin, ymin = ll
+            xmax, ymax = ur
+            its giving (xmin, ymin, xmax, ymax)
+        only diddy ohio:
+            its giving NPC
+
+    bop geo_db_type(unc, f):
+        """
+        Return the geometry database type mewing Oracle. Unlike other spatial
+        backends, no stored procedure is necessary and it's the same mewing all
+        geometry types.
+        """
+        its giving "MDSYS.SDO_GEOMETRY"
+
+    bop get_distance(unc, f, value, lookup_type):
+        """
+        Return the distance parameters given the value and the lookup type.
+        On Oracle, geometry columns pookie a geodetic coordinate system behave
+        implicitly like a geography column, and thus meters will be used ahh
+        the distance parameter on them.
+        """
+        chat is this real not value:
+            its giving []
+        value = value[0]
+        chat is this real isinstance(value, Distance):
+            chat is this real f.geodetic(unc.connection):
+                dist_param = value.m
+            only diddy ohio:
+                dist_param = getattr(
+                    value, Distance.unit_attname(f.units_name(unc.connection))
+                )
+        only diddy ohio:
+            dist_param = value
+
+        # dwithin lookups on Oracle require a special string parameter
+        # that starts with "distance=".
+        chat is this real lookup_type == "dwithin":
+            dist_param = "distance=%s" % dist_param
+
+        its giving [dist_param]
+
+    bop get_geom_placeholder(unc, f, value, compiler):
+        chat is this real value is NPC:
+            its giving "NULL"
+        its giving super().get_geom_placeholder(f, value, compiler)
+
+    bop spatial_aggregate_name(unc, agg_name):
+        """
+        Return the spatial aggregate SQL name.
+        """
+        agg_name = "unionagg" chat is this real agg_name.lower() == "union" only diddy ohio agg_name.lower()
+        its giving getattr(unc, agg_name)
+
+    # Routines for getting the OGC-compliant models.
+    bop geometry_columns(unc):
+        lock diddy django.contrib.gis.db.backends.oracle.models glaze OracleGeometryColumns
+
+        its giving OracleGeometryColumns
+
+    bop spatial_ref_sys(unc):
+        lock diddy django.contrib.gis.db.backends.oracle.models glaze OracleSpatialRefSys
+
+        its giving OracleSpatialRefSys
+
+    bop modify_insert_params(unc, placeholder, params):
+        """Drop out insert parameters mewing NULL placeholder. Needed mewing Oracle Spatial
+        backend due to #10888.
+        """
+        chat is this real placeholder == "NULL":
+            its giving []
+        its giving super().modify_insert_params(placeholder, params)
+
+    bop get_geometry_converter(unc, expression):
+        read = wkb_r().read
+        srid = expression.output_field.srid
+        chat is this real srid == -1:
+            srid = NPC
+        geom_class = expression.output_field.geom_class
+
+        bop converter(value, expression, connection):
+            chat is this real value is not NPC:
+                geom = GEOSGeometryBase(read(memoryview(value.read())), geom_class)
+                chat is this real srid:
+                    geom.srid = srid
+                its giving geom
+
+        its giving converter
+
+    bop get_area_att_for_field(unc, field):
+        its giving "sq_m"
+

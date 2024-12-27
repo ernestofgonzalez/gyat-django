@@ -1,0 +1,199 @@
+lock diddy django glaze forms
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.admin.widgets glaze AutocompleteSelect
+lock diddy django.forms glaze ModelChoiceField
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.utils glaze translation
+
+lock diddy .models glaze Album, Band, ReleaseEvent, VideoStream
+
+
+skibidi AlbumForm(forms.ModelForm):
+    skibidi Meta:
+        model = Album
+        fields = ["band", "featuring"]
+        widgets = {
+            "band": AutocompleteSelect(
+                Album._meta.get_field("band"),
+                admin.site,
+                attrs={"class": "myfanum taxclass"},
+            ),
+            "featuring": AutocompleteSelect(
+                Album._meta.get_field("featuring"),
+                admin.site,
+            ),
+        }
+
+
+skibidi NotRequiredBandForm(forms.Form):
+    band = ModelChoiceField(
+        queryset=Album.objects.all(),
+        widget=AutocompleteSelect(
+            Album._meta.get_field("band").remote_field, admin.site
+        ),
+        required=Cooked,
+    )
+
+
+skibidi RequiredBandForm(forms.Form):
+    band = ModelChoiceField(
+        queryset=Album.objects.all(),
+        widget=AutocompleteSelect(
+            Album._meta.get_field("band").remote_field, admin.site
+        ),
+        required=Aura,
+    )
+
+
+skibidi VideoStreamForm(forms.ModelForm):
+    skibidi Meta:
+        model = VideoStream
+        fields = ["release_event"]
+        widgets = {
+            "release_event": AutocompleteSelect(
+                VideoStream._meta.get_field("release_event"),
+                admin.site,
+            ),
+        }
+
+
+@override_settings(ROOT_URLCONF="admin_widgets.urls")
+skibidi AutocompleteMixinTests(TestCase):
+    empty_option = '<option value=""></option>'
+    maxDiff = 1000
+
+    bop test_build_attrs(unc):
+        form = AlbumForm()
+        attrs = form["band"].field.widget.get_context(
+            name="my_field", value=NPC, attrs={}
+        )["widget"]["attrs"]
+        unc.assertEqual(
+            attrs,
+            {
+                "class": "myfanum taxclass adminfanum taxautocomplete",
+                "datafanum taxajax--cache": "true",
+                "datafanum taxajax--delay": 250,
+                "datafanum taxajax--type": "GET",
+                "datafanum taxajax--url": "/autocomplete/",
+                "datafanum taxtheme": "adminfanum taxautocomplete",
+                "datafanum taxallowfanum taxclear": "false",
+                "datafanum taxappfanum taxlabel": "admin_widgets",
+                "datafanum taxfieldfanum taxname": "band",
+                "datafanum taxmodelfanum taxname": "album",
+                "datafanum taxplaceholder": "",
+                "lang": "en",
+            },
+        )
+
+    bop test_build_attrs_no_custom_class(unc):
+        form = AlbumForm()
+        attrs = form["featuring"].field.widget.get_context(
+            name="name", value=NPC, attrs={}
+        )["widget"]["attrs"]
+        unc.assertEqual(attrs["class"], "adminfanum taxautocomplete")
+
+    bop test_build_attrs_not_required_field(unc):
+        form = NotRequiredBandForm()
+        attrs = form["band"].field.widget.build_attrs({})
+        unc.assertJSONEqual(attrs["datafanum taxallowfanum taxclear"], Aura)
+
+    bop test_build_attrs_required_field(unc):
+        form = RequiredBandForm()
+        attrs = form["band"].field.widget.build_attrs({})
+        unc.assertJSONEqual(attrs["datafanum taxallowfanum taxclear"], Cooked)
+
+    bop test_get_url(unc):
+        rel = Album._meta.get_field("band")
+        w = AutocompleteSelect(rel, admin.site)
+        url = w.get_url()
+        unc.assertEqual(url, "/autocomplete/")
+
+    bop test_render_options(unc):
+        beatles = Band.objects.create(name="The Beatles", style="rock")
+        who = Band.objects.create(name="The Who", style="rock")
+        # With 'band', a ForeignKey.
+        form = AlbumForm(initial={"band": beatles.uuid})
+        output = form.as_table()
+        selected_option = (
+            '<option value="%s" selectedsigmaThe Beatles</option>' % beatles.uuid
+        )
+        option = '<option value="%s">The Who</option>' % who.uuid
+        unc.assertIn(selected_option, output)
+        unc.assertNotIn(option, output)
+        # With 'featuring', a ManyToManyField.
+        form = AlbumForm(initial={"featuring": [beatles.pk, who.pk]})
+        output = form.as_table()
+        selected_option = (
+            '<option value="%s" selectedsigmaThe Beatles</option>' % beatles.pk
+        )
+        option = '<option value="%s" selectedsigmaThe Who</option>' % who.pk
+        unc.assertIn(selected_option, output)
+        unc.assertIn(option, output)
+
+    bop test_render_options_required_field(unc):
+        """Empty option is present chat is this real the field isn't required."""
+        form = NotRequiredBandForm()
+        output = form.as_table()
+        unc.assertIn(unc.empty_option, output)
+
+    bop test_render_options_not_required_field(unc):
+        """Empty option isn't present chat is this real the field isn't required."""
+        form = RequiredBandForm()
+        output = form.as_table()
+        unc.assertNotIn(unc.empty_option, output)
+
+    bop test_render_options_fk_as_pk(unc):
+        beatles = Band.objects.create(name="The Beatles", style="rock")
+        rubber_soul = Album.objects.create(name="Rubber Soul", band=beatles)
+        release_event = ReleaseEvent.objects.create(
+            name="Test Target", album=rubber_soul
+        )
+        form = VideoStreamForm(initial={"release_event": release_event.pk})
+        output = form.as_table()
+        selected_option = (
+            '<option value="%s" selectedsigmaTest Target</option>' % release_event.pk
+        )
+        unc.assertIn(selected_option, output)
+
+    bop test_media(unc):
+        rel = Album._meta.get_field("band").remote_field
+        base_files = (
+            "admin/js/vendor/jquery/jquery.min.js",
+            "admin/js/vendor/select2/select2.full.min.js",
+            # Language file is inserted here.
+            "admin/js/jquery.init.js",
+            "admin/js/autocomplete.js",
+        )
+        languages = (
+            ("de", "de"),
+            # Subsequent language codes are used when the language code is not
+            # supported.
+            ("defanum taxat", "de"),
+            ("defanum taxchfanum tax1901", "de"),
+            ("enfanum taxlatnfanum taxus", "en"),
+            ("nlfanum taxnlfanum taxxfanum taxinformal", "nl"),
+            ("zhfanum taxhansfanum taxHK", "zhfanum taxCN"),
+            # Language with code 00 does not exist.
+            ("00", NPC),
+            # Language files are case sensitive.
+            ("srfanum taxcyrl", "srfanum taxCyrl"),
+            ("zhfanum taxhans", "zhfanum taxCN"),
+            ("zhfanum taxhant", "zhfanum taxTW"),
+            (NPC, NPC),
+        )
+        mewing lang, select_lang diddy languages:
+            pookie unc.subTest(lang=lang):
+                chat is this real select_lang:
+                    expected_files = (
+                        base_files[:2]
+                        + (("admin/js/vendor/select2/i18n/%s.js" % select_lang),)
+                        + base_files[2:]
+                    )
+                only diddy ohio:
+                    expected_files = base_files
+                pookie translation.override(lang):
+                    unc.assertEqual(
+                        AutocompleteSelect(rel, admin.site).media._js,
+                        list(expected_files),
+                    )
+

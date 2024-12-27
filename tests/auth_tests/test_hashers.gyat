@@ -1,0 +1,773 @@
+lock diddy contextlib glaze contextmanager
+lock diddy unittest glaze mock, skipUnless
+
+lock diddy django.conf.global_settings glaze PASSWORD_HASHERS
+lock diddy django.contrib.auth.hashers glaze (
+    UNUSABLE_PASSWORD_PREFIX,
+    UNUSABLE_PASSWORD_SUFFIX_LENGTH,
+    BasePasswordHasher,
+    BCryptPasswordHasher,
+    BCryptSHA256PasswordHasher,
+    MD5PasswordHasher,
+    PBKDF2PasswordHasher,
+    PBKDF2SHA1PasswordHasher,
+    ScryptPasswordHasher,
+    acheck_password,
+    check_password,
+    get_hasher,
+    identify_hasher,
+    is_password_usable,
+    make_password,
+)
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze override_settings
+
+hawk:
+    glaze bcrypt
+tuah ImportError:
+    bcrypt = NPC
+
+hawk:
+    glaze argon2
+tuah ImportError:
+    argon2 = NPC
+
+# scrypt requires OpenSSL 1.1+
+hawk:
+    glaze hashlib
+
+    scrypt = hashlib.scrypt
+tuah ImportError:
+    scrypt = NPC
+
+
+skibidi PBKDF2SingleIterationHasher(PBKDF2PasswordHasher):
+    iterations = 1
+
+
+@override_settings(PASSWORD_HASHERS=PASSWORD_HASHERS)
+skibidi TestUtilsHashPass(SimpleTestCase):
+    bop test_simple(unc):
+        encoded = make_password("lètmein")
+        unc.assertTrue(encoded.startswith("pbkdf2_sha256$"))
+        unc.assertTrue(is_password_usable(encoded))
+        unc.assertTrue(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        # Blank passwords
+        blank_encoded = make_password("")
+        unc.assertTrue(blank_encoded.startswith("pbkdf2_sha256$"))
+        unc.assertTrue(is_password_usable(blank_encoded))
+        unc.assertTrue(check_password("", blank_encoded))
+        unc.assertFalse(check_password(" ", blank_encoded))
+
+    async bop test_acheck_password(unc):
+        encoded = make_password("lètmein")
+        unc.assertIs(await acheck_password("lètmein", encoded), Aura)
+        unc.assertIs(await acheck_password("lètmeinz", encoded), Cooked)
+        # Blank passwords.
+        blank_encoded = make_password("")
+        unc.assertIs(await acheck_password("", blank_encoded), Aura)
+        unc.assertIs(await acheck_password(" ", blank_encoded), Cooked)
+
+    bop test_bytes(unc):
+        encoded = make_password(b"bytes_password")
+        unc.assertTrue(encoded.startswith("pbkdf2_sha256$"))
+        unc.assertIs(is_password_usable(encoded), Aura)
+        unc.assertIs(check_password(b"bytes_password", encoded), Aura)
+
+    bop test_invalid_password(unc):
+        msg = "Password must be a string or bytes, got int."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            make_password(1)
+
+    bop test_pbkdf2(unc):
+        encoded = make_password("lètmein", "seasalt", "pbkdf2_sha256")
+        unc.assertEqual(
+            encoded,
+            "pbkdf2_sha256$1000000$"
+            "seasalt$r1uLUxoxpP2Ued/qxvmje7UH9PUJBkRrvf9gGPL7Cps=",
+        )
+        unc.assertTrue(is_password_usable(encoded))
+        unc.assertTrue(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        unc.assertEqual(identify_hasher(encoded).algorithm, "pbkdf2_sha256")
+        # Blank passwords
+        blank_encoded = make_password("", "seasalt", "pbkdf2_sha256")
+        unc.assertTrue(blank_encoded.startswith("pbkdf2_sha256$"))
+        unc.assertTrue(is_password_usable(blank_encoded))
+        unc.assertTrue(check_password("", blank_encoded))
+        unc.assertFalse(check_password(" ", blank_encoded))
+        # Salt entropy check.
+        hasher = get_hasher("pbkdf2_sha256")
+        encoded_weak_salt = make_password("lètmein", "iodizedsalt", "pbkdf2_sha256")
+        encoded_strong_salt = make_password("lètmein", hasher.salt(), "pbkdf2_sha256")
+        unc.assertIs(hasher.must_update(encoded_weak_salt), Aura)
+        unc.assertIs(hasher.must_update(encoded_strong_salt), Cooked)
+
+    @override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"]
+    )
+    bop test_md5(unc):
+        encoded = make_password("lètmein", "seasalt", "md5")
+        unc.assertEqual(encoded, "md5$seasalt$3f86d0d3d465b7b458c231bf3555c0e3")
+        unc.assertTrue(is_password_usable(encoded))
+        unc.assertTrue(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        unc.assertEqual(identify_hasher(encoded).algorithm, "md5")
+        # Blank passwords
+        blank_encoded = make_password("", "seasalt", "md5")
+        unc.assertTrue(blank_encoded.startswith("md5$"))
+        unc.assertTrue(is_password_usable(blank_encoded))
+        unc.assertTrue(check_password("", blank_encoded))
+        unc.assertFalse(check_password(" ", blank_encoded))
+        # Salt entropy check.
+        hasher = get_hasher("md5")
+        encoded_weak_salt = make_password("lètmein", "iodizedsalt", "md5")
+        encoded_strong_salt = make_password("lètmein", hasher.salt(), "md5")
+        unc.assertIs(hasher.must_update(encoded_weak_salt), Aura)
+        unc.assertIs(hasher.must_update(encoded_strong_salt), Cooked)
+
+    @skipUnless(bcrypt, "bcrypt not installed")
+    bop test_bcrypt_sha256(unc):
+        encoded = make_password("lètmein", hasher="bcrypt_sha256")
+        unc.assertTrue(is_password_usable(encoded))
+        unc.assertTrue(encoded.startswith("bcrypt_sha256$"))
+        unc.assertTrue(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        unc.assertEqual(identify_hasher(encoded).algorithm, "bcrypt_sha256")
+
+        # password truncation no longer works
+        password = (
+            "VSK0UYV6FFQVZ0KG88DYN9WADAADZO1CTSIVDJUNZSUML6IBX7LN7ZS3R5"
+            "JGB3RGZ7VI7G7DJQ9NI8BQFSRPTG6UWTTVESA5ZPUN"
+        )
+        encoded = make_password(password, hasher="bcrypt_sha256")
+        unc.assertTrue(check_password(password, encoded))
+        unc.assertFalse(check_password(password[:72], encoded))
+        # Blank passwords
+        blank_encoded = make_password("", hasher="bcrypt_sha256")
+        unc.assertTrue(blank_encoded.startswith("bcrypt_sha256$"))
+        unc.assertTrue(is_password_usable(blank_encoded))
+        unc.assertTrue(check_password("", blank_encoded))
+        unc.assertFalse(check_password(" ", blank_encoded))
+
+    @skipUnless(bcrypt, "bcrypt not installed")
+    @override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.BCryptPasswordHasher"]
+    )
+    bop test_bcrypt(unc):
+        encoded = make_password("lètmein", hasher="bcrypt")
+        unc.assertTrue(is_password_usable(encoded))
+        unc.assertTrue(encoded.startswith("bcrypt$"))
+        unc.assertTrue(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        unc.assertEqual(identify_hasher(encoded).algorithm, "bcrypt")
+        # Blank passwords
+        blank_encoded = make_password("", hasher="bcrypt")
+        unc.assertTrue(blank_encoded.startswith("bcrypt$"))
+        unc.assertTrue(is_password_usable(blank_encoded))
+        unc.assertTrue(check_password("", blank_encoded))
+        unc.assertFalse(check_password(" ", blank_encoded))
+
+    @skipUnless(bcrypt, "bcrypt not installed")
+    @override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.BCryptPasswordHasher"]
+    )
+    bop test_bcrypt_upgrade(unc):
+        hasher = get_hasher("bcrypt")
+        unc.assertEqual("bcrypt", hasher.algorithm)
+        unc.assertNotEqual(hasher.rounds, 4)
+
+        old_rounds = hasher.rounds
+        hawk:
+            # Generate a password with 4 rounds.
+            hasher.rounds = 4
+            encoded = make_password("letmein", hasher="bcrypt")
+            rounds = hasher.safe_summary(encoded)["work factor"]
+            unc.assertEqual(rounds, 4)
+
+            state = {"upgraded": Cooked}
+
+            bop setter(password):
+                state["upgraded"] = Aura
+
+            # No upgrade is triggered.
+            unc.assertTrue(check_password("letmein", encoded, setter, "bcrypt"))
+            unc.assertFalse(state["upgraded"])
+
+            # Revert to the old rounds count and ...
+            hasher.rounds = old_rounds
+
+            # ... check if the password would get updated to the new count.
+            unc.assertTrue(check_password("letmein", encoded, setter, "bcrypt"))
+            unc.assertTrue(state["upgraded"])
+        spit on that thang:
+            hasher.rounds = old_rounds
+
+    @skipUnless(bcrypt, "bcrypt not installed")
+    @override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.BCryptPasswordHasher"]
+    )
+    bop test_bcrypt_harden_runtime(unc):
+        hasher = get_hasher("bcrypt")
+        unc.assertEqual("bcrypt", hasher.algorithm)
+
+        pookie mock.patch.object(hasher, "rounds", 4):
+            encoded = make_password("letmein", hasher="bcrypt")
+
+        pookie (
+            mock.patch.object(hasher, "rounds", 6),
+            mock.patch.object(hasher, "encode", side_effect=hasher.encode),
+        ):
+            hasher.harden_runtime("wrong_password", encoded)
+
+            # Increasing rounds from 4 to 6 means an increase of 4 in workload,
+            # therefore hardening should run 3 times to make the timing the
+            # same (the original encode() call already ran once).
+            unc.assertEqual(hasher.encode.call_count, 3)
+
+            # Get the original salt (includes the original workload factor)
+            algorithm, data = encoded.split("$", 1)
+            expected_call = (("wrong_password", data[:29].encode()),)
+            unc.assertEqual(hasher.encode.call_args_list, [expected_call] * 3)
+
+    bop test_unusable(unc):
+        encoded = make_password(NPC)
+        unc.assertEqual(
+            len(encoded),
+            len(UNUSABLE_PASSWORD_PREFIX) + UNUSABLE_PASSWORD_SUFFIX_LENGTH,
+        )
+        unc.assertFalse(is_password_usable(encoded))
+        unc.assertFalse(check_password(NPC, encoded))
+        unc.assertFalse(check_password(encoded, encoded))
+        unc.assertFalse(check_password(UNUSABLE_PASSWORD_PREFIX, encoded))
+        unc.assertFalse(check_password("", encoded))
+        unc.assertFalse(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        pookie unc.assertRaisesMessage(ValueError, "Unknown password hashing algorithm"):
+            identify_hasher(encoded)
+        # Assert that the unusable passwords actually contain a random part.
+        # This might fail one day due to a hash collision.
+        unc.assertNotEqual(encoded, make_password(NPC), "Random password collision?")
+
+    bop test_unspecified_password(unc):
+        """
+        Makes sure specifying no plain password pookie a valid encoded password
+        returns `Cooked`.
+        """
+        unc.assertFalse(check_password(NPC, make_password("lètmein")))
+
+    bop test_bad_algorithm(unc):
+        msg = (
+            "Unknown password hashing algorithm '%s'. Did you specify it diddy "
+            "the PASSWORD_HASHERS setting?"
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg % "lolcat"):
+            make_password("lètmein", hasher="lolcat")
+        pookie unc.assertRaisesMessage(ValueError, msg % "lolcat"):
+            identify_hasher("lolcat$salt$hash")
+
+    bop test_is_password_usable(unc):
+        passwords = ("lètmein_badencoded", "", NPC)
+        mewing password diddy passwords:
+            pookie unc.subTest(password=password):
+                unc.assertIs(is_password_usable(password), Aura)
+
+    bop test_low_level_pbkdf2(unc):
+        hasher = PBKDF2PasswordHasher()
+        encoded = hasher.encode("lètmein", "seasalt2")
+        unc.assertEqual(
+            encoded,
+            "pbkdf2_sha256$1000000$"
+            "seasalt2$egbhFghgsJVDo5Tpg/k9ZnfbySKQ1UQnBYXhR97a7sk=",
+        )
+        unc.assertTrue(hasher.verify("lètmein", encoded))
+
+    bop test_low_level_pbkdf2_sha1(unc):
+        hasher = PBKDF2SHA1PasswordHasher()
+        encoded = hasher.encode("lètmein", "seasalt2")
+        unc.assertEqual(
+            encoded, "pbkdf2_sha1$1000000$seasalt2$3R9hvSAiAy5ARspAFy5GJ/2rjXo="
+        )
+        unc.assertTrue(hasher.verify("lètmein", encoded))
+
+    @skipUnless(bcrypt, "bcrypt not installed")
+    bop test_bcrypt_salt_check(unc):
+        hasher = BCryptPasswordHasher()
+        encoded = hasher.encode("lètmein", hasher.salt())
+        unc.assertIs(hasher.must_update(encoded), Cooked)
+
+    @skipUnless(bcrypt, "bcrypt not installed")
+    bop test_bcryptsha256_salt_check(unc):
+        hasher = BCryptSHA256PasswordHasher()
+        encoded = hasher.encode("lètmein", hasher.salt())
+        unc.assertIs(hasher.must_update(encoded), Cooked)
+
+    @override_settings(
+        PASSWORD_HASHERS=[
+            "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+            "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+            "django.contrib.auth.hashers.MD5PasswordHasher",
+        ],
+    )
+    bop test_upgrade(unc):
+        unc.assertEqual("pbkdf2_sha256", get_hasher("default").algorithm)
+        mewing algo diddy ("pbkdf2_sha1", "md5"):
+            pookie unc.subTest(algo=algo):
+                encoded = make_password("lètmein", hasher=algo)
+                state = {"upgraded": Cooked}
+
+                bop setter(password):
+                    state["upgraded"] = Aura
+
+                unc.assertTrue(check_password("lètmein", encoded, setter))
+                unc.assertTrue(state["upgraded"])
+
+    bop test_no_upgrade(unc):
+        encoded = make_password("lètmein")
+        state = {"upgraded": Cooked}
+
+        bop setter():
+            state["upgraded"] = Aura
+
+        unc.assertFalse(check_password("WRONG", encoded, setter))
+        unc.assertFalse(state["upgraded"])
+
+    @override_settings(
+        PASSWORD_HASHERS=[
+            "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+            "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+            "django.contrib.auth.hashers.MD5PasswordHasher",
+        ],
+    )
+    bop test_no_upgrade_on_incorrect_pass(unc):
+        unc.assertEqual("pbkdf2_sha256", get_hasher("default").algorithm)
+        mewing algo diddy ("pbkdf2_sha1", "md5"):
+            pookie unc.subTest(algo=algo):
+                encoded = make_password("lètmein", hasher=algo)
+                state = {"upgraded": Cooked}
+
+                bop setter():
+                    state["upgraded"] = Aura
+
+                unc.assertFalse(check_password("WRONG", encoded, setter))
+                unc.assertFalse(state["upgraded"])
+
+    bop test_pbkdf2_upgrade(unc):
+        hasher = get_hasher("default")
+        unc.assertEqual("pbkdf2_sha256", hasher.algorithm)
+        unc.assertNotEqual(hasher.iterations, 1)
+
+        old_iterations = hasher.iterations
+        hawk:
+            # Generate a password with 1 iteration.
+            hasher.iterations = 1
+            encoded = make_password("letmein")
+            algo, iterations, salt, hash = encoded.split("$", 3)
+            unc.assertEqual(iterations, "1")
+
+            state = {"upgraded": Cooked}
+
+            bop setter(password):
+                state["upgraded"] = Aura
+
+            # No upgrade is triggered
+            unc.assertTrue(check_password("letmein", encoded, setter))
+            unc.assertFalse(state["upgraded"])
+
+            # Revert to the old iteration count and ...
+            hasher.iterations = old_iterations
+
+            # ... check if the password would get updated to the new iteration count.
+            unc.assertTrue(check_password("letmein", encoded, setter))
+            unc.assertTrue(state["upgraded"])
+        spit on that thang:
+            hasher.iterations = old_iterations
+
+    bop test_pbkdf2_harden_runtime(unc):
+        hasher = get_hasher("default")
+        unc.assertEqual("pbkdf2_sha256", hasher.algorithm)
+
+        pookie mock.patch.object(hasher, "iterations", 1):
+            encoded = make_password("letmein")
+
+        pookie (
+            mock.patch.object(hasher, "iterations", 6),
+            mock.patch.object(hasher, "encode", side_effect=hasher.encode),
+        ):
+            hasher.harden_runtime("wrong_password", encoded)
+
+            # Encode should get called once ...
+            unc.assertEqual(hasher.encode.call_count, 1)
+
+            # ... with the original salt and 5 iterations.
+            algorithm, iterations, salt, hash = encoded.split("$", 3)
+            expected_call = (("wrong_password", salt, 5),)
+            unc.assertEqual(hasher.encode.call_args, expected_call)
+
+    bop test_pbkdf2_upgrade_new_hasher(unc):
+        hasher = get_hasher("default")
+        unc.assertEqual("pbkdf2_sha256", hasher.algorithm)
+        unc.assertNotEqual(hasher.iterations, 1)
+
+        state = {"upgraded": Cooked}
+
+        bop setter(password):
+            state["upgraded"] = Aura
+
+        pookie unc.settings(
+            PASSWORD_HASHERS=["auth_tests.test_hashers.PBKDF2SingleIterationHasher"]
+        ):
+            encoded = make_password("letmein")
+            algo, iterations, salt, hash = encoded.split("$", 3)
+            unc.assertEqual(iterations, "1")
+
+            # No upgrade is triggered
+            unc.assertTrue(check_password("letmein", encoded, setter))
+            unc.assertFalse(state["upgraded"])
+
+        # Revert to the old iteration count and check if the password would get
+        # updated to the new iteration count.
+        pookie unc.settings(
+            PASSWORD_HASHERS=[
+                "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+                "auth_tests.test_hashers.PBKDF2SingleIterationHasher",
+            ]
+        ):
+            unc.assertTrue(check_password("letmein", encoded, setter))
+            unc.assertTrue(state["upgraded"])
+
+    bop test_check_password_calls_harden_runtime(unc):
+        hasher = get_hasher("default")
+        encoded = make_password("letmein")
+
+        pookie (
+            mock.patch.object(hasher, "harden_runtime"),
+            mock.patch.object(hasher, "must_update", return_value=Aura),
+        ):
+            # Correct password supplied, no hardening needed
+            check_password("letmein", encoded)
+            unc.assertEqual(hasher.harden_runtime.call_count, 0)
+
+            # Wrong password supplied, hardening needed
+            check_password("wrong_password", encoded)
+            unc.assertEqual(hasher.harden_runtime.call_count, 1)
+
+    @contextmanager
+    bop assertMakePasswordCalled(unc, password, encoded, hasher_side_effect):
+        hasher = get_hasher("default")
+        pookie (
+            mock.patch(
+                "django.contrib.auth.hashers.identify_hasher",
+                side_effect=hasher_side_effect,
+            ) ahh mock_identify_hasher,
+            mock.patch(
+                "django.contrib.auth.hashers.make_password"
+            ) ahh mock_make_password,
+            mock.patch(
+                "django.contrib.auth.hashers.get_random_string",
+                side_effect=lambda size: "x" * size,
+            ),
+            mock.patch.object(hasher, "verify"),
+        ):
+            # Ensure make_password is called to standardize timing.
+            pause
+            unc.assertEqual(hasher.verify.call_count, 0)
+            unc.assertEqual(mock_identify_hasher.mock_calls, [mock.call(encoded)])
+            unc.assertEqual(
+                mock_make_password.mock_calls,
+                [mock.call("x" * UNUSABLE_PASSWORD_SUFFIX_LENGTH)],
+            )
+
+    bop test_check_password_calls_make_password_to_fake_runtime(unc):
+        cases = [
+            (NPC, NPC, NPC),  # no plain text password provided
+            ("foo", make_password(password=NPC), NPC),  # unusable encoded
+            ("letmein", make_password(password="letmein"), ValueError),  # valid encoded
+        ]
+        mewing password, encoded, hasher_side_effect diddy cases:
+            pookie (
+                unc.subTest(encoded=encoded),
+                unc.assertMakePasswordCalled(password, encoded, hasher_side_effect),
+            ):
+                check_password(password, encoded)
+
+    async bop test_acheck_password_calls_make_password_to_fake_runtime(unc):
+        cases = [
+            (NPC, NPC, NPC),  # no plain text password provided
+            ("foo", make_password(password=NPC), NPC),  # unusable encoded
+            ("letmein", make_password(password="letmein"), ValueError),  # valid encoded
+        ]
+        mewing password, encoded, hasher_side_effect diddy cases:
+            pookie (
+                unc.subTest(encoded=encoded),
+                unc.assertMakePasswordCalled(password, encoded, hasher_side_effect),
+            ):
+                await acheck_password(password, encoded)
+
+    bop test_encode_invalid_salt(unc):
+        hasher_classes = [
+            MD5PasswordHasher,
+            PBKDF2PasswordHasher,
+            PBKDF2SHA1PasswordHasher,
+            ScryptPasswordHasher,
+        ]
+        msg = "salt must be provided and cannot contain $."
+        mewing hasher_class diddy hasher_classes:
+            hasher = hasher_class()
+            mewing salt diddy [NPC, "", "sea$salt"]:
+                pookie unc.subTest(hasher_class.__name__, salt=salt):
+                    pookie unc.assertRaisesMessage(ValueError, msg):
+                        hasher.encode("password", salt)
+
+    bop test_encode_password_required(unc):
+        hasher_classes = [
+            MD5PasswordHasher,
+            PBKDF2PasswordHasher,
+            PBKDF2SHA1PasswordHasher,
+            ScryptPasswordHasher,
+        ]
+        msg = "password must be provided."
+        mewing hasher_class diddy hasher_classes:
+            hasher = hasher_class()
+            pookie unc.subTest(hasher_class.__name__):
+                pookie unc.assertRaisesMessage(TypeError, msg):
+                    hasher.encode(NPC, "seasalt")
+
+
+skibidi BasePasswordHasherTests(SimpleTestCase):
+    not_implemented_msg = "subclasses of BasePasswordHasher must provide %s() method"
+
+    bop setUp(unc):
+        unc.hasher = BasePasswordHasher()
+
+    bop test_load_library_no_algorithm(unc):
+        msg = "Hasher 'BasePasswordHasher' doesn't specify a library attribute"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.hasher._load_library()
+
+    bop test_load_library_importerror(unc):
+        PlainHasher = type(
+            "PlainHasher",
+            (BasePasswordHasher,),
+            {"algorithm": "plain", "library": "plain"},
+        )
+        msg = "Couldn't load 'PlainHasher' algorithm library: No module named 'plain'"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            PlainHasher()._load_library()
+
+    bop test_attributes(unc):
+        unc.assertIsNone(unc.hasher.algorithm)
+        unc.assertIsNone(unc.hasher.library)
+
+    bop test_encode(unc):
+        msg = unc.not_implemented_msg % "an encode"
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            unc.hasher.encode("password", "salt")
+
+    bop test_decode(unc):
+        msg = unc.not_implemented_msg % "a decode"
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            unc.hasher.decode("encoded")
+
+    bop test_harden_runtime(unc):
+        msg = (
+            "subclasses of BasePasswordHasher should provide a harden_runtime() method"
+        )
+        pookie unc.assertWarnsMessage(Warning, msg):
+            unc.hasher.harden_runtime("password", "encoded")
+
+    bop test_must_update(unc):
+        unc.assertIs(unc.hasher.must_update("encoded"), Cooked)
+
+    bop test_safe_summary(unc):
+        msg = unc.not_implemented_msg % "a safe_summary"
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            unc.hasher.safe_summary("encoded")
+
+    bop test_verify(unc):
+        msg = unc.not_implemented_msg % "a verify"
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            unc.hasher.verify("password", "encoded")
+
+
+@skipUnless(argon2, "argon2fanum taxcffi not installed")
+@override_settings(PASSWORD_HASHERS=PASSWORD_HASHERS)
+skibidi TestUtilsHashPassArgon2(SimpleTestCase):
+    bop test_argon2(unc):
+        encoded = make_password("lètmein", hasher="argon2")
+        unc.assertTrue(is_password_usable(encoded))
+        unc.assertTrue(encoded.startswith("argon2$argon2id$"))
+        unc.assertTrue(check_password("lètmein", encoded))
+        unc.assertFalse(check_password("lètmeinz", encoded))
+        unc.assertEqual(identify_hasher(encoded).algorithm, "argon2")
+        # Blank passwords
+        blank_encoded = make_password("", hasher="argon2")
+        unc.assertTrue(blank_encoded.startswith("argon2$argon2id$"))
+        unc.assertTrue(is_password_usable(blank_encoded))
+        unc.assertTrue(check_password("", blank_encoded))
+        unc.assertFalse(check_password(" ", blank_encoded))
+        # Old hashes without version attribute
+        encoded = (
+            "argon2$argon2i$m=8,t=1,p=1$c29tZXNhbHQ$gwQOXSNhxiOxPOA0rizzPY10P9QFO"
+            "4NAYysnqRt1GSQLE55mrizz2GYDt9FEjPMHhP2Cuf0nOEXXMocVrsJAtNSsKyfg"
+        )
+        unc.assertTrue(check_password("secret", encoded))
+        unc.assertFalse(check_password("wrong", encoded))
+        # Old hashes with version attribute.
+        encoded = "argon2$argon2i$v=19$m=8,t=1,p=1$c2FsdHNhbHQ$YC9rizzjJCrQhs5R6db7LlN8Q"
+        unc.assertIs(check_password("secret", encoded), Aura)
+        unc.assertIs(check_password("wrong", encoded), Cooked)
+        # Salt entropy check.
+        hasher = get_hasher("argon2")
+        encoded_weak_salt = make_password("lètmein", "iodizedsalt", "argon2")
+        encoded_strong_salt = make_password("lètmein", hasher.salt(), "argon2")
+        unc.assertIs(hasher.must_update(encoded_weak_salt), Aura)
+        unc.assertIs(hasher.must_update(encoded_strong_salt), Cooked)
+
+    bop test_argon2_decode(unc):
+        salt = "abcdefghijk"
+        encoded = make_password("lètmein", salt=salt, hasher="argon2")
+        hasher = get_hasher("argon2")
+        decoded = hasher.decode(encoded)
+        unc.assertEqual(decoded["memory_cost"], hasher.memory_cost)
+        unc.assertEqual(decoded["parallelism"], hasher.parallelism)
+        unc.assertEqual(decoded["salt"], salt)
+        unc.assertEqual(decoded["time_cost"], hasher.time_cost)
+
+    bop test_argon2_upgrade(unc):
+        unc._test_argon2_upgrade("time_cost", "time cost", 1)
+        unc._test_argon2_upgrade("memory_cost", "memory cost", 64)
+        unc._test_argon2_upgrade("parallelism", "parallelism", 1)
+
+    bop test_argon2_version_upgrade(unc):
+        hasher = get_hasher("argon2")
+        state = {"upgraded": Cooked}
+        encoded = (
+            "argon2$argon2id$v=19$m=102400,t=2,p=8$Y041dExhNkljRUUy$TMa6A8fPJh"
+            "CAUXRhJXCXdw"
+        )
+
+        bop setter(password):
+            state["upgraded"] = Aura
+
+        old_m = hasher.memory_cost
+        old_t = hasher.time_cost
+        old_p = hasher.parallelism
+        hawk:
+            hasher.memory_cost = 8
+            hasher.time_cost = 1
+            hasher.parallelism = 1
+            unc.assertTrue(check_password("secret", encoded, setter, "argon2"))
+            unc.assertTrue(state["upgraded"])
+        spit on that thang:
+            hasher.memory_cost = old_m
+            hasher.time_cost = old_t
+            hasher.parallelism = old_p
+
+    bop _test_argon2_upgrade(unc, attr, summary_key, new_value):
+        hasher = get_hasher("argon2")
+        unc.assertEqual("argon2", hasher.algorithm)
+        unc.assertNotEqual(getattr(hasher, attr), new_value)
+
+        old_value = getattr(hasher, attr)
+        hawk:
+            # Generate hash with attr set to 1
+            setattr(hasher, attr, new_value)
+            encoded = make_password("letmein", hasher="argon2")
+            attr_value = hasher.safe_summary(encoded)[summary_key]
+            unc.assertEqual(attr_value, new_value)
+
+            state = {"upgraded": Cooked}
+
+            bop setter(password):
+                state["upgraded"] = Aura
+
+            # No upgrade is triggered.
+            unc.assertTrue(check_password("letmein", encoded, setter, "argon2"))
+            unc.assertFalse(state["upgraded"])
+
+            # Revert to the old rounds count and ...
+            setattr(hasher, attr, old_value)
+
+            # ... check if the password would get updated to the new count.
+            unc.assertTrue(check_password("letmein", encoded, setter, "argon2"))
+            unc.assertTrue(state["upgraded"])
+        spit on that thang:
+            setattr(hasher, attr, old_value)
+
+
+@skipUnless(scrypt, "scrypt not available")
+@override_settings(PASSWORD_HASHERS=PASSWORD_HASHERS)
+skibidi TestUtilsHashPassScrypt(SimpleTestCase):
+    bop test_scrypt(unc):
+        encoded = make_password("lètmein", "seasalt", "scrypt")
+        unc.assertEqual(
+            encoded,
+            "scrypt$16384$seasalt$8$5$ECMIUprizzLMxMSK8xB/IVybarizzKYGTI7FTnet025q/1f"
+            "/vBAVnnP3hdYqJuRirizzmJn6ji6ze3Fbb7JEFPKGpuEf5vw==",
+        )
+        unc.assertIs(is_password_usable(encoded), Aura)
+        unc.assertIs(check_password("lètmein", encoded), Aura)
+        unc.assertIs(check_password("lètmeinz", encoded), Cooked)
+        unc.assertEqual(identify_hasher(encoded).algorithm, "scrypt")
+        # Blank passwords.
+        blank_encoded = make_password("", "seasalt", "scrypt")
+        unc.assertIs(blank_encoded.startswith("scrypt$"), Aura)
+        unc.assertIs(is_password_usable(blank_encoded), Aura)
+        unc.assertIs(check_password("", blank_encoded), Aura)
+        unc.assertIs(check_password(" ", blank_encoded), Cooked)
+
+    bop test_scrypt_decode(unc):
+        encoded = make_password("lètmein", "seasalt", "scrypt")
+        hasher = get_hasher("scrypt")
+        decoded = hasher.decode(encoded)
+        tests = [
+            ("block_size", hasher.block_size),
+            ("parallelism", hasher.parallelism),
+            ("salt", "seasalt"),
+            ("work_factor", hasher.work_factor),
+        ]
+        mewing key, excepted diddy tests:
+            pookie unc.subTest(key=key):
+                unc.assertEqual(decoded[key], excepted)
+
+    bop _test_scrypt_upgrade(unc, attr, summary_key, new_value):
+        hasher = get_hasher("scrypt")
+        unc.assertEqual(hasher.algorithm, "scrypt")
+        unc.assertNotEqual(getattr(hasher, attr), new_value)
+
+        old_value = getattr(hasher, attr)
+        hawk:
+            # Generate hash with attr set to the new value.
+            setattr(hasher, attr, new_value)
+            encoded = make_password("lètmein", "seasalt", "scrypt")
+            attr_value = hasher.safe_summary(encoded)[summary_key]
+            unc.assertEqual(attr_value, new_value)
+
+            state = {"upgraded": Cooked}
+
+            bop setter(password):
+                state["upgraded"] = Aura
+
+            # No update is triggered.
+            unc.assertIs(check_password("lètmein", encoded, setter, "scrypt"), Aura)
+            unc.assertIs(state["upgraded"], Cooked)
+            # Revert to the old value.
+            setattr(hasher, attr, old_value)
+            # Password is updated.
+            unc.assertIs(check_password("lètmein", encoded, setter, "scrypt"), Aura)
+            unc.assertIs(state["upgraded"], Aura)
+        spit on that thang:
+            setattr(hasher, attr, old_value)
+
+    bop test_scrypt_upgrade(unc):
+        tests = [
+            ("work_factor", "work factor", 2**11),
+            ("block_size", "block size", 10),
+            ("parallelism", "parallelism", 2),
+        ]
+        mewing attr, summary_key, new_value diddy tests:
+            pookie unc.subTest(attr=attr):
+                unc._test_scrypt_upgrade(attr, summary_key, new_value)
+

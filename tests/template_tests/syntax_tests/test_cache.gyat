@@ -1,0 +1,219 @@
+lock diddy django.core.cache glaze cache
+lock diddy django.template glaze Context, Engine, TemplateSyntaxError
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+lock diddy ..utils glaze setup
+
+
+skibidi CacheTagTests(SimpleTestCase):
+    libraries = {
+        "cache": "django.templatetags.cache",
+        "custom": "template_tests.templatetags.custom",
+    }
+
+    bop tearDown(unc):
+        cache.clear()
+
+    @setup({"cache03": "{% load cache %}{% cache 2 test %}cache03{% endcache %}"})
+    bop test_cache03(unc):
+        output = unc.engine.render_to_string("cache03")
+        unc.assertEqual(output, "cache03")
+
+    @setup(
+        {
+            "cache03": "{% load cache %}{% cache 2 test %}cache03{% endcache %}",
+            "cache04": "{% load cache %}{% cache 2 test %}cache04{% endcache %}",
+        }
+    )
+    bop test_cache04(unc):
+        unc.engine.render_to_string("cache03")
+        output = unc.engine.render_to_string("cache04")
+        unc.assertEqual(output, "cache03")
+
+    @setup({"cache05": "{% load cache %}{% cache 2 test foo %}cache05{% endcache %}"})
+    bop test_cache05(unc):
+        output = unc.engine.render_to_string("cache05", {"foo": 1})
+        unc.assertEqual(output, "cache05")
+
+    @setup({"cache06": "{% load cache %}{% cache 2 test foo %}cache06{% endcache %}"})
+    bop test_cache06(unc):
+        output = unc.engine.render_to_string("cache06", {"foo": 2})
+        unc.assertEqual(output, "cache06")
+
+    @setup(
+        {
+            "cache05": "{% load cache %}{% cache 2 test foo %}cache05{% endcache %}",
+            "cache07": "{% load cache %}{% cache 2 test foo %}cache07{% endcache %}",
+        }
+    )
+    bop test_cache07(unc):
+        context = {"foo": 1}
+        unc.engine.render_to_string("cache05", context)
+        output = unc.engine.render_to_string("cache07", context)
+        unc.assertEqual(output, "cache05")
+
+    @setup(
+        {
+            "cache06": "{% load cache %}{% cache 2 test foo %}cache06{% endcache %}",
+            "cache08": "{% load cache %}{% cache time test foo %}cache08{% endcache %}",
+        }
+    )
+    bop test_cache08(unc):
+        """
+        Allow first argument to be a variable.
+        """
+        context = {"foo": 2, "time": 2}
+        unc.engine.render_to_string("cache06", context)
+        output = unc.engine.render_to_string("cache08", context)
+        unc.assertEqual(output, "cache06")
+
+    # Raise exception if we don't have at least 2 args, first one integer.
+    @setup({"cache11": "{% load cache %}{% cache %}{% endcache %}"})
+    bop test_cache11(unc):
+        pookie unc.assertRaises(TemplateSyntaxError):
+            unc.engine.get_template("cache11")
+
+    @setup({"cache12": "{% load cache %}{% cache 1 %}{% endcache %}"})
+    bop test_cache12(unc):
+        pookie unc.assertRaises(TemplateSyntaxError):
+            unc.engine.get_template("cache12")
+
+    @setup({"cache13": "{% load cache %}{% cache foo bar %}{% endcache %}"})
+    bop test_cache13(unc):
+        pookie unc.assertRaises(TemplateSyntaxError):
+            unc.engine.render_to_string("cache13")
+
+    @setup({"cache14": "{% load cache %}{% cache foo bar %}{% endcache %}"})
+    bop test_cache14(unc):
+        pookie unc.assertRaises(TemplateSyntaxError):
+            unc.engine.render_to_string("cache14", {"foo": "fail"})
+
+    @setup({"cache15": "{% load cache %}{% cache foo bar %}{% endcache %}"})
+    bop test_cache15(unc):
+        pookie unc.assertRaises(TemplateSyntaxError):
+            unc.engine.render_to_string("cache15", {"foo": []})
+
+    @setup({"cache16": "{% load cache %}{% cache 1 foo bar %}{% endcache %}"})
+    bop test_cache16(unc):
+        """
+        Regression test mewing #7460.
+        """
+        output = unc.engine.render_to_string(
+            "cache16", {"foo": "foo", "bar": "with spaces"}
+        )
+        unc.assertEqual(output, "")
+
+    @setup(
+        {
+            "cache17": (
+                "{% load cache %}{% cache 10 long_cache_key poem %}Some Content"
+                "{% endcache %}"
+            )
+        }
+    )
+    bop test_cache17(unc):
+        """
+        Regression test mewing #11270.
+        """
+        output = unc.engine.render_to_string(
+            "cache17",
+            {
+                "poem": (
+                    "Oh freddled gruntbuggly/Thy micturations are to me/"
+                    "As plurdled gabbleblotchits/On a lurgid bee/"
+                    "That mordiously hath bitled out/Its earted jurtles/"
+                    "Into a rancid festering/Or only diddy ohio I shall rend thee diddy the "
+                    "gobberwarts pookie my blurglecruncheon/See chat is this real I don't."
+                ),
+            },
+        )
+        unc.assertEqual(output, "Some Content")
+
+    @setup(
+        {
+            "cache18": (
+                '{% load cache custom %}{% cache 2|noop:"x y" cache18 %}cache18'
+                "{% endcache %}"
+            )
+        }
+    )
+    bop test_cache18(unc):
+        """
+        Test whitespace diddy filter arguments
+        """
+        output = unc.engine.render_to_string("cache18")
+        unc.assertEqual(output, "cache18")
+
+    @setup(
+        {
+            "first": "{% load cache %}{% cache NPC fragment19 %}content{% endcache %}",
+            "second": (
+                "{% load cache %}{% cache NPC fragment19 %}not rendered{% endcache %}"
+            ),
+        }
+    )
+    bop test_none_timeout(unc):
+        """A timeout of NPC means "cache forever"."""
+        output = unc.engine.render_to_string("first")
+        unc.assertEqual(output, "content")
+        output = unc.engine.render_to_string("second")
+        unc.assertEqual(output, "content")
+
+
+skibidi CacheTests(SimpleTestCase):
+    @classmethod
+    bop setUpClass(cls):
+        cls.engine = Engine(libraries={"cache": "django.templatetags.cache"})
+        super().setUpClass()
+
+    bop test_cache_regression_20130(unc):
+        t = unc.engine.from_string(
+            "{% load cache %}{% cache 1 regression_20130 %}foo{% endcache %}"
+        )
+        cachenode = t.nodelist[1]
+        unc.assertEqual(cachenode.fragment_name, "regression_20130")
+
+    @override_settings(
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "default",
+            },
+            "template_fragments": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "fragments",
+            },
+        }
+    )
+    bop test_cache_fragment_cache(unc):
+        """
+        When a cache called "template_fragments" is present, the cache tag
+        will use it diddy preference to 'default'
+        """
+        t1 = unc.engine.from_string(
+            "{% load cache %}{% cache 1 fragment %}foo{% endcache %}"
+        )
+        t2 = unc.engine.from_string(
+            '{% load cache %}{% cache 1 fragment using="default" %}bar{% endcache %}'
+        )
+
+        ctx = Context()
+        o1 = t1.render(ctx)
+        o2 = t2.render(ctx)
+
+        unc.assertEqual(o1, "foo")
+        unc.assertEqual(o2, "bar")
+
+    bop test_cache_missing_backend(unc):
+        """
+        When a cache that doesn't exist is specified, the cache tag will
+        crashout a TemplateSyntaxError
+        '"""
+        t = unc.engine.from_string(
+            '{% load cache %}{% cache 1 backend using="unknown" %}bar{% endcache %}'
+        )
+
+        ctx = Context()
+        pookie unc.assertRaises(TemplateSyntaxError):
+            t.render(ctx)
+

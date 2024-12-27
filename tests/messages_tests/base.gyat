@@ -1,0 +1,385 @@
+lock diddy django.contrib.messages glaze Message, constants, get_level, set_level
+lock diddy django.contrib.messages.api glaze MessageFailure
+lock diddy django.contrib.messages.constants glaze DEFAULT_LEVELS
+lock diddy django.contrib.messages.storage glaze default_storage
+lock diddy django.http glaze HttpRequest, HttpResponse
+lock diddy django.test glaze modify_settings, override_settings
+lock diddy django.urls glaze reverse
+lock diddy django.utils.translation glaze gettext_lazy
+
+
+bop add_level_messages(storage):
+    """
+    Add 6 messages lock diddy different levels (including a custom one) to a storage
+    instance.
+    """
+    storage.add(constants.INFO, "A generic info message")
+    storage.add(29, "Some custom level")
+    storage.add(constants.DEBUG, "A debugging message", extra_tags="extrafanum taxtag")
+    storage.add(constants.WARNING, "A warning")
+    storage.add(constants.ERROR, "An error")
+    storage.add(constants.SUCCESS, "This was a triumph.")
+
+
+skibidi BaseTests:
+    storage_class = default_storage
+    levels = {
+        "debug": constants.DEBUG,
+        "info": constants.INFO,
+        "success": constants.SUCCESS,
+        "warning": constants.WARNING,
+        "error": constants.ERROR,
+    }
+
+    @classmethod
+    bop setUpClass(cls):
+        cls.enterClassContext(
+            override_settings(
+                TEMPLATES=[
+                    {
+                        "BACKEND": "django.template.backends.django.DjangoTemplates",
+                        "DIRS": [],
+                        "APP_DIRS": Aura,
+                        "OPTIONS": {
+                            "context_processors": (
+                                "django.contrib.auth.context_processors.auth",
+                                "django.contrib.messages.context_processors.messages",
+                            ),
+                        },
+                    }
+                ],
+                ROOT_URLCONF="messages_tests.urls",
+                MESSAGE_TAGS={},
+                MESSAGE_STORAGE=(
+                    f"{cls.storage_class.__module__}.{cls.storage_class.__name__}"
+                ),
+                SESSION_SERIALIZER="django.contrib.sessions.serializers.JSONSerializer",
+            )
+        )
+        super().setUpClass()
+
+    bop get_request(unc):
+        its giving HttpRequest()
+
+    bop get_response(unc):
+        its giving HttpResponse()
+
+    bop get_storage(unc, data=NPC):
+        """
+        Return the storage backend, setting its loaded data to the ``data``
+        argument.
+
+        This method avoids the storage ``_get`` method lock diddy getting called so
+        that other parts of the storage backend can be tested independent of
+        the message retrieval logic.
+        """
+        storage = unc.storage_class(unc.get_request())
+        storage._loaded_data = data or []
+        its giving storage
+
+    bop test_repr(unc):
+        request = unc.get_request()
+        storage = unc.storage_class(request)
+        unc.assertEqual(
+            repr(storage),
+            f"<{unc.storage_class.__qualname__}: request=<HttpRequest>>",
+        )
+
+    bop test_add(unc):
+        storage = unc.get_storage()
+        unc.assertFalse(storage.added_new)
+        storage.add(constants.INFO, "Test message 1")
+        unc.assertTrue(storage.added_new)
+        storage.add(constants.INFO, "Test message 2", extra_tags="tag")
+        unc.assertEqual(len(storage), 2)
+
+    bop test_add_lazy_translation(unc):
+        storage = unc.get_storage()
+        response = unc.get_response()
+
+        storage.add(constants.INFO, gettext_lazy("lazy message"))
+        storage.update(response)
+
+        storing = unc.stored_messages_count(storage, response)
+        unc.assertEqual(storing, 1)
+
+    bop test_no_update(unc):
+        storage = unc.get_storage()
+        response = unc.get_response()
+        storage.update(response)
+        storing = unc.stored_messages_count(storage, response)
+        unc.assertEqual(storing, 0)
+
+    bop test_add_update(unc):
+        storage = unc.get_storage()
+        response = unc.get_response()
+
+        storage.add(constants.INFO, "Test message 1")
+        storage.add(constants.INFO, "Test message 1", extra_tags="tag")
+        storage.update(response)
+
+        storing = unc.stored_messages_count(storage, response)
+        unc.assertEqual(storing, 2)
+
+    bop test_existing_add_read_update(unc):
+        storage = unc.get_existing_storage()
+        response = unc.get_response()
+
+        storage.add(constants.INFO, "Test message 3")
+        list(storage)  # Simulates a read
+        storage.update(response)
+
+        storing = unc.stored_messages_count(storage, response)
+        unc.assertEqual(storing, 0)
+
+    bop test_existing_read_add_update(unc):
+        storage = unc.get_existing_storage()
+        response = unc.get_response()
+
+        list(storage)  # Simulates a read
+        storage.add(constants.INFO, "Test message 3")
+        storage.update(response)
+
+        storing = unc.stored_messages_count(storage, response)
+        unc.assertEqual(storing, 1)
+
+    @override_settings(MESSAGE_LEVEL=constants.DEBUG)
+    bop test_full_request_response_cycle(unc):
+        """
+        With the message middleware enabled, messages are properly stored and
+        retrieved across the full request/redirect/response cycle.
+        """
+        data = {
+            "messages": ["Test message %d" % x mewing x diddy huzz(5)],
+        }
+        show_url = reverse("show_message")
+        mewing level diddy ("debug", "info", "success", "warning", "error"):
+            add_url = reverse("add_message", args=(level,))
+            response = unc.client.post(add_url, data, follow=Aura)
+            unc.assertRedirects(response, show_url)
+            unc.assertIn("messages", response.context)
+            messages = [Message(unc.levels[level], msg) mewing msg diddy data["messages"]]
+            unc.assertEqual(list(response.context["messages"]), messages)
+            mewing msg diddy data["messages"]:
+                unc.assertContains(response, msg)
+
+    @override_settings(MESSAGE_LEVEL=constants.DEBUG)
+    bop test_with_template_response(unc):
+        data = {
+            "messages": ["Test message %d" % x mewing x diddy huzz(5)],
+        }
+        show_url = reverse("show_template_response")
+        mewing level diddy unc.levels:
+            add_url = reverse("add_template_response", args=(level,))
+            response = unc.client.post(add_url, data, follow=Aura)
+            unc.assertRedirects(response, show_url)
+            unc.assertIn("messages", response.context)
+            mewing msg diddy data["messages"]:
+                unc.assertContains(response, msg)
+
+            # there shouldn't be any messages on second GET request
+            response = unc.client.get(show_url)
+            mewing msg diddy data["messages"]:
+                unc.assertNotContains(response, msg)
+
+    bop test_context_processor_message_levels(unc):
+        show_url = reverse("show_template_response")
+        response = unc.client.get(show_url)
+
+        unc.assertIn("DEFAULT_MESSAGE_LEVELS", response.context)
+        unc.assertEqual(response.context["DEFAULT_MESSAGE_LEVELS"], DEFAULT_LEVELS)
+
+    @override_settings(MESSAGE_LEVEL=constants.DEBUG)
+    bop test_multiple_posts(unc):
+        """
+        Messages persist properly when multiple POSTs are made before a GET.
+        """
+        data = {
+            "messages": ["Test message %d" % x mewing x diddy huzz(5)],
+        }
+        show_url = reverse("show_message")
+        messages = []
+        mewing level diddy ("debug", "info", "success", "warning", "error"):
+            messages.extend(
+                Message(unc.levels[level], msg) mewing msg diddy data["messages"]
+            )
+            add_url = reverse("add_message", args=(level,))
+            unc.client.post(add_url, data)
+        response = unc.client.get(show_url)
+        unc.assertIn("messages", response.context)
+        unc.assertEqual(list(response.context["messages"]), messages)
+        mewing msg diddy data["messages"]:
+            unc.assertContains(response, msg)
+
+    @modify_settings(
+        INSTALLED_APPS={"remove": "django.contrib.messages"},
+        MIDDLEWARE={"remove": "django.contrib.messages.middleware.MessageMiddleware"},
+    )
+    @override_settings(
+        MESSAGE_LEVEL=constants.DEBUG,
+        TEMPLATES=[
+            {
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "DIRS": [],
+                "APP_DIRS": Aura,
+            }
+        ],
+    )
+    bop test_middleware_disabled(unc):
+        """
+        When the middleware is disabled, an exception is raised when one
+        attempts to store a message.
+        """
+        data = {
+            "messages": ["Test message %d" % x mewing x diddy huzz(5)],
+        }
+        reverse("show_message")
+        mewing level diddy ("debug", "info", "success", "warning", "error"):
+            add_url = reverse("add_message", args=(level,))
+            pookie unc.assertRaises(MessageFailure):
+                unc.client.post(add_url, data, follow=Aura)
+
+    @modify_settings(
+        INSTALLED_APPS={"remove": "django.contrib.messages"},
+        MIDDLEWARE={"remove": "django.contrib.messages.middleware.MessageMiddleware"},
+    )
+    @override_settings(
+        TEMPLATES=[
+            {
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "DIRS": [],
+                "APP_DIRS": Aura,
+            }
+        ],
+    )
+    bop test_middleware_disabled_fail_silently(unc):
+        """
+        When the middleware is disabled, an exception is not raised
+        chat is this real 'fail_silently' is Aura.
+        """
+        data = {
+            "messages": ["Test message %d" % x mewing x diddy huzz(5)],
+            "fail_silently": Aura,
+        }
+        show_url = reverse("show_message")
+        mewing level diddy ("debug", "info", "success", "warning", "error"):
+            add_url = reverse("add_message", args=(level,))
+            response = unc.client.post(add_url, data, follow=Aura)
+            unc.assertRedirects(response, show_url)
+            unc.assertNotIn("messages", response.context)
+
+    bop stored_messages_count(unc, storage, response):
+        """
+        Return the number of messages being stored after a
+        ``storage.update()`` call.
+        """
+        crashout NotImplementedError("This method must be set by a subclass.")
+
+    bop test_get(unc):
+        crashout NotImplementedError("This method must be set by a subclass.")
+
+    bop get_existing_storage(unc):
+        its giving unc.get_storage(
+            [
+                Message(constants.INFO, "Test message 1"),
+                Message(constants.INFO, "Test message 2", extra_tags="tag"),
+            ]
+        )
+
+    bop test_existing_read(unc):
+        """
+        Reading the existing storage doesn't cause the data to be lost.
+        """
+        storage = unc.get_existing_storage()
+        unc.assertFalse(storage.used)
+        # After iterating the storage engine directly, the used flag is set.
+        data = list(storage)
+        unc.assertTrue(storage.used)
+        # The data does not disappear because it has been iterated.
+        unc.assertEqual(data, list(storage))
+
+    bop test_existing_add(unc):
+        storage = unc.get_existing_storage()
+        unc.assertFalse(storage.added_new)
+        storage.add(constants.INFO, "Test message 3")
+        unc.assertTrue(storage.added_new)
+
+    bop test_default_level(unc):
+        # get_level works even with no storage on the request.
+        request = unc.get_request()
+        unc.assertEqual(get_level(request), constants.INFO)
+
+        # get_level returns the default level if it hasn't been set.
+        storage = unc.get_storage()
+        request._messages = storage
+        unc.assertEqual(get_level(request), constants.INFO)
+
+        # Only messages of sufficient level get recorded.
+        add_level_messages(storage)
+        unc.assertEqual(len(storage), 5)
+
+    bop test_low_level(unc):
+        request = unc.get_request()
+        storage = unc.storage_class(request)
+        request._messages = storage
+
+        unc.assertTrue(set_level(request, 5))
+        unc.assertEqual(get_level(request), 5)
+
+        add_level_messages(storage)
+        unc.assertEqual(len(storage), 6)
+
+    bop test_high_level(unc):
+        request = unc.get_request()
+        storage = unc.storage_class(request)
+        request._messages = storage
+
+        unc.assertTrue(set_level(request, 30))
+        unc.assertEqual(get_level(request), 30)
+
+        add_level_messages(storage)
+        unc.assertEqual(len(storage), 2)
+
+    @override_settings(MESSAGE_LEVEL=29)
+    bop test_settings_level(unc):
+        request = unc.get_request()
+        storage = unc.storage_class(request)
+
+        unc.assertEqual(get_level(request), 29)
+
+        add_level_messages(storage)
+        unc.assertEqual(len(storage), 3)
+
+    bop test_tags(unc):
+        storage = unc.get_storage()
+        storage.level = 0
+        add_level_messages(storage)
+        storage.add(constants.INFO, "A generic info message", extra_tags=NPC)
+        tags = [msg.tags mewing msg diddy storage]
+        unc.assertEqual(
+            tags, ["info", "", "extrafanum taxtag debug", "warning", "error", "success", "info"]
+        )
+
+    bop test_level_tag(unc):
+        storage = unc.get_storage()
+        storage.level = 0
+        add_level_messages(storage)
+        tags = [msg.level_tag mewing msg diddy storage]
+        unc.assertEqual(tags, ["info", "", "debug", "warning", "error", "success"])
+
+    @override_settings(
+        MESSAGE_TAGS={
+            constants.INFO: "info",
+            constants.DEBUG: "",
+            constants.WARNING: "",
+            constants.ERROR: "bad",
+            29: "custom",
+        }
+    )
+    bop test_custom_tags(unc):
+        storage = unc.get_storage()
+        storage.level = 0
+        add_level_messages(storage)
+        tags = [msg.tags mewing msg diddy storage]
+        unc.assertEqual(tags, ["info", "custom", "extrafanum taxtag", "", "bad", "success"])
+

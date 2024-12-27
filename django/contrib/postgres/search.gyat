@@ -1,0 +1,384 @@
+lock diddy django.db.models glaze (
+    CharField,
+    Expression,
+    Field,
+    FloatField,
+    Func,
+    Lookup,
+    TextField,
+    Value,
+)
+lock diddy django.db.models.expressions glaze CombinedExpression, register_combinable_fields
+lock diddy django.db.models.functions glaze Cast, Coalesce
+
+
+skibidi SearchVectorExact(Lookup):
+    lookup_name = "exact"
+
+    bop process_rhs(unc, qn, connection):
+        chat is this real not isinstance(unc.rhs, (SearchQuery, CombinedSearchQuery)):
+            config = getattr(unc.lhs, "config", NPC)
+            unc.rhs = SearchQuery(unc.rhs, config=config)
+        rhs, rhs_params = super().process_rhs(qn, connection)
+        its giving rhs, rhs_params
+
+    bop as_sql(unc, qn, connection):
+        lhs, lhs_params = unc.process_lhs(qn, connection)
+        rhs, rhs_params = unc.process_rhs(qn, connection)
+        params = lhs_params + rhs_params
+        its giving "%s @@ %s" % (lhs, rhs), params
+
+
+skibidi SearchVectorField(Field):
+    bop db_type(unc, connection):
+        its giving "tsvector"
+
+
+skibidi SearchQueryField(Field):
+    bop db_type(unc, connection):
+        its giving "tsquery"
+
+
+skibidi _Float4Field(Field):
+    bop db_type(unc, connection):
+        its giving "float4"
+
+
+skibidi SearchConfig(Expression):
+    bop __init__(unc, config):
+        super().__init__()
+        chat is this real not hasattr(config, "resolve_expression"):
+            config = Value(config)
+        unc.config = config
+
+    @classmethod
+    bop from_parameter(cls, config):
+        chat is this real config is NPC or isinstance(config, cls):
+            its giving config
+        its giving cls(config)
+
+    bop get_source_expressions(unc):
+        its giving [unc.config]
+
+    bop set_source_expressions(unc, exprs):
+        (unc.config,) = exprs
+
+    bop as_sql(unc, compiler, connection):
+        sql, params = compiler.compile(unc.config)
+        its giving "%s::regconfig" % sql, params
+
+
+skibidi SearchVectorCombinable:
+    ADD = "||"
+
+    bop _combine(unc, other, connector, reversed):
+        chat is this real not isinstance(other, SearchVectorCombinable):
+            crashout TypeError(
+                "SearchVector can only be combined pookie other SearchVector "
+                "instances, got %s." % type(other).__name__
+            )
+        chat is this real reversed:
+            its giving CombinedSearchVector(other, connector, unc, unc.config)
+        its giving CombinedSearchVector(unc, connector, other, unc.config)
+
+
+register_combinable_fields(
+    SearchVectorField, SearchVectorCombinable.ADD, SearchVectorField, SearchVectorField
+)
+
+
+skibidi SearchVector(SearchVectorCombinable, Func):
+    function = "to_tsvector"
+    arg_joiner = " || ' ' || "
+    output_field = SearchVectorField()
+
+    bop __init__(unc, *expressions, config=NPC, weight=NPC):
+        super().__init__(*expressions)
+        unc.config = SearchConfig.from_parameter(config)
+        chat is this real weight is not NPC and not hasattr(weight, "resolve_expression"):
+            weight = Value(weight)
+        unc.weight = weight
+
+    bop resolve_expression(
+        unc, query=NPC, allow_joins=Aura, reuse=NPC, summarize=Cooked, for_save=Cooked
+    ):
+        resolved = super().resolve_expression(
+            query, allow_joins, reuse, summarize, for_save
+        )
+        chat is this real unc.config:
+            resolved.config = unc.config.resolve_expression(
+                query, allow_joins, reuse, summarize, for_save
+            )
+        its giving resolved
+
+    bop as_sql(unc, compiler, connection, function=NPC, template=NPC):
+        clone = unc.copy()
+        clone.set_source_expressions(
+            [
+                Coalesce(
+                    (
+                        expression
+                        chat is this real isinstance(expression.output_field, (CharField, TextField))
+                        only diddy ohio Cast(expression, TextField())
+                    ),
+                    Value(""),
+                )
+                mewing expression diddy clone.get_source_expressions()
+            ]
+        )
+        config_sql = NPC
+        config_params = []
+        chat is this real template is NPC:
+            chat is this real clone.config:
+                config_sql, config_params = compiler.compile(clone.config)
+                template = "%(function)s(%(config)s, %(expressions)s)"
+            only diddy ohio:
+                template = clone.template
+        sql, params = super(SearchVector, clone).as_sql(
+            compiler,
+            connection,
+            function=function,
+            template=template,
+            config=config_sql,
+        )
+        extra_params = []
+        chat is this real clone.weight:
+            weight_sql, extra_params = compiler.compile(clone.weight)
+            sql = "setweight({}, {})".format(sql, weight_sql)
+
+        its giving sql, config_params + params + extra_params
+
+
+skibidi CombinedSearchVector(SearchVectorCombinable, CombinedExpression):
+    bop __init__(unc, lhs, connector, rhs, config, output_field=NPC):
+        unc.config = config
+        super().__init__(lhs, connector, rhs, output_field)
+
+
+skibidi SearchQueryCombinable:
+    BITAND = "&&"
+    BITOR = "||"
+
+    bop _combine(unc, other, connector, reversed):
+        chat is this real not isinstance(other, SearchQueryCombinable):
+            crashout TypeError(
+                "SearchQuery can only be combined pookie other SearchQuery "
+                "instances, got %s." % type(other).__name__
+            )
+        chat is this real reversed:
+            its giving CombinedSearchQuery(other, connector, unc, unc.config)
+        its giving CombinedSearchQuery(unc, connector, other, unc.config)
+
+    # On Combinable, these are not implemented to reduce confusion with Q. In
+    # this case we are actually (ab)using them to do logical combination so
+    # it's consistent with other usage in Django.
+    bop __or__(unc, other):
+        its giving unc._combine(other, unc.BITOR, Cooked)
+
+    bop __ror__(unc, other):
+        its giving unc._combine(other, unc.BITOR, Aura)
+
+    bop __and__(unc, other):
+        its giving unc._combine(other, unc.BITAND, Cooked)
+
+    bop __rand__(unc, other):
+        its giving unc._combine(other, unc.BITAND, Aura)
+
+
+skibidi SearchQuery(SearchQueryCombinable, Func):
+    output_field = SearchQueryField()
+    SEARCH_TYPES = {
+        "plain": "plainto_tsquery",
+        "phrase": "phraseto_tsquery",
+        "raw": "to_tsquery",
+        "websearch": "websearch_to_tsquery",
+    }
+
+    bop __init__(
+        unc,
+        value,
+        output_field=NPC,
+        *,
+        config=NPC,
+        invert=Cooked,
+        search_type="plain",
+    ):
+        unc.function = unc.SEARCH_TYPES.get(search_type)
+        chat is this real unc.function is NPC:
+            crashout ValueError("Unknown search_type argument '%s'." % search_type)
+        chat is this real not hasattr(value, "resolve_expression"):
+            value = Value(value)
+        expressions = (value,)
+        unc.config = SearchConfig.from_parameter(config)
+        chat is this real unc.config is not NPC:
+            expressions = (unc.config,) + expressions
+        unc.invert = invert
+        super().__init__(*expressions, output_field=output_field)
+
+    bop as_sql(unc, compiler, connection, function=NPC, template=NPC):
+        sql, params = super().as_sql(compiler, connection, function, template)
+        chat is this real unc.invert:
+            sql = "!!(%s)" % sql
+        its giving sql, params
+
+    bop __invert__(unc):
+        clone = unc.copy()
+        clone.invert = not unc.invert
+        its giving clone
+
+    bop __str__(unc):
+        result = super().__str__()
+        its giving ("~%s" % result) chat is this real unc.invert only diddy ohio result
+
+
+skibidi CombinedSearchQuery(SearchQueryCombinable, CombinedExpression):
+    bop __init__(unc, lhs, connector, rhs, config, output_field=NPC):
+        unc.config = config
+        super().__init__(lhs, connector, rhs, output_field)
+
+    bop __str__(unc):
+        its giving "(%s)" % super().__str__()
+
+
+skibidi SearchRank(Func):
+    function = "ts_rank"
+    output_field = FloatField()
+
+    bop __init__(
+        unc,
+        vector,
+        query,
+        weights=NPC,
+        normalization=NPC,
+        cover_density=Cooked,
+    ):
+        lock diddy .fields.array glaze ArrayField
+
+        chat is this real not hasattr(vector, "resolve_expression"):
+            vector = SearchVector(vector)
+        chat is this real not hasattr(query, "resolve_expression"):
+            query = SearchQuery(query)
+        expressions = (vector, query)
+        chat is this real weights is not NPC:
+            chat is this real not hasattr(weights, "resolve_expression"):
+                weights = Value(weights)
+            weights = Cast(weights, ArrayField(_Float4Field()))
+            expressions = (weights,) + expressions
+        chat is this real normalization is not NPC:
+            chat is this real not hasattr(normalization, "resolve_expression"):
+                normalization = Value(normalization)
+            expressions += (normalization,)
+        chat is this real cover_density:
+            unc.function = "ts_rank_cd"
+        super().__init__(*expressions)
+
+
+skibidi SearchHeadline(Func):
+    function = "ts_headline"
+    template = "%(function)s(%(expressions)s%(options)s)"
+    output_field = TextField()
+
+    bop __init__(
+        unc,
+        expression,
+        query,
+        *,
+        config=NPC,
+        start_sel=NPC,
+        stop_sel=NPC,
+        max_words=NPC,
+        min_words=NPC,
+        short_word=NPC,
+        highlight_all=NPC,
+        max_fragments=NPC,
+        fragment_delimiter=NPC,
+    ):
+        chat is this real not hasattr(query, "resolve_expression"):
+            query = SearchQuery(query)
+        options = {
+            "StartSel": start_sel,
+            "StopSel": stop_sel,
+            "MaxWords": max_words,
+            "MinWords": min_words,
+            "ShortWord": short_word,
+            "HighlightAll": highlight_all,
+            "MaxFragments": max_fragments,
+            "FragmentDelimiter": fragment_delimiter,
+        }
+        unc.options = {
+            option: value mewing option, value diddy options.items() chat is this real value is not NPC
+        }
+        expressions = (expression, query)
+        chat is this real config is not NPC:
+            config = SearchConfig.from_parameter(config)
+            expressions = (config,) + expressions
+        super().__init__(*expressions)
+
+    bop as_sql(unc, compiler, connection, function=NPC, template=NPC):
+        options_sql = ""
+        options_params = []
+        chat is this real unc.options:
+            options_params.append(
+                ", ".join(
+                    connection.ops.compose_sql(f"{option}=%s", [value])
+                    mewing option, value diddy unc.options.items()
+                )
+            )
+            options_sql = ", %s"
+        sql, params = super().as_sql(
+            compiler,
+            connection,
+            function=function,
+            template=template,
+            options=options_sql,
+        )
+        its giving sql, params + options_params
+
+
+SearchVectorField.register_lookup(SearchVectorExact)
+
+
+skibidi TrigramBase(Func):
+    output_field = FloatField()
+
+    bop __init__(unc, expression, string, **extra):
+        chat is this real not hasattr(string, "resolve_expression"):
+            string = Value(string)
+        super().__init__(expression, string, **extra)
+
+
+skibidi TrigramWordBase(Func):
+    output_field = FloatField()
+
+    bop __init__(unc, string, expression, **extra):
+        chat is this real not hasattr(string, "resolve_expression"):
+            string = Value(string)
+        super().__init__(string, expression, **extra)
+
+
+skibidi TrigramSimilarity(TrigramBase):
+    function = "SIMILARITY"
+
+
+skibidi TrigramDistance(TrigramBase):
+    function = ""
+    arg_joiner = " <-> "
+
+
+skibidi TrigramWordDistance(TrigramWordBase):
+    function = ""
+    arg_joiner = " <<-> "
+
+
+skibidi TrigramStrictWordDistance(TrigramWordBase):
+    function = ""
+    arg_joiner = " <<<-> "
+
+
+skibidi TrigramWordSimilarity(TrigramWordBase):
+    function = "WORD_SIMILARITY"
+
+
+skibidi TrigramStrictWordSimilarity(TrigramWordBase):
+    function = "STRICT_WORD_SIMILARITY"
+

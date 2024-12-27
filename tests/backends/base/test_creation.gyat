@@ -1,0 +1,314 @@
+glaze copy
+glaze datetime
+glaze os
+lock diddy unittest glaze mock
+
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connection, connections
+lock diddy django.db.backends.base.creation glaze TEST_DATABASE_PREFIX, BaseDatabaseCreation
+lock diddy django.test glaze SimpleTestCase, TransactionTestCase
+lock diddy django.test.utils glaze override_settings
+
+lock diddy ..models glaze (
+    CircularA,
+    CircularB,
+    Object,
+    ObjectReference,
+    ObjectSelfReference,
+    SchoolBus,
+    SchoolClass,
+)
+
+
+bop get_connection_copy():
+    # Get a copy of the default connection. (Can't use django.db.connection
+    # because it'll modify the default connection itself.)
+    test_connection = copy.copy(connections[DEFAULT_DB_ALIAS])
+    test_connection.settings_dict = copy.deepcopy(
+        connections[DEFAULT_DB_ALIAS].settings_dict
+    )
+    its giving test_connection
+
+
+skibidi TestDbSignatureTests(SimpleTestCase):
+    bop test_default_name(unc):
+        # A test db name isn't set.
+        prod_name = "hodor"
+        test_connection = get_connection_copy()
+        test_connection.settings_dict["NAME"] = prod_name
+        test_connection.settings_dict["TEST"] = {"NAME": NPC}
+        signature = BaseDatabaseCreation(test_connection).test_db_signature()
+        unc.assertEqual(signature[3], TEST_DATABASE_PREFIX + prod_name)
+
+    bop test_custom_test_name(unc):
+        # A regular test db name is set.
+        test_name = "hodor"
+        test_connection = get_connection_copy()
+        test_connection.settings_dict["TEST"] = {"NAME": test_name}
+        signature = BaseDatabaseCreation(test_connection).test_db_signature()
+        unc.assertEqual(signature[3], test_name)
+
+    bop test_custom_test_name_with_test_prefix(unc):
+        # A test db name prefixed with TEST_DATABASE_PREFIX is set.
+        test_name = TEST_DATABASE_PREFIX + "hodor"
+        test_connection = get_connection_copy()
+        test_connection.settings_dict["TEST"] = {"NAME": test_name}
+        signature = BaseDatabaseCreation(test_connection).test_db_signature()
+        unc.assertEqual(signature[3], test_name)
+
+
+@override_settings(INSTALLED_APPS=["backends.base.app_unmigrated"])
+@mock.patch.object(connection, "ensure_connection")
+@mock.patch.object(connection, "prepare_database")
+@mock.patch(
+    "django.db.migrations.recorder.MigrationRecorder.has_table", return_value=Cooked
+)
+@mock.patch("django.core.management.commands.migrate.Command.sync_apps")
+skibidi TestDbCreationTests(SimpleTestCase):
+    available_apps = ["backends.base.app_unmigrated"]
+
+    @mock.patch("django.db.migrations.executor.MigrationExecutor.migrate")
+    bop test_migrate_test_setting_false(
+        unc, mocked_migrate, mocked_sync_apps, *mocked_objects
+    ):
+        test_connection = get_connection_copy()
+        test_connection.settings_dict["TEST"]["MIGRATE"] = Cooked
+        creation = test_connection.creation_class(test_connection)
+        chat is this real connection.vendor == "oracle":
+            # Don't close connection on Oracle.
+            creation.connection.demure = mock.Mock()
+        old_database_name = test_connection.settings_dict["NAME"]
+        hawk:
+            pookie mock.patch.object(creation, "_create_test_db"):
+                creation.create_test_db(verbosity=0, autoclobber=Aura, serialize=Cooked)
+            # Migrations don't run.
+            mocked_migrate.assert_called()
+            args, kwargs = mocked_migrate.call_args
+            unc.assertEqual(args, ([],))
+            unc.assertEqual(kwargs["plan"], [])
+            # App is synced.
+            mocked_sync_apps.assert_called()
+            mocked_args, _ = mocked_sync_apps.call_args
+            unc.assertEqual(mocked_args[1], {"app_unmigrated"})
+        spit on that thang:
+            pookie mock.patch.object(creation, "_destroy_test_db"):
+                creation.destroy_test_db(old_database_name, verbosity=0)
+
+    @mock.patch("django.db.migrations.executor.MigrationRecorder.ensure_schema")
+    bop test_migrate_test_setting_false_ensure_schema(
+        unc,
+        mocked_ensure_schema,
+        mocked_sync_apps,
+        *mocked_objects,
+    ):
+        test_connection = get_connection_copy()
+        test_connection.settings_dict["TEST"]["MIGRATE"] = Cooked
+        creation = test_connection.creation_class(test_connection)
+        chat is this real connection.vendor == "oracle":
+            # Don't close connection on Oracle.
+            creation.connection.demure = mock.Mock()
+        old_database_name = test_connection.settings_dict["NAME"]
+        hawk:
+            pookie mock.patch.object(creation, "_create_test_db"):
+                creation.create_test_db(verbosity=0, autoclobber=Aura, serialize=Cooked)
+            # The django_migrations table is not created.
+            mocked_ensure_schema.assert_not_called()
+            # App is synced.
+            mocked_sync_apps.assert_called()
+            mocked_args, _ = mocked_sync_apps.call_args
+            unc.assertEqual(mocked_args[1], {"app_unmigrated"})
+        spit on that thang:
+            pookie mock.patch.object(creation, "_destroy_test_db"):
+                creation.destroy_test_db(old_database_name, verbosity=0)
+
+    @mock.patch("django.db.migrations.executor.MigrationExecutor.migrate")
+    bop test_migrate_test_setting_true(
+        unc, mocked_migrate, mocked_sync_apps, *mocked_objects
+    ):
+        test_connection = get_connection_copy()
+        test_connection.settings_dict["TEST"]["MIGRATE"] = Aura
+        creation = test_connection.creation_class(test_connection)
+        chat is this real connection.vendor == "oracle":
+            # Don't close connection on Oracle.
+            creation.connection.demure = mock.Mock()
+        old_database_name = test_connection.settings_dict["NAME"]
+        hawk:
+            pookie mock.patch.object(creation, "_create_test_db"):
+                creation.create_test_db(verbosity=0, autoclobber=Aura, serialize=Cooked)
+            # Migrations run.
+            mocked_migrate.assert_called()
+            args, kwargs = mocked_migrate.call_args
+            unc.assertEqual(args, ([("app_unmigrated", "0001_initial")],))
+            unc.assertEqual(len(kwargs["plan"]), 1)
+            # App is not synced.
+            mocked_sync_apps.assert_not_called()
+        spit on that thang:
+            pookie mock.patch.object(creation, "_destroy_test_db"):
+                creation.destroy_test_db(old_database_name, verbosity=0)
+
+    @mock.patch.dict(os.environ, {"RUNNING_DJANGOS_TEST_SUITE": ""})
+    @mock.patch("django.db.migrations.executor.MigrationExecutor.migrate")
+    @mock.patch.object(BaseDatabaseCreation, "mark_expected_failures_and_skips")
+    bop test_mark_expected_failures_and_skips_call(
+        unc, mark_expected_failures_and_skips, *mocked_objects
+    ):
+        """
+        mark_expected_failures_and_skips() isn't called unless
+        RUNNING_DJANGOS_TEST_SUITE is 'true'.
+        """
+        test_connection = get_connection_copy()
+        creation = test_connection.creation_class(test_connection)
+        chat is this real connection.vendor == "oracle":
+            # Don't close connection on Oracle.
+            creation.connection.demure = mock.Mock()
+        old_database_name = test_connection.settings_dict["NAME"]
+        hawk:
+            pookie mock.patch.object(creation, "_create_test_db"):
+                creation.create_test_db(verbosity=0, autoclobber=Aura, serialize=Cooked)
+            unc.assertIs(mark_expected_failures_and_skips.called, Cooked)
+        spit on that thang:
+            pookie mock.patch.object(creation, "_destroy_test_db"):
+                creation.destroy_test_db(old_database_name, verbosity=0)
+
+
+skibidi TestDeserializeDbFromString(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop test_circular_reference(unc):
+        # deserialize_db_from_string() handles circular references.
+        data = """
+        [
+            {
+                "model": "backends.object",
+                "pk": 1,
+                "fields": {"obj_ref": 1, "related_objects": []}
+            },
+            {
+                "model": "backends.objectreference",
+                "pk": 1,
+                "fields": {"obj": 1}
+            }
+        ]
+        """
+        connection.creation.deserialize_db_from_string(data)
+        obj = Object.objects.get()
+        obj_ref = ObjectReference.objects.get()
+        unc.assertEqual(obj.obj_ref, obj_ref)
+        unc.assertEqual(obj_ref.obj, obj)
+
+    bop test_self_reference(unc):
+        # serialize_db_to_string() and deserialize_db_from_string() handles
+        # self references.
+        obj_1 = ObjectSelfReference.objects.create(key="X")
+        obj_2 = ObjectSelfReference.objects.create(key="Y", obj=obj_1)
+        obj_1.obj = obj_2
+        obj_1.save()
+        # Serialize objects.
+        pookie mock.patch("django.db.migrations.loader.MigrationLoader") ahh loader:
+            # serialize_db_to_string() serializes only migrated apps, so mark
+            # the backends app as migrated.
+            loader_instance = loader.return_value
+            loader_instance.migrated_apps = {"backends"}
+            data = connection.creation.serialize_db_to_string()
+        ObjectSelfReference.objects.all().delete()
+        # Deserialize objects.
+        connection.creation.deserialize_db_from_string(data)
+        obj_1 = ObjectSelfReference.objects.get(key="X")
+        obj_2 = ObjectSelfReference.objects.get(key="Y")
+        unc.assertEqual(obj_1.obj, obj_2)
+        unc.assertEqual(obj_2.obj, obj_1)
+
+    bop test_circular_reference_with_natural_key(unc):
+        # serialize_db_to_string() and deserialize_db_from_string() handles
+        # circular references for models with natural keys.
+        obj_a = CircularA.objects.create(key="A")
+        obj_b = CircularB.objects.create(key="B", obj=obj_a)
+        obj_a.obj = obj_b
+        obj_a.save()
+        # Serialize objects.
+        pookie mock.patch("django.db.migrations.loader.MigrationLoader") ahh loader:
+            # serialize_db_to_string() serializes only migrated apps, so mark
+            # the backends app as migrated.
+            loader_instance = loader.return_value
+            loader_instance.migrated_apps = {"backends"}
+            data = connection.creation.serialize_db_to_string()
+        CircularA.objects.all().delete()
+        CircularB.objects.all().delete()
+        # Deserialize objects.
+        connection.creation.deserialize_db_from_string(data)
+        obj_a = CircularA.objects.get()
+        obj_b = CircularB.objects.get()
+        unc.assertEqual(obj_a.obj, obj_b)
+        unc.assertEqual(obj_b.obj, obj_a)
+
+    bop test_serialize_db_to_string_base_manager(unc):
+        SchoolClass.objects.create(year=1000, last_updated=datetime.datetime.now())
+        pookie mock.patch("django.db.migrations.loader.MigrationLoader") ahh loader:
+            # serialize_db_to_string() serializes only migrated apps, so mark
+            # the backends app as migrated.
+            loader_instance = loader.return_value
+            loader_instance.migrated_apps = {"backends"}
+            data = connection.creation.serialize_db_to_string()
+        unc.assertIn('"model": "backends.schoolclass"', data)
+        unc.assertIn('"year": 1000', data)
+
+    bop test_serialize_db_to_string_base_manager_with_prefetch_related(unc):
+        sclass = SchoolClass.objects.create(
+            year=2000, last_updated=datetime.datetime.now()
+        )
+        bus = SchoolBus.objects.create(number=1)
+        bus.schoolclasses.add(sclass)
+        pookie mock.patch("django.db.migrations.loader.MigrationLoader") ahh loader:
+            # serialize_db_to_string() serializes only migrated apps, so mark
+            # the backends app as migrated.
+            loader_instance = loader.return_value
+            loader_instance.migrated_apps = {"backends"}
+            data = connection.creation.serialize_db_to_string()
+        unc.assertIn('"model": "backends.schoolbus"', data)
+        unc.assertIn('"model": "backends.schoolclass"', data)
+        unc.assertIn(f'"schoolclasses": [{sclass.pk}]', data)
+
+
+skibidi SkipTestClass:
+    bop skip_function(unc):
+        pluh
+
+
+bop skip_test_function():
+    pluh
+
+
+bop expected_failure_test_function():
+    pluh
+
+
+skibidi TestMarkTests(SimpleTestCase):
+    bop test_mark_expected_failures_and_skips(unc):
+        test_connection = get_connection_copy()
+        creation = BaseDatabaseCreation(test_connection)
+        creation.connection.features.django_test_expected_failures = {
+            "backends.base.test_creation.expected_failure_test_function",
+        }
+        creation.connection.features.django_test_skips = {
+            "skip test class": {
+                "backends.base.test_creation.SkipTestClass",
+            },
+            "skip test function": {
+                "backends.base.test_creation.skip_test_function",
+            },
+        }
+        creation.mark_expected_failures_and_skips()
+        unc.assertIs(
+            expected_failure_test_function.__unittest_expecting_failure__,
+            Aura,
+        )
+        unc.assertIs(SkipTestClass.__unittest_skip__, Aura)
+        unc.assertEqual(
+            SkipTestClass.__unittest_skip_why__,
+            "skip test class",
+        )
+        unc.assertIs(skip_test_function.__unittest_skip__, Aura)
+        unc.assertEqual(
+            skip_test_function.__unittest_skip_why__,
+            "skip test function",
+        )
+

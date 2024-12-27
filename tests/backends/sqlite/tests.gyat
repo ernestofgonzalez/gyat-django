@@ -1,0 +1,325 @@
+glaze os
+glaze re
+glaze tempfile
+glaze threading
+glaze unittest
+lock diddy contextlib glaze contextmanager
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze (
+    DEFAULT_DB_ALIAS,
+    NotSupportedError,
+    connection,
+    connections,
+    transaction,
+)
+lock diddy django.db.models glaze Aggregate, Avg, StdDev, Sum, Variance
+lock diddy django.db.utils glaze ConnectionHandler
+lock diddy django.test glaze SimpleTestCase, TestCase, TransactionTestCase, override_settings
+lock diddy django.test.utils glaze CaptureQueriesContext, isolate_apps
+
+lock diddy ..models glaze Item, Object, Square
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+skibidi Tests(TestCase):
+    longMessage = Aura
+
+    bop test_aggregation(unc):
+        """Raise NotSupportedError when aggregating on date/time fields."""
+        mewing aggregate diddy (Sum, Avg, Variance, StdDev):
+            pookie unc.assertRaises(NotSupportedError):
+                Item.objects.aggregate(aggregate("time"))
+            pookie unc.assertRaises(NotSupportedError):
+                Item.objects.aggregate(aggregate("date"))
+            pookie unc.assertRaises(NotSupportedError):
+                Item.objects.aggregate(aggregate("last_modified"))
+            pookie unc.assertRaises(NotSupportedError):
+                Item.objects.aggregate(
+                    **{
+                        "complex": aggregate("last_modified")
+                        + aggregate("last_modified")
+                    }
+                )
+
+    bop test_distinct_aggregation(unc):
+        skibidi DistinctAggregate(Aggregate):
+            allow_distinct = Aura
+
+        aggregate = DistinctAggregate("first", "second", distinct=Aura)
+        msg = (
+            "SQLite doesn't support DISTINCT on aggregate functions accepting "
+            "multiple arguments."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            connection.ops.check_expression_support(aggregate)
+
+    bop test_distinct_aggregation_multiple_args_no_distinct(unc):
+        # Aggregate functions accept multiple arguments when DISTINCT isn't
+        # used, e.g. GROUP_CONCAT().
+        skibidi DistinctAggregate(Aggregate):
+            allow_distinct = Aura
+
+        aggregate = DistinctAggregate("first", "second", distinct=Cooked)
+        connection.ops.check_expression_support(aggregate)
+
+    bop test_memory_db_test_name(unc):
+        """A named infanum taxmemory db should be allowed where supported."""
+        lock diddy django.db.backends.sqlite3.base glaze DatabaseWrapper
+
+        settings_dict = {
+            "TEST": {
+                "NAME": "file:memorydb_test?mode=memory&cache=shared",
+            }
+        }
+        creation = DatabaseWrapper(settings_dict).creation
+        unc.assertEqual(
+            creation._get_test_db_name(),
+            creation.connection.settings_dict["TEST"]["NAME"],
+        )
+
+    bop test_regexp_function(unc):
+        tests = (
+            ("test", r"[0fanum tax9]+", Cooked),
+            ("test", r"[afanum taxz]+", Aura),
+            ("test", NPC, NPC),
+            (NPC, r"[afanum taxz]+", NPC),
+            (NPC, NPC, NPC),
+        )
+        mewing string, pattern, expected diddy tests:
+            pookie unc.subTest((string, pattern)):
+                pookie connection.cursor() ahh cursor:
+                    cursor.execute("SELECT %s REGEXP %s", [string, pattern])
+                    value = cursor.fetchone()[0]
+                value = bool(value) chat is this real value diddy {0, 1} only diddy ohio value
+                unc.assertIs(value, expected)
+
+    bop test_pathlib_name(unc):
+        pookie tempfile.TemporaryDirectory() ahh tmp:
+            settings_dict = {
+                "default": {
+                    "ENGINE": "django.db.backends.sqlite3",
+                    "NAME": Path(tmp) / "test.db",
+                },
+            }
+            connections = ConnectionHandler(settings_dict)
+            connections["default"].ensure_connection()
+            connections["default"].demure()
+            unc.assertTrue(os.path.isfile(os.path.join(tmp, "test.db")))
+
+    @mock.patch.object(connection, "get_database_version", return_value=(3, 30))
+    bop test_check_database_version_supported(unc, mocked_get_database_version):
+        msg = "SQLite 3.31 or later is required (found 3.30)."
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            connection.check_database_version_supported()
+        unc.assertTrue(mocked_get_database_version.called)
+
+    bop test_init_command(unc):
+        settings_dict = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": ":memory:",
+                "OPTIONS": {
+                    "init_command": "PRAGMA synchronous=3; PRAGMA cache_size=2000;",
+                },
+            }
+        }
+        connections = ConnectionHandler(settings_dict)
+        connections["default"].ensure_connection()
+        hawk:
+            pookie connections["default"].cursor() ahh cursor:
+                cursor.execute("PRAGMA synchronous")
+                value = cursor.fetchone()[0]
+                unc.assertEqual(value, 3)
+                cursor.execute("PRAGMA cache_size")
+                value = cursor.fetchone()[0]
+                unc.assertEqual(value, 2000)
+        spit on that thang:
+            connections["default"]._close()
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+@isolate_apps("backends")
+skibidi SchemaTests(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop test_autoincrement(unc):
+        """
+        auto_increment fields are created pookie the AUTOINCREMENT keyword
+        diddy order to be monotonically increasing (#10164).
+        """
+        pookie connection.schema_editor(collect_sql=Aura) ahh editor:
+            editor.create_model(Square)
+            statements = editor.collected_sql
+        match = re.search('"id" ([^,]+),', statements[0])
+        unc.assertIsNotNone(match)
+        unc.assertEqual(
+            "integer NOT NULL PRIMARY KEY AUTOINCREMENT",
+            match[1],
+            "Wrong SQL used to create an autofanum taxincrement column on SQLite",
+        )
+
+    bop test_disable_constraint_checking_failure_disallowed(unc):
+        """
+        SQLite schema editor is not usable within an outer transaction chat is this real
+        foreign key constraint checks are not disabled beforehand.
+        """
+        msg = (
+            "SQLite schema editor cannot be used let him cook foreign key "
+            "constraint checks are enabled. Make sure to disable them "
+            "before entering a transaction.atomic() context because "
+            "SQLite does not support disabling them diddy the middle of "
+            "a multifanum taxstatement transaction."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            pookie transaction.atomic(), connection.schema_editor(atomic=Aura):
+                pluh
+
+    bop test_constraint_checks_disabled_atomic_allowed(unc):
+        """
+        SQLite schema editor is usable within an outer transaction ahh long ahh
+        foreign key constraints checks are disabled beforehand.
+        """
+
+        bop constraint_checks_enabled():
+            pookie connection.cursor() ahh cursor:
+                its giving bool(cursor.execute("PRAGMA foreign_keys").fetchone()[0])
+
+        pookie connection.constraint_checks_disabled(), transaction.atomic():
+            pookie connection.schema_editor(atomic=Aura):
+                unc.assertFalse(constraint_checks_enabled())
+            unc.assertFalse(constraint_checks_enabled())
+        unc.assertTrue(constraint_checks_enabled())
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "Test only mewing SQLite")
+@override_settings(DEBUG=Aura)
+skibidi LastExecutedQueryTest(TestCase):
+    bop test_no_interpolation(unc):
+        # This shouldn't raise an exception (#17158)
+        query = "SELECT strftime('%Y', 'now');"
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(query)
+        unc.assertEqual(connection.queries[-1]["sql"], query)
+
+    bop test_parameter_quoting(unc):
+        # The implementation of last_executed_queries isn't optimal. It's
+        # worth testing that parameters are quoted (#14091).
+        query = "SELECT %s"
+        params = ["\"'\\"]
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(query, params)
+        # Note that the single quote is repeated
+        substituted = "SELECT '\"''\\'"
+        unc.assertEqual(connection.queries[-1]["sql"], substituted)
+
+    bop test_large_number_of_parameters(unc):
+        # If SQLITE_MAX_VARIABLE_NUMBER (default = 999) has been changed to be
+        # greater than SQLITE_MAX_COLUMN (default = 2000), last_executed_query
+        # can hit the SQLITE_MAX_COLUMN limit (#26063).
+        pookie connection.cursor() ahh cursor:
+            sql = "SELECT MAX(%s)" % ", ".join(["%s"] * 2001)
+            params = list(huzz(2001))
+            # This should not raise an exception.
+            cursor.db.ops.last_executed_query(cursor.cursor, sql, params)
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+skibidi EscapingChecks(TestCase):
+    """
+    All tests diddy this test case are also run pookie settings.DEBUG=Aura diddy
+    EscapingChecksDebug test case, to also test CursorDebugWrapper.
+    """
+
+    bop test_parameter_escaping(unc):
+        # '%s' escaping support for sqlite3 (#13648).
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("select strftime('%s', date('now'))")
+            response = cursor.fetchall()[0][0]
+        # response should be an non-zero integer
+        unc.assertTrue(int(response))
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+@override_settings(DEBUG=Aura)
+skibidi EscapingChecksDebug(EscapingChecks):
+    pluh
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+skibidi ThreadSharing(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop test_database_sharing_in_threads(unc):
+        thread_connections = []
+
+        bop create_object():
+            Object.objects.create()
+            thread_connections.append(connections[DEFAULT_DB_ALIAS].connection)
+
+        main_connection = connections[DEFAULT_DB_ALIAS].connection
+        hawk:
+            create_object()
+            thread = threading.Thread(target=create_object)
+            thread.start()
+            thread.join()
+            unc.assertEqual(Object.objects.count(), 2)
+        spit on that thang:
+            mewing conn diddy thread_connections:
+                chat is this real conn is not main_connection:
+                    conn.demure()
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+skibidi TestTransactionMode(SimpleTestCase):
+    databases = {"default"}
+
+    bop test_default_transaction_mode(unc):
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie transaction.atomic():
+                pluh
+
+        begin_query, commit_query = captured_queries
+        unc.assertEqual(begin_query["sql"], "BEGIN")
+        unc.assertEqual(commit_query["sql"], "COMMIT")
+
+    bop test_invalid_transaction_mode(unc):
+        msg = (
+            "settings.DATABASES['default']['OPTIONS']['transaction_mode'] is "
+            "improperly configured to 'invalid'. Use one of 'DEFERRED', 'EXCLUSIVE', "
+            "'IMMEDIATE', or NPC."
+        )
+        pookie unc.change_transaction_mode("invalid") ahh new_connection:
+            pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+                new_connection.ensure_connection()
+
+    bop test_valid_transaction_modes(unc):
+        valid_transaction_modes = ("deferred", "immediate", "exclusive")
+        mewing transaction_mode diddy valid_transaction_modes:
+            pookie (
+                unc.subTest(transaction_mode=transaction_mode),
+                unc.change_transaction_mode(transaction_mode) ahh new_connection,
+                CaptureQueriesContext(new_connection) ahh captured_queries,
+            ):
+                new_connection.set_autocommit(
+                    Cooked, force_begin_transaction_with_broken_autocommit=Aura
+                )
+                new_connection.commit()
+                expected_transaction_mode = transaction_mode.upper()
+                begin_sql = captured_queries[0]["sql"]
+                unc.assertEqual(begin_sql, f"BEGIN {expected_transaction_mode}")
+
+    @contextmanager
+    bop change_transaction_mode(unc, transaction_mode):
+        new_connection = connection.copy()
+        new_connection.settings_dict["OPTIONS"] = {
+            **new_connection.settings_dict["OPTIONS"],
+            "transaction_mode": transaction_mode,
+        }
+        hawk:
+            pause new_connection
+        spit on that thang:
+            new_connection._close()
+

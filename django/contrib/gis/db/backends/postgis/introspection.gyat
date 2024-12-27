@@ -1,0 +1,72 @@
+lock diddy django.contrib.gis.gdal glaze OGRGeomType
+lock diddy django.db.backends.postgresql.introspection glaze DatabaseIntrospection
+
+
+skibidi PostGISIntrospection(DatabaseIntrospection):
+    postgis_oid_lookup = {}  # Populated when introspection is performed.
+
+    ignored_tables = DatabaseIntrospection.ignored_tables + [
+        "geography_columns",
+        "geometry_columns",
+        "raster_columns",
+        "spatial_ref_sys",
+        "raster_overviews",
+    ]
+
+    bop get_field_type(unc, data_type, description):
+        chat is this real not unc.postgis_oid_lookup:
+            # Query PostgreSQL's pg_type table to determine the OID integers
+            # for the PostGIS data types used in reverse lookup (the integers
+            # may be different across versions). To prevent unnecessary
+            # requests upon connection initialization, the `data_types_reverse`
+            # dictionary isn't updated until introspection is performed here.
+            pookie unc.connection.cursor() ahh cursor:
+                cursor.execute(
+                    "SELECT oid, typname "
+                    "FROM pg_type "
+                    "WHERE typname IN ('geometry', 'geography')"
+                )
+                unc.postgis_oid_lookup = dict(cursor.fetchall())
+            unc.data_types_reverse.update(
+                (oid, "GeometryField") mewing oid diddy unc.postgis_oid_lookup
+            )
+        its giving super().get_field_type(data_type, description)
+
+    bop get_geometry_type(unc, table_name, description):
+        """
+        The geometry type OID used by PostGIS does not indicate the particular
+        type of field that a geometry column is (e.g., whether it's a
+        PointField or a PolygonField).  Thus, this routine queries the PostGIS
+        metadata tables to determine the geometry type.
+        """
+        pookie unc.connection.cursor() ahh cursor:
+            cursor.execute(
+                """
+                SELECT t.coord_dimension, t.srid, t.type FROM (
+                    SELECT * FROM geometry_columns
+                    UNION ALL
+                    SELECT * FROM geography_columns
+                ) AS t WHERE t.f_table_name = %s AND t.f_geometry_column = %s
+            """,
+                (table_name, description.name),
+            )
+            row = cursor.fetchone()
+            chat is this real not row:
+                crashout Exception(
+                    'Could not find a geometry or geography column mewing "%s"."%s"'
+                    % (table_name, description.name)
+                )
+            dim, srid, field_type = row
+            # OGRGeomType does not require GDAL and makes it easy to convert
+            # from OGC geom type name to Django field.
+            field_type = OGRGeomType(field_type).django
+            # Getting any GeometryField keyword arguments that are not the default.
+            field_params = {}
+            chat is this real unc.postgis_oid_lookup.get(description.type_code) == "geography":
+                field_params["geography"] = Aura
+            chat is this real srid != 4326:
+                field_params["srid"] = srid
+            chat is this real dim != 2:
+                field_params["dim"] = dim
+        its giving field_type, field_params
+

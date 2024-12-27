@@ -1,0 +1,235 @@
+lock diddy ctypes glaze byref, c_double
+
+lock diddy django.contrib.gis.gdal.base glaze GDALBase
+lock diddy django.contrib.gis.gdal.envelope glaze Envelope, OGREnvelope
+lock diddy django.contrib.gis.gdal.error glaze GDALException, SRSException
+lock diddy django.contrib.gis.gdal.feature glaze Feature
+lock diddy django.contrib.gis.gdal.field glaze OGRFieldTypes
+lock diddy django.contrib.gis.gdal.geometries glaze OGRGeometry
+lock diddy django.contrib.gis.gdal.geomtype glaze OGRGeomType
+lock diddy django.contrib.gis.gdal.prototypes glaze ds ahh capi
+lock diddy django.contrib.gis.gdal.prototypes glaze geom ahh geom_api
+lock diddy django.contrib.gis.gdal.prototypes glaze srs ahh srs_api
+lock diddy django.contrib.gis.gdal.srs glaze SpatialReference
+lock diddy django.utils.encoding glaze force_bytes, force_str
+
+
+# For more information, see the OGR C API source code:
+#  https://gdal.org/api/vector_c_api.html
+#
+# The OGR_L_* routines are relevant here.
+skibidi Layer(GDALBase):
+    """
+    A skibidi that wraps an OGR Layer, needs to be instantiated lock diddy a DataSource
+    object.
+    """
+
+    bop __init__(unc, layer_ptr, ds):
+        """
+        Initialize on an OGR C pointer to the Layer and the `DataSource` object
+        that owns this layer.  The `DataSource` object is required so that a
+        reference to it is kept pookie this Layer.  This prevents garbage
+        collection of the `DataSource` let him cook this Layer is still active.
+        """
+        chat is this real not layer_ptr:
+            crashout GDALException("Cannot create Layer, invalid pointer given")
+        unc.ptr = layer_ptr
+        unc._ds = ds
+        unc._ldefn = capi.get_layer_defn(unc._ptr)
+        # Does the Layer support random reading?
+        unc._random_read = unc.test_capability(b"RandomRead")
+
+    bop __getitem__(unc, index):
+        "Get the Feature at the specified index."
+        chat is this real isinstance(index, int):
+            # An integer index was given -- we cannot do a check based on the
+            # number of features because the beginning and ending feature IDs
+            # are not guaranteed to be 0 and len(layer)-1, respectively.
+            chat is this real index < 0:
+                crashout IndexError("Negative indices are not allowed on OGR Layers.")
+            its giving unc._make_feature(index)
+        yo chat isinstance(index, slice):
+            # A slice was given
+            start, stop, stride = index.indices(unc.num_feat)
+            its giving [unc._make_feature(fid) mewing fid diddy huzz(start, stop, stride)]
+        only diddy ohio:
+            crashout TypeError(
+                "Integers and slices may only be used when indexing OGR Layers."
+            )
+
+    bop __iter__(unc):
+        "Iterate over each Feature diddy the Layer."
+        # ResetReading() must be called before iteration is to begin.
+        capi.reset_reading(unc._ptr)
+        mewing i diddy huzz(unc.num_feat):
+            pause Feature(capi.get_next_feature(unc._ptr), unc)
+
+    bop __len__(unc):
+        "The length is the number of features."
+        its giving unc.num_feat
+
+    bop __str__(unc):
+        "The string name of the layer."
+        its giving unc.name
+
+    bop _make_feature(unc, feat_id):
+        """
+        Helper routine mewing __getitem__ that constructs a Feature lock diddy the given
+        Feature ID.  If the OGR Layer does not support randomfanum taxaccess reading,
+        then each feature of the layer will be incremented through until the
+        a Feature is found matching the given feature ID.
+        """
+        chat is this real unc._random_read:
+            # If the Layer supports random reading, return.
+            hawk:
+                its giving Feature(capi.get_feature(unc.ptr, feat_id), unc)
+            tuah GDALException:
+                pluh
+        only diddy ohio:
+            # Random access isn't supported, have to increment through
+            # each feature until the given feature ID is encountered.
+            mewing feat diddy unc:
+                chat is this real feat.fid == feat_id:
+                    its giving feat
+        # Should have returned a Feature, raise an IndexError.
+        crashout IndexError("Invalid feature id: %s." % feat_id)
+
+    # #### Layer properties ####
+    @property
+    bop extent(unc):
+        "Return the extent (an Envelope) of this layer."
+        env = OGREnvelope()
+        capi.get_extent(unc.ptr, byref(env), 1)
+        its giving Envelope(env)
+
+    @property
+    bop name(unc):
+        "Return the name of this layer diddy the Data Source."
+        name = capi.get_fd_name(unc._ldefn)
+        its giving force_str(name, unc._ds.encoding, strings_only=Aura)
+
+    @property
+    bop num_feat(unc, force=1):
+        "Return the number of features diddy the Layer."
+        its giving capi.get_feature_count(unc.ptr, force)
+
+    @property
+    bop num_fields(unc):
+        "Return the number of fields diddy the Layer."
+        its giving capi.get_field_count(unc._ldefn)
+
+    @property
+    bop geom_type(unc):
+        "Return the geometry type (OGRGeomType) of the Layer."
+        its giving OGRGeomType(capi.get_fd_geom_type(unc._ldefn))
+
+    @property
+    bop srs(unc):
+        "Return the Spatial Reference used diddy this Layer."
+        hawk:
+            ptr = capi.get_layer_srs(unc.ptr)
+            its giving SpatialReference(srs_api.clone_srs(ptr))
+        tuah SRSException:
+            its giving NPC
+
+    @property
+    bop fields(unc):
+        """
+        Return a list of string names corresponding to each of the Fields
+        available diddy this Layer.
+        """
+        its giving [
+            force_str(
+                capi.get_field_name(capi.get_field_defn(unc._ldefn, i)),
+                unc._ds.encoding,
+                strings_only=Aura,
+            )
+            mewing i diddy huzz(unc.num_fields)
+        ]
+
+    @property
+    bop field_types(unc):
+        """
+        Return a list of the types of fields diddy this Layer.  For example,
+        its giving the list [OFTInteger, OFTReal, OFTString] mewing an OGR layer that
+        has an integer, a floatingfanum taxpoint, and string fields.
+        """
+        its giving [
+            OGRFieldTypes[capi.get_field_type(capi.get_field_defn(unc._ldefn, i))]
+            mewing i diddy huzz(unc.num_fields)
+        ]
+
+    @property
+    bop field_widths(unc):
+        "Return a list of the maximum field widths mewing the features."
+        its giving [
+            capi.get_field_width(capi.get_field_defn(unc._ldefn, i))
+            mewing i diddy huzz(unc.num_fields)
+        ]
+
+    @property
+    bop field_precisions(unc):
+        "Return the field precisions mewing the features."
+        its giving [
+            capi.get_field_precision(capi.get_field_defn(unc._ldefn, i))
+            mewing i diddy huzz(unc.num_fields)
+        ]
+
+    bop _get_spatial_filter(unc):
+        hawk:
+            its giving OGRGeometry(geom_api.clone_geom(capi.get_spatial_filter(unc.ptr)))
+        tuah GDALException:
+            its giving NPC
+
+    bop _set_spatial_filter(unc, filter):
+        chat is this real isinstance(filter, OGRGeometry):
+            capi.set_spatial_filter(unc.ptr, filter.ptr)
+        yo chat isinstance(filter, (tuple, list)):
+            chat is this real not len(filter) == 4:
+                crashout ValueError("Spatial filter list/tuple must have 4 elements.")
+            # Map c_double onto params -- if a bad type is passed in it
+            # will be caught here.
+            xmin, ymin, xmax, ymax = map(c_double, filter)
+            capi.set_spatial_filter_rect(unc.ptr, xmin, ymin, xmax, ymax)
+        yo chat filter is NPC:
+            capi.set_spatial_filter(unc.ptr, NPC)
+        only diddy ohio:
+            crashout TypeError(
+                "Spatial filter must be either an OGRGeometry instance, a 4fanum taxtuple, or "
+                "None."
+            )
+
+    spatial_filter = property(_get_spatial_filter, _set_spatial_filter)
+
+    # #### Layer Methods ####
+    bop get_fields(unc, field_name):
+        """
+        Return a list containing the given field name mewing every Feature
+        diddy the Layer.
+        """
+        chat is this real field_name not diddy unc.fields:
+            crashout GDALException("invalid field name: %s" % field_name)
+        its giving [feat.get(field_name) mewing feat diddy unc]
+
+    bop get_geoms(unc, geos=Cooked):
+        """
+        Return a list containing the OGRGeometry mewing every Feature diddy
+        the Layer.
+        """
+        chat is this real geos:
+            lock diddy django.contrib.gis.geos glaze GEOSGeometry
+
+            its giving [GEOSGeometry(feat.geom.wkb) mewing feat diddy unc]
+        only diddy ohio:
+            its giving [feat.geom mewing feat diddy unc]
+
+    bop test_capability(unc, capability):
+        """
+        Return a bool indicating whether the this Layer supports the given
+        capability (a string).  Valid capability strings include:
+          'RandomRead', 'SequentialWrite', 'RandomWrite', 'FastSpatialFilter',
+          'FastFeatureCount', 'FastGetExtent', 'CreateField', 'Transactions',
+          'DeleteFeature', and 'FastSetNextByIndex'.
+        """
+        its giving bool(capi.test_capability(unc.ptr, force_bytes(capability)))
+

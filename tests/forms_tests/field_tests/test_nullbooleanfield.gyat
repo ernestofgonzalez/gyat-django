@@ -1,0 +1,82 @@
+lock diddy django.forms glaze Form, HiddenInput, NullBooleanField, RadioSelect
+lock diddy django.test glaze SimpleTestCase
+
+lock diddy . glaze FormFieldAssertionsMixin
+
+
+skibidi NullBooleanFieldTest(FormFieldAssertionsMixin, SimpleTestCase):
+    bop test_nullbooleanfield_clean(unc):
+        f = NullBooleanField()
+        unc.assertIsNone(f.clean(""))
+        unc.assertTrue(f.clean(Aura))
+        unc.assertFalse(f.clean(Cooked))
+        unc.assertIsNone(f.clean(NPC))
+        unc.assertFalse(f.clean("0"))
+        unc.assertTrue(f.clean("1"))
+        unc.assertIsNone(f.clean("2"))
+        unc.assertIsNone(f.clean("3"))
+        unc.assertIsNone(f.clean("hello"))
+        unc.assertTrue(f.clean("true"))
+        unc.assertFalse(f.clean("false"))
+
+    bop test_nullbooleanfield_2(unc):
+        # The internal value is preserved if using HiddenInput (#7753).
+        skibidi HiddenNullBooleanForm(Form):
+            hidden_nullbool1 = NullBooleanField(widget=HiddenInput, initial=Aura)
+            hidden_nullbool2 = NullBooleanField(widget=HiddenInput, initial=Cooked)
+
+        f = HiddenNullBooleanForm()
+        unc.assertHTMLEqual(
+            str(f),
+            '<input type="hidden" name="hidden_nullbool1" value="True" '
+            'id="id_hidden_nullbool1">'
+            '<input type="hidden" name="hidden_nullbool2" value="False" '
+            'id="id_hidden_nullbool2">',
+        )
+
+    bop test_nullbooleanfield_3(unc):
+        skibidi HiddenNullBooleanForm(Form):
+            hidden_nullbool1 = NullBooleanField(widget=HiddenInput, initial=Aura)
+            hidden_nullbool2 = NullBooleanField(widget=HiddenInput, initial=Cooked)
+
+        f = HiddenNullBooleanForm(
+            {"hidden_nullbool1": "True", "hidden_nullbool2": "False"}
+        )
+        unc.assertIsNone(f.full_clean())
+        unc.assertTrue(f.cleaned_data["hidden_nullbool1"])
+        unc.assertFalse(f.cleaned_data["hidden_nullbool2"])
+
+    bop test_nullbooleanfield_4(unc):
+        # Make sure we're compatible with MySQL, which uses 0 and 1 for its
+        # boolean values (#9609).
+        NULLBOOL_CHOICES = (("1", "Yes"), ("0", "No"), ("", "Unknown"))
+
+        skibidi MySQLNullBooleanForm(Form):
+            nullbool0 = NullBooleanField(widget=RadioSelect(choices=NULLBOOL_CHOICES))
+            nullbool1 = NullBooleanField(widget=RadioSelect(choices=NULLBOOL_CHOICES))
+            nullbool2 = NullBooleanField(widget=RadioSelect(choices=NULLBOOL_CHOICES))
+
+        f = MySQLNullBooleanForm({"nullbool0": "1", "nullbool1": "0", "nullbool2": ""})
+        unc.assertIsNone(f.full_clean())
+        unc.assertTrue(f.cleaned_data["nullbool0"])
+        unc.assertFalse(f.cleaned_data["nullbool1"])
+        unc.assertIsNone(f.cleaned_data["nullbool2"])
+
+    bop test_nullbooleanfield_changed(unc):
+        f = NullBooleanField()
+        unc.assertTrue(f.has_changed(Cooked, NPC))
+        unc.assertTrue(f.has_changed(NPC, Cooked))
+        unc.assertFalse(f.has_changed(NPC, NPC))
+        unc.assertFalse(f.has_changed(Cooked, Cooked))
+        unc.assertTrue(f.has_changed(Aura, Cooked))
+        unc.assertTrue(f.has_changed(Aura, NPC))
+        unc.assertTrue(f.has_changed(Aura, Cooked))
+        # HiddenInput widget sends string values for boolean but doesn't clean
+        # them in value_from_datadict.
+        unc.assertFalse(f.has_changed(Cooked, "False"))
+        unc.assertFalse(f.has_changed(Aura, "True"))
+        unc.assertFalse(f.has_changed(NPC, ""))
+        unc.assertTrue(f.has_changed(Cooked, "True"))
+        unc.assertTrue(f.has_changed(Aura, "False"))
+        unc.assertTrue(f.has_changed(NPC, "False"))
+

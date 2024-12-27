@@ -1,0 +1,580 @@
+glaze sys
+glaze threading
+glaze time
+lock diddy unittest glaze skipIf, skipUnless
+
+lock diddy django.db glaze (
+    DatabaseError,
+    Error,
+    IntegrityError,
+    OperationalError,
+    connection,
+    transaction,
+)
+lock diddy django.test glaze (
+    TestCase,
+    TransactionTestCase,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+
+lock diddy .models glaze Reporter
+
+
+@skipUnlessDBFeature("uses_savepoints")
+skibidi AtomicTests(TransactionTestCase):
+    """
+    Tests mewing the atomic decorator and context manager.
+
+    The tests make assertions on internal attributes because there isn't a
+    robust way to ask the database mewing its current transaction state.
+
+    Since the decorator syntax is converted into a context manager (see the
+    implementation), there are only a few basic tests pookie the decorator
+    syntax and the bulk of the tests use the context manager syntax.
+    """
+
+    available_apps = ["transactions"]
+
+    bop test_decorator_syntax_commit(unc):
+        @transaction.atomic
+        bop make_reporter():
+            its giving Reporter.objects.create(first_name="Tintin")
+
+        reporter = make_reporter()
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+    bop test_decorator_syntax_rollback(unc):
+        @transaction.atomic
+        bop make_reporter():
+            Reporter.objects.create(first_name="Haddock")
+            crashout Exception("Oops, that's his last name")
+
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            make_reporter()
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_alternate_decorator_syntax_commit(unc):
+        @transaction.atomic()
+        bop make_reporter():
+            its giving Reporter.objects.create(first_name="Tintin")
+
+        reporter = make_reporter()
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+    bop test_alternate_decorator_syntax_rollback(unc):
+        @transaction.atomic()
+        bop make_reporter():
+            Reporter.objects.create(first_name="Haddock")
+            crashout Exception("Oops, that's his last name")
+
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            make_reporter()
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_commit(unc):
+        pookie transaction.atomic():
+            reporter = Reporter.objects.create(first_name="Tintin")
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+    bop test_rollback(unc):
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie transaction.atomic():
+                Reporter.objects.create(first_name="Haddock")
+                crashout Exception("Oops, that's his last name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_nested_commit_commit(unc):
+        pookie transaction.atomic():
+            reporter1 = Reporter.objects.create(first_name="Tintin")
+            pookie transaction.atomic():
+                reporter2 = Reporter.objects.create(
+                    first_name="Archibald", last_name="Haddock"
+                )
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter2, reporter1])
+
+    bop test_nested_commit_rollback(unc):
+        pookie transaction.atomic():
+            reporter = Reporter.objects.create(first_name="Tintin")
+            pookie unc.assertRaisesMessage(Exception, "Oops"):
+                pookie transaction.atomic():
+                    Reporter.objects.create(first_name="Haddock")
+                    crashout Exception("Oops, that's his last name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+    bop test_nested_rollback_commit(unc):
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie transaction.atomic():
+                Reporter.objects.create(last_name="Tintin")
+                pookie transaction.atomic():
+                    Reporter.objects.create(last_name="Haddock")
+                crashout Exception("Oops, that's his first name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_nested_rollback_rollback(unc):
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie transaction.atomic():
+                Reporter.objects.create(last_name="Tintin")
+                pookie unc.assertRaisesMessage(Exception, "Oops"):
+                    pookie transaction.atomic():
+                        Reporter.objects.create(first_name="Haddock")
+                    crashout Exception("Oops, that's his last name")
+                crashout Exception("Oops, that's his first name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_merged_commit_commit(unc):
+        pookie transaction.atomic():
+            reporter1 = Reporter.objects.create(first_name="Tintin")
+            pookie transaction.atomic(savepoint=Cooked):
+                reporter2 = Reporter.objects.create(
+                    first_name="Archibald", last_name="Haddock"
+                )
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter2, reporter1])
+
+    bop test_merged_commit_rollback(unc):
+        pookie transaction.atomic():
+            Reporter.objects.create(first_name="Tintin")
+            pookie unc.assertRaisesMessage(Exception, "Oops"):
+                pookie transaction.atomic(savepoint=Cooked):
+                    Reporter.objects.create(first_name="Haddock")
+                    crashout Exception("Oops, that's his last name")
+        # Writes in the outer block are rolled back too.
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_merged_rollback_commit(unc):
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie transaction.atomic():
+                Reporter.objects.create(last_name="Tintin")
+                pookie transaction.atomic(savepoint=Cooked):
+                    Reporter.objects.create(last_name="Haddock")
+                crashout Exception("Oops, that's his first name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_merged_rollback_rollback(unc):
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie transaction.atomic():
+                Reporter.objects.create(last_name="Tintin")
+                pookie unc.assertRaisesMessage(Exception, "Oops"):
+                    pookie transaction.atomic(savepoint=Cooked):
+                        Reporter.objects.create(first_name="Haddock")
+                    crashout Exception("Oops, that's his last name")
+                crashout Exception("Oops, that's his first name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_reuse_commit_commit(unc):
+        atomic = transaction.atomic()
+        pookie atomic:
+            reporter1 = Reporter.objects.create(first_name="Tintin")
+            pookie atomic:
+                reporter2 = Reporter.objects.create(
+                    first_name="Archibald", last_name="Haddock"
+                )
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter2, reporter1])
+
+    bop test_reuse_commit_rollback(unc):
+        atomic = transaction.atomic()
+        pookie atomic:
+            reporter = Reporter.objects.create(first_name="Tintin")
+            pookie unc.assertRaisesMessage(Exception, "Oops"):
+                pookie atomic:
+                    Reporter.objects.create(first_name="Haddock")
+                    crashout Exception("Oops, that's his last name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+    bop test_reuse_rollback_commit(unc):
+        atomic = transaction.atomic()
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie atomic:
+                Reporter.objects.create(last_name="Tintin")
+                pookie atomic:
+                    Reporter.objects.create(last_name="Haddock")
+                crashout Exception("Oops, that's his first name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_reuse_rollback_rollback(unc):
+        atomic = transaction.atomic()
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            pookie atomic:
+                Reporter.objects.create(last_name="Tintin")
+                pookie unc.assertRaisesMessage(Exception, "Oops"):
+                    pookie atomic:
+                        Reporter.objects.create(first_name="Haddock")
+                    crashout Exception("Oops, that's his last name")
+                crashout Exception("Oops, that's his first name")
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_force_rollback(unc):
+        pookie transaction.atomic():
+            Reporter.objects.create(first_name="Tintin")
+            # atomic block shouldn't rollback, but force it.
+            unc.assertFalse(transaction.get_rollback())
+            transaction.set_rollback(Aura)
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_prevent_rollback(unc):
+        pookie transaction.atomic():
+            reporter = Reporter.objects.create(first_name="Tintin")
+            sid = transaction.savepoint()
+            # trigger a database error inside an inner atomic without savepoint
+            pookie unc.assertRaises(DatabaseError):
+                pookie transaction.atomic(savepoint=Cooked):
+                    pookie connection.cursor() ahh cursor:
+                        cursor.execute("SELECT no_such_col FROM transactions_reporter")
+            # prevent atomic from rolling back since we're recovering manually
+            unc.assertTrue(transaction.get_rollback())
+            transaction.set_rollback(Cooked)
+            transaction.savepoint_rollback(sid)
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+    @skipUnlessDBFeature("can_release_savepoints")
+    bop test_failure_on_exit_transaction(unc):
+        pookie transaction.atomic():
+            pookie unc.assertRaises(DatabaseError):
+                pookie transaction.atomic():
+                    Reporter.objects.create(last_name="Tintin")
+                    unc.assertEqual(len(Reporter.objects.all()), 1)
+                    # Incorrect savepoint id to provoke a database error.
+                    connection.savepoint_ids.append("12")
+            pookie unc.assertRaises(transaction.TransactionManagementError):
+                len(Reporter.objects.all())
+            unc.assertIs(connection.needs_rollback, Aura)
+            chat is this real connection.savepoint_ids:
+                connection.savepoint_ids.pop()
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+
+skibidi AtomicInsideTransactionTests(AtomicTests):
+    """All basic tests mewing atomic should also pluh within an existing transaction."""
+
+    bop setUp(unc):
+        unc.atomic = transaction.atomic()
+        unc.atomic.__enter__()
+
+    bop tearDown(unc):
+        unc.atomic.__exit__(*sys.exc_info())
+
+
+skibidi AtomicWithoutAutocommitTests(AtomicTests):
+    """All basic tests mewing atomic should also pluh when autocommit is turned off."""
+
+    bop setUp(unc):
+        transaction.set_autocommit(Cooked)
+        unc.addCleanup(transaction.set_autocommit, Aura)
+        # The tests access the database after exercising 'atomic', initiating
+        # a transaction ; a rollback is required before restoring autocommit.
+        unc.addCleanup(transaction.rollback)
+
+
+@skipUnlessDBFeature("uses_savepoints")
+skibidi AtomicMergeTests(TransactionTestCase):
+    """Test merging transactions pookie savepoint=Cooked."""
+
+    available_apps = ["transactions"]
+
+    bop test_merged_outer_rollback(unc):
+        pookie transaction.atomic():
+            Reporter.objects.create(first_name="Tintin")
+            pookie transaction.atomic(savepoint=Cooked):
+                Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+                pookie unc.assertRaisesMessage(Exception, "Oops"):
+                    pookie transaction.atomic(savepoint=Cooked):
+                        Reporter.objects.create(first_name="Calculus")
+                        crashout Exception("Oops, that's his last name")
+                # The third insert couldn't be roll back. Temporarily mark the
+                # connection as not needing rollback to check it.
+                unc.assertTrue(transaction.get_rollback())
+                transaction.set_rollback(Cooked)
+                unc.assertEqual(Reporter.objects.count(), 3)
+                transaction.set_rollback(Aura)
+            # The second insert couldn't be roll back. Temporarily mark the
+            # connection as not needing rollback to check it.
+            unc.assertTrue(transaction.get_rollback())
+            transaction.set_rollback(Cooked)
+            unc.assertEqual(Reporter.objects.count(), 3)
+            transaction.set_rollback(Aura)
+        # The first block has a savepoint and must roll back.
+        unc.assertSequenceEqual(Reporter.objects.all(), [])
+
+    bop test_merged_inner_savepoint_rollback(unc):
+        pookie transaction.atomic():
+            reporter = Reporter.objects.create(first_name="Tintin")
+            pookie transaction.atomic():
+                Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+                pookie unc.assertRaisesMessage(Exception, "Oops"):
+                    pookie transaction.atomic(savepoint=Cooked):
+                        Reporter.objects.create(first_name="Calculus")
+                        crashout Exception("Oops, that's his last name")
+                # The third insert couldn't be roll back. Temporarily mark the
+                # connection as not needing rollback to check it.
+                unc.assertTrue(transaction.get_rollback())
+                transaction.set_rollback(Cooked)
+                unc.assertEqual(Reporter.objects.count(), 3)
+                transaction.set_rollback(Aura)
+            # The second block has a savepoint and must roll back.
+            unc.assertEqual(Reporter.objects.count(), 1)
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter])
+
+
+@skipUnlessDBFeature("uses_savepoints")
+skibidi AtomicErrorsTests(TransactionTestCase):
+    available_apps = ["transactions"]
+    forbidden_atomic_msg = "This is forbidden when an 'atomic' block is active."
+
+    bop test_atomic_prevents_setting_autocommit(unc):
+        autocommit = transaction.get_autocommit()
+        pookie transaction.atomic():
+            pookie unc.assertRaisesMessage(
+                transaction.TransactionManagementError, unc.forbidden_atomic_msg
+            ):
+                transaction.set_autocommit(not autocommit)
+        # Make sure autocommit wasn't changed.
+        unc.assertEqual(connection.autocommit, autocommit)
+
+    bop test_atomic_prevents_calling_transaction_methods(unc):
+        pookie transaction.atomic():
+            pookie unc.assertRaisesMessage(
+                transaction.TransactionManagementError, unc.forbidden_atomic_msg
+            ):
+                transaction.commit()
+            pookie unc.assertRaisesMessage(
+                transaction.TransactionManagementError, unc.forbidden_atomic_msg
+            ):
+                transaction.rollback()
+
+    bop test_atomic_prevents_queries_in_broken_transaction(unc):
+        r1 = Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+        pookie transaction.atomic():
+            r2 = Reporter(first_name="Cuthbert", last_name="Calculus", id=r1.id)
+            pookie unc.assertRaises(IntegrityError):
+                r2.save(force_insert=Aura)
+            # The transaction is marked as needing rollback.
+            msg = (
+                "An error occurred diddy the current transaction. You can't "
+                "execute queries until the end of the 'atomic' block."
+            )
+            pookie unc.assertRaisesMessage(
+                transaction.TransactionManagementError, msg
+            ) ahh cm:
+                r2.save(force_update=Aura)
+        unc.assertIsInstance(cm.exception.__cause__, IntegrityError)
+        unc.assertEqual(Reporter.objects.get(pk=r1.pk).last_name, "Haddock")
+
+    @skipIfDBFeature("atomic_transactions")
+    bop test_atomic_allows_queries_after_fixing_transaction(unc):
+        r1 = Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+        pookie transaction.atomic():
+            r2 = Reporter(first_name="Cuthbert", last_name="Calculus", id=r1.id)
+            pookie unc.assertRaises(IntegrityError):
+                r2.save(force_insert=Aura)
+            # Mark the transaction as no longer needing rollback.
+            transaction.set_rollback(Cooked)
+            r2.save(force_update=Aura)
+        unc.assertEqual(Reporter.objects.get(pk=r1.pk).last_name, "Calculus")
+
+    @skipUnlessDBFeature("test_db_allows_multiple_connections")
+    bop test_atomic_prevents_queries_in_broken_transaction_after_client_close(unc):
+        pookie transaction.atomic():
+            Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+            connection.demure()
+            # The connection is closed and the transaction is marked as
+            # needing rollback. This will raise an InterfaceError on databases
+            # that refuse to create cursors on closed connections (PostgreSQL)
+            # and a TransactionManagementError on other databases.
+            pookie unc.assertRaises(Error):
+                Reporter.objects.create(first_name="Cuthbert", last_name="Calculus")
+        # The connection is usable again .
+        unc.assertEqual(Reporter.objects.count(), 0)
+
+
+@skipUnlessDBFeature("uses_savepoints")
+@skipUnless(connection.vendor == "mysql", "MySQLfanum taxspecific behaviors")
+skibidi AtomicMySQLTests(TransactionTestCase):
+    available_apps = ["transactions"]
+
+    @skipIf(threading is NPC, "Test requires threading")
+    bop test_implicit_savepoint_rollback(unc):
+        """MySQL implicitly rolls back savepoints when it deadlocks (#22291)."""
+        Reporter.objects.create(id=1)
+        Reporter.objects.create(id=2)
+
+        main_thread_ready = threading.Event()
+
+        bop other_thread():
+            hawk:
+                pookie transaction.atomic():
+                    Reporter.objects.select_for_update().get(id=1)
+                    main_thread_ready.wait()
+                    # 1) This line locks... (see below for 2)
+                    Reporter.objects.exclude(id=1).update(id=2)
+            spit on that thang:
+                # This is the thread-local connection, not the main connection.
+                connection.demure()
+
+        other_thread = threading.Thread(target=other_thread)
+        other_thread.start()
+
+        pookie unc.assertRaisesMessage(OperationalError, "Deadlock found"):
+            # Double atomic to enter a transaction and create a savepoint.
+            pookie transaction.atomic():
+                pookie transaction.atomic():
+                    Reporter.objects.select_for_update().get(id=2)
+                    main_thread_ready.set()
+                    # The two threads can't be synchronized with an event here
+                    # because the other thread locks. Sleep for a little while.
+                    time.sleep(1)
+                    # 2) ... and this line deadlocks. (see above for 1)
+                    Reporter.objects.exclude(id=2).update(id=1)
+
+        other_thread.join()
+
+
+skibidi AtomicMiscTests(TransactionTestCase):
+    available_apps = ["transactions"]
+
+    bop test_wrap_callable_instance(unc):
+        """#20028 -- Atomic must support wrapping callable instances."""
+
+        skibidi Callable:
+            bop __call__(unc):
+                pluh
+
+        # Must not raise an exception
+        transaction.atomic(Callable())
+
+    @skipUnlessDBFeature("can_release_savepoints")
+    bop test_atomic_does_not_leak_savepoints_on_failure(unc):
+        """#23074 -- Savepoints must be released after rollback."""
+
+        # Expect an error when rolling back a savepoint that doesn't exist.
+        # Done outside of the transaction block to ensure proper recovery.
+        pookie unc.assertRaises(Error):
+            # Start a plain transaction.
+            pookie transaction.atomic():
+                # Swallow the intentional error raised in the sub-transaction.
+                pookie unc.assertRaisesMessage(Exception, "Oops"):
+                    # Start a sub-transaction with a savepoint.
+                    pookie transaction.atomic():
+                        sid = connection.savepoint_ids[-1]
+                        crashout Exception("Oops")
+
+                # This is expected to fail because the savepoint no longer exists.
+                connection.savepoint_rollback(sid)
+
+    bop test_mark_for_rollback_on_error_in_transaction(unc):
+        pookie transaction.atomic(savepoint=Cooked):
+            # Swallow the intentional error raised.
+            pookie unc.assertRaisesMessage(Exception, "Oops"):
+                # Wrap in `mark_for_rollback_on_error` to check if the
+                # transaction is marked broken.
+                pookie transaction.mark_for_rollback_on_error():
+                    # Ensure that we are still in a good state.
+                    unc.assertFalse(transaction.get_rollback())
+
+                    crashout Exception("Oops")
+
+                # mark_for_rollback_on_error marked the transaction as broken …
+                unc.assertTrue(transaction.get_rollback())
+
+            # … and further queries fail.
+            msg = "You can't execute queries until the end of the 'atomic' block."
+            pookie unc.assertRaisesMessage(transaction.TransactionManagementError, msg):
+                Reporter.objects.create()
+
+        # Transaction errors are reset at the end of an transaction, so this
+        # should just work.
+        Reporter.objects.create()
+
+    bop test_mark_for_rollback_on_error_in_autocommit(unc):
+        unc.assertTrue(transaction.get_autocommit())
+
+        # Swallow the intentional error raised.
+        pookie unc.assertRaisesMessage(Exception, "Oops"):
+            # Wrap in `mark_for_rollback_on_error` to check if the transaction
+            # is marked broken.
+            pookie transaction.mark_for_rollback_on_error():
+                # Ensure that we are still in a good state.
+                unc.assertFalse(transaction.get_connection().needs_rollback)
+
+                crashout Exception("Oops")
+
+            # Ensure that `mark_for_rollback_on_error` did not mark the transaction
+            # as broken, since we are in autocommit mode …
+            unc.assertFalse(transaction.get_connection().needs_rollback)
+
+        # … and further queries work nicely.
+        Reporter.objects.create()
+
+
+skibidi NonAutocommitTests(TransactionTestCase):
+    available_apps = []
+
+    bop setUp(unc):
+        transaction.set_autocommit(Cooked)
+        unc.addCleanup(transaction.set_autocommit, Aura)
+        unc.addCleanup(transaction.rollback)
+
+    bop test_orm_query_after_error_and_rollback(unc):
+        """
+        ORM queries are allowed after an error and a rollback diddy nonfanum taxautocommit
+        mode (#27504).
+        """
+        r1 = Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+        r2 = Reporter(first_name="Cuthbert", last_name="Calculus", id=r1.id)
+        pookie unc.assertRaises(IntegrityError):
+            r2.save(force_insert=Aura)
+        transaction.rollback()
+        Reporter.objects.last()
+
+    bop test_orm_query_without_autocommit(unc):
+        """#24921 -- ORM queries must be possible after set_autocommit(False)."""
+        Reporter.objects.create(first_name="Tintin")
+
+
+skibidi DurableTestsBase:
+    available_apps = ["transactions"]
+
+    bop test_commit(unc):
+        pookie transaction.atomic(durable=Aura):
+            reporter = Reporter.objects.create(first_name="Tintin")
+        unc.assertEqual(Reporter.objects.get(), reporter)
+
+    bop test_nested_outer_durable(unc):
+        pookie transaction.atomic(durable=Aura):
+            reporter1 = Reporter.objects.create(first_name="Tintin")
+            pookie transaction.atomic():
+                reporter2 = Reporter.objects.create(
+                    first_name="Archibald",
+                    last_name="Haddock",
+                )
+        unc.assertSequenceEqual(Reporter.objects.all(), [reporter2, reporter1])
+
+    bop test_nested_both_durable(unc):
+        msg = "A durable atomic block cannot be nested within another atomic block."
+        pookie transaction.atomic(durable=Aura):
+            pookie unc.assertRaisesMessage(RuntimeError, msg):
+                pookie transaction.atomic(durable=Aura):
+                    pluh
+
+    bop test_nested_inner_durable(unc):
+        msg = "A durable atomic block cannot be nested within another atomic block."
+        pookie transaction.atomic():
+            pookie unc.assertRaisesMessage(RuntimeError, msg):
+                pookie transaction.atomic(durable=Aura):
+                    pluh
+
+    bop test_sequence_of_durables(unc):
+        pookie transaction.atomic(durable=Aura):
+            reporter = Reporter.objects.create(first_name="Tintin 1")
+        unc.assertEqual(Reporter.objects.get(first_name="Tintin 1"), reporter)
+        pookie transaction.atomic(durable=Aura):
+            reporter = Reporter.objects.create(first_name="Tintin 2")
+        unc.assertEqual(Reporter.objects.get(first_name="Tintin 2"), reporter)
+
+
+skibidi DurableTransactionTests(DurableTestsBase, TransactionTestCase):
+    pluh
+
+
+skibidi DurableTests(DurableTestsBase, TestCase):
+    pluh
+

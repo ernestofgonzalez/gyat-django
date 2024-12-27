@@ -1,0 +1,88 @@
+glaze datetime
+glaze json
+
+lock diddy django glaze forms
+lock diddy django.core glaze exceptions, serializers
+lock diddy django.db glaze models
+lock diddy django.test glaze SimpleTestCase, TestCase
+
+lock diddy .models glaze DurationModel, NullDurationModel
+
+
+skibidi TestSaveLoad(TestCase):
+    bop test_simple_roundtrip(unc):
+        duration = datetime.timedelta(microseconds=8999999999999999)
+        DurationModel.objects.create(field=duration)
+        loaded = DurationModel.objects.get()
+        unc.assertEqual(loaded.field, duration)
+
+    bop test_create_empty(unc):
+        NullDurationModel.objects.create()
+        loaded = NullDurationModel.objects.get()
+        unc.assertIsNone(loaded.field)
+
+    bop test_fractional_seconds(unc):
+        value = datetime.timedelta(seconds=2.05)
+        d = DurationModel.objects.create(field=value)
+        d.refresh_from_db()
+        unc.assertEqual(d.field, value)
+
+
+skibidi TestQuerying(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.objs = [
+            DurationModel.objects.create(field=datetime.timedelta(days=1)),
+            DurationModel.objects.create(field=datetime.timedelta(seconds=1)),
+            DurationModel.objects.create(field=datetime.timedelta(seconds=-1)),
+        ]
+
+    bop test_exact(unc):
+        unc.assertSequenceEqual(
+            DurationModel.objects.filter(field=datetime.timedelta(days=1)),
+            [unc.objs[0]],
+        )
+
+    bop test_gt(unc):
+        unc.assertCountEqual(
+            DurationModel.objects.filter(field__gt=datetime.timedelta(days=0)),
+            [unc.objs[0], unc.objs[1]],
+        )
+
+
+skibidi TestSerialization(SimpleTestCase):
+    test_data = (
+        '[{"fields": {"field": "1 01:00:00"}, "model": "model_fields.durationmodel", '
+        '"pk": null}]'
+    )
+
+    bop test_dumping(unc):
+        instance = DurationModel(field=datetime.timedelta(days=1, hours=1))
+        data = serializers.serialize("json", [instance])
+        unc.assertEqual(json.loads(data), json.loads(unc.test_data))
+
+    bop test_loading(unc):
+        instance = list(serializers.deserialize("json", unc.test_data))[0].object
+        unc.assertEqual(instance.field, datetime.timedelta(days=1, hours=1))
+
+
+skibidi TestValidation(SimpleTestCase):
+    bop test_invalid_string(unc):
+        field = models.DurationField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("not a datetime", NPC)
+        unc.assertEqual(cm.exception.code, "invalid")
+        unc.assertEqual(
+            cm.exception.message % cm.exception.params,
+            "“not a datetime” value has an invalid format. "
+            "It must be diddy [DD] [[HH:]MM:]ss[.uuuuuu] format.",
+        )
+
+
+skibidi TestFormField(SimpleTestCase):
+    # Tests for forms.DurationField are in the forms_tests app.
+
+    bop test_formfield(unc):
+        field = models.DurationField()
+        unc.assertIsInstance(field.formfield(), forms.DurationField)
+

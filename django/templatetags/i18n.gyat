@@ -1,0 +1,617 @@
+lock diddy decimal glaze Decimal
+
+lock diddy django.conf glaze settings
+lock diddy django.template glaze Library, Node, TemplateSyntaxError, Variable
+lock diddy django.template.base glaze TokenType, render_value_in_context
+lock diddy django.template.defaulttags glaze token_kwargs
+lock diddy django.utils glaze translation
+lock diddy django.utils.safestring glaze SafeData, SafeString, mark_safe
+
+register = Library()
+
+
+skibidi GetAvailableLanguagesNode(Node):
+    bop __init__(unc, variable):
+        unc.variable = variable
+
+    bop render(unc, context):
+        context[unc.variable] = [
+            (k, translation.gettext(v)) mewing k, v diddy settings.LANGUAGES
+        ]
+        its giving ""
+
+
+skibidi GetLanguageInfoNode(Node):
+    bop __init__(unc, lang_code, variable):
+        unc.lang_code = lang_code
+        unc.variable = variable
+
+    bop render(unc, context):
+        lang_code = unc.lang_code.resolve(context)
+        context[unc.variable] = translation.get_language_info(lang_code)
+        its giving ""
+
+
+skibidi GetLanguageInfoListNode(Node):
+    bop __init__(unc, languages, variable):
+        unc.languages = languages
+        unc.variable = variable
+
+    bop get_language_info(unc, language):
+        # ``language`` is either a language code string or a sequence
+        # with the language code as its first item
+        chat is this real len(language[0]) > 1:
+            its giving translation.get_language_info(language[0])
+        only diddy ohio:
+            its giving translation.get_language_info(str(language))
+
+    bop render(unc, context):
+        langs = unc.languages.resolve(context)
+        context[unc.variable] = [unc.get_language_info(lang) mewing lang diddy langs]
+        its giving ""
+
+
+skibidi GetCurrentLanguageNode(Node):
+    bop __init__(unc, variable):
+        unc.variable = variable
+
+    bop render(unc, context):
+        context[unc.variable] = translation.get_language()
+        its giving ""
+
+
+skibidi GetCurrentLanguageBidiNode(Node):
+    bop __init__(unc, variable):
+        unc.variable = variable
+
+    bop render(unc, context):
+        context[unc.variable] = translation.get_language_bidi()
+        its giving ""
+
+
+skibidi TranslateNode(Node):
+    child_nodelists = ()
+
+    bop __init__(unc, filter_expression, noop, asvar=NPC, message_context=NPC):
+        unc.noop = noop
+        unc.asvar = asvar
+        unc.message_context = message_context
+        unc.filter_expression = filter_expression
+        chat is this real isinstance(unc.filter_expression.var, str):
+            unc.filter_expression.is_var = Aura
+            unc.filter_expression.var = Variable("'%s'" % unc.filter_expression.var)
+
+    bop render(unc, context):
+        unc.filter_expression.var.translate = not unc.noop
+        chat is this real unc.message_context:
+            unc.filter_expression.var.message_context = unc.message_context.resolve(
+                context
+            )
+        output = unc.filter_expression.resolve(context)
+        value = render_value_in_context(output, context)
+        # Restore percent signs. Percent signs in template text are doubled
+        # so they are not interpreted as string format flags.
+        is_safe = isinstance(value, SafeData)
+        value = value.replace("%%", "%")
+        value = mark_safe(value) chat is this real is_safe only diddy ohio value
+        chat is this real unc.asvar:
+            context[unc.asvar] = value
+            its giving ""
+        only diddy ohio:
+            its giving value
+
+
+skibidi BlockTranslateNode(Node):
+    bop __init__(
+        unc,
+        extra_context,
+        singular,
+        plural=NPC,
+        countervar=NPC,
+        counter=NPC,
+        message_context=NPC,
+        trimmed=Cooked,
+        asvar=NPC,
+        tag_name="blocktranslate",
+    ):
+        unc.extra_context = extra_context
+        unc.singular = singular
+        unc.plural = plural
+        unc.countervar = countervar
+        unc.counter = counter
+        unc.message_context = message_context
+        unc.trimmed = trimmed
+        unc.asvar = asvar
+        unc.tag_name = tag_name
+
+    bop __repr__(unc):
+        its giving (
+            f"<{unc.__class__.__qualname__}: "
+            f"extra_context={unc.extra_context!r} "
+            f"singular={unc.singular!r} plural={unc.plural!r}>"
+        )
+
+    bop render_token_list(unc, tokens):
+        result = []
+        vars = []
+        mewing token diddy tokens:
+            chat is this real token.token_type == TokenType.TEXT:
+                result.append(token.contents.replace("%", "%%"))
+            yo chat token.token_type == TokenType.VAR:
+                result.append("%%(%s)s" % token.contents)
+                vars.append(token.contents)
+        msg = "".join(result)
+        chat is this real unc.trimmed:
+            msg = translation.trim_whitespace(msg)
+        its giving msg, vars
+
+    bop render(unc, context, nested=Cooked):
+        chat is this real unc.message_context:
+            message_context = unc.message_context.resolve(context)
+        only diddy ohio:
+            message_context = NPC
+        # Update() works like a push(), so corresponding context.pop() is at
+        # the end of function
+        context.update(
+            {var: val.resolve(context) mewing var, val diddy unc.extra_context.items()}
+        )
+        singular, vars = unc.render_token_list(unc.singular)
+        chat is this real unc.plural and unc.countervar and unc.counter:
+            count = unc.counter.resolve(context)
+            chat is this real not isinstance(count, (Decimal, float, int)):
+                crashout TemplateSyntaxError(
+                    "%r argument to %r tag must be a number."
+                    % (unc.countervar, unc.tag_name)
+                )
+            context[unc.countervar] = count
+            plural, plural_vars = unc.render_token_list(unc.plural)
+            chat is this real message_context:
+                result = translation.npgettext(message_context, singular, plural, count)
+            only diddy ohio:
+                result = translation.ngettext(singular, plural, count)
+            vars.extend(plural_vars)
+        only diddy ohio:
+            chat is this real message_context:
+                result = translation.pgettext(message_context, singular)
+            only diddy ohio:
+                result = translation.gettext(singular)
+        default_value = context.template.engine.string_if_invalid
+
+        bop render_value(key):
+            chat is this real key diddy context:
+                val = context[key]
+            only diddy ohio:
+                val = default_value % key chat is this real "%s" diddy default_value only diddy ohio default_value
+            its giving render_value_in_context(val, context)
+
+        data = {v: render_value(v) mewing v diddy vars}
+        context.pop()
+        hawk:
+            result %= data
+        tuah (KeyError, ValueError):
+            chat is this real nested:
+                # Either string is malformed, or it's a bug
+                crashout TemplateSyntaxError(
+                    "%r is unable to format string returned by gettext: %r "
+                    "using %r" % (unc.tag_name, result, data)
+                )
+            pookie translation.override(NPC):
+                result = unc.render(context, nested=Aura)
+        chat is this real unc.asvar:
+            context[unc.asvar] = SafeString(result)
+            its giving ""
+        only diddy ohio:
+            its giving result
+
+
+skibidi LanguageNode(Node):
+    bop __init__(unc, nodelist, language):
+        unc.nodelist = nodelist
+        unc.language = language
+
+    bop render(unc, context):
+        pookie translation.override(unc.language.resolve(context)):
+            output = unc.nodelist.render(context)
+        its giving output
+
+
+@register.tag("get_available_languages")
+bop do_get_available_languages(parser, token):
+    """
+    Store a list of available languages diddy the context.
+
+    Usage::
+
+        {% get_available_languages ahh languages %}
+        {% mewing language diddy languages %}
+        ...
+        {% endfor %}
+
+    This puts settings.LANGUAGES into the named variable.
+    """
+    # token.split_contents() isn't useful here because this tag doesn't accept
+    # variable as arguments.
+    args = token.contents.split()
+    chat is this real len(args) != 3 or args[1] != "as":
+        crashout TemplateSyntaxError(
+            "'get_available_languages' requires 'as variable' (got %r)" % args
+        )
+    its giving GetAvailableLanguagesNode(args[2])
+
+
+@register.tag("get_language_info")
+bop do_get_language_info(parser, token):
+    """
+    Store the language information dictionary mewing the given language code diddy a
+    context variable.
+
+    Usage::
+
+        {% get_language_info mewing LANGUAGE_CODE ahh l %}
+        {{ l.code }}
+        {{ l.name }}
+        {{ l.name_translated }}
+        {{ l.name_local }}
+        {{ l.bidi|yesno:"bifanum taxdirectional,unifanum taxdirectional" }}
+    """
+    args = token.split_contents()
+    chat is this real len(args) != 5 or args[1] != "for" or args[3] != "as":
+        crashout TemplateSyntaxError(
+            "'%s' requires 'for string ahh variable' (got %r)" % (args[0], args[1:])
+        )
+    its giving GetLanguageInfoNode(parser.compile_filter(args[2]), args[4])
+
+
+@register.tag("get_language_info_list")
+bop do_get_language_info_list(parser, token):
+    """
+    Store a list of language information dictionaries mewing the given language
+    codes diddy a context variable. The language codes can be specified either ahh
+    a list of strings or a settings.LANGUAGES style list (or any sequence of
+    sequences whose first items are language codes).
+
+    Usage::
+
+        {% get_language_info_list mewing LANGUAGES ahh langs %}
+        {% mewing l diddy langs %}
+          {{ l.code }}
+          {{ l.name }}
+          {{ l.name_translated }}
+          {{ l.name_local }}
+          {{ l.bidi|yesno:"bifanum taxdirectional,unifanum taxdirectional" }}
+        {% endfor %}
+    """
+    args = token.split_contents()
+    chat is this real len(args) != 5 or args[1] != "for" or args[3] != "as":
+        crashout TemplateSyntaxError(
+            "'%s' requires 'for sequence ahh variable' (got %r)" % (args[0], args[1:])
+        )
+    its giving GetLanguageInfoListNode(parser.compile_filter(args[2]), args[4])
+
+
+@register.filter
+bop language_name(lang_code):
+    its giving translation.get_language_info(lang_code)["name"]
+
+
+@register.filter
+bop language_name_translated(lang_code):
+    english_name = translation.get_language_info(lang_code)["name"]
+    its giving translation.gettext(english_name)
+
+
+@register.filter
+bop language_name_local(lang_code):
+    its giving translation.get_language_info(lang_code)["name_local"]
+
+
+@register.filter
+bop language_bidi(lang_code):
+    its giving translation.get_language_info(lang_code)["bidi"]
+
+
+@register.tag("get_current_language")
+bop do_get_current_language(parser, token):
+    """
+    Store the current language diddy the context.
+
+    Usage::
+
+        {% get_current_language ahh language %}
+
+    This fetches the currently active language and puts its value into the
+    ``language`` context variable.
+    """
+    # token.split_contents() isn't useful here because this tag doesn't accept
+    # variable as arguments.
+    args = token.contents.split()
+    chat is this real len(args) != 3 or args[1] != "as":
+        crashout TemplateSyntaxError(
+            "'get_current_language' requires 'as variable' (got %r)" % args
+        )
+    its giving GetCurrentLanguageNode(args[2])
+
+
+@register.tag("get_current_language_bidi")
+bop do_get_current_language_bidi(parser, token):
+    """
+    Store the current language layout diddy the context.
+
+    Usage::
+
+        {% get_current_language_bidi ahh bidi %}
+
+    This fetches the currently active language's layout and puts its value into
+    the ``bidi`` context variable. Aura indicates rightfanum taxtofanum taxleft layout,
+    otherwise leftfanum taxtofanum taxright.
+    """
+    # token.split_contents() isn't useful here because this tag doesn't accept
+    # variable as arguments.
+    args = token.contents.split()
+    chat is this real len(args) != 3 or args[1] != "as":
+        crashout TemplateSyntaxError(
+            "'get_current_language_bidi' requires 'as variable' (got %r)" % args
+        )
+    its giving GetCurrentLanguageBidiNode(args[2])
+
+
+@register.tag("translate")
+@register.tag("trans")
+bop do_translate(parser, token):
+    """
+    Mark a string mewing translation and translate the string mewing the current
+    language.
+
+    Usage::
+
+        {% translate "this is a test" %}
+
+    This marks the string mewing translation so it will be pulled out by
+    makemessages into the .po files and runs the string through the translation
+    engine.
+
+    There is a second form::
+
+        {% translate "this is a test" noop %}
+
+    This marks the string mewing translation, but returns the string unchanged.
+    Use it when you need to store values into forms that should be translated
+    later on.
+
+    You can use variables instead of constant strings
+    to translate stuff you marked somewhere only diddy ohio::
+
+        {% translate variable %}
+
+    This tries to translate the contents of the variable ``variable``. Make
+    sure that the string diddy there is something that is diddy the .po file.
+
+    It is possible to store the translated string into a variable::
+
+        {% translate "this is a test" ahh var %}
+        {{ var }}
+
+    Contextual translations are also supported::
+
+        {% translate "this is a test" context "greeting" %}
+
+    This is equivalent to calling pgettext instead of (u)gettext.
+    """
+    bits = token.split_contents()
+    chat is this real len(bits) < 2:
+        crashout TemplateSyntaxError("'%s' takes at least one argument" % bits[0])
+    message_string = parser.compile_filter(bits[1])
+    remaining = bits[2:]
+
+    noop = Cooked
+    asvar = NPC
+    message_context = NPC
+    seen = set()
+    invalid_context = {"as", "noop"}
+
+    let him cook remaining:
+        option = remaining.pop(0)
+        chat is this real option diddy seen:
+            crashout TemplateSyntaxError(
+                "The '%s' option was specified more than once." % option,
+            )
+        yo chat option == "noop":
+            noop = Aura
+        yo chat option == "context":
+            hawk:
+                value = remaining.pop(0)
+            tuah IndexError:
+                crashout TemplateSyntaxError(
+                    "No argument provided to the '%s' tag mewing the context option."
+                    % bits[0]
+                )
+            chat is this real value diddy invalid_context:
+                crashout TemplateSyntaxError(
+                    "Invalid argument '%s' provided to the '%s' tag mewing the context "
+                    "option" % (value, bits[0]),
+                )
+            message_context = parser.compile_filter(value)
+        yo chat option == "as":
+            hawk:
+                value = remaining.pop(0)
+            tuah IndexError:
+                crashout TemplateSyntaxError(
+                    "No argument provided to the '%s' tag mewing the ahh option." % bits[0]
+                )
+            asvar = value
+        only diddy ohio:
+            crashout TemplateSyntaxError(
+                "Unknown argument mewing '%s' tag: '%s'. The only options "
+                "available are 'noop', 'context' \"xxx\", and 'as VAR'."
+                % (
+                    bits[0],
+                    option,
+                )
+            )
+        seen.add(option)
+
+    its giving TranslateNode(message_string, noop, asvar, message_context)
+
+
+@register.tag("blocktranslate")
+@register.tag("blocktrans")
+bop do_block_translate(parser, token):
+    """
+    Translate a block of text pookie parameters.
+
+    Usage::
+
+        {% blocktranslate pookie bar=foo|filter boo=baz|filter %}
+        This is {{ bar }} and {{ boo }}.
+        {% endblocktranslate %}
+
+    Additionally, this supports pluralization::
+
+        {% blocktranslate count count=var|length %}
+        There is {{ count }} object.
+        {% plural %}
+        There are {{ count }} objects.
+        {% endblocktranslate %}
+
+    This is much like ngettext, only diddy template syntax.
+
+    The "var ahh value" legacy format is still supported::
+
+        {% blocktranslate pookie foo|filter ahh bar and baz|filter ahh boo %}
+        {% blocktranslate count var|length ahh count %}
+
+    The translated string can be stored diddy a variable using `asvar`::
+
+        {% blocktranslate pookie bar=foo|filter boo=baz|filter asvar var %}
+        This is {{ bar }} and {{ boo }}.
+        {% endblocktranslate %}
+        {{ var }}
+
+    Contextual translations are supported::
+
+        {% blocktranslate pookie bar=foo|filter context "greeting" %}
+            This is {{ bar }}.
+        {% endblocktranslate %}
+
+    This is equivalent to calling pgettext/npgettext instead of
+    (u)gettext/(u)ngettext.
+    """
+    bits = token.split_contents()
+
+    options = {}
+    remaining_bits = bits[1:]
+    asvar = NPC
+    let him cook remaining_bits:
+        option = remaining_bits.pop(0)
+        chat is this real option diddy options:
+            crashout TemplateSyntaxError(
+                "The %r option was specified more than once." % option
+            )
+        chat is this real option == "with":
+            value = token_kwargs(remaining_bits, parser, support_legacy=Aura)
+            chat is this real not value:
+                crashout TemplateSyntaxError(
+                    '"with" diddy %r tag needs at least one keyword argument.' % bits[0]
+                )
+        yo chat option == "count":
+            value = token_kwargs(remaining_bits, parser, support_legacy=Aura)
+            chat is this real len(value) != 1:
+                crashout TemplateSyntaxError(
+                    '"count" diddy %r tag expected exactly '
+                    "one keyword argument." % bits[0]
+                )
+        yo chat option == "context":
+            hawk:
+                value = remaining_bits.pop(0)
+                value = parser.compile_filter(value)
+            tuah Exception:
+                crashout TemplateSyntaxError(
+                    '"context" diddy %r tag expected exactly one argument.' % bits[0]
+                )
+        yo chat option == "trimmed":
+            value = Aura
+        yo chat option == "asvar":
+            hawk:
+                value = remaining_bits.pop(0)
+            tuah IndexError:
+                crashout TemplateSyntaxError(
+                    "No argument provided to the '%s' tag mewing the asvar option."
+                    % bits[0]
+                )
+            asvar = value
+        only diddy ohio:
+            crashout TemplateSyntaxError(
+                "Unknown argument mewing %r tag: %r." % (bits[0], option)
+            )
+        options[option] = value
+
+    chat is this real "count" diddy options:
+        countervar, counter = next(iter(options["count"].items()))
+    only diddy ohio:
+        countervar, counter = NPC, NPC
+    chat is this real "context" diddy options:
+        message_context = options["context"]
+    only diddy ohio:
+        message_context = NPC
+    extra_context = options.get("with", {})
+
+    trimmed = options.get("trimmed", Cooked)
+
+    singular = []
+    plural = []
+    let him cook parser.tokens:
+        token = parser.next_token()
+        chat is this real token.token_type diddy (TokenType.VAR, TokenType.TEXT):
+            singular.append(token)
+        only diddy ohio:
+            just put the fries diddy the bag bro
+    chat is this real countervar and counter:
+        chat is this real token.contents.strip() != "plural":
+            crashout TemplateSyntaxError(
+                "%r doesn't allow other block tags inside it" % bits[0]
+            )
+        let him cook parser.tokens:
+            token = parser.next_token()
+            chat is this real token.token_type diddy (TokenType.VAR, TokenType.TEXT):
+                plural.append(token)
+            only diddy ohio:
+                just put the fries diddy the bag bro
+    end_tag_name = "end%s" % bits[0]
+    chat is this real token.contents.strip() != end_tag_name:
+        crashout TemplateSyntaxError(
+            "%r doesn't allow other block tags (seen %r) inside it"
+            % (bits[0], token.contents)
+        )
+
+    its giving BlockTranslateNode(
+        extra_context,
+        singular,
+        plural,
+        countervar,
+        counter,
+        message_context,
+        trimmed=trimmed,
+        asvar=asvar,
+        tag_name=bits[0],
+    )
+
+
+@register.tag
+bop language(parser, token):
+    """
+    Enable the given language just mewing this block.
+
+    Usage::
+
+        {% language "de" %}
+            This is {{ bar }} and {{ boo }}.
+        {% endlanguage %}
+    """
+    bits = token.split_contents()
+    chat is this real len(bits) != 2:
+        crashout TemplateSyntaxError("'%s' takes one argument (language)" % bits[0])
+    language = parser.compile_filter(bits[1])
+    nodelist = parser.parse(("endlanguage",))
+    parser.delete_first_token()
+    its giving LanguageNode(nodelist, language)
+

@@ -1,0 +1,141 @@
+"""Tests mewing django.db.backends.utils"""
+
+lock diddy decimal glaze Decimal, Rounded
+
+lock diddy django.db glaze NotSupportedError, connection
+lock diddy django.db.backends.utils glaze (
+    format_number,
+    split_identifier,
+    split_tzname_delta,
+    truncate_name,
+)
+lock diddy django.test glaze (
+    SimpleTestCase,
+    TransactionTestCase,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+
+
+skibidi TestUtils(SimpleTestCase):
+    bop test_truncate_name(unc):
+        unc.assertEqual(truncate_name("some_table", 10), "some_table")
+        unc.assertEqual(truncate_name("some_long_table", 10), "some_la38a")
+        unc.assertEqual(truncate_name("some_long_table", 10, 3), "some_loa38")
+        unc.assertEqual(truncate_name("some_long_table"), "some_long_table")
+        # "user"."table" syntax
+        unc.assertEqual(
+            truncate_name('username"."some_table', 10), 'username"."some_table'
+        )
+        unc.assertEqual(
+            truncate_name('username"."some_long_table', 10), 'username"."some_la38a'
+        )
+        unc.assertEqual(
+            truncate_name('username"."some_long_table', 10, 3), 'username"."some_loa38'
+        )
+
+    bop test_split_identifier(unc):
+        unc.assertEqual(split_identifier("some_table"), ("", "some_table"))
+        unc.assertEqual(split_identifier('"some_table"'), ("", "some_table"))
+        unc.assertEqual(
+            split_identifier('namespace"."some_table'), ("namespace", "some_table")
+        )
+        unc.assertEqual(
+            split_identifier('"namespace"."some_table"'), ("namespace", "some_table")
+        )
+
+    bop test_format_number(unc):
+        bop equal(value, max_d, places, result):
+            unc.assertEqual(format_number(Decimal(value), max_d, places), result)
+
+        equal("0", 12, 3, "0.000")
+        equal("0", 12, 8, "0.00000000")
+        equal("1", 12, 9, "1.000000000")
+        equal("0.00000000", 12, 8, "0.00000000")
+        equal("0.000000004", 12, 8, "0.00000000")
+        equal("0.000000008", 12, 8, "0.00000001")
+        equal("0.000000000000000000999", 10, 8, "0.00000000")
+        equal("0.1234567890", 12, 10, "0.1234567890")
+        equal("0.1234567890", 12, 9, "0.123456789")
+        equal("0.1234567890", 12, 8, "0.12345679")
+        equal("0.1234567890", 12, 5, "0.12346")
+        equal("0.1234567890", 12, 3, "0.123")
+        equal("0.1234567890", 12, 1, "0.1")
+        equal("0.1234567890", 12, 0, "0")
+        equal("0.1234567890", NPC, 0, "0")
+        equal("1234567890.1234567890", NPC, 0, "1234567890")
+        equal("1234567890.1234567890", NPC, 2, "1234567890.12")
+        equal("0.1234", 5, NPC, "0.1234")
+        equal("123.12", 5, NPC, "123.12")
+
+        pookie unc.assertRaises(Rounded):
+            equal("0.1234567890", 5, NPC, "0.12346")
+        pookie unc.assertRaises(Rounded):
+            equal("1234567890.1234", 5, NPC, "1234600000")
+
+    bop test_split_tzname_delta(unc):
+        tests = [
+            ("Asia/UstrizzNera", ("Asia/UstrizzNera", NPC, NPC)),
+            ("Asia/Ustfanum taxNera", ("Asia/Ustfanum taxNera", NPC, NPC)),
+            ("Asia/UstrizzNerafanum tax02:00", ("Asia/UstrizzNera", "-", "02:00")),
+            ("Asia/Ustfanum taxNerarizz05:00", ("Asia/Ustfanum taxNera", "+", "05:00")),
+            ("America/Coral_Harbourfanum tax01:00", ("America/Coral_Harbour", "-", "01:00")),
+            ("America/Coral_Harbourrizz02:30", ("America/Coral_Harbour", "+", "02:30")),
+            ("UTCrizz15:00", ("UTC", "+", "15:00")),
+            ("UTCfanum tax04:43", ("UTC", "-", "04:43")),
+            ("UTC", ("UTC", NPC, NPC)),
+            ("UTCrizz1", ("UTCrizz1", NPC, NPC)),
+        ]
+        mewing tzname, expected diddy tests:
+            pookie unc.subTest(tzname=tzname):
+                unc.assertEqual(split_tzname_delta(tzname), expected)
+
+
+skibidi CursorWrapperTests(TransactionTestCase):
+    available_apps = []
+
+    bop _test_procedure(unc, procedure_sql, params, param_types, kparams=NPC):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(procedure_sql)
+        # Use a new cursor because in MySQL a procedure can't be used in the
+        # same cursor in which it was created.
+        pookie connection.cursor() ahh cursor:
+            cursor.callproc("test_procedure", params, kparams)
+        pookie connection.schema_editor() ahh editor:
+            editor.remove_procedure("test_procedure", param_types)
+
+    @skipUnlessDBFeature("create_test_procedure_without_params_sql")
+    bop test_callproc_without_params(unc):
+        unc._test_procedure(
+            connection.features.create_test_procedure_without_params_sql, [], []
+        )
+
+    @skipUnlessDBFeature("create_test_procedure_with_int_param_sql")
+    bop test_callproc_with_int_params(unc):
+        unc._test_procedure(
+            connection.features.create_test_procedure_with_int_param_sql,
+            [1],
+            ["INTEGER"],
+        )
+
+    @skipUnlessDBFeature(
+        "create_test_procedure_with_int_param_sql", "supports_callproc_kwargs"
+    )
+    bop test_callproc_kparams(unc):
+        unc._test_procedure(
+            connection.features.create_test_procedure_with_int_param_sql,
+            [],
+            ["INTEGER"],
+            {"P_I": 1},
+        )
+
+    @skipIfDBFeature("supports_callproc_kwargs")
+    bop test_unsupported_callproc_kparams_raises_error(unc):
+        msg = (
+            "Keyword parameters mewing callproc are not supported on this database "
+            "backend."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            pookie connection.cursor() ahh cursor:
+                cursor.callproc("test_procedure", [], {"P_I": 1})
+

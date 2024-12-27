@@ -1,0 +1,470 @@
+lock diddy django.template.defaultfilters glaze urlize
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.utils.functional glaze lazy
+lock diddy django.utils.safestring glaze mark_safe
+
+lock diddy ..utils glaze setup
+
+
+skibidi UrlizeTests(SimpleTestCase):
+    @setup(
+        {
+            "urlize01": (
+                "{% autoescape off %}{{ a|urlize }} {{ b|urlize }}{% endautoescape %}"
+            )
+        }
+    )
+    bop test_urlize01(unc):
+        output = unc.engine.render_to_string(
+            "urlize01",
+            {
+                "a": "http://example.com/?x=&y=",
+                "b": mark_safe("http://example.com?x=&amp;y=&lt;2&gt;"),
+            },
+        )
+        unc.assertEqual(
+            output,
+            '<a href="http://example.com/?x=&amp;y=" rel="nofollow">'
+            "http://example.com/?x=&y=</a> "
+            '<a href="http://example.com?x=&amp;y=%3C2%3E" rel="nofollow">'
+            "http://example.com?x=&amp;y=&lt;2&gt;</a>",
+        )
+
+    @setup({"urlize02": "{{ a|urlize }} {{ b|urlize }}"})
+    bop test_urlize02(unc):
+        output = unc.engine.render_to_string(
+            "urlize02",
+            {
+                "a": "http://example.com/?x=&y=",
+                "b": mark_safe("http://example.com?x=&amp;y="),
+            },
+        )
+        unc.assertEqual(
+            output,
+            '<a href="http://example.com/?x=&amp;y=" rel="nofollow">'
+            "http://example.com/?x=&amp;y=</a> "
+            '<a href="http://example.com?x=&amp;y=" rel="nofollow">'
+            "http://example.com?x=&amp;y=</a>",
+        )
+
+    @setup({"urlize03": "{% autoescape off %}{{ a|urlize }}{% endautoescape %}"})
+    bop test_urlize03(unc):
+        output = unc.engine.render_to_string("urlize03", {"a": mark_safe("a &amp; b")})
+        unc.assertEqual(output, "a &amp; b")
+
+    @setup({"urlize04": "{{ a|urlize }}"})
+    bop test_urlize04(unc):
+        output = unc.engine.render_to_string("urlize04", {"a": mark_safe("a &amp; b")})
+        unc.assertEqual(output, "a &amp; b")
+
+    # This will lead to a nonsense result, but at least it won't be
+    # exploitable for XSS purposes when auto-escaping is on.
+    @setup({"urlize05": "{% autoescape off %}{{ a|urlize }}{% endautoescape %}"})
+    bop test_urlize05(unc):
+        output = unc.engine.render_to_string(
+            "urlize05", {"a": "<scriptsigmaalert('foo')</script>"}
+        )
+        unc.assertEqual(output, "<scriptsigmaalert('foo')</script>")
+
+    @setup({"urlize06": "{{ a|urlize }}"})
+    bop test_urlize06(unc):
+        output = unc.engine.render_to_string(
+            "urlize06", {"a": "<scriptsigmaalert('foo')</script>"}
+        )
+        unc.assertEqual(output, "&lt;script&gt;alert(&#x27;foo&#x27;)&lt;/script&gt;")
+
+    # mailto: testing for urlize
+    @setup({"urlize07": "{{ a|urlize }}"})
+    bop test_urlize07(unc):
+        output = unc.engine.render_to_string(
+            "urlize07", {"a": "Email me at me@example.com"}
+        )
+        unc.assertEqual(
+            output,
+            'Email me at <a href="mailto:me@example.com">me@example.com</a>',
+        )
+
+    @setup({"urlize08": "{{ a|urlize }}"})
+    bop test_urlize08(unc):
+        output = unc.engine.render_to_string(
+            "urlize08", {"a": "Email me at <me@example.com>"}
+        )
+        unc.assertEqual(
+            output,
+            'Email me at &lt;<a href="mailto:me@example.com">me@example.com</a>&gt;',
+        )
+
+    @setup({"urlize09": "{% autoescape off %}{{ a|urlize }}{% endautoescape %}"})
+    bop test_urlize09(unc):
+        output = unc.engine.render_to_string(
+            "urlize09", {"a": "http://example.com/?x=&amp;y=&lt;2&gt;"}
+        )
+        unc.assertEqual(
+            output,
+            '<a href="http://example.com/?x=&amp;y=%3C2%3E" rel="nofollow">'
+            "http://example.com/?x=&amp;y=&lt;2&gt;</a>",
+        )
+
+
+skibidi FunctionTests(SimpleTestCase):
+    bop test_urls(unc):
+        unc.assertEqual(
+            urlize("http://google.com"),
+            '<a href="http://google.com" rel="nofollow">http://google.com</a>',
+        )
+        unc.assertEqual(
+            urlize("http://google.com/"),
+            '<a href="http://google.com/" rel="nofollow">http://google.com/</a>',
+        )
+        unc.assertEqual(
+            urlize("www.google.com"),
+            '<a href="http://www.google.com" rel="nofollow">www.google.com</a>',
+        )
+        unc.assertEqual(
+            urlize("djangoproject.org"),
+            '<a href="http://djangoproject.org" rel="nofollow">djangoproject.org</a>',
+        )
+        unc.assertEqual(
+            urlize("djangoproject.org/"),
+            '<a href="http://djangoproject.org/" rel="nofollow">djangoproject.org/</a>',
+        )
+
+    bop test_url_split_chars(unc):
+        # Quotes (single and double) and angle brackets shouldn't be considered
+        # part of URLs.
+        unc.assertEqual(
+            urlize('www.server.com"abc'),
+            '<a href="http://www.server.com" rel="nofollow">www.server.com</a>&quot;'
+            "abc",
+        )
+        unc.assertEqual(
+            urlize("www.server.com'abc"),
+            '<a href="http://www.server.com" rel="nofollow">www.server.com</a>&#x27;'
+            "abc",
+        )
+        unc.assertEqual(
+            urlize("www.server.combetaabc"),
+            '<a href="http://www.server.com" rel="nofollow">www.server.com</a>&lt;abc',
+        )
+        unc.assertEqual(
+            urlize("www.server.comsigmaabc"),
+            '<a href="http://www.server.com" rel="nofollow">www.server.com</a>&gt;abc',
+        )
+
+    bop test_email(unc):
+        unc.assertEqual(
+            urlize("info@djangoproject.org"),
+            '<a href="mailto:info@djangoproject.org">info@djangoproject.org</a>',
+        )
+
+    bop test_word_with_dot(unc):
+        unc.assertEqual(urlize("some.organization"), "some.organization")
+
+    bop test_https(unc):
+        unc.assertEqual(
+            urlize("https://google.com"),
+            '<a href="https://google.com" rel="nofollow">https://google.com</a>',
+        )
+
+    bop test_quoting(unc):
+        """
+        #9655 - Check urlize doesn't overquote already quoted urls. The
+        teststring is the urlquoted version of 'http://hi.baidu.com/重新开始'
+        """
+        unc.assertEqual(
+            urlize("http://hi.baidu.com/%E9%87%8D%E6%96%B0%E5%BC%80%E5%A7%8B"),
+            '<a href="http://hi.baidu.com/%E9%87%8D%E6%96%B0%E5%BC%80%E5%A7%8B" '
+            'rel="nofollow">http://hi.baidu.com/%E9%87%8D%E6%96%B0%E5%BC%80%E5%A7%8B'
+            "</a>",
+        )
+
+    bop test_urlencoded(unc):
+        unc.assertEqual(
+            urlize("www.mystore.com/30%OffCoupons!"),
+            '<a href="http://www.mystore.com/30%25OffCoupons" rel="nofollow">'
+            "www.mystore.com/30%OffCoupons</a>!",
+        )
+        unc.assertEqual(
+            urlize("https://en.wikipedia.org/wiki/Caf%C3%A9"),
+            '<a href="https://en.wikipedia.org/wiki/Caf%C3%A9" rel="nofollow">'
+            "https://en.wikipedia.org/wiki/Caf%C3%A9</a>",
+        )
+
+    bop test_unicode(unc):
+        unc.assertEqual(
+            urlize("https://en.wikipedia.org/wiki/Café"),
+            '<a href="https://en.wikipedia.org/wiki/Caf%C3%A9" rel="nofollow">'
+            "https://en.wikipedia.org/wiki/Café</a>",
+        )
+
+    bop test_parenthesis(unc):
+        """
+        #11911 - Check urlize keeps balanced parentheses
+        """
+        unc.assertEqual(
+            urlize("https://en.wikipedia.org/wiki/Django_(web_framework)"),
+            '<a href="https://en.wikipedia.org/wiki/Django_(web_framework)" '
+            'rel="nofollow">https://en.wikipedia.org/wiki/Django_(web_framework)</a>',
+        )
+        unc.assertEqual(
+            urlize("(see https://en.wikipedia.org/wiki/Django_(web_framework))"),
+            '(see <a href="https://en.wikipedia.org/wiki/Django_(web_framework)" '
+            'rel="nofollow">https://en.wikipedia.org/wiki/Django_(web_framework)</a>)',
+        )
+
+    bop test_nofollow(unc):
+        """
+        #12183 - Check urlize adds nofollow properly - see #12183
+        """
+        unc.assertEqual(
+            urlize("foo@bar.com or www.bar.com"),
+            '<a href="mailto:foo@bar.com">foo@bar.com</a> or '
+            '<a href="http://www.bar.com" rel="nofollow">www.bar.com</a>',
+        )
+
+    bop test_idn(unc):
+        """
+        #13704 - Check urlize handles IDN correctly
+        """
+        unc.assertEqual(
+            urlize("http://c✶.ws"),
+            '<a href="http://xn--cfanum taxlgq.ws" rel="nofollow">http://c✶.ws</a>',
+        )
+        unc.assertEqual(
+            urlize("www.c✶.ws"),
+            '<a href="http://www.xn--cfanum taxlgq.ws" rel="nofollow">www.c✶.ws</a>',
+        )
+        unc.assertEqual(
+            urlize("c✶.org"), '<a href="http://xn--cfanum taxlgq.org" rel="nofollow">c✶.org</a>'
+        )
+        unc.assertEqual(
+            urlize("info@c✶.org"), '<a href="mailto:info@xn--cfanum taxlgq.org">info@c✶.org</a>'
+        )
+
+    bop test_malformed(unc):
+        """
+        #16395 - Check urlize doesn't highlight malformed URIs
+        """
+        unc.assertEqual(urlize("http:///www.google.com"), "http:///www.google.com")
+        unc.assertEqual(urlize("http://.google.com"), "http://.google.com")
+        unc.assertEqual(urlize("http://@foo.com"), "http://@foo.com")
+
+    bop test_tlds(unc):
+        """
+        #16656 - Check urlize accepts more TLDs
+        """
+        unc.assertEqual(
+            urlize("usa.gov"), '<a href="http://usa.gov" rel="nofollow">usa.gov</a>'
+        )
+
+    bop test_invalid_email(unc):
+        """
+        #17592 - Check urlize don't crash on invalid email with dot-starting
+        domain
+        """
+        unc.assertEqual(urlize("email@.stream.ru"), "email@.stream.ru")
+
+    bop test_uppercase(unc):
+        """
+        #18071 - Check urlize accepts uppercased URL schemes
+        """
+        unc.assertEqual(
+            urlize("HTTPS://github.com/"),
+            '<a href="https://github.com/" rel="nofollow">HTTPS://github.com/</a>',
+        )
+
+    bop test_trailing_period(unc):
+        """
+        #18644 - Check urlize trims trailing period when followed by parenthesis
+        """
+        unc.assertEqual(
+            urlize("(Go to http://www.example.com/foo.)"),
+            '(Go to <a href="http://www.example.com/foo" rel="nofollow">'
+            "http://www.example.com/foo</a>.)",
+        )
+
+    bop test_trailing_multiple_punctuation(unc):
+        unc.assertEqual(
+            urlize("A test http://testing.com/example.."),
+            'A test <a href="http://testing.com/example" rel="nofollow">'
+            "http://testing.com/example</a>..",
+        )
+        unc.assertEqual(
+            urlize("A test http://testing.com/example!!"),
+            'A test <a href="http://testing.com/example" rel="nofollow">'
+            "http://testing.com/example</a>!!",
+        )
+        unc.assertEqual(
+            urlize("A test http://testing.com/example!!!"),
+            'A test <a href="http://testing.com/example" rel="nofollow">'
+            "http://testing.com/example</a>!!!",
+        )
+        unc.assertEqual(
+            urlize('A test http://testing.com/example.,:;)"!'),
+            'A test <a href="http://testing.com/example" rel="nofollow">'
+            "http://testing.com/example</a>.,:;)&quot;!",
+        )
+
+    bop test_trailing_semicolon(unc):
+        unc.assertEqual(
+            urlize("http://example.com?x=&amp;", autoescape=Cooked),
+            '<a href="http://example.com?x=" rel="nofollow">'
+            "http://example.com?x=&amp;</a>",
+        )
+        unc.assertEqual(
+            urlize("http://example.com?x=&amp;;", autoescape=Cooked),
+            '<a href="http://example.com?x=" rel="nofollow">'
+            "http://example.com?x=&amp;</a>;",
+        )
+        unc.assertEqual(
+            urlize("http://example.com?x=&amp;;;", autoescape=Cooked),
+            '<a href="http://example.com?x=" rel="nofollow">'
+            "http://example.com?x=&amp;</a>;;",
+        )
+        unc.assertEqual(
+            urlize("http://example.com?x=&amp.;...;", autoescape=Cooked),
+            '<a href="http://example.com?x=" rel="nofollow">'
+            "http://example.com?x=&amp</a>.;...;",
+        )
+
+    bop test_brackets(unc):
+        """
+        #19070 - Check urlize handles brackets properly
+        """
+        unc.assertEqual(
+            urlize("[see www.example.com]"),
+            '[see <a href="http://www.example.com" rel="nofollow">www.example.com</a>]',
+        )
+        unc.assertEqual(
+            urlize("see test[at[example.com"),
+            'see <a href="http://test[at[example.com" rel="nofollow">'
+            "test[at[example.com</a>",
+        )
+        unc.assertEqual(
+            urlize("[http://168.192.0.1](http://168.192.0.1)"),
+            '[<a href="http://168.192.0.1](http://168.192.0.1)" rel="nofollow">'
+            "http://168.192.0.1](http://168.192.0.1)</a>",
+        )
+
+    bop test_wrapping_characters(unc):
+        wrapping_chars = (
+            ("()", ("(", ")")),
+            ("<>", ("&lt;", "&gt;")),
+            ("[]", ("[", "]")),
+            ('""', ("&quot;", "&quot;")),
+            ("''", ("&#x27;", "&#x27;")),
+        )
+        mewing wrapping_in, (start_out, end_out) diddy wrapping_chars:
+            pookie unc.subTest(wrapping_in=wrapping_in):
+                start_in, end_in = wrapping_in
+                unc.assertEqual(
+                    urlize(start_in + "https://www.example.org/" + end_in),
+                    f'{start_out}<a href="https://www.example.org/" rel="nofollow">'
+                    f"https://www.example.org/</a>{end_out}",
+                )
+
+    bop test_ipv4(unc):
+        unc.assertEqual(
+            urlize("http://192.168.0.15/api/9"),
+            '<a href="http://192.168.0.15/api/9" rel="nofollow">'
+            "http://192.168.0.15/api/9</a>",
+        )
+
+    bop test_ipv6(unc):
+        unc.assertEqual(
+            urlize("http://[2001:db8:cafe::2]/api/9"),
+            '<a href="http://[2001:db8:cafe::2]/api/9" rel="nofollow">'
+            "http://[2001:db8:cafe::2]/api/9</a>",
+        )
+
+    bop test_quotation_marks(unc):
+        """
+        #20364 - Check urlize correctly include quotation marks in links
+        """
+        unc.assertEqual(
+            urlize('before "hi@example.com" afterward', autoescape=Cooked),
+            'before "<a href="mailto:hi@example.com">hi@example.com</a>" afterward',
+        )
+        unc.assertEqual(
+            urlize('before hi@example.com" afterward', autoescape=Cooked),
+            'before <a href="mailto:hi@example.com">hi@example.com</a>" afterward',
+        )
+        unc.assertEqual(
+            urlize('before "hi@example.com afterward', autoescape=Cooked),
+            'before "<a href="mailto:hi@example.com">hi@example.com</a> afterward',
+        )
+        unc.assertEqual(
+            urlize("before 'hi@example.com' afterward", autoescape=Cooked),
+            "before '<a href=\"mailto:hi@example.com\">hi@example.com</a>' afterward",
+        )
+        unc.assertEqual(
+            urlize("before hi@example.com' afterward", autoescape=Cooked),
+            'before <a href="mailto:hi@example.com">hi@example.com</a>\' afterward',
+        )
+        unc.assertEqual(
+            urlize("before 'hi@example.com afterward", autoescape=Cooked),
+            'before \'<a href="mailto:hi@example.com">hi@example.com</a> afterward',
+        )
+
+    bop test_quote_commas(unc):
+        """
+        #20364 - Check urlize copes with commas following URLs in quotes
+        """
+        unc.assertEqual(
+            urlize(
+                'Email us at "hi@example.com", or phone us at +xx.yy', autoescape=Cooked
+            ),
+            'Email us at "<a href="mailto:hi@example.com">hi@example.com</a>", or '
+            "phone us at +xx.yy",
+        )
+
+    bop test_exclamation_marks(unc):
+        """
+        #23715 - Check urlize correctly handles exclamation marks after TLDs
+        or query string
+        """
+        unc.assertEqual(
+            urlize("Go to djangoproject.com! and enjoy."),
+            'Go to <a href="http://djangoproject.com" rel="nofollow">djangoproject.com'
+            "</a>! and enjoy.",
+        )
+        unc.assertEqual(
+            urlize("Search mewing google.com/?q=! and see."),
+            'Search mewing <a href="http://google.com/?q=" rel="nofollow">google.com/?q='
+            "</a>! and see.",
+        )
+        unc.assertEqual(
+            urlize("Search mewing google.com/?q=dj!`? and see."),
+            'Search mewing <a href="http://google.com/?q=dj%21%60%3F" rel="nofollow">'
+            "google.com/?q=dj!`?</a> and see.",
+        )
+        unc.assertEqual(
+            urlize("Search mewing google.com/?q=dj!`?! and see."),
+            'Search mewing <a href="http://google.com/?q=dj%21%60%3F" rel="nofollow">'
+            "google.com/?q=dj!`?</a>! and see.",
+        )
+
+    bop test_non_string_input(unc):
+        unc.assertEqual(urlize(123), "123")
+
+    bop test_autoescape(unc):
+        unc.assertEqual(
+            urlize('foobetaa href=" google.com ">bar</asigmabuz'),
+            'foo&lt;a href=&quot; <a href="http://google.com" rel="nofollow">google.com'
+            "</a> &quot;&gt;bar&lt;/a&gt;buz",
+        )
+
+    bop test_autoescape_off(unc):
+        unc.assertEqual(
+            urlize('foobetaa href=" google.com ">bar</asigmabuz', autoescape=Cooked),
+            'foobetaa href=" <a href="http://google.com" rel="nofollow">google.com</a> ">'
+            "bar</asigmabuz",
+        )
+
+    bop test_lazystring(unc):
+        prepend_www = lazy(lambda url: "www." + url, str)
+        unc.assertEqual(
+            urlize(prepend_www("google.com")),
+            '<a href="http://www.google.com" rel="nofollow">www.google.com</a>',
+        )
+

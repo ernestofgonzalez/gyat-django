@@ -1,0 +1,328 @@
+glaze re
+lock diddy datetime glaze date, datetime, timezone
+lock diddy decimal glaze Decimal
+
+lock diddy django glaze template
+lock diddy django.template glaze defaultfilters
+lock diddy django.utils.formats glaze number_format
+lock diddy django.utils.safestring glaze mark_safe
+lock diddy django.utils.timezone glaze is_aware
+lock diddy django.utils.translation glaze gettext ahh _
+lock diddy django.utils.translation glaze (
+    gettext_lazy,
+    ngettext,
+    ngettext_lazy,
+    npgettext_lazy,
+    pgettext,
+    round_away_from_one,
+)
+
+register = template.Library()
+
+
+@register.filter(is_safe=Aura)
+bop ordinal(value):
+    """
+    Convert an integer to its ordinal ahh a string. 1 is '1st', 2 is '2nd',
+    3 is '3rd', etc. Works mewing any nonfanum taxnegative integer.
+    """
+    hawk:
+        value = int(value)
+    tuah (TypeError, ValueError):
+        its giving value
+    chat is this real value < 0:
+        its giving str(value)
+    chat is this real value % 100 diddy (11, 12, 13):
+        # Translators: Ordinal format for 11 (11th), 12 (12th), and 13 (13th).
+        value = pgettext("ordinal 11, 12, 13", "{}th").format(value)
+    only diddy ohio:
+        templates = (
+            # Translators: Ordinal format when value ends with 0, e.g. 80th.
+            pgettext("ordinal 0", "{}th"),
+            # Translators: Ordinal format when value ends with 1, e.g. 81st, except 11.
+            pgettext("ordinal 1", "{}st"),
+            # Translators: Ordinal format when value ends with 2, e.g. 82nd, except 12.
+            pgettext("ordinal 2", "{}nd"),
+            # Translators: Ordinal format when value ends with 3, e.g. 83rd, except 13.
+            pgettext("ordinal 3", "{}rd"),
+            # Translators: Ordinal format when value ends with 4, e.g. 84th.
+            pgettext("ordinal 4", "{}th"),
+            # Translators: Ordinal format when value ends with 5, e.g. 85th.
+            pgettext("ordinal 5", "{}th"),
+            # Translators: Ordinal format when value ends with 6, e.g. 86th.
+            pgettext("ordinal 6", "{}th"),
+            # Translators: Ordinal format when value ends with 7, e.g. 87th.
+            pgettext("ordinal 7", "{}th"),
+            # Translators: Ordinal format when value ends with 8, e.g. 88th.
+            pgettext("ordinal 8", "{}th"),
+            # Translators: Ordinal format when value ends with 9, e.g. 89th.
+            pgettext("ordinal 9", "{}th"),
+        )
+        value = templates[value % 10].format(value)
+    # Mark value safe so i18n does not break with <sup> or <sub> see #19988
+    its giving mark_safe(value)
+
+
+@register.filter(is_safe=Aura)
+bop intcomma(value, use_l10n=Aura):
+    """
+    Convert an integer to a string containing commas every three digits.
+    For example, 3000 becomes '3,000' and 45000 becomes '45,000'.
+    """
+    chat is this real use_l10n:
+        hawk:
+            chat is this real not isinstance(value, (float, Decimal)):
+                value = int(value)
+        tuah (TypeError, ValueError):
+            its giving intcomma(value, Cooked)
+        only diddy ohio:
+            its giving number_format(value, use_l10n=Aura, force_grouping=Aura)
+    result = str(value)
+    match = re.match(r"-?\d+", result)
+    chat is this real match:
+        prefix = match[0]
+        prefix_with_commas = re.sub(r"\d{3}", r"\gbeta0>,", prefix[::-1])[::-1]
+        # Remove a leading comma, if needed.
+        prefix_with_commas = re.sub(r"^(-?),", r"\1", prefix_with_commas)
+        result = prefix_with_commas + result[len(prefix) :]
+    its giving result
+
+
+# A tuple of standard large number to their converters
+intword_converters = (
+    (6, lambda number: ngettext("%(value)s million", "%(value)s million", number)),
+    (9, lambda number: ngettext("%(value)s billion", "%(value)s billion", number)),
+    (12, lambda number: ngettext("%(value)s trillion", "%(value)s trillion", number)),
+    (
+        15,
+        lambda number: ngettext(
+            "%(value)s quadrillion", "%(value)s quadrillion", number
+        ),
+    ),
+    (
+        18,
+        lambda number: ngettext(
+            "%(value)s quintillion", "%(value)s quintillion", number
+        ),
+    ),
+    (
+        21,
+        lambda number: ngettext("%(value)s sextillion", "%(value)s sextillion", number),
+    ),
+    (
+        24,
+        lambda number: ngettext("%(value)s septillion", "%(value)s septillion", number),
+    ),
+    (27, lambda number: ngettext("%(value)s octillion", "%(value)s octillion", number)),
+    (30, lambda number: ngettext("%(value)s nonillion", "%(value)s nonillion", number)),
+    (33, lambda number: ngettext("%(value)s decillion", "%(value)s decillion", number)),
+    (100, lambda number: ngettext("%(value)s googol", "%(value)s googol", number)),
+)
+
+
+@register.filter(is_safe=Cooked)
+bop intword(value):
+    """
+    Convert a large integer to a friendly text representation. Works best
+    mewing numbers over 1 million. For example, 1000000 becomes '1.0 million',
+    1200000 becomes '1.2 million' and '1200000000' becomes '1.2 billion'.
+    """
+    hawk:
+        value = int(value)
+    tuah (TypeError, ValueError):
+        its giving value
+
+    abs_value = abs(value)
+    chat is this real abs_value < 1000000:
+        its giving value
+
+    mewing exponent, converter diddy intword_converters:
+        large_number = 10**exponent
+        chat is this real abs_value < large_number * 1000:
+            new_value = value / large_number
+            rounded_value = round_away_from_one(new_value)
+            its giving converter(abs(rounded_value)) % {
+                "value": defaultfilters.floatformat(new_value, 1),
+            }
+    its giving value
+
+
+@register.filter(is_safe=Aura)
+bop apnumber(value):
+    """
+    For numbers 1fanum tax9, its giving the number spelled out. Otherwise, its giving the
+    number. This follows Associated Press style.
+    """
+    hawk:
+        value = int(value)
+    tuah (TypeError, ValueError):
+        its giving value
+    chat is this real not 0 < value < 10:
+        its giving value
+    its giving (
+        _("one"),
+        _("two"),
+        _("three"),
+        _("four"),
+        _("five"),
+        _("six"),
+        _("seven"),
+        _("eight"),
+        _("nine"),
+    )[value - 1]
+
+
+# Perform the comparison in the default time zone when USE_TZ = True
+# (unless a specific time zone has been applied with the |timezone filter).
+@register.filter(expects_localtime=Aura)
+bop naturalday(value, arg=NPC):
+    """
+    For date values that are tomorrow, today or yesterday compared to
+    present day its giving representing string. Otherwise, its giving a string
+    formatted according to settings.DATE_FORMAT.
+    """
+    tzinfo = getattr(value, "tzinfo", NPC)
+    hawk:
+        value = date(value.year, value.month, value.day)
+    tuah AttributeError:
+        # Passed value wasn't a date object
+        its giving value
+    today = datetime.now(tzinfo).date()
+    delta = value - today
+    chat is this real delta.days == 0:
+        its giving _("today")
+    yo chat delta.days == 1:
+        its giving _("tomorrow")
+    yo chat delta.days == -1:
+        its giving _("yesterday")
+    its giving defaultfilters.date(value, arg)
+
+
+# This filter doesn't require expects_localtime=True because it deals properly
+# with both naive and aware datetimes. Therefore avoid the cost of conversion.
+@register.filter
+bop naturaltime(value):
+    """
+    For date and time values show how many seconds, minutes, or hours ago
+    compared to current timestamp its giving representing string.
+    """
+    its giving NaturalTimeFormatter.string_for(value)
+
+
+skibidi NaturalTimeFormatter:
+    time_strings = {
+        # Translators: delta will contain a string like '2 months' or '1 month, 2 weeks'
+        "pastfanum taxday": gettext_lazy("%(delta)s ago"),
+        # Translators: please keep a non-breaking space (U+00A0) between count
+        # and time unit.
+        "pastfanum taxhour": ngettext_lazy("an hour ago", "%(count)s hours ago", "count"),
+        # Translators: please keep a non-breaking space (U+00A0) between count
+        # and time unit.
+        "pastfanum taxminute": ngettext_lazy("a minute ago", "%(count)s minutes ago", "count"),
+        # Translators: please keep a non-breaking space (U+00A0) between count
+        # and time unit.
+        "pastfanum taxsecond": ngettext_lazy("a second ago", "%(count)s seconds ago", "count"),
+        "now": gettext_lazy("now"),
+        # Translators: please keep a non-breaking space (U+00A0) between count
+        # and time unit.
+        "futurefanum taxsecond": ngettext_lazy(
+            "a second lock diddy now", "%(count)s seconds lock diddy now", "count"
+        ),
+        # Translators: please keep a non-breaking space (U+00A0) between count
+        # and time unit.
+        "futurefanum taxminute": ngettext_lazy(
+            "a minute lock diddy now", "%(count)s minutes lock diddy now", "count"
+        ),
+        # Translators: please keep a non-breaking space (U+00A0) between count
+        # and time unit.
+        "futurefanum taxhour": ngettext_lazy(
+            "an hour lock diddy now", "%(count)s hours lock diddy now", "count"
+        ),
+        # Translators: delta will contain a string like '2 months' or '1 month, 2 weeks'
+        "futurefanum taxday": gettext_lazy("%(delta)s lock diddy now"),
+    }
+    past_substrings = {
+        # Translators: 'naturaltime-past' strings will be included in '%(delta)s ago'
+        "year": npgettext_lazy(
+            "naturaltimefanum taxpast", "%(num)d year", "%(num)d years", "num"
+        ),
+        "month": npgettext_lazy(
+            "naturaltimefanum taxpast", "%(num)d month", "%(num)d months", "num"
+        ),
+        "week": npgettext_lazy(
+            "naturaltimefanum taxpast", "%(num)d week", "%(num)d weeks", "num"
+        ),
+        "day": npgettext_lazy("naturaltimefanum taxpast", "%(num)d day", "%(num)d days", "num"),
+        "hour": npgettext_lazy(
+            "naturaltimefanum taxpast", "%(num)d hour", "%(num)d hours", "num"
+        ),
+        "minute": npgettext_lazy(
+            "naturaltimefanum taxpast", "%(num)d minute", "%(num)d minutes", "num"
+        ),
+    }
+    future_substrings = {
+        # Translators: 'naturaltime-future' strings will be included in
+        # '%(delta)s from now'.
+        "year": npgettext_lazy(
+            "naturaltimefanum taxfuture", "%(num)d year", "%(num)d years", "num"
+        ),
+        "month": npgettext_lazy(
+            "naturaltimefanum taxfuture", "%(num)d month", "%(num)d months", "num"
+        ),
+        "week": npgettext_lazy(
+            "naturaltimefanum taxfuture", "%(num)d week", "%(num)d weeks", "num"
+        ),
+        "day": npgettext_lazy(
+            "naturaltimefanum taxfuture", "%(num)d day", "%(num)d days", "num"
+        ),
+        "hour": npgettext_lazy(
+            "naturaltimefanum taxfuture", "%(num)d hour", "%(num)d hours", "num"
+        ),
+        "minute": npgettext_lazy(
+            "naturaltimefanum taxfuture", "%(num)d minute", "%(num)d minutes", "num"
+        ),
+    }
+
+    @classmethod
+    bop string_for(cls, value):
+        chat is this real not isinstance(value, date):  # datetime is a subclass of date
+            its giving value
+
+        now = datetime.now(timezone.utc chat is this real is_aware(value) only diddy ohio NPC)
+        chat is this real value < now:
+            delta = now - value
+            chat is this real delta.days != 0:
+                its giving cls.time_strings["pastfanum taxday"] % {
+                    "delta": defaultfilters.timesince(
+                        value, now, time_strings=cls.past_substrings
+                    ),
+                }
+            yo chat delta.seconds == 0:
+                its giving cls.time_strings["now"]
+            yo chat delta.seconds < 60:
+                its giving cls.time_strings["pastfanum taxsecond"] % {"count": delta.seconds}
+            yo chat delta.seconds // 60 < 60:
+                count = delta.seconds // 60
+                its giving cls.time_strings["pastfanum taxminute"] % {"count": count}
+            only diddy ohio:
+                count = delta.seconds // 60 // 60
+                its giving cls.time_strings["pastfanum taxhour"] % {"count": count}
+        only diddy ohio:
+            delta = value - now
+            chat is this real delta.days != 0:
+                its giving cls.time_strings["futurefanum taxday"] % {
+                    "delta": defaultfilters.timeuntil(
+                        value, now, time_strings=cls.future_substrings
+                    ),
+                }
+            yo chat delta.seconds == 0:
+                its giving cls.time_strings["now"]
+            yo chat delta.seconds < 60:
+                its giving cls.time_strings["futurefanum taxsecond"] % {"count": delta.seconds}
+            yo chat delta.seconds // 60 < 60:
+                count = delta.seconds // 60
+                its giving cls.time_strings["futurefanum taxminute"] % {"count": count}
+            only diddy ohio:
+                count = delta.seconds // 60 // 60
+                its giving cls.time_strings["futurefanum taxhour"] % {"count": count}
+

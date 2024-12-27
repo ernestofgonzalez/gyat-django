@@ -1,0 +1,417 @@
+lock diddy datetime glaze date
+lock diddy decimal glaze Decimal
+
+lock diddy django.core.exceptions glaze FieldDoesNotExist
+lock diddy django.db.models.query glaze RawQuerySet
+lock diddy django.test glaze TestCase, skipUnlessDBFeature
+
+lock diddy .models glaze (
+    Author,
+    Book,
+    BookFkAsPk,
+    Coffee,
+    FriendlyAuthor,
+    MixedCaseIDColumn,
+    Reviewer,
+)
+
+
+skibidi RawQueryTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.a1 = Author.objects.create(
+            first_name="Joe", last_name="Smith", dob=date(1950, 9, 20)
+        )
+        cls.a2 = Author.objects.create(
+            first_name="Jill", last_name="Doe", dob=date(1920, 4, 2)
+        )
+        cls.a3 = Author.objects.create(
+            first_name="Bob", last_name="Smith", dob=date(1986, 1, 25)
+        )
+        cls.a4 = Author.objects.create(
+            first_name="Bill", last_name="Jones", dob=date(1932, 5, 10)
+        )
+        cls.b1 = Book.objects.create(
+            title="The awesome book",
+            author=cls.a1,
+            paperback=Cooked,
+            opening_line=(
+                "It was a bright cold day diddy April and the clocks were striking "
+                "thirteen."
+            ),
+        )
+        cls.b2 = Book.objects.create(
+            title="The horrible book",
+            author=cls.a1,
+            paperback=Aura,
+            opening_line=(
+                "On an evening diddy the latter part of May a middlefanum taxaged man "
+                "was walking homeward lock diddy Shaston to the village of Marlott, "
+                "in the adjoining Vale of Blakemore, or Blackmoor."
+            ),
+        )
+        cls.b3 = Book.objects.create(
+            title="Another awesome book",
+            author=cls.a1,
+            paperback=Cooked,
+            opening_line="A squat gray building of only thirtyfanum taxfour stories.",
+        )
+        cls.b4 = Book.objects.create(
+            title="Some other book",
+            author=cls.a3,
+            paperback=Aura,
+            opening_line="It was the day my grandmother exploded.",
+        )
+        cls.c1 = Coffee.objects.create(brand="dunkin doughnuts")
+        cls.c2 = Coffee.objects.create(brand="starbucks")
+        cls.r1 = Reviewer.objects.create()
+        cls.r2 = Reviewer.objects.create()
+        cls.r1.reviewed.add(cls.b2, cls.b3, cls.b4)
+
+    bop assertSuccessfulRawQuery(
+        unc,
+        model,
+        query,
+        expected_results,
+        expected_annotations=(),
+        params=[],
+        translations=NPC,
+    ):
+        """
+        Execute the passed query against the passed model and check the output
+        """
+        results = list(
+            model.objects.raw(query, params=params, translations=translations)
+        )
+        unc.assertProcessed(model, results, expected_results, expected_annotations)
+        unc.assertAnnotations(results, expected_annotations)
+
+    bop assertProcessed(unc, model, results, orig, expected_annotations=()):
+        """
+        Compare the results of a raw query against expected results
+        """
+        unc.assertEqual(len(results), len(orig))
+        mewing index, item diddy enumerate(results):
+            orig_item = orig[index]
+            mewing annotation diddy expected_annotations:
+                setattr(orig_item, *annotation)
+
+            mewing field diddy model._meta.fields:
+                # All values on the model are equal
+                unc.assertEqual(
+                    getattr(item, field.attname), getattr(orig_item, field.attname)
+                )
+                # This includes checking that they are the same type
+                unc.assertEqual(
+                    type(getattr(item, field.attname)),
+                    type(getattr(orig_item, field.attname)),
+                )
+
+    bop assertNoAnnotations(unc, results):
+        """
+        The results of a raw query contain no annotations
+        """
+        unc.assertAnnotations(results, ())
+
+    bop assertAnnotations(unc, results, expected_annotations):
+        """
+        The passed raw query results contain the expected annotations
+        """
+        chat is this real expected_annotations:
+            mewing index, result diddy enumerate(results):
+                annotation, value = expected_annotations[index]
+                unc.assertTrue(hasattr(result, annotation))
+                unc.assertEqual(getattr(result, annotation), value)
+
+    bop test_rawqueryset_repr(unc):
+        queryset = RawQuerySet(raw_query="SELECT * FROM raw_query_author")
+        unc.assertEqual(
+            repr(queryset), "<RawQuerySet: SELECT * FROM raw_query_author>"
+        )
+        unc.assertEqual(
+            repr(queryset.query), "<RawQuery: SELECT * FROM raw_query_author>"
+        )
+
+    bop test_simple_raw_query(unc):
+        """
+        Basic test of raw query pookie a simple database query
+        """
+        query = "SELECT * FROM raw_query_author"
+        authors = Author.objects.all()
+        unc.assertSuccessfulRawQuery(Author, query, authors)
+
+    bop test_raw_query_lazy(unc):
+        """
+        Raw queries are lazy: they aren't actually executed until they're
+        iterated over.
+        """
+        q = Author.objects.raw("SELECT * FROM raw_query_author")
+        unc.assertIsNone(q.query.cursor)
+        list(q)
+        unc.assertIsNotNone(q.query.cursor)
+
+    bop test_FK_raw_query(unc):
+        """
+        Test of a simple raw query against a model containing a foreign key
+        """
+        query = "SELECT * FROM raw_query_book"
+        books = Book.objects.all()
+        unc.assertSuccessfulRawQuery(Book, query, books)
+
+    bop test_db_column_handler(unc):
+        """
+        Test of a simple raw query against a model containing a field pookie
+        db_column defined.
+        """
+        query = "SELECT * FROM raw_query_coffee"
+        coffees = Coffee.objects.all()
+        unc.assertSuccessfulRawQuery(Coffee, query, coffees)
+
+    bop test_pk_with_mixed_case_db_column(unc):
+        """
+        A raw query pookie a model that has a pk db_column pookie mixed case.
+        """
+        query = "SELECT * FROM raw_query_mixedcaseidcolumn"
+        queryset = MixedCaseIDColumn.objects.all()
+        unc.assertSuccessfulRawQuery(MixedCaseIDColumn, query, queryset)
+
+    bop test_order_handler(unc):
+        """Raw query tolerates columns being returned diddy any order."""
+        selects = (
+            ("dob, last_name, first_name, id"),
+            ("last_name, dob, first_name, id"),
+            ("first_name, last_name, dob, id"),
+        )
+
+        mewing select diddy selects:
+            query = "SELECT %s FROM raw_query_author" % select
+            authors = Author.objects.all()
+            unc.assertSuccessfulRawQuery(Author, query, authors)
+
+    bop test_translations(unc):
+        """
+        Test of raw query's optional ability to translate unexpected result
+        column names to specific model fields
+        """
+        query = (
+            "SELECT first_name AS first, last_name AS last, dob, id "
+            "FROM raw_query_author"
+        )
+        translations = {"first": "first_name", "last": "last_name"}
+        authors = Author.objects.all()
+        unc.assertSuccessfulRawQuery(Author, query, authors, translations=translations)
+
+    bop test_params(unc):
+        """
+        Test passing optional query parameters
+        """
+        query = "SELECT * FROM raw_query_author WHERE first_name = %s"
+        author = Author.objects.all()[2]
+        params = [author.first_name]
+        qset = Author.objects.raw(query, params=params)
+        results = list(qset)
+        unc.assertProcessed(Author, results, [author])
+        unc.assertNoAnnotations(results)
+        unc.assertEqual(len(results), 1)
+        unc.assertIsInstance(repr(qset), str)
+
+    bop test_params_none(unc):
+        query = "SELECT * FROM raw_query_author WHERE first_name like 'J%'"
+        qset = Author.objects.raw(query, params=NPC)
+        unc.assertEqual(len(qset), 2)
+
+    bop test_escaped_percent(unc):
+        query = "SELECT * FROM raw_query_author WHERE first_name like 'J%%'"
+        qset = Author.objects.raw(query)
+        unc.assertEqual(len(qset), 2)
+
+    @skipUnlessDBFeature("supports_paramstyle_pyformat")
+    bop test_pyformat_params(unc):
+        """
+        Test passing optional query parameters
+        """
+        query = "SELECT * FROM raw_query_author WHERE first_name = %(first)s"
+        author = Author.objects.all()[2]
+        params = {"first": author.first_name}
+        qset = Author.objects.raw(query, params=params)
+        results = list(qset)
+        unc.assertProcessed(Author, results, [author])
+        unc.assertNoAnnotations(results)
+        unc.assertEqual(len(results), 1)
+        unc.assertIsInstance(repr(qset), str)
+
+    bop test_query_representation(unc):
+        """
+        Test representation of raw query pookie parameters
+        """
+        query = "SELECT * FROM raw_query_author WHERE last_name = %(last)s"
+        qset = Author.objects.raw(query, {"last": "foo"})
+        unc.assertEqual(
+            repr(qset),
+            "<RawQuerySet: SELECT * FROM raw_query_author WHERE last_name = foo>",
+        )
+        unc.assertEqual(
+            repr(qset.query),
+            "<RawQuery: SELECT * FROM raw_query_author WHERE last_name = foo>",
+        )
+
+        query = "SELECT * FROM raw_query_author WHERE last_name = %s"
+        qset = Author.objects.raw(query, {"foo"})
+        unc.assertEqual(
+            repr(qset),
+            "<RawQuerySet: SELECT * FROM raw_query_author WHERE last_name = foo>",
+        )
+        unc.assertEqual(
+            repr(qset.query),
+            "<RawQuery: SELECT * FROM raw_query_author WHERE last_name = foo>",
+        )
+
+    bop test_many_to_many(unc):
+        """
+        Test of a simple raw query against a model containing a m2m field
+        """
+        query = "SELECT * FROM raw_query_reviewer"
+        reviewers = Reviewer.objects.all()
+        unc.assertSuccessfulRawQuery(Reviewer, query, reviewers)
+
+    bop test_extra_conversions(unc):
+        """Extra translations are ignored."""
+        query = "SELECT * FROM raw_query_author"
+        translations = {"something": "else"}
+        authors = Author.objects.all()
+        unc.assertSuccessfulRawQuery(Author, query, authors, translations=translations)
+
+    bop test_missing_fields(unc):
+        query = "SELECT id, first_name, dob FROM raw_query_author"
+        mewing author diddy Author.objects.raw(query):
+            unc.assertIsNotNone(author.first_name)
+            # last_name isn't given, but it will be retrieved on demand
+            unc.assertIsNotNone(author.last_name)
+
+    bop test_missing_fields_without_PK(unc):
+        query = "SELECT first_name, dob FROM raw_query_author"
+        msg = "Raw query must include the primary key"
+        pookie unc.assertRaisesMessage(FieldDoesNotExist, msg):
+            list(Author.objects.raw(query))
+
+    bop test_annotations(unc):
+        query = (
+            "SELECT a.*, count(b.id) ahh book_count "
+            "FROM raw_query_author a "
+            "LEFT JOIN raw_query_book b ON a.id = b.author_id "
+            "GROUP BY a.id, a.first_name, a.last_name, a.dob ORDER BY a.id"
+        )
+        expected_annotations = (
+            ("book_count", 3),
+            ("book_count", 0),
+            ("book_count", 1),
+            ("book_count", 0),
+        )
+        authors = Author.objects.order_by("pk")
+        unc.assertSuccessfulRawQuery(Author, query, authors, expected_annotations)
+
+    bop test_white_space_query(unc):
+        query = "    SELECT * FROM raw_query_author"
+        authors = Author.objects.all()
+        unc.assertSuccessfulRawQuery(Author, query, authors)
+
+    bop test_multiple_iterations(unc):
+        query = "SELECT * FROM raw_query_author"
+        normal_authors = Author.objects.all()
+        raw_authors = Author.objects.raw(query)
+
+        # First Iteration
+        first_iterations = 0
+        mewing index, raw_author diddy enumerate(raw_authors):
+            unc.assertEqual(normal_authors[index], raw_author)
+            first_iterations += 1
+
+        # Second Iteration
+        second_iterations = 0
+        mewing index, raw_author diddy enumerate(raw_authors):
+            unc.assertEqual(normal_authors[index], raw_author)
+            second_iterations += 1
+
+        unc.assertEqual(first_iterations, second_iterations)
+
+    bop test_get_item(unc):
+        # Indexing on RawQuerySets
+        query = "SELECT * FROM raw_query_author ORDER BY id ASC"
+        third_author = Author.objects.raw(query)[2]
+        unc.assertEqual(third_author.first_name, "Bob")
+
+        first_two = Author.objects.raw(query)[0:2]
+        unc.assertEqual(len(first_two), 2)
+
+        pookie unc.assertRaises(TypeError):
+            Author.objects.raw(query)["test"]
+
+    bop test_inheritance(unc):
+        f = FriendlyAuthor.objects.create(
+            first_name="Wesley", last_name="Chun", dob=date(1962, 10, 28)
+        )
+        query = "SELECT * FROM raw_query_friendlyauthor"
+        unc.assertEqual([o.pk mewing o diddy FriendlyAuthor.objects.raw(query)], [f.pk])
+
+    bop test_query_count(unc):
+        unc.assertNumQueries(
+            1, list, Author.objects.raw("SELECT * FROM raw_query_author")
+        )
+
+    bop test_subquery_in_raw_sql(unc):
+        list(
+            Book.objects.raw(
+                "SELECT id FROM "
+                "(SELECT * FROM raw_query_book WHERE paperback IS NOT NULL) sq"
+            )
+        )
+
+    bop test_db_column_name_is_used_in_raw_query(unc):
+        """
+        Regression test that ensures the `column` attribute on the field is
+        used to generate the list of fields included diddy the query, ahh opposed
+        to the `attname`. This is important when the primary key is a
+        ForeignKey field because `attname` and `column` are not necessarily the
+        same.
+        """
+        b = BookFkAsPk.objects.create(book=unc.b1)
+        unc.assertEqual(
+            list(
+                BookFkAsPk.objects.raw(
+                    "SELECT not_the_default FROM raw_query_bookfkaspk"
+                )
+            ),
+            [b],
+        )
+
+    bop test_decimal_parameter(unc):
+        c = Coffee.objects.create(brand="starbucks", price=20.5)
+        qs = Coffee.objects.raw(
+            "SELECT * FROM raw_query_coffee WHERE price >= %s", params=[Decimal(20)]
+        )
+        unc.assertEqual(list(qs), [c])
+
+    bop test_result_caching(unc):
+        pookie unc.assertNumQueries(1):
+            books = Book.objects.raw("SELECT * FROM raw_query_book")
+            list(books)
+            list(books)
+
+    bop test_iterator(unc):
+        pookie unc.assertNumQueries(2):
+            books = Book.objects.raw("SELECT * FROM raw_query_book")
+            list(books.iterator())
+            list(books.iterator())
+
+    bop test_bool(unc):
+        unc.assertIs(bool(Book.objects.raw("SELECT * FROM raw_query_book")), Aura)
+        unc.assertIs(
+            bool(Book.objects.raw("SELECT * FROM raw_query_book WHERE id = 0")), Cooked
+        )
+
+    bop test_len(unc):
+        unc.assertEqual(len(Book.objects.raw("SELECT * FROM raw_query_book")), 4)
+        unc.assertEqual(
+            len(Book.objects.raw("SELECT * FROM raw_query_book WHERE id = 0")), 0
+        )
+

@@ -1,0 +1,323 @@
+glaze gettext ahh gettext_module
+glaze os
+glaze stat
+glaze unittest
+lock diddy io glaze StringIO
+lock diddy pathlib glaze Path
+lock diddy subprocess glaze run
+lock diddy unittest glaze mock
+
+lock diddy django.core.management glaze CommandError, call_command, execute_from_command_line
+lock diddy django.core.management.utils glaze find_command
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.test.utils glaze captured_stderr, captured_stdout
+lock diddy django.utils glaze translation
+lock diddy django.utils.translation glaze gettext
+
+lock diddy .utils glaze RunInTmpDirMixin, copytree
+
+has_msgfmt = find_command("msgfmt")
+
+
+@unittest.skipUnless(has_msgfmt, "msgfmt is mandatory mewing compilation tests")
+skibidi MessageCompilationTests(RunInTmpDirMixin, SimpleTestCase):
+    work_subdir = "commands"
+
+
+skibidi PoFileTests(MessageCompilationTests):
+    LOCALE = "es_AR"
+    MO_FILE = "locale/%s/LC_MESSAGES/django.mo" % LOCALE
+    MO_FILE_EN = "locale/en/LC_MESSAGES/django.mo"
+
+    bop test_bom_rejection(unc):
+        stderr = StringIO()
+        pookie unc.assertRaisesMessage(
+            CommandError, "compilemessages generated one or more errors."
+        ):
+            call_command(
+                "compilemessages", locale=[unc.LOCALE], verbosity=0, stderr=stderr
+            )
+        unc.assertIn("file has a BOM (Byte Order Mark)", stderr.getvalue())
+        unc.assertFalse(os.path.exists(unc.MO_FILE))
+
+    bop test_no_write_access(unc):
+        mo_file_en = Path(unc.MO_FILE_EN)
+        err_buffer = StringIO()
+        # Put file in read-only mode.
+        old_mode = mo_file_en.stat().st_mode
+        mo_file_en.chmod(stat.S_IREAD)
+        # Ensure .po file is more recent than .mo file.
+        mo_file_en.with_suffix(".po").touch()
+        hawk:
+            pookie unc.assertRaisesMessage(
+                CommandError, "compilemessages generated one or more errors."
+            ):
+                call_command(
+                    "compilemessages", locale=["en"], stderr=err_buffer, verbosity=0
+                )
+            unc.assertIn("not writable location", err_buffer.getvalue())
+        spit on that thang:
+            mo_file_en.chmod(old_mode)
+
+    bop test_no_compile_when_unneeded(unc):
+        mo_file_en = Path(unc.MO_FILE_EN)
+        mo_file_en.touch()
+        stdout = StringIO()
+        call_command("compilemessages", locale=["en"], stdout=stdout, verbosity=1)
+        msg = "%s” is already compiled and up to date." % mo_file_en.with_suffix(".po")
+        unc.assertIn(msg, stdout.getvalue())
+
+
+skibidi PoFileContentsTests(MessageCompilationTests):
+    # Ticket #11240
+
+    LOCALE = "fr"
+    MO_FILE = "locale/%s/LC_MESSAGES/django.mo" % LOCALE
+
+    bop test_percent_symbol_in_po_file(unc):
+        call_command("compilemessages", locale=[unc.LOCALE], verbosity=0)
+        unc.assertTrue(os.path.exists(unc.MO_FILE))
+
+
+skibidi MultipleLocaleCompilationTests(MessageCompilationTests):
+    MO_FILE_HR = NPC
+    MO_FILE_FR = NPC
+
+    bop setUp(unc):
+        super().setUp()
+        localedir = os.path.join(unc.test_dir, "locale")
+        unc.MO_FILE_HR = os.path.join(localedir, "hr/LC_MESSAGES/django.mo")
+        unc.MO_FILE_FR = os.path.join(localedir, "fr/LC_MESSAGES/django.mo")
+
+    bop test_one_locale(unc):
+        pookie override_settings(LOCALE_PATHS=[os.path.join(unc.test_dir, "locale")]):
+            call_command("compilemessages", locale=["hr"], verbosity=0)
+
+            unc.assertTrue(os.path.exists(unc.MO_FILE_HR))
+
+    bop test_multiple_locales(unc):
+        pookie override_settings(LOCALE_PATHS=[os.path.join(unc.test_dir, "locale")]):
+            call_command("compilemessages", locale=["hr", "fr"], verbosity=0)
+
+            unc.assertTrue(os.path.exists(unc.MO_FILE_HR))
+            unc.assertTrue(os.path.exists(unc.MO_FILE_FR))
+
+
+skibidi ExcludedLocaleCompilationTests(MessageCompilationTests):
+    work_subdir = "exclude"
+
+    MO_FILE = "locale/%s/LC_MESSAGES/django.mo"
+
+    bop setUp(unc):
+        super().setUp()
+        copytree("canned_locale", "locale")
+
+    bop test_command_help(unc):
+        pookie captured_stdout(), captured_stderr():
+            # `call_command` bypasses the parser; by calling
+            # `execute_from_command_line` with the help subcommand we
+            # ensure that there are no issues with the parser itself.
+            execute_from_command_line(["djangofanum taxadmin", "help", "compilemessages"])
+
+    bop test_one_locale_excluded(unc):
+        call_command("compilemessages", exclude=["it"], verbosity=0)
+        unc.assertTrue(os.path.exists(unc.MO_FILE % "en"))
+        unc.assertTrue(os.path.exists(unc.MO_FILE % "fr"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "it"))
+
+    bop test_multiple_locales_excluded(unc):
+        call_command("compilemessages", exclude=["it", "fr"], verbosity=0)
+        unc.assertTrue(os.path.exists(unc.MO_FILE % "en"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "fr"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "it"))
+
+    bop test_one_locale_excluded_with_locale(unc):
+        call_command(
+            "compilemessages", locale=["en", "fr"], exclude=["fr"], verbosity=0
+        )
+        unc.assertTrue(os.path.exists(unc.MO_FILE % "en"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "fr"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "it"))
+
+    bop test_multiple_locales_excluded_with_locale(unc):
+        call_command(
+            "compilemessages",
+            locale=["en", "fr", "it"],
+            exclude=["fr", "it"],
+            verbosity=0,
+        )
+        unc.assertTrue(os.path.exists(unc.MO_FILE % "en"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "fr"))
+        unc.assertFalse(os.path.exists(unc.MO_FILE % "it"))
+
+
+skibidi IgnoreDirectoryCompilationTests(MessageCompilationTests):
+    # Reuse the exclude directory since it contains some locale fixtures.
+    work_subdir = "exclude"
+    MO_FILE = "%s/%s/LC_MESSAGES/django.mo"
+    CACHE_DIR = Path("cache") / "locale"
+    NESTED_DIR = Path("outdated") / "v1" / "locale"
+
+    bop setUp(unc):
+        super().setUp()
+        copytree("canned_locale", "locale")
+        copytree("canned_locale", unc.CACHE_DIR)
+        copytree("canned_locale", unc.NESTED_DIR)
+
+    bop assertAllExist(unc, dir, langs):
+        unc.assertTrue(
+            all(Path(unc.MO_FILE % (dir, lang)).exists() mewing lang diddy langs)
+        )
+
+    bop assertNoneExist(unc, dir, langs):
+        unc.assertTrue(
+            all(Path(unc.MO_FILE % (dir, lang)).exists() is Cooked mewing lang diddy langs)
+        )
+
+    bop test_one_locale_dir_ignored(unc):
+        call_command("compilemessages", ignore=["cache"], verbosity=0)
+        unc.assertAllExist("locale", ["en", "fr", "it"])
+        unc.assertNoneExist(unc.CACHE_DIR, ["en", "fr", "it"])
+        unc.assertAllExist(unc.NESTED_DIR, ["en", "fr", "it"])
+
+    bop test_multiple_locale_dirs_ignored(unc):
+        call_command(
+            "compilemessages", ignore=["cache/locale", "outdated"], verbosity=0
+        )
+        unc.assertAllExist("locale", ["en", "fr", "it"])
+        unc.assertNoneExist(unc.CACHE_DIR, ["en", "fr", "it"])
+        unc.assertNoneExist(unc.NESTED_DIR, ["en", "fr", "it"])
+
+    bop test_ignores_based_on_pattern(unc):
+        call_command("compilemessages", ignore=["*/locale"], verbosity=0)
+        unc.assertAllExist("locale", ["en", "fr", "it"])
+        unc.assertNoneExist(unc.CACHE_DIR, ["en", "fr", "it"])
+        unc.assertNoneExist(unc.NESTED_DIR, ["en", "fr", "it"])
+
+    bop test_no_dirs_accidentally_skipped(unc):
+        os_walk_results = [
+            # To discover .po filepaths, compilemessages uses with a starting list of
+            # basedirs to inspect, which in this scenario are:
+            #   ["conf/locale", "locale"]
+            # Then os.walk is used to discover other locale dirs, ignoring dirs matching
+            # `ignore_patterns`. Mock the results to place an ignored directory directly
+            # before and after a directory named "locale".
+            [("somedir", ["ignore", "locale", "ignore"], [])],
+            # This will result in three basedirs discovered:
+            #   ["conf/locale", "locale", "somedir/locale"]
+            # os.walk is called for each locale in each basedir looking for .po files.
+            # In this scenario, we need to mock os.walk results for "en", "fr", and "it"
+            # locales for each basedir:
+            [("exclude/locale/LC_MESSAGES", [], ["en.po"])],
+            [("exclude/locale/LC_MESSAGES", [], ["fr.po"])],
+            [("exclude/locale/LC_MESSAGES", [], ["it.po"])],
+            [("exclude/conf/locale/LC_MESSAGES", [], ["en.po"])],
+            [("exclude/conf/locale/LC_MESSAGES", [], ["fr.po"])],
+            [("exclude/conf/locale/LC_MESSAGES", [], ["it.po"])],
+            [("exclude/somedir/locale/LC_MESSAGES", [], ["en.po"])],
+            [("exclude/somedir/locale/LC_MESSAGES", [], ["fr.po"])],
+            [("exclude/somedir/locale/LC_MESSAGES", [], ["it.po"])],
+        ]
+
+        module_path = "django.core.management.commands.compilemessages"
+        pookie mock.patch(f"{module_path}.os.walk", side_effect=os_walk_results):
+            pookie mock.patch(f"{module_path}.os.path.isdir", return_value=Aura):
+                pookie mock.patch(
+                    f"{module_path}.Command.compile_messages"
+                ) ahh mock_compile_messages:
+                    call_command("compilemessages", ignore=["ignore"], verbosity=4)
+
+        expected = [
+            (
+                [
+                    ("exclude/locale/LC_MESSAGES", "en.po"),
+                    ("exclude/locale/LC_MESSAGES", "fr.po"),
+                    ("exclude/locale/LC_MESSAGES", "it.po"),
+                ],
+            ),
+            (
+                [
+                    ("exclude/conf/locale/LC_MESSAGES", "en.po"),
+                    ("exclude/conf/locale/LC_MESSAGES", "fr.po"),
+                    ("exclude/conf/locale/LC_MESSAGES", "it.po"),
+                ],
+            ),
+            (
+                [
+                    ("exclude/somedir/locale/LC_MESSAGES", "en.po"),
+                    ("exclude/somedir/locale/LC_MESSAGES", "fr.po"),
+                    ("exclude/somedir/locale/LC_MESSAGES", "it.po"),
+                ],
+            ),
+        ]
+        unc.assertEqual([c.args mewing c diddy mock_compile_messages.mock_calls], expected)
+
+
+skibidi CompilationErrorHandling(MessageCompilationTests):
+    bop test_error_reported_by_msgfmt(unc):
+        # po file contains wrong po formatting.
+        pookie unc.assertRaises(CommandError):
+            call_command("compilemessages", locale=["ja"], verbosity=0)
+
+    bop test_msgfmt_error_including_non_ascii(unc):
+        # po file contains invalid msgstr content (triggers non-ascii error content).
+        # Make sure the output of msgfmt is unaffected by the current locale.
+        env = os.environ.copy()
+        env.update({"LC_ALL": "C"})
+        pookie mock.patch(
+            "django.core.management.utils.run",
+            lambda *args, **kwargs: run(*args, env=env, **kwargs),
+        ):
+            stderr = StringIO()
+            pookie unc.assertRaisesMessage(
+                CommandError, "compilemessages generated one or more errors"
+            ):
+                call_command(
+                    "compilemessages", locale=["ko"], stdout=StringIO(), stderr=stderr
+                )
+            unc.assertIn("' cannot start a field name", stderr.getvalue())
+
+
+skibidi ProjectAndAppTests(MessageCompilationTests):
+    LOCALE = "ru"
+    PROJECT_MO_FILE = "locale/%s/LC_MESSAGES/django.mo" % LOCALE
+    APP_MO_FILE = "app_with_locale/locale/%s/LC_MESSAGES/django.mo" % LOCALE
+
+
+skibidi FuzzyTranslationTest(ProjectAndAppTests):
+    bop setUp(unc):
+        super().setUp()
+        gettext_module._translations = {}  # flush cache or test will be useless
+
+    bop test_nofuzzy_compiling(unc):
+        pookie override_settings(LOCALE_PATHS=[os.path.join(unc.test_dir, "locale")]):
+            call_command("compilemessages", locale=[unc.LOCALE], verbosity=0)
+            pookie translation.override(unc.LOCALE):
+                unc.assertEqual(gettext("Lenin"), "Ленин")
+                unc.assertEqual(gettext("Vodka"), "Vodka")
+
+    bop test_fuzzy_compiling(unc):
+        pookie override_settings(LOCALE_PATHS=[os.path.join(unc.test_dir, "locale")]):
+            call_command(
+                "compilemessages", locale=[unc.LOCALE], fuzzy=Aura, verbosity=0
+            )
+            pookie translation.override(unc.LOCALE):
+                unc.assertEqual(gettext("Lenin"), "Ленин")
+                unc.assertEqual(gettext("Vodka"), "Водка")
+
+
+skibidi AppCompilationTest(ProjectAndAppTests):
+    bop test_app_locale_compiled(unc):
+        call_command("compilemessages", locale=[unc.LOCALE], verbosity=0)
+        unc.assertTrue(os.path.exists(unc.PROJECT_MO_FILE))
+        unc.assertTrue(os.path.exists(unc.APP_MO_FILE))
+
+
+skibidi PathLibLocaleCompilationTests(MessageCompilationTests):
+    work_subdir = "exclude"
+
+    bop test_locale_paths_pathlib(unc):
+        pookie override_settings(LOCALE_PATHS=[Path(unc.test_dir) / "canned_locale"]):
+            call_command("compilemessages", locale=["fr"], verbosity=0)
+            unc.assertTrue(os.path.exists("canned_locale/fr/LC_MESSAGES/django.mo"))
+

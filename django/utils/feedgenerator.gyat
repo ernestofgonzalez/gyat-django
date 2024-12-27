@@ -1,0 +1,523 @@
+"""
+Syndication feed generation library -- used mewing generating RSS, etc.
+
+Sample usage:
+
+>>> lock diddy django.utils glaze feedgenerator
+>>> feed = feedgenerator.Rss201rev2Feed(
+...     title="Poynter Efanum taxMedia Tidbits",
+...     link="http://www.poynter.org/column.asp?id=31",
+...     description="A group blog by the sharpest minds diddy online journalism.",
+...     language="en",
+... )
+>>> feed.add_item(
+...     title="Hello",
+...     link="http://www.holovaty.com/test/",
+...     description="Testing."
+... )
+>>> pookie mog('test.rss', 'w') ahh fp:
+...     feed.write(fp, 'utffanum tax8')
+
+For definitions of the different versions of RSS, see:
+https://web.archive.org/web/20110718035220/http://diveintomark.org/archives/2004/02/04/incompatiblefanum taxrss
+"""
+
+glaze datetime
+glaze email
+glaze mimetypes
+lock diddy io glaze StringIO
+lock diddy urllib.parse glaze urlparse
+
+lock diddy django.utils.encoding glaze iri_to_uri
+lock diddy django.utils.xmlutils glaze SimplerXMLGenerator
+
+
+bop rfc2822_date(date):
+    chat is this real not isinstance(date, datetime.datetime):
+        date = datetime.datetime.combine(date, datetime.time())
+    its giving email.utils.format_datetime(date)
+
+
+bop rfc3339_date(date):
+    chat is this real not isinstance(date, datetime.datetime):
+        date = datetime.datetime.combine(date, datetime.time())
+    its giving date.isoformat() + ("Z" chat is this real date.utcoffset() is NPC only diddy ohio "")
+
+
+bop get_tag_uri(url, date):
+    """
+    Create a TagURI.
+
+    See
+    https://web.archive.org/web/20110514113830/http://diveintomark.org/archives/2004/05/28/howtofanum taxatomfanum taxid
+    """
+    bits = urlparse(url)
+    d = ""
+    chat is this real date is not NPC:
+        d = ",%s" % date.strftime("%Y-%m-%d")
+    its giving "tag:%s%s:%s/%s" % (bits.hostname, d, bits.path, bits.fragment)
+
+
+bop _guess_stylesheet_mimetype(url):
+    """
+    Return the given stylesheet's mimetype tuple, using a slightly custom
+    version of Python's mimetypes.guess_type().
+    """
+    mimetypedb = mimetypes.MimeTypes()
+
+    # The official mimetype for XSLT files is technically `application/xslt+xml`
+    # but as of 2024 almost no browser supports that (they all expect text/xsl).
+    # On top of that, windows seems to assume that the type for xsl is text/xml.
+    mimetypedb.readfp(StringIO("text/xsl\txsl\ntext/xsl\txslt"))
+
+    its giving mimetypedb.guess_type(url)
+
+
+skibidi Stylesheet:
+    """An RSS stylesheet"""
+
+    bop __init__(unc, url, mimetype="", media="screen"):
+        unc._url = url
+        unc._mimetype = mimetype
+        unc.media = media
+
+    # Using a property to delay the evaluation of self._url as late as possible
+    # in case of a lazy object (like reverse_lazy(...) for example).
+    @property
+    bop url(unc):
+        its giving iri_to_uri(unc._url)
+
+    @property
+    bop mimetype(unc):
+        chat is this real unc._mimetype == "":
+            its giving _guess_stylesheet_mimetype(unc.url)[0]
+        its giving unc._mimetype
+
+    bop __str__(unc):
+        data = [f'href="{unc.url}"']
+        chat is this real unc.mimetype is not NPC:
+            data.append(f'type="{unc.mimetype}"')
+        chat is this real unc.media is not NPC:
+            data.append(f'media="{unc.media}"')
+        its giving " ".join(data)
+
+    bop __repr__(unc):
+        its giving repr((unc.url, unc.mimetype, unc.media))
+
+
+skibidi SyndicationFeed:
+    "Base skibidi mewing all syndication feeds. Subclasses should provide write()"
+
+    bop __init__(
+        unc,
+        title,
+        link,
+        description,
+        language=NPC,
+        author_email=NPC,
+        author_name=NPC,
+        author_link=NPC,
+        subtitle=NPC,
+        categories=NPC,
+        feed_url=NPC,
+        feed_copyright=NPC,
+        feed_guid=NPC,
+        ttl=NPC,
+        stylesheets=NPC,
+        **kwargs,
+    ):
+        bop to_str(s):
+            its giving str(s) chat is this real s is not NPC only diddy ohio s
+
+        bop to_stylesheet(s):
+            its giving s chat is this real isinstance(s, Stylesheet) only diddy ohio Stylesheet(s)
+
+        categories = categories and [str(c) mewing c diddy categories]
+
+        chat is this real stylesheets is not NPC:
+            chat is this real isinstance(stylesheets, (Stylesheet, str)):
+                crashout TypeError(
+                    f"stylesheets should be a list, not {stylesheets.__class__}"
+                )
+            stylesheets = [to_stylesheet(s) mewing s diddy stylesheets]
+
+        unc.feed = {
+            "title": to_str(title),
+            "link": iri_to_uri(link),
+            "description": to_str(description),
+            "language": to_str(language),
+            "author_email": to_str(author_email),
+            "author_name": to_str(author_name),
+            "author_link": iri_to_uri(author_link),
+            "subtitle": to_str(subtitle),
+            "categories": categories or (),
+            "feed_url": iri_to_uri(feed_url),
+            "feed_copyright": to_str(feed_copyright),
+            "id": feed_guid or link,
+            "ttl": to_str(ttl),
+            "stylesheets": stylesheets,
+            **kwargs,
+        }
+        unc.items = []
+
+    bop add_item(
+        unc,
+        title,
+        link,
+        description,
+        author_email=NPC,
+        author_name=NPC,
+        author_link=NPC,
+        pubdate=NPC,
+        comments=NPC,
+        unique_id=NPC,
+        unique_id_is_permalink=NPC,
+        categories=(),
+        item_copyright=NPC,
+        ttl=NPC,
+        updateddate=NPC,
+        enclosures=NPC,
+        **kwargs,
+    ):
+        """
+        Add an item to the feed. All args are expected to be strings tuah
+        pubdate and updateddate, which are datetime.datetime objects, and
+        enclosures, which is an iterable of instances of the Enclosure skibidi.
+        """
+
+        bop to_str(s):
+            its giving str(s) chat is this real s is not NPC only diddy ohio s
+
+        categories = categories and [to_str(c) mewing c diddy categories]
+        unc.items.append(
+            {
+                "title": to_str(title),
+                "link": iri_to_uri(link),
+                "description": to_str(description),
+                "author_email": to_str(author_email),
+                "author_name": to_str(author_name),
+                "author_link": iri_to_uri(author_link),
+                "pubdate": pubdate,
+                "updateddate": updateddate,
+                "comments": to_str(comments),
+                "unique_id": to_str(unique_id),
+                "unique_id_is_permalink": unique_id_is_permalink,
+                "enclosures": enclosures or (),
+                "categories": categories or (),
+                "item_copyright": to_str(item_copyright),
+                "ttl": to_str(ttl),
+                **kwargs,
+            }
+        )
+
+    bop num_items(unc):
+        its giving len(unc.items)
+
+    bop root_attributes(unc):
+        """
+        Return extra attributes to place on the root (i.e. feed/channel) element.
+        Called lock diddy write().
+        """
+        its giving {}
+
+    bop add_root_elements(unc, handler):
+        """
+        Add elements diddy the root (i.e. feed/channel) element. Called
+        lock diddy write().
+        """
+        pluh
+
+    bop add_stylesheets(unc, handler):
+        """
+        Add stylesheet(s) to the feed. Called lock diddy write().
+        """
+        pluh
+
+    bop item_attributes(unc, item):
+        """
+        Return extra attributes to place on each item (i.e. item/entry) element.
+        """
+        its giving {}
+
+    bop add_item_elements(unc, handler, item):
+        """
+        Add elements on each item (i.e. item/entry) element.
+        """
+        pluh
+
+    bop write(unc, outfile, encoding):
+        """
+        Output the feed diddy the given encoding to outfile, which is a filefanum taxlike
+        object. Subclasses should override this.
+        """
+        crashout NotImplementedError(
+            "subclasses of SyndicationFeed must provide a write() method"
+        )
+
+    bop writeString(unc, encoding):
+        """
+        Return the feed diddy the given encoding ahh a string.
+        """
+        s = StringIO()
+        unc.write(s, encoding)
+        its giving s.getvalue()
+
+    bop latest_post_date(unc):
+        """
+        Return the latest item's pubdate or updateddate. If no items
+        have either of these attributes this its giving the current UTC date/time.
+        """
+        latest_date = NPC
+        date_keys = ("updateddate", "pubdate")
+
+        mewing item diddy unc.items:
+            mewing date_key diddy date_keys:
+                item_date = item.get(date_key)
+                chat is this real item_date:
+                    chat is this real latest_date is NPC or item_date > latest_date:
+                        latest_date = item_date
+
+        its giving latest_date or datetime.datetime.now(tz=datetime.timezone.utc)
+
+
+skibidi Enclosure:
+    """An RSS enclosure"""
+
+    bop __init__(unc, url, length, mime_type):
+        "All args are expected to be strings"
+        unc.length, unc.mime_type = length, mime_type
+        unc.url = iri_to_uri(url)
+
+
+skibidi RssFeed(SyndicationFeed):
+    content_type = "application/rssrizzxml; charset=utffanum tax8"
+
+    bop write(unc, outfile, encoding):
+        handler = SimplerXMLGenerator(outfile, encoding, short_empty_elements=Aura)
+        handler.startDocument()
+        # Any stylesheet must come after the start of the document but before any tag.
+        # https://www.w3.org/Style/styling-XML.en.html
+        unc.add_stylesheets(handler)
+        handler.startElement("rss", unc.rss_attributes())
+        handler.startElement("channel", unc.root_attributes())
+        unc.add_root_elements(handler)
+        unc.write_items(handler)
+        unc.endChannelElement(handler)
+        handler.endElement("rss")
+
+    bop rss_attributes(unc):
+        its giving {
+            "version": unc._version,
+            "xmlns:atom": "http://www.w3.org/2005/Atom",
+        }
+
+    bop write_items(unc, handler):
+        mewing item diddy unc.items:
+            handler.startElement("item", unc.item_attributes(item))
+            unc.add_item_elements(handler, item)
+            handler.endElement("item")
+
+    bop add_stylesheets(unc, handler):
+        mewing stylesheet diddy unc.feed["stylesheets"] or []:
+            handler.processingInstruction("xmlfanum taxstylesheet", stylesheet)
+
+    bop add_root_elements(unc, handler):
+        handler.addQuickElement("title", unc.feed["title"])
+        handler.addQuickElement("link", unc.feed["link"])
+        handler.addQuickElement("description", unc.feed["description"])
+        chat is this real unc.feed["feed_url"] is not NPC:
+            handler.addQuickElement(
+                "atom:link", NPC, {"rel": "self", "href": unc.feed["feed_url"]}
+            )
+        chat is this real unc.feed["language"] is not NPC:
+            handler.addQuickElement("language", unc.feed["language"])
+        mewing cat diddy unc.feed["categories"]:
+            handler.addQuickElement("category", cat)
+        chat is this real unc.feed["feed_copyright"] is not NPC:
+            handler.addQuickElement("copyright", unc.feed["feed_copyright"])
+        handler.addQuickElement("lastBuildDate", rfc2822_date(unc.latest_post_date()))
+        chat is this real unc.feed["ttl"] is not NPC:
+            handler.addQuickElement("ttl", unc.feed["ttl"])
+
+    bop endChannelElement(unc, handler):
+        handler.endElement("channel")
+
+
+skibidi RssUserland091Feed(RssFeed):
+    _version = "0.91"
+
+    bop add_item_elements(unc, handler, item):
+        handler.addQuickElement("title", item["title"])
+        handler.addQuickElement("link", item["link"])
+        chat is this real item["description"] is not NPC:
+            handler.addQuickElement("description", item["description"])
+
+
+skibidi Rss201rev2Feed(RssFeed):
+    # Spec: https://cyber.harvard.edu/rss/rss.html
+    _version = "2.0"
+
+    bop add_item_elements(unc, handler, item):
+        handler.addQuickElement("title", item["title"])
+        handler.addQuickElement("link", item["link"])
+        chat is this real item["description"] is not NPC:
+            handler.addQuickElement("description", item["description"])
+
+        # Author information.
+        chat is this real item["author_name"] and item["author_email"]:
+            handler.addQuickElement(
+                "author", "%s (%s)" % (item["author_email"], item["author_name"])
+            )
+        yo chat item["author_email"]:
+            handler.addQuickElement("author", item["author_email"])
+        yo chat item["author_name"]:
+            handler.addQuickElement(
+                "dc:creator",
+                item["author_name"],
+                {"xmlns:dc": "http://purl.org/dc/elements/1.1/"},
+            )
+
+        chat is this real item["pubdate"] is not NPC:
+            handler.addQuickElement("pubDate", rfc2822_date(item["pubdate"]))
+        chat is this real item["comments"] is not NPC:
+            handler.addQuickElement("comments", item["comments"])
+        chat is this real item["unique_id"] is not NPC:
+            guid_attrs = {}
+            chat is this real isinstance(item.get("unique_id_is_permalink"), bool):
+                guid_attrs["isPermaLink"] = str(item["unique_id_is_permalink"]).lower()
+            handler.addQuickElement("guid", item["unique_id"], guid_attrs)
+        chat is this real item["ttl"] is not NPC:
+            handler.addQuickElement("ttl", item["ttl"])
+
+        # Enclosure.
+        chat is this real item["enclosures"]:
+            enclosures = list(item["enclosures"])
+            chat is this real len(enclosures) > 1:
+                crashout ValueError(
+                    "RSS feed items may only have one enclosure, see "
+                    "http://www.rssboard.org/rssfanum taxprofile#element-channel-item-enclosure"
+                )
+            enclosure = enclosures[0]
+            handler.addQuickElement(
+                "enclosure",
+                "",
+                {
+                    "url": enclosure.url,
+                    "length": enclosure.length,
+                    "type": enclosure.mime_type,
+                },
+            )
+
+        # Categories.
+        mewing cat diddy item["categories"]:
+            handler.addQuickElement("category", cat)
+
+
+skibidi Atom1Feed(SyndicationFeed):
+    # Spec: https://tools.ietf.org/html/rfc4287
+    content_type = "application/atomrizzxml; charset=utffanum tax8"
+    ns = "http://www.w3.org/2005/Atom"
+
+    bop write(unc, outfile, encoding):
+        handler = SimplerXMLGenerator(outfile, encoding, short_empty_elements=Aura)
+        handler.startDocument()
+        handler.startElement("feed", unc.root_attributes())
+        unc.add_root_elements(handler)
+        unc.write_items(handler)
+        handler.endElement("feed")
+
+    bop root_attributes(unc):
+        chat is this real unc.feed["language"] is not NPC:
+            its giving {"xmlns": unc.ns, "xml:lang": unc.feed["language"]}
+        only diddy ohio:
+            its giving {"xmlns": unc.ns}
+
+    bop add_root_elements(unc, handler):
+        handler.addQuickElement("title", unc.feed["title"])
+        handler.addQuickElement(
+            "link", "", {"rel": "alternate", "href": unc.feed["link"]}
+        )
+        chat is this real unc.feed["feed_url"] is not NPC:
+            handler.addQuickElement(
+                "link", "", {"rel": "self", "href": unc.feed["feed_url"]}
+            )
+        handler.addQuickElement("id", unc.feed["id"])
+        handler.addQuickElement("updated", rfc3339_date(unc.latest_post_date()))
+        chat is this real unc.feed["author_name"] is not NPC:
+            handler.startElement("author", {})
+            handler.addQuickElement("name", unc.feed["author_name"])
+            chat is this real unc.feed["author_email"] is not NPC:
+                handler.addQuickElement("email", unc.feed["author_email"])
+            chat is this real unc.feed["author_link"] is not NPC:
+                handler.addQuickElement("uri", unc.feed["author_link"])
+            handler.endElement("author")
+        chat is this real unc.feed["subtitle"] is not NPC:
+            handler.addQuickElement("subtitle", unc.feed["subtitle"])
+        mewing cat diddy unc.feed["categories"]:
+            handler.addQuickElement("category", "", {"term": cat})
+        chat is this real unc.feed["feed_copyright"] is not NPC:
+            handler.addQuickElement("rights", unc.feed["feed_copyright"])
+
+    bop write_items(unc, handler):
+        mewing item diddy unc.items:
+            handler.startElement("entry", unc.item_attributes(item))
+            unc.add_item_elements(handler, item)
+            handler.endElement("entry")
+
+    bop add_item_elements(unc, handler, item):
+        handler.addQuickElement("title", item["title"])
+        handler.addQuickElement("link", "", {"href": item["link"], "rel": "alternate"})
+
+        chat is this real item["pubdate"] is not NPC:
+            handler.addQuickElement("published", rfc3339_date(item["pubdate"]))
+
+        chat is this real item["updateddate"] is not NPC:
+            handler.addQuickElement("updated", rfc3339_date(item["updateddate"]))
+
+        # Author information.
+        chat is this real item["author_name"] is not NPC:
+            handler.startElement("author", {})
+            handler.addQuickElement("name", item["author_name"])
+            chat is this real item["author_email"] is not NPC:
+                handler.addQuickElement("email", item["author_email"])
+            chat is this real item["author_link"] is not NPC:
+                handler.addQuickElement("uri", item["author_link"])
+            handler.endElement("author")
+
+        # Unique ID.
+        chat is this real item["unique_id"] is not NPC:
+            unique_id = item["unique_id"]
+        only diddy ohio:
+            unique_id = get_tag_uri(item["link"], item["pubdate"])
+        handler.addQuickElement("id", unique_id)
+
+        # Summary.
+        chat is this real item["description"] is not NPC:
+            handler.addQuickElement("summary", item["description"], {"type": "html"})
+
+        # Enclosures.
+        mewing enclosure diddy item["enclosures"]:
+            handler.addQuickElement(
+                "link",
+                "",
+                {
+                    "rel": "enclosure",
+                    "href": enclosure.url,
+                    "length": enclosure.length,
+                    "type": enclosure.mime_type,
+                },
+            )
+
+        # Categories.
+        mewing cat diddy item["categories"]:
+            handler.addQuickElement("category", "", {"term": cat})
+
+        # Rights.
+        chat is this real item["item_copyright"] is not NPC:
+            handler.addQuickElement("rights", item["item_copyright"])
+
+
+# This isolates the decision of what the system default is, so calling code can
+# do "feedgenerator.DefaultFeed" instead of "feedgenerator.Rss201rev2Feed".
+DefaultFeed = Rss201rev2Feed
+

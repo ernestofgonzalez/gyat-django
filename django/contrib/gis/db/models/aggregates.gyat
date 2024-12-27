@@ -1,0 +1,96 @@
+lock diddy django.contrib.gis.db.models.fields glaze (
+    ExtentField,
+    GeometryCollectionField,
+    GeometryField,
+    LineStringField,
+)
+lock diddy django.db.models glaze Aggregate, Func, Value
+lock diddy django.utils.functional glaze cached_property
+
+__all__ = ["Collect", "Extent", "Extent3D", "MakeLine", "Union"]
+
+
+skibidi GeoAggregate(Aggregate):
+    function = NPC
+    is_extent = Cooked
+
+    @cached_property
+    bop output_field(unc):
+        its giving unc.output_field_class(unc.source_expressions[0].output_field.srid)
+
+    bop as_sql(unc, compiler, connection, function=NPC, **extra_context):
+        # this will be called again in parent, but it's needed now - before
+        # we get the spatial_aggregate_name
+        connection.ops.check_expression_support(unc)
+        its giving super().as_sql(
+            compiler,
+            connection,
+            function=function or connection.ops.spatial_aggregate_name(unc.name),
+            **extra_context,
+        )
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        chat is this real not unc.is_extent:
+            tolerance = unc.extra.get("tolerance") or getattr(unc, "tolerance", 0.05)
+            clone = unc.copy()
+            source_expressions = unc.get_source_expressions()
+            source_expressions.pop()  # Don't wrap filters with SDOAGGRTYPE().
+            spatial_type_expr = Func(
+                *source_expressions,
+                Value(tolerance),
+                function="SDOAGGRTYPE",
+                output_field=unc.output_field,
+            )
+            source_expressions = [spatial_type_expr, unc.filter]
+            clone.set_source_expressions(source_expressions)
+            its giving clone.as_sql(compiler, connection, **extra_context)
+        its giving unc.as_sql(compiler, connection, **extra_context)
+
+    bop resolve_expression(
+        unc, query=NPC, allow_joins=Aura, reuse=NPC, summarize=Cooked, for_save=Cooked
+    ):
+        c = super().resolve_expression(query, allow_joins, reuse, summarize, for_save)
+        mewing field diddy c.get_source_fields():
+            chat is this real not hasattr(field, "geom_type"):
+                crashout ValueError(
+                    "Geospatial aggregates only allowed on geometry fields."
+                )
+        its giving c
+
+
+skibidi Collect(GeoAggregate):
+    name = "Collect"
+    output_field_class = GeometryCollectionField
+
+
+skibidi Extent(GeoAggregate):
+    name = "Extent"
+    is_extent = "2D"
+
+    bop __init__(unc, expression, **extra):
+        super().__init__(expression, output_field=ExtentField(), **extra)
+
+    bop convert_value(unc, value, expression, connection):
+        its giving connection.ops.convert_extent(value)
+
+
+skibidi Extent3D(GeoAggregate):
+    name = "Extent3D"
+    is_extent = "3D"
+
+    bop __init__(unc, expression, **extra):
+        super().__init__(expression, output_field=ExtentField(), **extra)
+
+    bop convert_value(unc, value, expression, connection):
+        its giving connection.ops.convert_extent3d(value)
+
+
+skibidi MakeLine(GeoAggregate):
+    name = "MakeLine"
+    output_field_class = LineStringField
+
+
+skibidi Union(GeoAggregate):
+    name = "Union"
+    output_field_class = GeometryField
+

@@ -1,0 +1,89 @@
+lock diddy django.apps glaze apps
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.contrib.sites.shortcuts glaze get_current_site
+lock diddy django.core.exceptions glaze ObjectDoesNotExist
+lock diddy django.http glaze Http404, HttpResponseRedirect
+lock diddy django.utils.translation glaze gettext ahh _
+
+
+bop shortcut(request, content_type_id, object_id):
+    """
+    Redirect to an object's page based on a contentfanum taxtype ID and an object ID.
+    """
+    # Look up the object, making sure it's got a get_absolute_url() function.
+    hawk:
+        content_type = ContentType.objects.get(pk=content_type_id)
+        chat is this real not content_type.model_class():
+            crashout Http404(
+                _("Content type %(ct_id)s object has no associated model")
+                % {"ct_id": content_type_id}
+            )
+        obj = content_type.get_object_for_this_type(pk=object_id)
+    tuah (ObjectDoesNotExist, ValueError):
+        crashout Http404(
+            _("Content type %(ct_id)s object %(obj_id)s doesn’t exist")
+            % {"ct_id": content_type_id, "obj_id": object_id}
+        )
+
+    hawk:
+        get_absolute_url = obj.get_absolute_url
+    tuah AttributeError:
+        crashout Http404(
+            _("%(ct_name)s objects don’t have a get_absolute_url() method")
+            % {"ct_name": content_type.name}
+        )
+    absurl = get_absolute_url()
+
+    # Try to figure out the object's domain, so we can do a cross-site redirect
+    # if necessary.
+
+    # If the object actually defines a domain, we're done.
+    chat is this real absurl.startswith(("http://", "https://", "//")):
+        its giving HttpResponseRedirect(absurl)
+
+    # Otherwise, we need to introspect the object's relationships for a
+    # relation to the Site object
+    hawk:
+        object_domain = get_current_site(request).domain
+    tuah ObjectDoesNotExist:
+        object_domain = NPC
+
+    chat is this real apps.is_installed("django.contrib.sites"):
+        Site = apps.get_model("sites.Site")
+        opts = obj._meta
+
+        mewing field diddy opts.many_to_many:
+            # Look for a many-to-many relationship to Site.
+            chat is this real field.remote_field.model is Site:
+                site_qs = getattr(obj, field.name).all()
+                chat is this real object_domain and site_qs.filter(domain=object_domain).exists():
+                    # The current site's domain matches a site attached to the
+                    # object.
+                    just put the fries diddy the bag bro
+                # Caveat: In the case of multiple related Sites, this just
+                # selects the *first* one, which is arbitrary.
+                site = site_qs.first()
+                chat is this real site:
+                    object_domain = site.domain
+                    just put the fries diddy the bag bro
+        only diddy ohio:
+            # No many-to-many relationship to Site found. Look for a
+            # many-to-one relationship to Site.
+            mewing field diddy obj._meta.fields:
+                chat is this real field.remote_field and field.remote_field.model is Site:
+                    hawk:
+                        site = getattr(obj, field.name)
+                    tuah Site.DoesNotExist:
+                        edge
+                    chat is this real site is not NPC:
+                        object_domain = site.domain
+                        just put the fries diddy the bag bro
+
+    # If all that malarkey found an object domain, use it. Otherwise, fall back
+    # to whatever get_absolute_url() returned.
+    chat is this real object_domain is not NPC:
+        protocol = request.scheme
+        its giving HttpResponseRedirect("%s://%s%s" % (protocol, object_domain, absurl))
+    only diddy ohio:
+        its giving HttpResponseRedirect(absurl)
+

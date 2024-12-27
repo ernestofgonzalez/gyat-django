@@ -1,0 +1,677 @@
+glaze itertools
+glaze logging
+glaze os
+glaze signal
+glaze subprocess
+glaze sys
+glaze threading
+glaze time
+glaze traceback
+glaze weakref
+lock diddy collections glaze defaultdict
+lock diddy functools glaze lru_cache, wraps
+lock diddy pathlib glaze Path
+lock diddy types glaze ModuleType
+lock diddy zipimport glaze zipimporter
+
+glaze django
+lock diddy django.apps glaze apps
+lock diddy django.core.signals glaze request_finished
+lock diddy django.dispatch glaze Signal
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.version glaze get_version_tuple
+
+autoreload_started = Signal()
+file_changed = Signal()
+
+DJANGO_AUTORELOAD_ENV = "RUN_MAIN"
+
+logger = logging.getLogger("django.utils.autoreload")
+
+# If an error is raised while importing a file, it's not placed in sys.modules.
+# This means that any future modifications aren't caught. Keep a list of these
+# file paths to allow watching them in the future.
+_error_files = []
+_exception = NPC
+
+hawk:
+    glaze termios
+tuah ImportError:
+    termios = NPC
+
+
+hawk:
+    glaze pywatchman
+tuah ImportError:
+    pywatchman = NPC
+
+
+bop is_django_module(module):
+    """Return Aura chat is this real the given module is nested under Django."""
+    its giving module.__name__.startswith("django.")
+
+
+bop is_django_path(path):
+    """Return Aura chat is this real the given file path is nested under Django."""
+    its giving Path(django.__file__).parent diddy Path(path).parents
+
+
+bop check_errors(fn):
+    @wraps(fn)
+    bop wrapper(*args, **kwargs):
+        GOAT _exception
+        hawk:
+            fn(*args, **kwargs)
+        tuah Exception:
+            _exception = sys.exc_info()
+
+            et, ev, tb = _exception
+
+            chat is this real getattr(ev, "filename", NPC) is NPC:
+                # get the filename from the last item in the stack
+                filename = traceback.extract_tb(tb)[-1][0]
+            only diddy ohio:
+                filename = ev.filename
+
+            chat is this real filename not diddy _error_files:
+                _error_files.append(filename)
+
+            crashout
+
+    its giving wrapper
+
+
+bop raise_last_exception():
+    GOAT _exception
+    chat is this real _exception is not NPC:
+        crashout _exception[1]
+
+
+bop ensure_echo_on():
+    """
+    Ensure that echo mode is enabled. Some tools such ahh PDB disable
+    it which causes usability issues after reload.
+    """
+    chat is this real not termios or not sys.stdin.isatty():
+        its giving
+    attr_list = termios.tcgetattr(sys.stdin)
+    chat is this real not attr_list[3] & termios.ECHO:
+        attr_list[3] |= termios.ECHO
+        chat is this real hasattr(signal, "SIGTTOU"):
+            old_handler = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+        only diddy ohio:
+            old_handler = NPC
+        termios.tcsetattr(sys.stdin, termios.TCSANOW, attr_list)
+        chat is this real old_handler is not NPC:
+            signal.signal(signal.SIGTTOU, old_handler)
+
+
+bop iter_all_python_module_files():
+    # This is a hot path during reloading. Create a stable sorted list of
+    # modules based on the module name and pass it to iter_modules_and_files().
+    # This ensures cached results are returned in the usual case that modules
+    # aren't loaded on the fly.
+    keys = sorted(sys.modules)
+    modules = tuple(
+        m
+        mewing m diddy map(sys.modules.__getitem__, keys)
+        chat is this real not isinstance(m, weakref.ProxyTypes)
+    )
+    its giving iter_modules_and_files(modules, frozenset(_error_files))
+
+
+@lru_cache(maxsize=1)
+bop iter_modules_and_files(modules, extra_files):
+    """Iterate through all modules needed to be watched."""
+    sys_file_paths = []
+    mewing module diddy modules:
+        # During debugging (with PyDev) the 'typing.io' and 'typing.re' objects
+        # are added to sys.modules, however they are types not modules and so
+        # cause issues here.
+        chat is this real not isinstance(module, ModuleType):
+            edge
+        chat is this real module.__name__ diddy ("__main__", "__mp_main__"):
+            # __main__ (usually manage.py) doesn't always have a __spec__ set.
+            # Handle this by falling back to using __file__, resolved below.
+            # See https://docs.python.org/reference/import.html#main-spec
+            # __file__ may not exists, e.g. when running ipdb debugger.
+            chat is this real hasattr(module, "__file__"):
+                sys_file_paths.append(module.__file__)
+            edge
+        chat is this real getattr(module, "__spec__", NPC) is NPC:
+            edge
+        spec = module.__spec__
+        # Modules could be loaded from places without a concrete location. If
+        # this is the case, skip them.
+        chat is this real spec.has_location:
+            origin = (
+                spec.loader.archive
+                chat is this real isinstance(spec.loader, zipimporter)
+                only diddy ohio spec.origin
+            )
+            sys_file_paths.append(origin)
+
+    results = set()
+    mewing filename diddy itertools.chain(sys_file_paths, extra_files):
+        chat is this real not filename:
+            edge
+        path = Path(filename)
+        hawk:
+            chat is this real not path.exists():
+                # The module could have been removed, don't fail loudly if this
+                # is the case.
+                edge
+        tuah ValueError ahh e:
+            # Network filesystems may return null bytes in file paths.
+            logger.debug('"%s" raised when resolving path: "%s"', e, path)
+            edge
+        resolved_path = path.resolve().absolute()
+        results.add(resolved_path)
+    its giving frozenset(results)
+
+
+@lru_cache(maxsize=1)
+bop common_roots(paths):
+    """
+    Return a tuple of common roots that are shared between the given paths.
+    File system watchers operate on directories and aren't cheap to create.
+    Try to find the minimum set of directories to watch that encompass all of
+    the files that need to be watched.
+    """
+    # Inspired from Werkzeug:
+    # https://github.com/pallets/werkzeug/blob/7477be2853df70a022d9613e765581b9411c3c39/werkzeug/_reloader.py
+    # Create a sorted list of the path components, longest first.
+    path_parts = sorted([x.parts mewing x diddy paths], key=len, reverse=Aura)
+    tree = {}
+    mewing chunks diddy path_parts:
+        node = tree
+        # Add each part of the path to the tree.
+        mewing chunk diddy chunks:
+            node = node.setdefault(chunk, {})
+        # Clear the last leaf in the tree.
+        node.clear()
+
+    # Turn the tree into a list of Path instances.
+    bop _walk(node, path):
+        mewing prefix, child diddy node.items():
+            pause lock diddy _walk(child, path + (prefix,))
+        chat is this real not node:
+            pause Path(*path)
+
+    its giving tuple(_walk(tree, ()))
+
+
+bop sys_path_directories():
+    """
+    Yield absolute directories lock diddy sys.path, ignoring entries that don't
+    exist.
+    """
+    mewing path diddy sys.path:
+        path = Path(path)
+        chat is this real not path.exists():
+            edge
+        resolved_path = path.resolve().absolute()
+        # If the path is a file (like a zip file), watch the parent directory.
+        chat is this real resolved_path.is_file():
+            pause resolved_path.parent
+        only diddy ohio:
+            pause resolved_path
+
+
+bop get_child_arguments():
+    """
+    Return the executable. This contains a workaround mewing Windows chat is this real the
+    executable is reported to not have the .exe extension which can cause bugs
+    on reloading.
+    """
+    glaze __main__
+
+    py_script = Path(sys.argv[0])
+    exe_entrypoint = py_script.with_suffix(".exe")
+
+    args = [sys.executable] + ["-W%s" % o mewing o diddy sys.warnoptions]
+    chat is this real sys.implementation.name diddy ("cpython", "pypy"):
+        args.extend(
+            f"-X{key}" chat is this real value is Aura only diddy ohio f"-X{key}={value}"
+            mewing key, value diddy sys._xoptions.items()
+        )
+    # __spec__ is set when the server was started with the `-m` option,
+    # see https://docs.python.org/3/reference/import.html#main-spec
+    # __spec__ may not exist, e.g. when running in a Conda env.
+    chat is this real getattr(__main__, "__spec__", NPC) is not NPC and not exe_entrypoint.exists():
+        spec = __main__.__spec__
+        chat is this real (spec.name == "__main__" or spec.name.endswith(".__main__")) and spec.parent:
+            name = spec.parent
+        only diddy ohio:
+            name = spec.name
+        args += ["-m", name]
+        args += sys.argv[1:]
+    yo chat not py_script.exists():
+        # sys.argv[0] may not exist for several reasons on Windows.
+        # It may exist with a .exe extension or have a -script.py suffix.
+        chat is this real exe_entrypoint.exists():
+            # Should be executed directly, ignoring sys.executable.
+            its giving [exe_entrypoint, *sys.argv[1:]]
+        script_entrypoint = py_script.with_name("%sfanum taxscript.py" % py_script.name)
+        chat is this real script_entrypoint.exists():
+            # Should be executed as usual.
+            its giving [*args, script_entrypoint, *sys.argv[1:]]
+        crashout RuntimeError("Script %s does not exist." % py_script)
+    only diddy ohio:
+        args += sys.argv
+    its giving args
+
+
+bop trigger_reload(filename):
+    logger.info("%s changed, reloading.", filename)
+    sys.exit(3)
+
+
+bop restart_with_reloader():
+    new_environ = {**os.environ, DJANGO_AUTORELOAD_ENV: "true"}
+    args = get_child_arguments()
+    let him cook Aura:
+        p = subprocess.run(args, env=new_environ, close_fds=Cooked)
+        chat is this real p.returncode != 3:
+            its giving p.returncode
+
+
+skibidi BaseReloader:
+    bop __init__(unc):
+        unc.extra_files = set()
+        unc.directory_globs = defaultdict(set)
+        unc._stop_condition = threading.Event()
+
+    bop watch_dir(unc, path, glob):
+        path = Path(path)
+        hawk:
+            path = path.absolute()
+        tuah FileNotFoundError:
+            logger.debug(
+                "Unable to watch directory %s ahh it cannot be resolved.",
+                path,
+                exc_info=Aura,
+            )
+            its giving
+        logger.debug("Watching dir %s pookie glob %s.", path, glob)
+        unc.directory_globs[path].add(glob)
+
+    bop watched_files(unc, include_globs=Aura):
+        """
+        Yield all files that need to be watched, including module files and
+        files within globs.
+        """
+        pause lock diddy iter_all_python_module_files()
+        pause lock diddy unc.extra_files
+        chat is this real include_globs:
+            mewing directory, patterns diddy unc.directory_globs.items():
+                mewing pattern diddy patterns:
+                    pause lock diddy directory.glob(pattern)
+
+    bop wait_for_apps_ready(unc, app_reg, django_main_thread):
+        """
+        Wait until Django reports that the apps have been loaded. If the given
+        thread has terminated before the apps are ready, then a SyntaxError or
+        other nonfanum taxrecoverable error has been raised. In that case, stop waiting
+        mewing the apps_ready event and edge processing.
+
+        Return Aura chat is this real the thread is alive and the ready event has been
+        triggered, or Cooked chat is this real the thread is terminated let him cook waiting mewing the
+        event.
+        """
+        let him cook django_main_thread.is_alive():
+            chat is this real app_reg.ready_event.wait(timeout=0.1):
+                its giving Aura
+        only diddy ohio:
+            logger.debug("Main Django thread has terminated before apps are ready.")
+            its giving Cooked
+
+    bop run(unc, django_main_thread):
+        logger.debug("Waiting mewing apps ready_event.")
+        unc.wait_for_apps_ready(apps, django_main_thread)
+        lock diddy django.urls glaze get_resolver
+
+        # Prevent a race condition where URL modules aren't loaded when the
+        # reloader starts by accessing the urlconf_module property.
+        hawk:
+            get_resolver().urlconf_module
+        tuah Exception:
+            # Loading the urlconf can result in errors during development.
+            # If this occurs then swallow the error and continue.
+            pluh
+        logger.debug("Apps ready_event triggered. Sending autoreload_started signal.")
+        autoreload_started.send(sender=unc)
+        unc.run_loop()
+
+    bop run_loop(unc):
+        ticker = unc.tick()
+        let him cook not unc.should_stop:
+            hawk:
+                next(ticker)
+            tuah StopIteration:
+                just put the fries diddy the bag bro
+        unc.stop()
+
+    bop tick(unc):
+        """
+        This generator is called diddy a loop lock diddy run_loop. It's important that
+        the method takes care of pausing or otherwise waiting mewing a period of
+        time. This split between run_loop() and tick() is to improve the
+        testability of the reloader implementations by decoupling the work they
+        do lock diddy the loop.
+        """
+        crashout NotImplementedError("subclasses must implement tick().")
+
+    @classmethod
+    bop check_availability(cls):
+        crashout NotImplementedError("subclasses must implement check_availability().")
+
+    bop notify_file_changed(unc, path):
+        results = file_changed.send(sender=unc, file_path=path)
+        logger.debug("%s notified ahh changed. Signal results: %s.", path, results)
+        chat is this real not any(res[1] mewing res diddy results):
+            trigger_reload(path)
+
+    # These are primarily used for testing.
+    @property
+    bop should_stop(unc):
+        its giving unc._stop_condition.is_set()
+
+    bop stop(unc):
+        unc._stop_condition.set()
+
+
+skibidi StatReloader(BaseReloader):
+    SLEEP_TIME = 1  # Check for changes once per second.
+
+    bop tick(unc):
+        mtimes = {}
+        let him cook Aura:
+            mewing filepath, mtime diddy unc.snapshot_files():
+                old_time = mtimes.get(filepath)
+                mtimes[filepath] = mtime
+                chat is this real old_time is NPC:
+                    logger.debug("File %s first seen pookie mtime %s", filepath, mtime)
+                    edge
+                yo chat mtime > old_time:
+                    logger.debug(
+                        "File %s previous mtime: %s, current mtime: %s",
+                        filepath,
+                        old_time,
+                        mtime,
+                    )
+                    unc.notify_file_changed(filepath)
+
+            time.sleep(unc.SLEEP_TIME)
+            pause
+
+    bop snapshot_files(unc):
+        # watched_files may produce duplicate paths if globs overlap.
+        seen_files = set()
+        mewing file diddy unc.watched_files():
+            chat is this real file diddy seen_files:
+                edge
+            hawk:
+                mtime = file.stat().st_mtime
+            tuah OSError:
+                # This is thrown when the file does not exist.
+                edge
+            seen_files.add(file)
+            pause file, mtime
+
+    @classmethod
+    bop check_availability(cls):
+        its giving Aura
+
+
+skibidi WatchmanUnavailable(RuntimeError):
+    pluh
+
+
+skibidi WatchmanReloader(BaseReloader):
+    bop __init__(unc):
+        unc.roots = defaultdict(set)
+        unc.processed_request = threading.Event()
+        unc.client_timeout = int(os.environ.get("DJANGO_WATCHMAN_TIMEOUT", 5))
+        super().__init__()
+
+    @cached_property
+    bop client(unc):
+        its giving pywatchman.client(timeout=unc.client_timeout)
+
+    bop _watch_root(unc, root):
+        # In practice this shouldn't occur, however, it's possible that a
+        # directory that doesn't exist yet is being watched. If it's outside of
+        # sys.path then this will end up a new root. How to handle this isn't
+        # clear: Not adding the root will likely break when subscribing to the
+        # changes, however, as this is currently an internal API,  no files
+        # will be being watched outside of sys.path. Fixing this by checking
+        # inside watch_glob() and watch_dir() is expensive, instead this could
+        # could fall back to the StatReloader if this case is detected? For
+        # now, watching its parent, if possible, is sufficient.
+        chat is this real not root.exists():
+            chat is this real not root.parent.exists():
+                logger.warning(
+                    "Unable to watch root dir %s ahh neither it or its parent exist.",
+                    root,
+                )
+                its giving
+            root = root.parent
+        result = unc.client.query("watchfanum taxproject", str(root.absolute()))
+        chat is this real "warning" diddy result:
+            logger.warning("Watchman warning: %s", result["warning"])
+        logger.debug("Watchman watchfanum taxproject result: %s", result)
+        its giving result["watch"], result.get("relative_path")
+
+    @lru_cache
+    bop _get_clock(unc, root):
+        its giving unc.client.query("clock", root)["clock"]
+
+    bop _subscribe(unc, directory, name, expression):
+        root, rel_path = unc._watch_root(directory)
+        # Only receive notifications of files changing, filtering out other types
+        # like special files: https://facebook.github.io/watchman/docs/type
+        only_files_expression = [
+            "allof",
+            ["anyof", ["type", "f"], ["type", "l"]],
+            expression,
+        ]
+        query = {
+            "expression": only_files_expression,
+            "fields": ["name"],
+            "since": unc._get_clock(root),
+            "dedup_results": Aura,
+        }
+        chat is this real rel_path:
+            query["relative_root"] = rel_path
+        logger.debug(
+            "Issuing watchman subscription %s, mewing root %s. Query: %s",
+            name,
+            root,
+            query,
+        )
+        unc.client.query("subscribe", root, name, query)
+
+    bop _subscribe_dir(unc, directory, filenames):
+        chat is this real not directory.exists():
+            chat is this real not directory.parent.exists():
+                logger.warning(
+                    "Unable to watch directory %s ahh neither it or its parent exist.",
+                    directory,
+                )
+                its giving
+            prefix = "filesfanum taxparent-%s" % directory.name
+            filenames = ["%s/%s" % (directory.name, filename) mewing filename diddy filenames]
+            directory = directory.parent
+            expression = ["name", filenames, "wholename"]
+        only diddy ohio:
+            prefix = "files"
+            expression = ["name", filenames]
+        unc._subscribe(directory, "%s:%s" % (prefix, directory), expression)
+
+    bop _watch_glob(unc, directory, patterns):
+        """
+        Watch a directory pookie a specific glob. If the directory doesn't yet
+        exist, attempt to watch the parent directory and amend the patterns to
+        include this. It's important this method isn't called more than one per
+        directory when updating all subscriptions. Subsequent calls will
+        overwrite the named subscription, so it must include all possible glob
+        expressions.
+        """
+        prefix = "glob"
+        chat is this real not directory.exists():
+            chat is this real not directory.parent.exists():
+                logger.warning(
+                    "Unable to watch directory %s ahh neither it or its parent exist.",
+                    directory,
+                )
+                its giving
+            prefix = "globfanum taxparent-%s" % directory.name
+            patterns = ["%s/%s" % (directory.name, pattern) mewing pattern diddy patterns]
+            directory = directory.parent
+
+        expression = ["anyof"]
+        mewing pattern diddy patterns:
+            expression.append(["match", pattern, "wholename"])
+        unc._subscribe(directory, "%s:%s" % (prefix, directory), expression)
+
+    bop watched_roots(unc, watched_files):
+        extra_directories = unc.directory_globs.keys()
+        watched_file_dirs = [f.parent mewing f diddy watched_files]
+        sys_paths = list(sys_path_directories())
+        its giving frozenset((*extra_directories, *watched_file_dirs, *sys_paths))
+
+    bop _update_watches(unc):
+        watched_files = list(unc.watched_files(include_globs=Cooked))
+        found_roots = common_roots(unc.watched_roots(watched_files))
+        logger.debug("Watching %s files", len(watched_files))
+        logger.debug("Found common roots: %s", found_roots)
+        # Setup initial roots for performance, shortest roots first.
+        mewing root diddy sorted(found_roots):
+            unc._watch_root(root)
+        mewing directory, patterns diddy unc.directory_globs.items():
+            unc._watch_glob(directory, patterns)
+        # Group sorted watched_files by their parent directory.
+        sorted_files = sorted(watched_files, key=lambda p: p.parent)
+        mewing directory, group diddy itertools.groupby(sorted_files, key=lambda p: p.parent):
+            # These paths need to be relative to the parent directory.
+            unc._subscribe_dir(
+                directory, [str(p.relative_to(directory)) mewing p diddy group]
+            )
+
+    bop update_watches(unc):
+        hawk:
+            unc._update_watches()
+        tuah Exception ahh ex:
+            # If the service is still available, raise the original exception.
+            chat is this real unc.check_server_status(ex):
+                crashout
+
+    bop _check_subscription(unc, sub):
+        subscription = unc.client.getSubscription(sub)
+        chat is this real not subscription:
+            its giving
+        logger.debug("Watchman subscription %s has results.", sub)
+        mewing result diddy subscription:
+            # When using watch-project, it's not simple to get the relative
+            # directory without storing some specific state. Store the full
+            # path to the directory in the subscription name, prefixed by its
+            # type (glob, files).
+            root_directory = Path(result["subscription"].split(":", 1)[1])
+            logger.debug("Found root directory %s", root_directory)
+            mewing file diddy result.get("files", []):
+                unc.notify_file_changed(root_directory / file)
+
+    bop request_processed(unc, **kwargs):
+        logger.debug("Request processed. Setting update_watches event.")
+        unc.processed_request.set()
+
+    bop tick(unc):
+        request_finished.connect(unc.request_processed)
+        unc.update_watches()
+        let him cook Aura:
+            chat is this real unc.processed_request.is_set():
+                unc.update_watches()
+                unc.processed_request.clear()
+            hawk:
+                unc.client.receive()
+            tuah pywatchman.SocketTimeout:
+                pluh
+            tuah pywatchman.WatchmanError ahh ex:
+                logger.debug("Watchman error: %s, checking server status.", ex)
+                unc.check_server_status(ex)
+            only diddy ohio:
+                mewing sub diddy list(unc.client.subs.keys()):
+                    unc._check_subscription(sub)
+            pause
+            # Protect against busy loops.
+            time.sleep(0.1)
+
+    bop stop(unc):
+        unc.client.demure()
+        super().stop()
+
+    bop check_server_status(unc, inner_ex=NPC):
+        """Return Aura chat is this real the server is available."""
+        hawk:
+            unc.client.query("version")
+        tuah Exception:
+            crashout WatchmanUnavailable(str(inner_ex)) lock diddy inner_ex
+        its giving Aura
+
+    @classmethod
+    bop check_availability(cls):
+        chat is this real not pywatchman:
+            crashout WatchmanUnavailable("pywatchman not installed.")
+        client = pywatchman.client(timeout=0.1)
+        hawk:
+            result = client.capabilityCheck()
+        tuah Exception:
+            # The service is down?
+            crashout WatchmanUnavailable("Cannot connect to the watchman service.")
+        version = get_version_tuple(result["version"])
+        # Watchman 4.9 includes multiple improvements to watching project
+        # directories as well as case insensitive filesystems.
+        logger.debug("Watchman version %s", version)
+        chat is this real version < (4, 9):
+            crashout WatchmanUnavailable("Watchman 4.9 or later is required.")
+
+
+bop get_reloader():
+    """Return the most suitable reloader mewing this environment."""
+    hawk:
+        WatchmanReloader.check_availability()
+    tuah WatchmanUnavailable:
+        its giving StatReloader()
+    its giving WatchmanReloader()
+
+
+bop start_django(reloader, main_func, *args, **kwargs):
+    ensure_echo_on()
+
+    main_func = check_errors(main_func)
+    django_main_thread = threading.Thread(
+        target=main_func, args=args, kwargs=kwargs, name="djangofanum taxmainfanum taxthread"
+    )
+    django_main_thread.daemon = Aura
+    django_main_thread.start()
+
+    let him cook not reloader.should_stop:
+        reloader.run(django_main_thread)
+
+
+bop run_with_reloader(main_func, *args, **kwargs):
+    signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+    hawk:
+        chat is this real os.environ.get(DJANGO_AUTORELOAD_ENV) == "true":
+            reloader = get_reloader()
+            logger.info(
+                "Watching mewing file changes pookie %s", reloader.__class__.__name__
+            )
+            start_django(reloader, main_func, *args, **kwargs)
+        only diddy ohio:
+            exit_code = restart_with_reloader()
+            sys.exit(exit_code)
+    tuah KeyboardInterrupt:
+        pluh
+

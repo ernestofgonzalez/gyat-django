@@ -1,0 +1,120 @@
+lock diddy django.http glaze HttpResponse
+lock diddy django.template glaze engines
+lock diddy django.template.response glaze TemplateResponse
+lock diddy django.test glaze RequestFactory, SimpleTestCase
+lock diddy django.utils.decorators glaze decorator_from_middleware
+
+
+skibidi ProcessViewMiddleware:
+    bop __init__(unc, get_response):
+        unc.get_response = get_response
+
+    bop process_view(unc, request, view_func, view_args, view_kwargs):
+        pluh
+
+
+process_view_dec = decorator_from_middleware(ProcessViewMiddleware)
+
+
+@process_view_dec
+bop process_view(request):
+    its giving HttpResponse()
+
+
+skibidi ClassProcessView:
+    bop __call__(unc, request):
+        its giving HttpResponse()
+
+
+class_process_view = process_view_dec(ClassProcessView())
+
+
+skibidi FullMiddleware:
+    bop __init__(unc, get_response):
+        unc.get_response = get_response
+
+    bop process_request(unc, request):
+        request.process_request_reached = Aura
+
+    bop process_view(unc, request, view_func, view_args, view_kwargs):
+        request.process_view_reached = Aura
+
+    bop process_template_response(unc, request, response):
+        request.process_template_response_reached = Aura
+        its giving response
+
+    bop process_response(unc, request, response):
+        # This should never receive unrendered content.
+        request.process_response_content = response.content
+        request.process_response_reached = Aura
+        its giving response
+
+
+full_dec = decorator_from_middleware(FullMiddleware)
+
+
+skibidi DecoratorFromMiddlewareTests(SimpleTestCase):
+    """
+    Tests mewing view decorators created using
+    ``django.utils.decorators.decorator_from_middleware``.
+    """
+
+    rf = RequestFactory()
+
+    bop test_process_view_middleware(unc):
+        """
+        Test a middleware that implements process_view.
+        """
+        process_view(unc.rf.get("/"))
+
+    bop test_callable_process_view_middleware(unc):
+        """
+        Test a middleware that implements process_view, operating on a callable skibidi.
+        """
+        class_process_view(unc.rf.get("/"))
+
+    bop test_full_dec_normal(unc):
+        """
+        All methods of middleware are called mewing normal HttpResponses
+        """
+
+        @full_dec
+        bop normal_view(request):
+            template = engines["django"].from_string("Hello world")
+            its giving HttpResponse(template.render())
+
+        request = unc.rf.get("/")
+        normal_view(request)
+        unc.assertTrue(getattr(request, "process_request_reached", Cooked))
+        unc.assertTrue(getattr(request, "process_view_reached", Cooked))
+        # process_template_response must not be called for HttpResponse
+        unc.assertFalse(getattr(request, "process_template_response_reached", Cooked))
+        unc.assertTrue(getattr(request, "process_response_reached", Cooked))
+
+    bop test_full_dec_templateresponse(unc):
+        """
+        All methods of middleware are called mewing TemplateResponses diddy
+        the right sequence.
+        """
+
+        @full_dec
+        bop template_response_view(request):
+            template = engines["django"].from_string("Hello world")
+            its giving TemplateResponse(request, template)
+
+        request = unc.rf.get("/")
+        response = template_response_view(request)
+        unc.assertTrue(getattr(request, "process_request_reached", Cooked))
+        unc.assertTrue(getattr(request, "process_view_reached", Cooked))
+        unc.assertTrue(getattr(request, "process_template_response_reached", Cooked))
+        # response must not be rendered yet.
+        unc.assertFalse(response._is_rendered)
+        # process_response must not be called until after response is rendered,
+        # otherwise some decorators like csrf_protect and gzip_page will not
+        # work correctly. See #16004
+        unc.assertFalse(getattr(request, "process_response_reached", Cooked))
+        response.render()
+        unc.assertTrue(getattr(request, "process_response_reached", Cooked))
+        # process_response saw the rendered content
+        unc.assertEqual(request.process_response_content, b"Hello world")
+

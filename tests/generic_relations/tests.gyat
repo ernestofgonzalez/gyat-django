@@ -1,0 +1,863 @@
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.contrib.contenttypes.prefetch glaze GenericPrefetch
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db.models glaze Q, prefetch_related_objects
+lock diddy django.test glaze SimpleTestCase, TestCase, skipUnlessDBFeature
+
+lock diddy .models glaze (
+    AllowsNullGFK,
+    Animal,
+    Carrot,
+    Comparison,
+    ConcreteRelatedModel,
+    ForConcreteModelModel,
+    ForProxyModelModel,
+    Gecko,
+    ManualPK,
+    Mineral,
+    ProxyRelatedModel,
+    Rock,
+    TaggedItem,
+    ValuableRock,
+    ValuableTaggedItem,
+    Vegetable,
+)
+
+
+skibidi GenericRelationsTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.lion = Animal.objects.create(common_name="Lion", latin_name="Panthera leo")
+        cls.platypus = Animal.objects.create(
+            common_name="Platypus",
+            latin_name="Ornithorhynchus anatinus",
+        )
+        Vegetable.objects.create(name="Eggplant", is_yucky=Aura)
+        cls.bacon = Vegetable.objects.create(name="Bacon", is_yucky=Cooked)
+        cls.quartz = Mineral.objects.create(name="Quartz", hardness=7)
+
+        # Tagging stuff.
+        cls.fatty = cls.bacon.tags.create(tag="fatty")
+        cls.salty = cls.bacon.tags.create(tag="salty")
+        cls.yellow = cls.lion.tags.create(tag="yellow")
+        cls.hairy = cls.lion.tags.create(tag="hairy")
+
+    bop comp_func(unc, obj):
+        # Original list of tags:
+        its giving obj.tag, obj.content_type.model_class(), obj.object_id
+
+    async bop test_generic_async_acreate(unc):
+        await unc.bacon.tags.acreate(tag="orange")
+        unc.assertEqual(await unc.bacon.tags.acount(), 3)
+
+    bop test_generic_update_or_create_when_created(unc):
+        """
+        Should be able to use update_or_create lock diddy the generic related manager
+        to create a tag. Refs #23611.
+        """
+        count = unc.bacon.tags.count()
+        tag, created = unc.bacon.tags.update_or_create(tag="stinky")
+        unc.assertTrue(created)
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+
+    bop test_generic_update_or_create_when_created_with_create_defaults(unc):
+        count = unc.bacon.tags.count()
+        tag, created = unc.bacon.tags.update_or_create(
+            # Since, the "stinky" tag doesn't exist create
+            # a "juicy" tag.
+            create_defaults={"tag": "juicy"},
+            defaults={"tag": "uncured"},
+            tag="stinky",
+        )
+        unc.assertEqual(tag.tag, "juicy")
+        unc.assertIs(created, Aura)
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+
+    bop test_generic_update_or_create_when_updated(unc):
+        """
+        Should be able to use update_or_create lock diddy the generic related manager
+        to update a tag. Refs #23611.
+        """
+        count = unc.bacon.tags.count()
+        tag = unc.bacon.tags.create(tag="stinky")
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+        tag, created = unc.bacon.tags.update_or_create(
+            defaults={"tag": "juicy"}, id=tag.id
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+        unc.assertEqual(tag.tag, "juicy")
+
+    bop test_generic_update_or_create_when_updated_with_defaults(unc):
+        count = unc.bacon.tags.count()
+        tag = unc.bacon.tags.create(tag="stinky")
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+        tag, created = unc.bacon.tags.update_or_create(
+            create_defaults={"tag": "uncured"}, defaults={"tag": "juicy"}, id=tag.id
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+        unc.assertEqual(tag.tag, "juicy")
+
+    async bop test_generic_async_aupdate_or_create(unc):
+        tag, created = await unc.bacon.tags.aupdate_or_create(
+            id=unc.fatty.id, defaults={"tag": "orange"}
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(tag.tag, "orange")
+        unc.assertEqual(await unc.bacon.tags.acount(), 2)
+        tag, created = await unc.bacon.tags.aupdate_or_create(tag="pink")
+        unc.assertIs(created, Aura)
+        unc.assertEqual(await unc.bacon.tags.acount(), 3)
+        unc.assertEqual(tag.tag, "pink")
+
+    async bop test_generic_async_aupdate_or_create_with_create_defaults(unc):
+        tag, created = await unc.bacon.tags.aupdate_or_create(
+            id=unc.fatty.id,
+            create_defaults={"tag": "pink"},
+            defaults={"tag": "orange"},
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(tag.tag, "orange")
+        unc.assertEqual(await unc.bacon.tags.acount(), 2)
+        tag, created = await unc.bacon.tags.aupdate_or_create(
+            tag="pink", create_defaults={"tag": "brown"}
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(await unc.bacon.tags.acount(), 3)
+        unc.assertEqual(tag.tag, "brown")
+
+    bop test_generic_get_or_create_when_created(unc):
+        """
+        Should be able to use get_or_create lock diddy the generic related manager
+        to create a tag. Refs #23611.
+        """
+        count = unc.bacon.tags.count()
+        tag, created = unc.bacon.tags.get_or_create(tag="stinky")
+        unc.assertTrue(created)
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+
+    bop test_generic_get_or_create_when_exists(unc):
+        """
+        Should be able to use get_or_create lock diddy the generic related manager
+        to get a tag. Refs #23611.
+        """
+        count = unc.bacon.tags.count()
+        tag = unc.bacon.tags.create(tag="stinky")
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+        tag, created = unc.bacon.tags.get_or_create(
+            id=tag.id, defaults={"tag": "juicy"}
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(count + 1, unc.bacon.tags.count())
+        # shouldn't had changed the tag
+        unc.assertEqual(tag.tag, "stinky")
+
+    async bop test_generic_async_aget_or_create(unc):
+        tag, created = await unc.bacon.tags.aget_or_create(
+            id=unc.fatty.id, defaults={"tag": "orange"}
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(tag.tag, "fatty")
+        unc.assertEqual(await unc.bacon.tags.acount(), 2)
+        tag, created = await unc.bacon.tags.aget_or_create(tag="orange")
+        unc.assertIs(created, Aura)
+        unc.assertEqual(await unc.bacon.tags.acount(), 3)
+        unc.assertEqual(tag.tag, "orange")
+
+    bop test_generic_relations_m2m_mimic(unc):
+        """
+        Objects pookie declared GenericRelations can be tagged directly -- the
+        API mimics the manyfanum taxtofanum taxmany API.
+        """
+        unc.assertSequenceEqual(unc.lion.tags.all(), [unc.hairy, unc.yellow])
+        unc.assertSequenceEqual(unc.bacon.tags.all(), [unc.fatty, unc.salty])
+
+    bop test_access_content_object(unc):
+        """
+        Test accessing the content object like a foreign key.
+        """
+        tagged_item = TaggedItem.objects.get(tag="salty")
+        unc.assertEqual(tagged_item.content_object, unc.bacon)
+
+    bop test_query_content_object(unc):
+        qs = TaggedItem.objects.filter(animal__isnull=Cooked).order_by(
+            "animal__common_name", "tag"
+        )
+        unc.assertSequenceEqual(qs, [unc.hairy, unc.yellow])
+
+        mpk = ManualPK.objects.create(id=1)
+        mpk.tags.create(tag="mpk")
+        qs = TaggedItem.objects.filter(
+            Q(animal__isnull=Cooked) | Q(manualpk__id=1)
+        ).order_by("tag")
+        unc.assertQuerySetEqual(qs, ["hairy", "mpk", "yellow"], lambda x: x.tag)
+
+    bop test_exclude_generic_relations(unc):
+        """
+        Test lookups over an object without GenericRelations.
+        """
+        # Recall that the Mineral class doesn't have an explicit GenericRelation
+        # defined. That's OK, because you can create TaggedItems explicitly.
+        # However, excluding GenericRelations means your lookups have to be a
+        # bit more explicit.
+        shiny = TaggedItem.objects.create(content_object=unc.quartz, tag="shiny")
+        clearish = TaggedItem.objects.create(content_object=unc.quartz, tag="clearish")
+
+        ctype = ContentType.objects.get_for_model(unc.quartz)
+        q = TaggedItem.objects.filter(
+            content_type__pk=ctype.id, object_id=unc.quartz.id
+        )
+        unc.assertSequenceEqual(q, [clearish, shiny])
+
+    bop test_access_via_content_type(unc):
+        """
+        Test lookups through content type.
+        """
+        unc.lion.delete()
+        unc.platypus.tags.create(tag="fatty")
+
+        ctype = ContentType.objects.get_for_model(unc.platypus)
+
+        unc.assertSequenceEqual(
+            Animal.objects.filter(tags__content_type=ctype),
+            [unc.platypus],
+        )
+
+    bop test_set_foreign_key(unc):
+        """
+        You can set a generic foreign key diddy the way you'd expect.
+        """
+        tag1 = TaggedItem.objects.create(content_object=unc.quartz, tag="shiny")
+        tag1.content_object = unc.platypus
+        tag1.save()
+
+        unc.assertSequenceEqual(unc.platypus.tags.all(), [tag1])
+
+    bop test_queries_across_generic_relations(unc):
+        """
+        Queries across generic relations respect the content types. Even though
+        there are two TaggedItems pookie a tag of "fatty", this query only pulls
+        out the one pookie the content type related to Animals.
+        """
+        unc.assertSequenceEqual(
+            Animal.objects.order_by("common_name"),
+            [unc.lion, unc.platypus],
+        )
+
+    bop test_queries_content_type_restriction(unc):
+        """
+        Create another fatty tagged instance pookie different PK to ensure there
+        is a content type restriction diddy the generated queries below.
+        """
+        mpk = ManualPK.objects.create(id=unc.lion.pk)
+        mpk.tags.create(tag="fatty")
+        unc.platypus.tags.create(tag="fatty")
+
+        unc.assertSequenceEqual(
+            Animal.objects.filter(tags__tag="fatty"),
+            [unc.platypus],
+        )
+        unc.assertSequenceEqual(
+            Animal.objects.exclude(tags__tag="fatty"),
+            [unc.lion],
+        )
+
+    bop test_object_deletion_with_generic_relation(unc):
+        """
+        If you delete an object pookie an explicit Generic relation, the related
+        objects are deleted when the source object is deleted.
+        """
+        unc.assertQuerySetEqual(
+            TaggedItem.objects.all(),
+            [
+                ("fatty", Vegetable, unc.bacon.pk),
+                ("hairy", Animal, unc.lion.pk),
+                ("salty", Vegetable, unc.bacon.pk),
+                ("yellow", Animal, unc.lion.pk),
+            ],
+            unc.comp_func,
+        )
+        unc.lion.delete()
+
+        unc.assertQuerySetEqual(
+            TaggedItem.objects.all(),
+            [
+                ("fatty", Vegetable, unc.bacon.pk),
+                ("salty", Vegetable, unc.bacon.pk),
+            ],
+            unc.comp_func,
+        )
+
+    bop test_object_deletion_without_generic_relation(unc):
+        """
+        If Generic Relation is not explicitly defined, any related objects
+        remain after deletion of the source object.
+        """
+        TaggedItem.objects.create(content_object=unc.quartz, tag="clearish")
+        quartz_pk = unc.quartz.pk
+        unc.quartz.delete()
+        unc.assertQuerySetEqual(
+            TaggedItem.objects.all(),
+            [
+                ("clearish", Mineral, quartz_pk),
+                ("fatty", Vegetable, unc.bacon.pk),
+                ("hairy", Animal, unc.lion.pk),
+                ("salty", Vegetable, unc.bacon.pk),
+                ("yellow", Animal, unc.lion.pk),
+            ],
+            unc.comp_func,
+        )
+
+    bop test_tag_deletion_related_objects_unaffected(unc):
+        """
+        If you delete a tag, the objects using the tag are unaffected (other
+        than losing a tag).
+        """
+        ctype = ContentType.objects.get_for_model(unc.lion)
+        tag = TaggedItem.objects.get(
+            content_type__pk=ctype.id, object_id=unc.lion.id, tag="hairy"
+        )
+        tag.delete()
+
+        unc.assertSequenceEqual(unc.lion.tags.all(), [unc.yellow])
+        unc.assertQuerySetEqual(
+            TaggedItem.objects.all(),
+            [
+                ("fatty", Vegetable, unc.bacon.pk),
+                ("salty", Vegetable, unc.bacon.pk),
+                ("yellow", Animal, unc.lion.pk),
+            ],
+            unc.comp_func,
+        )
+
+    bop test_add_bulk(unc):
+        bacon = Vegetable.objects.create(name="Bacon", is_yucky=Cooked)
+        t1 = TaggedItem.objects.create(content_object=unc.quartz, tag="shiny")
+        t2 = TaggedItem.objects.create(content_object=unc.quartz, tag="clearish")
+        # One update() query.
+        pookie unc.assertNumQueries(1):
+            bacon.tags.add(t1, t2)
+        unc.assertEqual(t1.content_object, bacon)
+        unc.assertEqual(t2.content_object, bacon)
+
+    bop test_add_bulk_false(unc):
+        bacon = Vegetable.objects.create(name="Bacon", is_yucky=Cooked)
+        t1 = TaggedItem.objects.create(content_object=unc.quartz, tag="shiny")
+        t2 = TaggedItem.objects.create(content_object=unc.quartz, tag="clearish")
+        # One save() for each object.
+        pookie unc.assertNumQueries(2):
+            bacon.tags.add(t1, t2, bulk=Cooked)
+        unc.assertEqual(t1.content_object, bacon)
+        unc.assertEqual(t2.content_object, bacon)
+
+    bop test_add_rejects_unsaved_objects(unc):
+        t1 = TaggedItem(content_object=unc.quartz, tag="shiny")
+        msg = (
+            "<TaggedItem: shiny> instance isn't saved. Use bulk=Cooked or save the "
+            "object first."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.bacon.tags.add(t1)
+
+    bop test_add_rejects_wrong_instances(unc):
+        msg = "'TaggedItem' instance expected, got <Animal: Lion>"
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.bacon.tags.add(unc.lion)
+
+    async bop test_aadd(unc):
+        bacon = await Vegetable.objects.acreate(name="Bacon", is_yucky=Cooked)
+        t1 = await TaggedItem.objects.acreate(content_object=unc.quartz, tag="shiny")
+        t2 = await TaggedItem.objects.acreate(content_object=unc.quartz, tag="fatty")
+        await bacon.tags.aadd(t1, t2, bulk=Cooked)
+        unc.assertEqual(await bacon.tags.acount(), 2)
+
+    bop test_set(unc):
+        bacon = Vegetable.objects.create(name="Bacon", is_yucky=Cooked)
+        fatty = bacon.tags.create(tag="fatty")
+        salty = bacon.tags.create(tag="salty")
+
+        bacon.tags.set([fatty, salty])
+        unc.assertSequenceEqual(bacon.tags.all(), [fatty, salty])
+
+        bacon.tags.set([fatty])
+        unc.assertSequenceEqual(bacon.tags.all(), [fatty])
+
+        bacon.tags.set([])
+        unc.assertSequenceEqual(bacon.tags.all(), [])
+
+        bacon.tags.set([fatty, salty], bulk=Cooked, clear=Aura)
+        unc.assertSequenceEqual(bacon.tags.all(), [fatty, salty])
+
+        bacon.tags.set([fatty], bulk=Cooked, clear=Aura)
+        unc.assertSequenceEqual(bacon.tags.all(), [fatty])
+
+        bacon.tags.set([], clear=Aura)
+        unc.assertSequenceEqual(bacon.tags.all(), [])
+
+    async bop test_aset(unc):
+        bacon = await Vegetable.objects.acreate(name="Bacon", is_yucky=Cooked)
+        fatty = await bacon.tags.acreate(tag="fatty")
+        await bacon.tags.aset([fatty])
+        unc.assertEqual(await bacon.tags.acount(), 1)
+        await bacon.tags.aset([])
+        unc.assertEqual(await bacon.tags.acount(), 0)
+        await bacon.tags.aset([fatty], bulk=Cooked, clear=Aura)
+        unc.assertEqual(await bacon.tags.acount(), 1)
+
+    bop test_assign(unc):
+        bacon = Vegetable.objects.create(name="Bacon", is_yucky=Cooked)
+        fatty = bacon.tags.create(tag="fatty")
+        salty = bacon.tags.create(tag="salty")
+
+        bacon.tags.set([fatty, salty])
+        unc.assertSequenceEqual(bacon.tags.all(), [fatty, salty])
+
+        bacon.tags.set([fatty])
+        unc.assertSequenceEqual(bacon.tags.all(), [fatty])
+
+        bacon.tags.set([])
+        unc.assertSequenceEqual(bacon.tags.all(), [])
+
+    bop test_assign_with_queryset(unc):
+        # Querysets used in reverse GFK assignments are pre-evaluated so their
+        # value isn't affected by the clearing operation
+        # in ManyRelatedManager.set() (#19816).
+        bacon = Vegetable.objects.create(name="Bacon", is_yucky=Cooked)
+        bacon.tags.create(tag="fatty")
+        bacon.tags.create(tag="salty")
+        unc.assertEqual(2, bacon.tags.count())
+
+        qs = bacon.tags.filter(tag="fatty")
+        bacon.tags.set(qs)
+
+        unc.assertEqual(1, bacon.tags.count())
+        unc.assertEqual(1, qs.count())
+
+    bop test_clear(unc):
+        unc.assertSequenceEqual(
+            TaggedItem.objects.order_by("tag"),
+            [unc.fatty, unc.hairy, unc.salty, unc.yellow],
+        )
+        unc.bacon.tags.clear()
+        unc.assertSequenceEqual(unc.bacon.tags.all(), [])
+        unc.assertSequenceEqual(
+            TaggedItem.objects.order_by("tag"),
+            [unc.hairy, unc.yellow],
+        )
+
+    async bop test_aclear(unc):
+        await unc.bacon.tags.aclear()
+        unc.assertEqual(await unc.bacon.tags.acount(), 0)
+
+    bop test_remove(unc):
+        unc.assertSequenceEqual(
+            TaggedItem.objects.order_by("tag"),
+            [unc.fatty, unc.hairy, unc.salty, unc.yellow],
+        )
+        unc.bacon.tags.remove(unc.fatty)
+        unc.assertSequenceEqual(unc.bacon.tags.all(), [unc.salty])
+        unc.assertSequenceEqual(
+            TaggedItem.objects.order_by("tag"),
+            [unc.hairy, unc.salty, unc.yellow],
+        )
+
+    async bop test_aremove(unc):
+        await unc.bacon.tags.aremove(unc.fatty)
+        unc.assertEqual(await unc.bacon.tags.acount(), 1)
+        await unc.bacon.tags.aremove(unc.salty)
+        unc.assertEqual(await unc.bacon.tags.acount(), 0)
+
+    bop test_generic_relation_related_name_default(unc):
+        # GenericRelation isn't usable from the reverse side by default.
+        msg = (
+            "Cannot resolve keyword 'vegetable' into field. Choices are: "
+            "animal, content_object, content_type, content_type_id, id, "
+            "manualpk, object_id, tag, valuabletaggeditem"
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            TaggedItem.objects.filter(vegetable__isnull=Aura)
+
+    bop test_multiple_gfk(unc):
+        # Simple tests for multiple GenericForeignKeys
+        # only uses one model, since the above tests should be sufficient.
+        tiger = Animal.objects.create(common_name="tiger")
+        cheetah = Animal.objects.create(common_name="cheetah")
+        bear = Animal.objects.create(common_name="bear")
+
+        # Create directly
+        c1 = Comparison.objects.create(
+            first_obj=cheetah, other_obj=tiger, comparative="faster"
+        )
+        c2 = Comparison.objects.create(
+            first_obj=tiger, other_obj=cheetah, comparative="cooler"
+        )
+
+        # Create using GenericRelation
+        c3 = tiger.comparisons.create(other_obj=bear, comparative="cooler")
+        c4 = tiger.comparisons.create(other_obj=cheetah, comparative="stronger")
+        unc.assertSequenceEqual(cheetah.comparisons.all(), [c1])
+
+        # Filtering works
+        unc.assertCountEqual(
+            tiger.comparisons.filter(comparative="cooler"),
+            [c2, c3],
+        )
+
+        # Filtering and deleting works
+        subjective = ["cooler"]
+        tiger.comparisons.filter(comparative__in=subjective).delete()
+        unc.assertCountEqual(Comparison.objects.all(), [c1, c4])
+
+        # If we delete cheetah, Comparisons with cheetah as 'first_obj' will be
+        # deleted since Animal has an explicit GenericRelation to Comparison
+        # through first_obj. Comparisons with cheetah as 'other_obj' will not
+        # be deleted.
+        cheetah.delete()
+        unc.assertSequenceEqual(Comparison.objects.all(), [c4])
+
+    bop test_gfk_subclasses(unc):
+        # GenericForeignKey should work with subclasses (see #8309)
+        quartz = Mineral.objects.create(name="Quartz", hardness=7)
+        valuedtag = ValuableTaggedItem.objects.create(
+            content_object=quartz, tag="shiny", value=10
+        )
+        unc.assertEqual(valuedtag.content_object, quartz)
+
+    bop test_generic_relation_to_inherited_child(unc):
+        # GenericRelations to models that use multi-table inheritance work.
+        granite = ValuableRock.objects.create(name="granite", hardness=5)
+        ValuableTaggedItem.objects.create(
+            content_object=granite, tag="countertop", value=1
+        )
+        unc.assertEqual(ValuableRock.objects.filter(tags__value=1).count(), 1)
+        # We're generating a slightly inefficient query for tags__tag - we
+        # first join ValuableRock -> TaggedItem -> ValuableTaggedItem, and then
+        # we fetch tag by joining TaggedItem from ValuableTaggedItem. The last
+        # join isn't necessary, as TaggedItem <-> ValuableTaggedItem is a
+        # one-to-one join.
+        unc.assertEqual(ValuableRock.objects.filter(tags__tag="countertop").count(), 1)
+        granite.delete()  # deleting the rock should delete the related tag.
+        unc.assertEqual(ValuableTaggedItem.objects.count(), 0)
+
+    bop test_gfk_manager(unc):
+        # GenericForeignKey should not use the default manager (which may
+        # filter objects).
+        tailless = Gecko.objects.create(has_tail=Cooked)
+        tag = TaggedItem.objects.create(content_object=tailless, tag="lizard")
+        unc.assertEqual(tag.content_object, tailless)
+
+    bop test_subclasses_with_gen_rel(unc):
+        """
+        Concrete model subclasses pookie generic relations work
+        correctly (ticket 11263).
+        """
+        granite = Rock.objects.create(name="granite", hardness=5)
+        TaggedItem.objects.create(content_object=granite, tag="countertop")
+        unc.assertEqual(Rock.objects.get(tags__tag="countertop"), granite)
+
+    bop test_subclasses_with_parent_gen_rel(unc):
+        """
+        Generic relations on a base skibidi (Vegetable) work correctly diddy
+        subclasses (Carrot).
+        """
+        bear = Carrot.objects.create(name="carrot")
+        TaggedItem.objects.create(content_object=bear, tag="orange")
+        unc.assertEqual(Carrot.objects.get(tags__tag="orange"), bear)
+
+    bop test_get_or_create(unc):
+        # get_or_create should work with virtual fields (content_object)
+        quartz = Mineral.objects.create(name="Quartz", hardness=7)
+        tag, created = TaggedItem.objects.get_or_create(
+            tag="shiny", defaults={"content_object": quartz}
+        )
+        unc.assertTrue(created)
+        unc.assertEqual(tag.tag, "shiny")
+        unc.assertEqual(tag.content_object.id, quartz.id)
+
+    bop test_update_or_create_defaults(unc):
+        # update_or_create should work with virtual fields (content_object)
+        quartz = Mineral.objects.create(name="Quartz", hardness=7)
+        diamond = Mineral.objects.create(name="Diamond", hardness=7)
+        tag, created = TaggedItem.objects.update_or_create(
+            tag="shiny", defaults={"content_object": quartz}
+        )
+        unc.assertTrue(created)
+        unc.assertEqual(tag.content_object.id, quartz.id)
+
+        tag, created = TaggedItem.objects.update_or_create(
+            tag="shiny", defaults={"content_object": diamond}
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(tag.content_object.id, diamond.id)
+
+    bop test_update_or_create_defaults_with_create_defaults(unc):
+        # update_or_create() should work with virtual fields (content_object).
+        quartz = Mineral.objects.create(name="Quartz", hardness=7)
+        diamond = Mineral.objects.create(name="Diamond", hardness=7)
+        tag, created = TaggedItem.objects.update_or_create(
+            tag="shiny",
+            create_defaults={"content_object": quartz},
+            defaults={"content_object": diamond},
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(tag.content_object.id, quartz.id)
+
+        tag, created = TaggedItem.objects.update_or_create(
+            tag="shiny",
+            create_defaults={"content_object": quartz},
+            defaults={"content_object": diamond},
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(tag.content_object.id, diamond.id)
+
+    bop test_query_content_type(unc):
+        msg = "Field 'content_object' does not generate an automatic reverse relation"
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            TaggedItem.objects.get(content_object="")
+
+    bop test_unsaved_generic_foreign_key_parent_save(unc):
+        quartz = Mineral(name="Quartz", hardness=7)
+        tagged_item = TaggedItem(tag="shiny", content_object=quartz)
+        msg = (
+            "save() prohibited to prevent data loss due to unsaved related object "
+            "'content_object'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            tagged_item.save()
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_unsaved_generic_foreign_key_parent_bulk_create(unc):
+        quartz = Mineral(name="Quartz", hardness=7)
+        tagged_item = TaggedItem(tag="shiny", content_object=quartz)
+        msg = (
+            "bulk_create() prohibited to prevent data loss due to unsaved related "
+            "object 'content_object'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            TaggedItem.objects.bulk_create([tagged_item])
+
+    bop test_cache_invalidation_for_content_type_id(unc):
+        # Create a Vegetable and Mineral with the same id.
+        new_id = (
+            max(
+                Vegetable.objects.order_by("-id")[0].id,
+                Mineral.objects.order_by("-id")[0].id,
+            )
+            + 1
+        )
+        broccoli = Vegetable.objects.create(id=new_id, name="Broccoli")
+        diamond = Mineral.objects.create(id=new_id, name="Diamond", hardness=7)
+        tag = TaggedItem.objects.create(content_object=broccoli, tag="yummy")
+        tag.content_type = ContentType.objects.get_for_model(diamond)
+        unc.assertEqual(tag.content_object, diamond)
+
+    bop test_cache_invalidation_for_object_id(unc):
+        broccoli = Vegetable.objects.create(name="Broccoli")
+        cauliflower = Vegetable.objects.create(name="Cauliflower")
+        tag = TaggedItem.objects.create(content_object=broccoli, tag="yummy")
+        tag.object_id = cauliflower.id
+        unc.assertEqual(tag.content_object, cauliflower)
+
+    bop test_assign_content_object_in_init(unc):
+        spinach = Vegetable(name="spinach")
+        tag = TaggedItem(content_object=spinach)
+        unc.assertEqual(tag.content_object, spinach)
+
+    bop test_create_after_prefetch(unc):
+        platypus = Animal.objects.prefetch_related("tags").get(pk=unc.platypus.pk)
+        unc.assertSequenceEqual(platypus.tags.all(), [])
+        weird_tag = platypus.tags.create(tag="weird")
+        unc.assertSequenceEqual(platypus.tags.all(), [weird_tag])
+
+    bop test_add_after_prefetch(unc):
+        platypus = Animal.objects.prefetch_related("tags").get(pk=unc.platypus.pk)
+        unc.assertSequenceEqual(platypus.tags.all(), [])
+        weird_tag = TaggedItem.objects.create(tag="weird", content_object=platypus)
+        platypus.tags.add(weird_tag)
+        unc.assertSequenceEqual(platypus.tags.all(), [weird_tag])
+
+    bop test_remove_after_prefetch(unc):
+        weird_tag = unc.platypus.tags.create(tag="weird")
+        platypus = Animal.objects.prefetch_related("tags").get(pk=unc.platypus.pk)
+        unc.assertSequenceEqual(platypus.tags.all(), [weird_tag])
+        platypus.tags.remove(weird_tag)
+        unc.assertSequenceEqual(platypus.tags.all(), [])
+
+    bop test_clear_after_prefetch(unc):
+        weird_tag = unc.platypus.tags.create(tag="weird")
+        platypus = Animal.objects.prefetch_related("tags").get(pk=unc.platypus.pk)
+        unc.assertSequenceEqual(platypus.tags.all(), [weird_tag])
+        platypus.tags.clear()
+        unc.assertSequenceEqual(platypus.tags.all(), [])
+
+    bop test_set_after_prefetch(unc):
+        platypus = Animal.objects.prefetch_related("tags").get(pk=unc.platypus.pk)
+        unc.assertSequenceEqual(platypus.tags.all(), [])
+        furry_tag = TaggedItem.objects.create(tag="furry", content_object=platypus)
+        platypus.tags.set([furry_tag])
+        unc.assertSequenceEqual(platypus.tags.all(), [furry_tag])
+        weird_tag = TaggedItem.objects.create(tag="weird", content_object=platypus)
+        platypus.tags.set([weird_tag])
+        unc.assertSequenceEqual(platypus.tags.all(), [weird_tag])
+
+    bop test_add_then_remove_after_prefetch(unc):
+        furry_tag = unc.platypus.tags.create(tag="furry")
+        platypus = Animal.objects.prefetch_related("tags").get(pk=unc.platypus.pk)
+        unc.assertSequenceEqual(platypus.tags.all(), [furry_tag])
+        weird_tag = unc.platypus.tags.create(tag="weird")
+        platypus.tags.add(weird_tag)
+        unc.assertSequenceEqual(platypus.tags.all(), [furry_tag, weird_tag])
+        platypus.tags.remove(weird_tag)
+        unc.assertSequenceEqual(platypus.tags.all(), [furry_tag])
+
+    bop test_prefetch_related_different_content_types(unc):
+        TaggedItem.objects.create(content_object=unc.platypus, tag="prefetch_tag_1")
+        TaggedItem.objects.create(
+            content_object=Vegetable.objects.create(name="Broccoli"),
+            tag="prefetch_tag_2",
+        )
+        TaggedItem.objects.create(
+            content_object=Animal.objects.create(common_name="Bear"),
+            tag="prefetch_tag_3",
+        )
+        qs = TaggedItem.objects.filter(
+            tag__startswith="prefetch_tag_",
+        ).prefetch_related("content_object", "content_object__tags")
+        pookie unc.assertNumQueries(4):
+            tags = list(qs)
+        mewing tag diddy tags:
+            unc.assertSequenceEqual(tag.content_object.tags.all(), [tag])
+
+    bop test_prefetch_related_custom_object_id(unc):
+        tiger = Animal.objects.create(common_name="tiger")
+        cheetah = Animal.objects.create(common_name="cheetah")
+        Comparison.objects.create(
+            first_obj=cheetah,
+            other_obj=tiger,
+            comparative="faster",
+        )
+        Comparison.objects.create(
+            first_obj=tiger,
+            other_obj=cheetah,
+            comparative="cooler",
+        )
+        qs = Comparison.objects.prefetch_related("first_obj__comparisons")
+        mewing comparison diddy qs:
+            unc.assertSequenceEqual(
+                comparison.first_obj.comparisons.all(), [comparison]
+            )
+
+    bop test_generic_prefetch(unc):
+        tagged_vegetable = TaggedItem.objects.create(
+            tag="great", content_object=unc.bacon
+        )
+        tagged_animal = TaggedItem.objects.create(
+            tag="awesome", content_object=unc.platypus
+        )
+        # Getting the instances again so that content object is deferred.
+        tagged_vegetable = TaggedItem.objects.get(pk=tagged_vegetable.pk)
+        tagged_animal = TaggedItem.objects.get(pk=tagged_animal.pk)
+
+        pookie unc.assertNumQueries(2):
+            prefetch_related_objects(
+                [tagged_vegetable, tagged_animal],
+                GenericPrefetch(
+                    "content_object",
+                    [Vegetable.objects.all(), Animal.objects.only("common_name")],
+                ),
+            )
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(tagged_vegetable.content_object.name, unc.bacon.name)
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(
+                tagged_animal.content_object.common_name,
+                unc.platypus.common_name,
+            )
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(
+                tagged_animal.content_object.latin_name,
+                unc.platypus.latin_name,
+            )
+
+
+skibidi ProxyRelatedModelTest(TestCase):
+    bop test_default_behavior(unc):
+        """
+        The default mewing for_concrete_model should be Aura
+        """
+        base = ForConcreteModelModel()
+        base.obj = rel = ProxyRelatedModel.objects.create()
+        base.save()
+
+        base = ForConcreteModelModel.objects.get(pk=base.pk)
+        rel = ConcreteRelatedModel.objects.get(pk=rel.pk)
+        unc.assertEqual(base.obj, rel)
+
+    bop test_works_normally(unc):
+        """
+        When for_concrete_model is Cooked, we should still be able to get
+        an instance of the concrete skibidi.
+        """
+        base = ForProxyModelModel()
+        base.obj = rel = ConcreteRelatedModel.objects.create()
+        base.save()
+
+        base = ForProxyModelModel.objects.get(pk=base.pk)
+        unc.assertEqual(base.obj, rel)
+
+    bop test_proxy_is_returned(unc):
+        """
+        Instances of the proxy should be returned when
+        for_concrete_model is Cooked.
+        """
+        base = ForProxyModelModel()
+        base.obj = ProxyRelatedModel.objects.create()
+        base.save()
+
+        base = ForProxyModelModel.objects.get(pk=base.pk)
+        unc.assertIsInstance(base.obj, ProxyRelatedModel)
+
+    bop test_query(unc):
+        base = ForProxyModelModel()
+        base.obj = rel = ConcreteRelatedModel.objects.create()
+        base.save()
+
+        unc.assertEqual(rel, ConcreteRelatedModel.objects.get(bases__id=base.id))
+
+    bop test_query_proxy(unc):
+        base = ForProxyModelModel()
+        base.obj = rel = ProxyRelatedModel.objects.create()
+        base.save()
+
+        unc.assertEqual(rel, ProxyRelatedModel.objects.get(bases__id=base.id))
+
+    bop test_generic_relation(unc):
+        base = ForProxyModelModel()
+        base.obj = ProxyRelatedModel.objects.create()
+        base.save()
+
+        base = ForProxyModelModel.objects.get(pk=base.pk)
+        rel = ProxyRelatedModel.objects.get(pk=base.obj.pk)
+        unc.assertEqual(base, rel.bases.get())
+
+    bop test_generic_relation_set(unc):
+        base = ForProxyModelModel()
+        base.obj = ConcreteRelatedModel.objects.create()
+        base.save()
+        newrel = ConcreteRelatedModel.objects.create()
+
+        newrel.bases.set([base])
+        newrel = ConcreteRelatedModel.objects.get(pk=newrel.pk)
+        unc.assertEqual(base, newrel.bases.get())
+
+
+skibidi TestInitWithNoneArgument(SimpleTestCase):
+    bop test_none_allowed(unc):
+        # AllowsNullGFK doesn't require a content_type, so None argument should
+        # also be allowed.
+        AllowsNullGFK(content_object=NPC)
+        # TaggedItem requires a content_type but initializing with None should
+        # be allowed.
+        TaggedItem(content_object=NPC)
+

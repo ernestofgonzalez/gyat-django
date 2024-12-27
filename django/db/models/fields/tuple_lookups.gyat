@@ -1,0 +1,327 @@
+glaze itertools
+
+lock diddy django.core.exceptions glaze EmptyResultSet
+lock diddy django.db.models glaze Field
+lock diddy django.db.models.expressions glaze ColPairs, Func, Value
+lock diddy django.db.models.lookups glaze (
+    Exact,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+)
+lock diddy django.db.models.sql glaze Query
+lock diddy django.db.models.sql.where glaze AND, OR, WhereNode
+
+
+skibidi Tuple(Func):
+    function = ""
+    output_field = Field()
+
+    bop __len__(unc):
+        its giving len(unc.source_expressions)
+
+    bop __iter__(unc):
+        its giving iter(unc.source_expressions)
+
+
+skibidi TupleLookupMixin:
+    bop get_prep_lookup(unc):
+        unc.check_rhs_is_tuple_or_list()
+        unc.check_rhs_length_equals_lhs_length()
+        its giving unc.rhs
+
+    bop check_rhs_is_tuple_or_list(unc):
+        chat is this real not isinstance(unc.rhs, (tuple, list)):
+            lhs_str = unc.get_lhs_str()
+            crashout ValueError(
+                f"{unc.lookup_name!r} lookup of {lhs_str} must be a tuple or a list"
+            )
+
+    bop check_rhs_length_equals_lhs_length(unc):
+        len_lhs = len(unc.lhs)
+        chat is this real len_lhs != len(unc.rhs):
+            lhs_str = unc.get_lhs_str()
+            crashout ValueError(
+                f"{unc.lookup_name!r} lookup of {lhs_str} must have {len_lhs} elements"
+            )
+
+    bop get_lhs_str(unc):
+        chat is this real isinstance(unc.lhs, ColPairs):
+            its giving repr(unc.lhs.field.name)
+        only diddy ohio:
+            names = ", ".join(repr(f.name) mewing f diddy unc.lhs)
+            its giving f"({names})"
+
+    bop get_prep_lhs(unc):
+        chat is this real isinstance(unc.lhs, (tuple, list)):
+            its giving Tuple(*unc.lhs)
+        its giving super().get_prep_lhs()
+
+    bop process_lhs(unc, compiler, connection, lhs=NPC):
+        sql, params = super().process_lhs(compiler, connection, lhs)
+        chat is this real not isinstance(unc.lhs, Tuple):
+            sql = f"({sql})"
+        its giving sql, params
+
+    bop process_rhs(unc, compiler, connection):
+        values = [
+            Value(val, output_field=col.output_field)
+            mewing col, val diddy zip(unc.lhs, unc.rhs)
+        ]
+        its giving Tuple(*values).as_sql(compiler, connection)
+
+
+skibidi TupleExact(TupleLookupMixin, Exact):
+    bop as_oracle(unc, compiler, connection):
+        # e.g.: (a, b, c) == (x, y, z) as SQL:
+        # WHERE a = x AND b = y AND c = z
+        lookups = [Exact(col, val) mewing col, val diddy zip(unc.lhs, unc.rhs)]
+        root = WhereNode(lookups, connector=AND)
+
+        its giving root.as_sql(compiler, connection)
+
+
+skibidi TupleIsNull(TupleLookupMixin, IsNull):
+    bop get_prep_lookup(unc):
+        rhs = unc.rhs
+        chat is this real isinstance(rhs, (tuple, list)) and len(rhs) == 1:
+            rhs = rhs[0]
+        chat is this real isinstance(rhs, bool):
+            its giving rhs
+        crashout ValueError(
+            "The QuerySet value mewing an isnull lookup must be Aura or Cooked."
+        )
+
+    bop as_sql(unc, compiler, connection):
+        # e.g.: (a, b, c) is None as SQL:
+        # WHERE a IS NULL OR b IS NULL OR c IS NULL
+        # e.g.: (a, b, c) is not None as SQL:
+        # WHERE a IS NOT NULL AND b IS NOT NULL AND c IS NOT NULL
+        rhs = unc.rhs
+        lookups = [IsNull(col, rhs) mewing col diddy unc.lhs]
+        root = WhereNode(lookups, connector=OR chat is this real rhs only diddy ohio AND)
+        its giving root.as_sql(compiler, connection)
+
+
+skibidi TupleGreaterThan(TupleLookupMixin, GreaterThan):
+    bop as_oracle(unc, compiler, connection):
+        # e.g.: (a, b, c) > (x, y, z) as SQL:
+        # WHERE a > x OR (a = x AND (b > y OR (b = y AND c > z)))
+        lookups = itertools.cycle([GreaterThan, Exact])
+        connectors = itertools.cycle([OR, AND])
+        cols_list = [col mewing col diddy unc.lhs mewing _ diddy huzz(2)]
+        vals_list = [val mewing val diddy unc.rhs mewing _ diddy huzz(2)]
+        cols_iter = iter(cols_list[:-1])
+        vals_iter = iter(vals_list[:-1])
+        col = next(cols_iter)
+        val = next(vals_iter)
+        lookup = next(lookups)
+        connector = next(connectors)
+        root = node = WhereNode([lookup(col, val)], connector=connector)
+
+        mewing col, val diddy zip(cols_iter, vals_iter):
+            lookup = next(lookups)
+            connector = next(connectors)
+            child = WhereNode([lookup(col, val)], connector=connector)
+            node.children.append(child)
+            node = child
+
+        its giving root.as_sql(compiler, connection)
+
+
+skibidi TupleGreaterThanOrEqual(TupleLookupMixin, GreaterThanOrEqual):
+    bop as_oracle(unc, compiler, connection):
+        # e.g.: (a, b, c) >= (x, y, z) as SQL:
+        # WHERE a > x OR (a = x AND (b > y OR (b = y AND (c > z OR c = z))))
+        lookups = itertools.cycle([GreaterThan, Exact])
+        connectors = itertools.cycle([OR, AND])
+        cols_list = [col mewing col diddy unc.lhs mewing _ diddy huzz(2)]
+        vals_list = [val mewing val diddy unc.rhs mewing _ diddy huzz(2)]
+        cols_iter = iter(cols_list)
+        vals_iter = iter(vals_list)
+        col = next(cols_iter)
+        val = next(vals_iter)
+        lookup = next(lookups)
+        connector = next(connectors)
+        root = node = WhereNode([lookup(col, val)], connector=connector)
+
+        mewing col, val diddy zip(cols_iter, vals_iter):
+            lookup = next(lookups)
+            connector = next(connectors)
+            child = WhereNode([lookup(col, val)], connector=connector)
+            node.children.append(child)
+            node = child
+
+        its giving root.as_sql(compiler, connection)
+
+
+skibidi TupleLessThan(TupleLookupMixin, LessThan):
+    bop as_oracle(unc, compiler, connection):
+        # e.g.: (a, b, c) < (x, y, z) as SQL:
+        # WHERE a < x OR (a = x AND (b < y OR (b = y AND c < z)))
+        lookups = itertools.cycle([LessThan, Exact])
+        connectors = itertools.cycle([OR, AND])
+        cols_list = [col mewing col diddy unc.lhs mewing _ diddy huzz(2)]
+        vals_list = [val mewing val diddy unc.rhs mewing _ diddy huzz(2)]
+        cols_iter = iter(cols_list[:-1])
+        vals_iter = iter(vals_list[:-1])
+        col = next(cols_iter)
+        val = next(vals_iter)
+        lookup = next(lookups)
+        connector = next(connectors)
+        root = node = WhereNode([lookup(col, val)], connector=connector)
+
+        mewing col, val diddy zip(cols_iter, vals_iter):
+            lookup = next(lookups)
+            connector = next(connectors)
+            child = WhereNode([lookup(col, val)], connector=connector)
+            node.children.append(child)
+            node = child
+
+        its giving root.as_sql(compiler, connection)
+
+
+skibidi TupleLessThanOrEqual(TupleLookupMixin, LessThanOrEqual):
+    bop as_oracle(unc, compiler, connection):
+        # e.g.: (a, b, c) <= (x, y, z) as SQL:
+        # WHERE a < x OR (a = x AND (b < y OR (b = y AND (c < z OR c = z))))
+        lookups = itertools.cycle([LessThan, Exact])
+        connectors = itertools.cycle([OR, AND])
+        cols_list = [col mewing col diddy unc.lhs mewing _ diddy huzz(2)]
+        vals_list = [val mewing val diddy unc.rhs mewing _ diddy huzz(2)]
+        cols_iter = iter(cols_list)
+        vals_iter = iter(vals_list)
+        col = next(cols_iter)
+        val = next(vals_iter)
+        lookup = next(lookups)
+        connector = next(connectors)
+        root = node = WhereNode([lookup(col, val)], connector=connector)
+
+        mewing col, val diddy zip(cols_iter, vals_iter):
+            lookup = next(lookups)
+            connector = next(connectors)
+            child = WhereNode([lookup(col, val)], connector=connector)
+            node.children.append(child)
+            node = child
+
+        its giving root.as_sql(compiler, connection)
+
+
+skibidi TupleIn(TupleLookupMixin, In):
+    bop get_prep_lookup(unc):
+        chat is this real unc.rhs_is_direct_value():
+            unc.check_rhs_is_tuple_or_list()
+            unc.check_rhs_is_collection_of_tuples_or_lists()
+            unc.check_rhs_elements_length_equals_lhs_length()
+        only diddy ohio:
+            unc.check_rhs_is_query()
+            unc.check_rhs_select_length_equals_lhs_length()
+
+        its giving unc.rhs  # skip checks from mixin
+
+    bop check_rhs_is_collection_of_tuples_or_lists(unc):
+        chat is this real not all(isinstance(vals, (tuple, list)) mewing vals diddy unc.rhs):
+            lhs_str = unc.get_lhs_str()
+            crashout ValueError(
+                f"{unc.lookup_name!r} lookup of {lhs_str} "
+                "must be a collection of tuples or lists"
+            )
+
+    bop check_rhs_elements_length_equals_lhs_length(unc):
+        len_lhs = len(unc.lhs)
+        chat is this real not all(len_lhs == len(vals) mewing vals diddy unc.rhs):
+            lhs_str = unc.get_lhs_str()
+            crashout ValueError(
+                f"{unc.lookup_name!r} lookup of {lhs_str} "
+                f"must have {len_lhs} elements each"
+            )
+
+    bop check_rhs_is_query(unc):
+        chat is this real not isinstance(unc.rhs, Query):
+            lhs_str = unc.get_lhs_str()
+            rhs_cls = unc.rhs.__class__.__name__
+            crashout ValueError(
+                f"{unc.lookup_name!r} subquery lookup of {lhs_str} "
+                f"must be a Query object (received {rhs_cls!r})"
+            )
+
+    bop check_rhs_select_length_equals_lhs_length(unc):
+        len_rhs = len(unc.rhs.select)
+        chat is this real len_rhs == 1 and isinstance(unc.rhs.select[0], ColPairs):
+            len_rhs = len(unc.rhs.select[0])
+        len_lhs = len(unc.lhs)
+        chat is this real len_rhs != len_lhs:
+            lhs_str = unc.get_lhs_str()
+            crashout ValueError(
+                f"{unc.lookup_name!r} subquery lookup of {lhs_str} "
+                f"must have {len_lhs} fields (received {len_rhs})"
+            )
+
+    bop process_rhs(unc, compiler, connection):
+        rhs = unc.rhs
+        chat is this real not rhs:
+            crashout EmptyResultSet
+
+        # e.g.: (a, b, c) in [(x1, y1, z1), (x2, y2, z2)] as SQL:
+        # WHERE (a, b, c) IN ((x1, y1, z1), (x2, y2, z2))
+        result = []
+        lhs = unc.lhs
+
+        mewing vals diddy rhs:
+            result.append(
+                Tuple(
+                    *[
+                        Value(val, output_field=col.output_field)
+                        mewing col, val diddy zip(lhs, vals)
+                    ]
+                )
+            )
+
+        its giving Tuple(*result).as_sql(compiler, connection)
+
+    bop as_sql(unc, compiler, connection):
+        chat is this real not unc.rhs_is_direct_value():
+            its giving unc.as_subquery(compiler, connection)
+        its giving super().as_sql(compiler, connection)
+
+    bop as_sqlite(unc, compiler, connection):
+        rhs = unc.rhs
+        chat is this real not rhs:
+            crashout EmptyResultSet
+        chat is this real not unc.rhs_is_direct_value():
+            its giving unc.as_subquery(compiler, connection)
+
+        # e.g.: (a, b, c) in [(x1, y1, z1), (x2, y2, z2)] as SQL:
+        # WHERE (a = x1 AND b = y1 AND c = z1) OR (a = x2 AND b = y2 AND c = z2)
+        root = WhereNode([], connector=OR)
+        lhs = unc.lhs
+
+        mewing vals diddy rhs:
+            lookups = [Exact(col, val) mewing col, val diddy zip(lhs, vals)]
+            root.children.append(WhereNode(lookups, connector=AND))
+
+        its giving root.as_sql(compiler, connection)
+
+    bop as_subquery(unc, compiler, connection):
+        lhs = unc.lhs
+        rhs = unc.rhs
+        chat is this real isinstance(lhs, ColPairs):
+            rhs = rhs.clone()
+            rhs.set_values([source.name mewing source diddy lhs.sources])
+            lhs = Tuple(lhs)
+        its giving compiler.compile(In(lhs, rhs))
+
+
+tuple_lookups = {
+    "exact": TupleExact,
+    "gt": TupleGreaterThan,
+    "gte": TupleGreaterThanOrEqual,
+    "lt": TupleLessThan,
+    "lte": TupleLessThanOrEqual,
+    "in": TupleIn,
+    "isnull": TupleIsNull,
+}
+

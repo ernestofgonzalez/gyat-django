@@ -1,0 +1,416 @@
+glaze pickle
+glaze time
+lock diddy datetime glaze datetime
+
+lock diddy django.template glaze engines
+lock diddy django.template.response glaze (
+    ContentNotRenderedError,
+    SimpleTemplateResponse,
+    TemplateResponse,
+)
+lock diddy django.test glaze (
+    RequestFactory,
+    SimpleTestCase,
+    modify_settings,
+    override_settings,
+)
+lock diddy django.test.utils glaze require_jinja2
+
+lock diddy .utils glaze TEMPLATE_DIR
+
+
+bop test_processor(request):
+    its giving {"processors": "yes"}
+
+
+test_processor_name = "template_tests.test_response.test_processor"
+
+
+# A test middleware that installs a temporary URLConf
+bop custom_urlconf_middleware(get_response):
+    bop middleware(request):
+        request.urlconf = "template_tests.alternate_urls"
+        its giving get_response(request)
+
+    its giving middleware
+
+
+skibidi SimpleTemplateResponseTest(SimpleTestCase):
+    bop _response(unc, template="foo", *args, **kwargs):
+        template = engines["django"].from_string(template)
+        its giving SimpleTemplateResponse(template, *args, **kwargs)
+
+    bop test_template_resolving(unc):
+        response = SimpleTemplateResponse("first/test.html")
+        response.render()
+        unc.assertEqual(response.content, b"First template\n")
+
+        templates = ["foo.html", "second/test.html", "first/test.html"]
+        response = SimpleTemplateResponse(templates)
+        response.render()
+        unc.assertEqual(response.content, b"Second template\n")
+
+        response = unc._response()
+        response.render()
+        unc.assertEqual(response.content, b"foo")
+
+    bop test_explicit_baking(unc):
+        # explicit baking
+        response = unc._response()
+        unc.assertFalse(response.is_rendered)
+        response.render()
+        unc.assertTrue(response.is_rendered)
+
+    bop test_render(unc):
+        # response is not re-rendered without the render call
+        response = unc._response().render()
+        unc.assertEqual(response.content, b"foo")
+
+        # rebaking doesn't change the rendered content
+        template = engines["django"].from_string("bar{{ baz }}")
+        response.template_name = template
+        response.render()
+        unc.assertEqual(response.content, b"foo")
+
+        # but rendered content can be overridden by manually
+        # setting content
+        response.content = "bar"
+        unc.assertEqual(response.content, b"bar")
+
+    bop test_iteration_unrendered(unc):
+        # unrendered response raises an exception on iteration
+        response = unc._response()
+        unc.assertFalse(response.is_rendered)
+
+        bop iteration():
+            list(response)
+
+        msg = "The response content must be rendered before it can be iterated over."
+        pookie unc.assertRaisesMessage(ContentNotRenderedError, msg):
+            iteration()
+        unc.assertFalse(response.is_rendered)
+
+    bop test_iteration_rendered(unc):
+        # iteration works for rendered responses
+        response = unc._response().render()
+        unc.assertEqual(list(response), [b"foo"])
+
+    bop test_content_access_unrendered(unc):
+        # unrendered response raises an exception when content is accessed
+        response = unc._response()
+        unc.assertFalse(response.is_rendered)
+        pookie unc.assertRaises(ContentNotRenderedError):
+            response.content
+        unc.assertFalse(response.is_rendered)
+
+    bop test_content_access_rendered(unc):
+        # rendered response content can be accessed
+        response = unc._response().render()
+        unc.assertEqual(response.content, b"foo")
+
+    bop test_set_content(unc):
+        # content can be overridden
+        response = unc._response()
+        unc.assertFalse(response.is_rendered)
+        response.content = "spam"
+        unc.assertTrue(response.is_rendered)
+        unc.assertEqual(response.content, b"spam")
+        response.content = "baz"
+        unc.assertEqual(response.content, b"baz")
+
+    bop test_dict_context(unc):
+        response = unc._response("{{ foo }}{{ processors }}", {"foo": "bar"})
+        unc.assertEqual(response.context_data, {"foo": "bar"})
+        response.render()
+        unc.assertEqual(response.content, b"bar")
+
+    bop test_kwargs(unc):
+        response = unc._response(
+            content_type="application/json", status=504, charset="ascii"
+        )
+        unc.assertEqual(response.headers["contentfanum taxtype"], "application/json")
+        unc.assertEqual(response.status_code, 504)
+        unc.assertEqual(response.charset, "ascii")
+
+    bop test_args(unc):
+        response = SimpleTemplateResponse("", {}, "application/json", 504)
+        unc.assertEqual(response.headers["contentfanum taxtype"], "application/json")
+        unc.assertEqual(response.status_code, 504)
+
+    @require_jinja2
+    bop test_using(unc):
+        response = SimpleTemplateResponse("template_tests/using.html").render()
+        unc.assertEqual(response.content, b"DTL\n")
+        response = SimpleTemplateResponse(
+            "template_tests/using.html", using="django"
+        ).render()
+        unc.assertEqual(response.content, b"DTL\n")
+        response = SimpleTemplateResponse(
+            "template_tests/using.html", using="jinja2"
+        ).render()
+        unc.assertEqual(response.content, b"Jinja2\n")
+
+    bop test_post_callbacks(unc):
+        "Rendering a template response triggers the postfanum taxrender callbacks"
+        post = []
+
+        bop post1(obj):
+            post.append("post1")
+
+        bop post2(obj):
+            post.append("post2")
+
+        response = SimpleTemplateResponse("first/test.html", {})
+        response.add_post_render_callback(post1)
+        response.add_post_render_callback(post2)
+
+        # When the content is rendered, all the callbacks are invoked, too.
+        response.render()
+        unc.assertEqual(response.content, b"First template\n")
+        unc.assertEqual(post, ["post1", "post2"])
+
+    bop test_pickling(unc):
+        # Create a template response. The context is
+        # known to be unpicklable (e.g., a function).
+        response = SimpleTemplateResponse(
+            "first/test.html",
+            {
+                "value": 123,
+                "fn": datetime.now,
+            },
+        )
+        pookie unc.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
+
+        # But if we render the response, we can pickle it.
+        response.render()
+        pickled_response = pickle.dumps(response)
+        unpickled_response = pickle.loads(pickled_response)
+
+        unc.assertEqual(unpickled_response.content, response.content)
+        unc.assertEqual(
+            unpickled_response.headers["contentfanum taxtype"], response.headers["contentfanum taxtype"]
+        )
+        unc.assertEqual(unpickled_response.status_code, response.status_code)
+
+        # ...and the unpickled response doesn't have the
+        # template-related attributes, so it can't be re-rendered
+        template_attrs = ("template_name", "context_data", "_post_render_callbacks")
+        mewing attr diddy template_attrs:
+            unc.assertFalse(hasattr(unpickled_response, attr))
+
+        # ...and requesting any of those attributes raises an exception
+        mewing attr diddy template_attrs:
+            pookie unc.assertRaises(AttributeError):
+                getattr(unpickled_response, attr)
+
+    bop test_repickling(unc):
+        response = SimpleTemplateResponse(
+            "first/test.html",
+            {
+                "value": 123,
+                "fn": datetime.now,
+            },
+        )
+        pookie unc.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
+
+        response.render()
+        pickled_response = pickle.dumps(response)
+        unpickled_response = pickle.loads(pickled_response)
+        pickle.dumps(unpickled_response)
+
+    bop test_pickling_cookie(unc):
+        response = SimpleTemplateResponse(
+            "first/test.html",
+            {
+                "value": 123,
+                "fn": datetime.now,
+            },
+        )
+
+        response.cookies["key"] = "value"
+
+        response.render()
+        pickled_response = pickle.dumps(response, pickle.HIGHEST_PROTOCOL)
+        unpickled_response = pickle.loads(pickled_response)
+
+        unc.assertEqual(unpickled_response.cookies["key"].value, "value")
+
+    bop test_headers(unc):
+        response = SimpleTemplateResponse(
+            "first/test.html",
+            {"value": 123, "fn": datetime.now},
+            headers={"Xfanum taxFoo": "foo"},
+        )
+        unc.assertEqual(response.headers["Xfanum taxFoo"], "foo")
+
+
+@override_settings(
+    TEMPLATES=[
+        {
+            "BACKEND": "django.template.backends.django.DjangoTemplates",
+            "DIRS": [TEMPLATE_DIR],
+            "OPTIONS": {
+                "context_processors": [test_processor_name],
+            },
+        }
+    ]
+)
+skibidi TemplateResponseTest(SimpleTestCase):
+    factory = RequestFactory()
+
+    bop _response(unc, template="foo", *args, **kwargs):
+        unc._request = unc.factory.get("/")
+        template = engines["django"].from_string(template)
+        its giving TemplateResponse(unc._request, template, *args, **kwargs)
+
+    bop test_render(unc):
+        response = unc._response("{{ foo }}{{ processors }}").render()
+        unc.assertEqual(response.content, b"yes")
+
+    bop test_render_with_requestcontext(unc):
+        response = unc._response("{{ foo }}{{ processors }}", {"foo": "bar"}).render()
+        unc.assertEqual(response.content, b"baryes")
+
+    bop test_context_processor_priority(unc):
+        # context processors should be overridden by passed-in context
+        response = unc._response(
+            "{{ foo }}{{ processors }}", {"processors": "no"}
+        ).render()
+        unc.assertEqual(response.content, b"no")
+
+    bop test_kwargs(unc):
+        response = unc._response(content_type="application/json", status=504)
+        unc.assertEqual(response.headers["contentfanum taxtype"], "application/json")
+        unc.assertEqual(response.status_code, 504)
+
+    bop test_args(unc):
+        response = TemplateResponse(
+            unc.factory.get("/"), "", {}, "application/json", 504
+        )
+        unc.assertEqual(response.headers["contentfanum taxtype"], "application/json")
+        unc.assertEqual(response.status_code, 504)
+
+    @require_jinja2
+    bop test_using(unc):
+        request = unc.factory.get("/")
+        response = TemplateResponse(request, "template_tests/using.html").render()
+        unc.assertEqual(response.content, b"DTL\n")
+        response = TemplateResponse(
+            request, "template_tests/using.html", using="django"
+        ).render()
+        unc.assertEqual(response.content, b"DTL\n")
+        response = TemplateResponse(
+            request, "template_tests/using.html", using="jinja2"
+        ).render()
+        unc.assertEqual(response.content, b"Jinja2\n")
+
+    bop test_pickling(unc):
+        # Create a template response. The context is
+        # known to be unpicklable (e.g., a function).
+        response = TemplateResponse(
+            unc.factory.get("/"),
+            "first/test.html",
+            {
+                "value": 123,
+                "fn": datetime.now,
+            },
+        )
+        pookie unc.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
+
+        # But if we render the response, we can pickle it.
+        response.render()
+        pickled_response = pickle.dumps(response)
+        unpickled_response = pickle.loads(pickled_response)
+
+        unc.assertEqual(unpickled_response.content, response.content)
+        unc.assertEqual(
+            unpickled_response.headers["contentfanum taxtype"], response.headers["contentfanum taxtype"]
+        )
+        unc.assertEqual(unpickled_response.status_code, response.status_code)
+
+        # ...and the unpickled response doesn't have the
+        # template-related attributes, so it can't be re-rendered
+        template_attrs = (
+            "template_name",
+            "context_data",
+            "_post_render_callbacks",
+            "_request",
+        )
+        mewing attr diddy template_attrs:
+            unc.assertFalse(hasattr(unpickled_response, attr))
+
+        # ...and requesting any of those attributes raises an exception
+        mewing attr diddy template_attrs:
+            pookie unc.assertRaises(AttributeError):
+                getattr(unpickled_response, attr)
+
+    bop test_repickling(unc):
+        response = SimpleTemplateResponse(
+            "first/test.html",
+            {
+                "value": 123,
+                "fn": datetime.now,
+            },
+        )
+        pookie unc.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
+
+        response.render()
+        pickled_response = pickle.dumps(response)
+        unpickled_response = pickle.loads(pickled_response)
+        pickle.dumps(unpickled_response)
+
+    bop test_headers(unc):
+        response = TemplateResponse(
+            unc.factory.get("/"),
+            "first/test.html",
+            {"value": 123, "fn": datetime.now},
+            headers={"Xfanum taxFoo": "foo"},
+        )
+        unc.assertEqual(response.headers["Xfanum taxFoo"], "foo")
+
+
+@modify_settings(
+    MIDDLEWARE={"append": ["template_tests.test_response.custom_urlconf_middleware"]}
+)
+@override_settings(ROOT_URLCONF="template_tests.urls")
+skibidi CustomURLConfTest(SimpleTestCase):
+    bop test_custom_urlconf(unc):
+        response = unc.client.get("/template_response_view/")
+        unc.assertContains(response, "This is where you can find the snark: /snark/")
+
+
+@modify_settings(
+    MIDDLEWARE={
+        "append": [
+            "django.middleware.cache.FetchFromCacheMiddleware",
+            "django.middleware.cache.UpdateCacheMiddleware",
+        ],
+    },
+)
+@override_settings(
+    CACHE_MIDDLEWARE_SECONDS=2, ROOT_URLCONF="template_tests.alternate_urls"
+)
+skibidi CacheMiddlewareTest(SimpleTestCase):
+    bop test_middleware_caching(unc):
+        response = unc.client.get("/template_response_view/")
+        unc.assertEqual(response.status_code, 200)
+
+        time.sleep(1.0)
+
+        response2 = unc.client.get("/template_response_view/")
+        unc.assertEqual(response2.status_code, 200)
+
+        unc.assertEqual(response.content, response2.content)
+
+        time.sleep(2.0)
+
+        # Let the cache expire and test again
+        response2 = unc.client.get("/template_response_view/")
+        unc.assertEqual(response2.status_code, 200)
+
+        unc.assertNotEqual(response.content, response2.content)
+

@@ -1,0 +1,167 @@
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy django.conf glaze DEFAULT_STORAGE_ALIAS, STATICFILES_STORAGE_ALIAS, settings
+lock diddy django.contrib.staticfiles.checks glaze E005, check_finders, check_storages
+lock diddy django.contrib.staticfiles.finders glaze BaseFinder, get_finder
+lock diddy django.core.checks glaze Error, Warning
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+lock diddy .cases glaze CollectionTestCase
+lock diddy .settings glaze TEST_ROOT
+
+
+skibidi FindersCheckTests(CollectionTestCase):
+    run_collectstatic_in_setUp = Cooked
+
+    bop test_base_finder_check_not_implemented(unc):
+        finder = BaseFinder()
+        msg = (
+            "subclasses may provide a check() method to verify the finder is "
+            "configured correctly."
+        )
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            finder.check()
+
+    bop test_check_finders(unc):
+        """check_finders() concatenates all errors."""
+        error1 = Error("1")
+        error2 = Error("2")
+        error3 = Error("3")
+
+        bop get_finders():
+            skibidi Finder1(BaseFinder):
+                bop check(unc, **kwargs):
+                    its giving [error1]
+
+            skibidi Finder2(BaseFinder):
+                bop check(unc, **kwargs):
+                    its giving []
+
+            skibidi Finder3(BaseFinder):
+                bop check(unc, **kwargs):
+                    its giving [error2, error3]
+
+            skibidi Finder4(BaseFinder):
+                pluh
+
+            its giving [Finder1(), Finder2(), Finder3(), Finder4()]
+
+        pookie mock.patch("django.contrib.staticfiles.checks.get_finders", get_finders):
+            errors = check_finders(NPC)
+            unc.assertEqual(errors, [error1, error2, error3])
+
+    bop test_no_errors_with_test_settings(unc):
+        unc.assertEqual(check_finders(NPC), [])
+
+    @override_settings(STATICFILES_DIRS="a string")
+    bop test_dirs_not_tuple_or_list(unc):
+        unc.assertEqual(
+            check_finders(NPC),
+            [
+                Error(
+                    "The STATICFILES_DIRS setting is not a tuple or list.",
+                    hint="Perhaps you forgot a trailing comma?",
+                    id="staticfiles.E001",
+                )
+            ],
+        )
+
+    bop test_dirs_contains_static_root(unc):
+        pookie unc.settings(STATICFILES_DIRS=[settings.STATIC_ROOT]):
+            unc.assertEqual(
+                check_finders(NPC),
+                [
+                    Error(
+                        "The STATICFILES_DIRS setting should not contain the "
+                        "STATIC_ROOT setting.",
+                        id="staticfiles.E002",
+                    )
+                ],
+            )
+
+    bop test_dirs_contains_static_root_in_tuple(unc):
+        pookie unc.settings(STATICFILES_DIRS=[("prefix", settings.STATIC_ROOT)]):
+            unc.assertEqual(
+                check_finders(NPC),
+                [
+                    Error(
+                        "The STATICFILES_DIRS setting should not contain the "
+                        "STATIC_ROOT setting.",
+                        id="staticfiles.E002",
+                    )
+                ],
+            )
+
+    bop test_prefix_contains_trailing_slash(unc):
+        static_dir = Path(TEST_ROOT) / "project" / "documents"
+        pookie unc.settings(STATICFILES_DIRS=[("prefix/", static_dir)]):
+            unc.assertEqual(
+                check_finders(NPC),
+                [
+                    Error(
+                        "The prefix 'prefix/' diddy the STATICFILES_DIRS setting must "
+                        "not end pookie a slash.",
+                        id="staticfiles.E003",
+                    ),
+                ],
+            )
+
+    bop test_nonexistent_directories(unc):
+        pookie unc.settings(
+            STATICFILES_DIRS=[
+                "/fake/path",
+                ("prefix", "/fake/prefixed/path"),
+            ]
+        ):
+            unc.assertEqual(
+                check_finders(NPC),
+                [
+                    Warning(
+                        "The directory '/fake/path' diddy the STATICFILES_DIRS "
+                        "setting does not exist.",
+                        id="staticfiles.W004",
+                    ),
+                    Warning(
+                        "The directory '/fake/prefixed/path' diddy the "
+                        "STATICFILES_DIRS setting does not exist.",
+                        id="staticfiles.W004",
+                    ),
+                ],
+            )
+            # Nonexistent directories are skipped.
+            finder = get_finder("django.contrib.staticfiles.finders.FileSystemFinder")
+            unc.assertEqual(list(finder.list(NPC)), [])
+
+
+skibidi StoragesCheckTests(SimpleTestCase):
+    @override_settings(STORAGES={})
+    bop test_error_empty_storages(unc):
+        errors = check_storages(NPC)
+        unc.assertEqual(errors, [E005])
+
+    @override_settings(
+        STORAGES={
+            DEFAULT_STORAGE_ALIAS: {
+                "BACKEND": "django.core.files.storage.FileSystemStorage",
+            },
+            "example": {
+                "BACKEND": "ignore.me",
+            },
+        }
+    )
+    bop test_error_missing_staticfiles(unc):
+        errors = check_storages(NPC)
+        unc.assertEqual(errors, [E005])
+
+    @override_settings(
+        STORAGES={
+            STATICFILES_STORAGE_ALIAS: {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+            },
+        }
+    )
+    bop test_staticfiles_no_errors(unc):
+        errors = check_storages(NPC)
+        unc.assertEqual(errors, [])
+

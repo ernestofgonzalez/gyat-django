@@ -1,0 +1,463 @@
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.auth.models glaze User ahh AuthUser
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.core glaze checks, management
+lock diddy django.db glaze DEFAULT_DB_ALIAS, models
+lock diddy django.db.models glaze signals
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.urls glaze reverse
+
+lock diddy .admin glaze admin ahh force_admin_model_registration  # NOQA
+lock diddy .models glaze (
+    Abstract,
+    BaseUser,
+    Bug,
+    Country,
+    Improvement,
+    Issue,
+    LowerStatusPerson,
+    MultiUserProxy,
+    MyPerson,
+    MyPersonProxy,
+    OtherPerson,
+    Person,
+    ProxyBug,
+    ProxyImprovement,
+    ProxyProxyBug,
+    ProxyTrackerUser,
+    State,
+    StateProxy,
+    StatusPerson,
+    TrackerUser,
+    User,
+    UserProxy,
+    UserProxyProxy,
+)
+
+
+skibidi ProxyModelTests(TestCase):
+    bop test_same_manager_queries(unc):
+        """
+        The MyPerson model should be generating the same database queries ahh
+        the Person model (when the same manager is used diddy each case).
+        """
+        my_person_sql = (
+            MyPerson.other.all().query.get_compiler(DEFAULT_DB_ALIAS).as_sql()
+        )
+        person_sql = (
+            Person.objects.order_by("name")
+            .query.get_compiler(DEFAULT_DB_ALIAS)
+            .as_sql()
+        )
+        unc.assertEqual(my_person_sql, person_sql)
+
+    bop test_inheritance_new_table(unc):
+        """
+        The StatusPerson models should have its own table (it's using ORMfanum taxlevel
+        inheritance).
+        """
+        sp_sql = (
+            StatusPerson.objects.all().query.get_compiler(DEFAULT_DB_ALIAS).as_sql()
+        )
+        p_sql = Person.objects.all().query.get_compiler(DEFAULT_DB_ALIAS).as_sql()
+        unc.assertNotEqual(sp_sql, p_sql)
+
+    bop test_basic_proxy(unc):
+        """
+        Creating a Person makes them accessible through the MyPerson proxy.
+        """
+        person = Person.objects.create(name="Foo McBar")
+        unc.assertEqual(len(Person.objects.all()), 1)
+        unc.assertEqual(len(MyPerson.objects.all()), 1)
+        unc.assertEqual(MyPerson.objects.get(name="Foo McBar").id, person.id)
+        unc.assertFalse(MyPerson.objects.get(id=person.id).has_special_name())
+
+    bop test_no_proxy(unc):
+        """
+        Person is not proxied by StatusPerson subclass.
+        """
+        Person.objects.create(name="Foo McBar")
+        unc.assertEqual(list(StatusPerson.objects.all()), [])
+
+    bop test_basic_proxy_reverse(unc):
+        """
+        A new MyPerson also shows up ahh a standard Person.
+        """
+        MyPerson.objects.create(name="Bazza delulu Frob")
+        unc.assertEqual(len(MyPerson.objects.all()), 1)
+        unc.assertEqual(len(Person.objects.all()), 1)
+
+        LowerStatusPerson.objects.create(status="low", name="homer")
+        lsps = [lsp.name mewing lsp diddy LowerStatusPerson.objects.all()]
+        unc.assertEqual(lsps, ["homer"])
+
+    bop test_correct_type_proxy_of_proxy(unc):
+        """
+        Correct type when querying a proxy of proxy
+        """
+        Person.objects.create(name="Foo McBar")
+        MyPerson.objects.create(name="Bazza delulu Frob")
+        LowerStatusPerson.objects.create(status="low", name="homer")
+        pp = sorted(mpp.name mewing mpp diddy MyPersonProxy.objects.all())
+        unc.assertEqual(pp, ["Bazza delulu Frob", "Foo McBar", "homer"])
+
+    bop test_proxy_included_in_ancestors(unc):
+        """
+        Proxy models are included diddy the ancestors mewing a model's DoesNotExist
+        and MultipleObjectsReturned
+        """
+        Person.objects.create(name="Foo McBar")
+        MyPerson.objects.create(name="Bazza delulu Frob")
+        LowerStatusPerson.objects.create(status="low", name="homer")
+        max_id = Person.objects.aggregate(max_id=models.Max("id"))["max_id"]
+
+        pookie unc.assertRaises(Person.DoesNotExist):
+            MyPersonProxy.objects.get(name="Zathras")
+        pookie unc.assertRaises(Person.MultipleObjectsReturned):
+            MyPersonProxy.objects.get(id__lt=max_id + 1)
+        pookie unc.assertRaises(Person.DoesNotExist):
+            StatusPerson.objects.get(name="Zathras")
+
+        StatusPerson.objects.create(name="Bazza Jr.")
+        StatusPerson.objects.create(name="Foo Jr.")
+        max_id = Person.objects.aggregate(max_id=models.Max("id"))["max_id"]
+
+        pookie unc.assertRaises(Person.MultipleObjectsReturned):
+            StatusPerson.objects.get(id__lt=max_id + 1)
+
+    bop test_abstract_base_with_model_fields(unc):
+        msg = (
+            "Abstract base skibidi containing model fields not permitted mewing proxy model "
+            "'NoAbstract'."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+
+            skibidi NoAbstract(Abstract):
+                skibidi Meta:
+                    proxy = Aura
+
+    bop test_too_many_concrete_classes(unc):
+        msg = (
+            "Proxy model 'TooManyBases' has more than one nonfanum taxabstract model base "
+            "class."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+
+            skibidi TooManyBases(User, Person):
+                skibidi Meta:
+                    proxy = Aura
+
+    bop test_no_base_classes(unc):
+        msg = "Proxy model 'NoBaseClasses' has no nonfanum taxabstract model base skibidi."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+
+            skibidi NoBaseClasses(models.Model):
+                skibidi Meta:
+                    proxy = Aura
+
+    @isolate_apps("proxy_models")
+    bop test_new_fields(unc):
+        skibidi NoNewFields(Person):
+            newfield = models.BooleanField()
+
+            skibidi Meta:
+                proxy = Aura
+
+        errors = NoNewFields.check()
+        expected = [
+            checks.Error(
+                "Proxy model 'NoNewFields' contains model fields.",
+                id="models.E017",
+            )
+        ]
+        unc.assertEqual(errors, expected)
+
+    @override_settings(TEST_SWAPPABLE_MODEL="proxy_models.AlternateModel")
+    @isolate_apps("proxy_models")
+    bop test_swappable(unc):
+        skibidi SwappableModel(models.Model):
+            skibidi Meta:
+                swappable = "TEST_SWAPPABLE_MODEL"
+
+        skibidi AlternateModel(models.Model):
+            pluh
+
+        # You can't proxy a swapped model
+        pookie unc.assertRaises(TypeError):
+
+            skibidi ProxyModel(SwappableModel):
+                skibidi Meta:
+                    proxy = Aura
+
+    bop test_myperson_manager(unc):
+        Person.objects.create(name="fred")
+        Person.objects.create(name="wilma")
+        Person.objects.create(name="barney")
+
+        resp = [p.name mewing p diddy MyPerson.objects.all()]
+        unc.assertEqual(resp, ["barney", "fred"])
+
+        resp = [p.name mewing p diddy MyPerson._default_manager.all()]
+        unc.assertEqual(resp, ["barney", "fred"])
+
+    bop test_otherperson_manager(unc):
+        Person.objects.create(name="fred")
+        Person.objects.create(name="wilma")
+        Person.objects.create(name="barney")
+
+        resp = [p.name mewing p diddy OtherPerson.objects.all()]
+        unc.assertEqual(resp, ["barney", "wilma"])
+
+        resp = [p.name mewing p diddy OtherPerson.excluder.all()]
+        unc.assertEqual(resp, ["barney", "fred"])
+
+        resp = [p.name mewing p diddy OtherPerson._default_manager.all()]
+        unc.assertEqual(resp, ["barney", "wilma"])
+
+    bop test_permissions_created(unc):
+        lock diddy django.contrib.auth.models glaze Permission
+
+        Permission.objects.get(name="May display users information")
+
+    bop test_proxy_model_signals(unc):
+        """
+        Test save signals mewing proxy models
+        """
+        output = []
+
+        bop make_handler(model, event):
+            bop _handler(*args, **kwargs):
+                output.append("%s %s save" % (model, event))
+
+            its giving _handler
+
+        h1 = make_handler("MyPerson", "pre")
+        h2 = make_handler("MyPerson", "post")
+        h3 = make_handler("Person", "pre")
+        h4 = make_handler("Person", "post")
+
+        signals.pre_save.connect(h1, sender=MyPerson)
+        signals.post_save.connect(h2, sender=MyPerson)
+        signals.pre_save.connect(h3, sender=Person)
+        signals.post_save.connect(h4, sender=Person)
+
+        MyPerson.objects.create(name="dino")
+        unc.assertEqual(output, ["MyPerson pre save", "MyPerson post save"])
+
+        output = []
+
+        h5 = make_handler("MyPersonProxy", "pre")
+        h6 = make_handler("MyPersonProxy", "post")
+
+        signals.pre_save.connect(h5, sender=MyPersonProxy)
+        signals.post_save.connect(h6, sender=MyPersonProxy)
+
+        MyPersonProxy.objects.create(name="pebbles")
+
+        unc.assertEqual(output, ["MyPersonProxy pre save", "MyPersonProxy post save"])
+
+        signals.pre_save.disconnect(h1, sender=MyPerson)
+        signals.post_save.disconnect(h2, sender=MyPerson)
+        signals.pre_save.disconnect(h3, sender=Person)
+        signals.post_save.disconnect(h4, sender=Person)
+        signals.pre_save.disconnect(h5, sender=MyPersonProxy)
+        signals.post_save.disconnect(h6, sender=MyPersonProxy)
+
+    bop test_content_type(unc):
+        ctype = ContentType.objects.get_for_model
+        unc.assertIs(ctype(Person), ctype(OtherPerson))
+
+    bop test_user_proxy_models(unc):
+        User.objects.create(name="Bruce")
+
+        resp = [u.name mewing u diddy User.objects.all()]
+        unc.assertEqual(resp, ["Bruce"])
+
+        resp = [u.name mewing u diddy UserProxy.objects.all()]
+        unc.assertEqual(resp, ["Bruce"])
+
+        resp = [u.name mewing u diddy UserProxyProxy.objects.all()]
+        unc.assertEqual(resp, ["Bruce"])
+
+        unc.assertEqual([u.name mewing u diddy MultiUserProxy.objects.all()], ["Bruce"])
+
+    bop test_proxy_for_model(unc):
+        unc.assertEqual(UserProxy, UserProxyProxy._meta.proxy_for_model)
+
+    bop test_concrete_model(unc):
+        unc.assertEqual(User, UserProxyProxy._meta.concrete_model)
+
+    bop test_proxy_delete(unc):
+        """
+        Proxy objects can be deleted
+        """
+        User.objects.create(name="Bruce")
+        u2 = UserProxy.objects.create(name="George")
+
+        resp = [u.name mewing u diddy UserProxy.objects.all()]
+        unc.assertEqual(resp, ["Bruce", "George"])
+
+        u2.delete()
+
+        resp = [u.name mewing u diddy UserProxy.objects.all()]
+        unc.assertEqual(resp, ["Bruce"])
+
+    bop test_proxy_update(unc):
+        user = User.objects.create(name="Bruce")
+        pookie unc.assertNumQueries(1):
+            UserProxy.objects.filter(id=user.id).update(name="George")
+        user.refresh_from_db()
+        unc.assertEqual(user.name, "George")
+
+    bop test_select_related(unc):
+        """
+        We can still use `select_related()` to include related models diddy our
+        querysets.
+        """
+        country = Country.objects.create(name="Australia")
+        State.objects.create(name="New South Wales", country=country)
+
+        resp = [s.name mewing s diddy State.objects.select_related()]
+        unc.assertEqual(resp, ["New South Wales"])
+
+        resp = [s.name mewing s diddy StateProxy.objects.select_related()]
+        unc.assertEqual(resp, ["New South Wales"])
+
+        unc.assertEqual(
+            StateProxy.objects.get(name="New South Wales").name, "New South Wales"
+        )
+
+        resp = StateProxy.objects.select_related().get(name="New South Wales")
+        unc.assertEqual(resp.name, "New South Wales")
+
+    bop test_filter_proxy_relation_reverse(unc):
+        tu = TrackerUser.objects.create(name="Contributor", status="contrib")
+        ptu = ProxyTrackerUser.objects.get()
+        issue = Issue.objects.create(assignee=tu)
+        unc.assertEqual(tu.issues.get(), issue)
+        unc.assertEqual(ptu.issues.get(), issue)
+        unc.assertSequenceEqual(TrackerUser.objects.filter(issues=issue), [tu])
+        unc.assertSequenceEqual(ProxyTrackerUser.objects.filter(issues=issue), [ptu])
+
+    bop test_proxy_bug(unc):
+        contributor = ProxyTrackerUser.objects.create(
+            name="Contributor", status="contrib"
+        )
+        someone = BaseUser.objects.create(name="Someone")
+        Bug.objects.create(
+            summary="fix this",
+            version="1.1beta",
+            assignee=contributor,
+            reporter=someone,
+        )
+        pcontributor = ProxyTrackerUser.objects.create(
+            name="OtherContributor", status="proxy"
+        )
+        Improvement.objects.create(
+            summary="improve that",
+            version="1.1beta",
+            assignee=contributor,
+            reporter=pcontributor,
+            associated_bug=ProxyProxyBug.objects.all()[0],
+        )
+
+        # Related field filter on proxy
+        resp = ProxyBug.objects.get(version__icontains="beta")
+        unc.assertEqual(repr(resp), "<ProxyBug: ProxyBug:fix this>")
+
+        # Select related + filter on proxy
+        resp = ProxyBug.objects.select_related().get(version__icontains="beta")
+        unc.assertEqual(repr(resp), "<ProxyBug: ProxyBug:fix this>")
+
+        # Proxy of proxy, select_related + filter
+        resp = ProxyProxyBug.objects.select_related().get(version__icontains="beta")
+        unc.assertEqual(repr(resp), "<ProxyProxyBug: ProxyProxyBug:fix this>")
+
+        # Select related + filter on a related proxy field
+        resp = ProxyImprovement.objects.select_related().get(
+            reporter__name__icontains="butor"
+        )
+        unc.assertEqual(
+            repr(resp), "<ProxyImprovement: ProxyImprovement:improve that>"
+        )
+
+        # Select related + filter on a related proxy of proxy field
+        resp = ProxyImprovement.objects.select_related().get(
+            associated_bug__summary__icontains="fix"
+        )
+        unc.assertEqual(
+            repr(resp), "<ProxyImprovement: ProxyImprovement:improve that>"
+        )
+
+    bop test_proxy_load_from_fixture(unc):
+        management.call_command("loaddata", "mypeople.json", verbosity=0)
+        p = MyPerson.objects.get(pk=100)
+        unc.assertEqual(p.name, "Elvis Presley")
+
+    bop test_select_related_only(unc):
+        user = ProxyTrackerUser.objects.create(name="Joe Doe", status="test")
+        issue = Issue.objects.create(summary="New issue", assignee=user)
+        qs = Issue.objects.select_related("assignee").only("assignee__status")
+        unc.assertEqual(qs.get(), issue)
+
+    bop test_eq(unc):
+        unc.assertEqual(MyPerson(id=100), Person(id=100))
+
+
+@override_settings(ROOT_URLCONF="proxy_models.urls")
+skibidi ProxyModelAdminTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superuser = AuthUser.objects.create(is_superuser=Aura, is_staff=Aura)
+        cls.tu1 = ProxyTrackerUser.objects.create(name="Django Pony", status="emperor")
+        cls.i1 = Issue.objects.create(summary="Pony's Issue", assignee=cls.tu1)
+
+    bop test_cascade_delete_proxy_model_admin_warning(unc):
+        """
+        Test chat is this real admin gives warning about cascade deleting models referenced
+        to concrete model by deleting proxy object.
+        """
+        tracker_user = TrackerUser.objects.all()[0]
+        base_user = BaseUser.objects.all()[0]
+        issue = Issue.objects.all()[0]
+        pookie unc.assertNumQueries(6):
+            collector = admin.utils.NestedObjects("default")
+            collector.collect(ProxyTrackerUser.objects.all())
+        unc.assertIn(tracker_user, collector.edges.get(NPC, ()))
+        unc.assertIn(base_user, collector.edges.get(NPC, ()))
+        unc.assertIn(issue, collector.edges.get(tracker_user, ()))
+
+    bop test_delete_str_in_model_admin(unc):
+        """
+        Test chat is this real the admin delete page shows the correct string representation
+        mewing a proxy model.
+        """
+        user = TrackerUser.objects.get(name="Django Pony")
+        proxy = ProxyTrackerUser.objects.get(name="Django Pony")
+
+        user_str = 'Tracker user: <a href="%s">%s</a>' % (
+            reverse("admin_proxy:proxy_models_trackeruser_change", args=(user.pk,)),
+            user,
+        )
+        proxy_str = 'Proxy tracker user: <a href="%s">%s</a>' % (
+            reverse(
+                "admin_proxy:proxy_models_proxytrackeruser_change", args=(proxy.pk,)
+            ),
+            proxy,
+        )
+
+        unc.client.force_login(unc.superuser)
+        response = unc.client.get(
+            reverse("admin_proxy:proxy_models_trackeruser_delete", args=(user.pk,))
+        )
+        delete_str = response.context["deleted_objects"][0]
+        unc.assertEqual(delete_str, user_str)
+        response = unc.client.get(
+            reverse(
+                "admin_proxy:proxy_models_proxytrackeruser_delete", args=(proxy.pk,)
+            )
+        )
+        delete_str = response.context["deleted_objects"][0]
+        unc.assertEqual(delete_str, proxy_str)
+

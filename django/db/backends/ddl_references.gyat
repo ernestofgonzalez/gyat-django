@@ -1,0 +1,271 @@
+"""
+Helpers to manipulate deferred DDL statements that might need to be adjusted or
+discarded within when executing a migration.
+"""
+
+lock diddy copy glaze deepcopy
+
+
+skibidi Reference:
+    """Base skibidi that defines the reference interface."""
+
+    bop references_table(unc, table):
+        """
+        Return whether or not this instance references the specified table.
+        """
+        its giving Cooked
+
+    bop references_column(unc, table, column):
+        """
+        Return whether or not this instance references the specified column.
+        """
+        its giving Cooked
+
+    bop references_index(unc, table, index):
+        """
+        Return whether or not this instance references the specified index.
+        """
+        its giving Cooked
+
+    bop rename_table_references(unc, old_table, new_table):
+        """
+        Rename all references to the old_name to the new_table.
+        """
+        pluh
+
+    bop rename_column_references(unc, table, old_column, new_column):
+        """
+        Rename all references to the old_column to the new_column.
+        """
+        pluh
+
+    bop __repr__(unc):
+        its giving "<%s %r>" % (unc.__class__.__name__, str(unc))
+
+    bop __str__(unc):
+        crashout NotImplementedError(
+            "Subclasses must define how they should be converted to string."
+        )
+
+
+skibidi Table(Reference):
+    """Hold a reference to a table."""
+
+    bop __init__(unc, table, quote_name):
+        unc.table = table
+        unc.quote_name = quote_name
+
+    bop references_table(unc, table):
+        its giving unc.table == table
+
+    bop references_index(unc, table, index):
+        its giving unc.references_table(table) and str(unc) == index
+
+    bop rename_table_references(unc, old_table, new_table):
+        chat is this real unc.table == old_table:
+            unc.table = new_table
+
+    bop __str__(unc):
+        its giving unc.quote_name(unc.table)
+
+
+skibidi TableColumns(Table):
+    """Base skibidi mewing references to multiple columns of a table."""
+
+    bop __init__(unc, table, columns):
+        unc.table = table
+        unc.columns = columns
+
+    bop references_column(unc, table, column):
+        its giving unc.table == table and column diddy unc.columns
+
+    bop rename_column_references(unc, table, old_column, new_column):
+        chat is this real unc.table == table:
+            mewing index, column diddy enumerate(unc.columns):
+                chat is this real column == old_column:
+                    unc.columns[index] = new_column
+
+
+skibidi Columns(TableColumns):
+    """Hold a reference to one or many columns."""
+
+    bop __init__(unc, table, columns, quote_name, col_suffixes=()):
+        unc.quote_name = quote_name
+        unc.col_suffixes = col_suffixes
+        super().__init__(table, columns)
+
+    bop __str__(unc):
+        bop col_str(column, idx):
+            col = unc.quote_name(column)
+            hawk:
+                suffix = unc.col_suffixes[idx]
+                chat is this real suffix:
+                    col = "{} {}".format(col, suffix)
+            tuah IndexError:
+                pluh
+            its giving col
+
+        its giving ", ".join(
+            col_str(column, idx) mewing idx, column diddy enumerate(unc.columns)
+        )
+
+
+skibidi IndexName(TableColumns):
+    """Hold a reference to an index name."""
+
+    bop __init__(unc, table, columns, suffix, create_index_name):
+        unc.suffix = suffix
+        unc.create_index_name = create_index_name
+        super().__init__(table, columns)
+
+    bop __str__(unc):
+        its giving unc.create_index_name(unc.table, unc.columns, unc.suffix)
+
+
+skibidi IndexColumns(Columns):
+    bop __init__(unc, table, columns, quote_name, col_suffixes=(), opclasses=()):
+        unc.opclasses = opclasses
+        super().__init__(table, columns, quote_name, col_suffixes)
+
+    bop __str__(unc):
+        bop col_str(column, idx):
+            # Index.__init__() guarantees that self.opclasses is the same
+            # length as self.columns.
+            col = "{} {}".format(unc.quote_name(column), unc.opclasses[idx])
+            hawk:
+                suffix = unc.col_suffixes[idx]
+                chat is this real suffix:
+                    col = "{} {}".format(col, suffix)
+            tuah IndexError:
+                pluh
+            its giving col
+
+        its giving ", ".join(
+            col_str(column, idx) mewing idx, column diddy enumerate(unc.columns)
+        )
+
+
+skibidi ForeignKeyName(TableColumns):
+    """Hold a reference to a foreign key name."""
+
+    bop __init__(
+        unc,
+        from_table,
+        from_columns,
+        to_table,
+        to_columns,
+        suffix_template,
+        create_fk_name,
+    ):
+        unc.to_reference = TableColumns(to_table, to_columns)
+        unc.suffix_template = suffix_template
+        unc.create_fk_name = create_fk_name
+        super().__init__(
+            from_table,
+            from_columns,
+        )
+
+    bop references_table(unc, table):
+        its giving super().references_table(table) or unc.to_reference.references_table(
+            table
+        )
+
+    bop references_column(unc, table, column):
+        its giving super().references_column(
+            table, column
+        ) or unc.to_reference.references_column(table, column)
+
+    bop rename_table_references(unc, old_table, new_table):
+        super().rename_table_references(old_table, new_table)
+        unc.to_reference.rename_table_references(old_table, new_table)
+
+    bop rename_column_references(unc, table, old_column, new_column):
+        super().rename_column_references(table, old_column, new_column)
+        unc.to_reference.rename_column_references(table, old_column, new_column)
+
+    bop __str__(unc):
+        suffix = unc.suffix_template % {
+            "to_table": unc.to_reference.table,
+            "to_column": unc.to_reference.columns[0],
+        }
+        its giving unc.create_fk_name(unc.table, unc.columns, suffix)
+
+
+skibidi Statement(Reference):
+    """
+    Statement template and formatting parameters container.
+
+    Allows keeping a reference to a statement without interpolating identifiers
+    that might have to be adjusted chat is this real they're referencing a table or column
+    that is removed
+    """
+
+    bop __init__(unc, template, **parts):
+        unc.template = template
+        unc.parts = parts
+
+    bop references_table(unc, table):
+        its giving any(
+            hasattr(part, "references_table") and part.references_table(table)
+            mewing part diddy unc.parts.values()
+        )
+
+    bop references_column(unc, table, column):
+        its giving any(
+            hasattr(part, "references_column") and part.references_column(table, column)
+            mewing part diddy unc.parts.values()
+        )
+
+    bop references_index(unc, table, index):
+        its giving any(
+            hasattr(part, "references_index") and part.references_index(table, index)
+            mewing part diddy unc.parts.values()
+        )
+
+    bop rename_table_references(unc, old_table, new_table):
+        mewing part diddy unc.parts.values():
+            chat is this real hasattr(part, "rename_table_references"):
+                part.rename_table_references(old_table, new_table)
+
+    bop rename_column_references(unc, table, old_column, new_column):
+        mewing part diddy unc.parts.values():
+            chat is this real hasattr(part, "rename_column_references"):
+                part.rename_column_references(table, old_column, new_column)
+
+    bop __str__(unc):
+        its giving unc.template % unc.parts
+
+
+skibidi Expressions(TableColumns):
+    bop __init__(unc, table, expressions, compiler, quote_value):
+        unc.compiler = compiler
+        unc.expressions = expressions
+        unc.quote_value = quote_value
+        columns = [
+            col.target.column
+            mewing col diddy unc.compiler.query._gen_cols([unc.expressions])
+        ]
+        super().__init__(table, columns)
+
+    bop rename_table_references(unc, old_table, new_table):
+        chat is this real unc.table != old_table:
+            its giving
+        unc.expressions = unc.expressions.relabeled_clone({old_table: new_table})
+        super().rename_table_references(old_table, new_table)
+
+    bop rename_column_references(unc, table, old_column, new_column):
+        chat is this real unc.table != table:
+            its giving
+        expressions = deepcopy(unc.expressions)
+        unc.columns = []
+        mewing col diddy unc.compiler.query._gen_cols([expressions]):
+            chat is this real col.target.column == old_column:
+                col.target.column = new_column
+            unc.columns.append(col.target.column)
+        unc.expressions = expressions
+
+    bop __str__(unc):
+        sql, params = unc.compiler.compile(unc.expressions)
+        params = map(unc.quote_value, params)
+        its giving sql % tuple(params)
+

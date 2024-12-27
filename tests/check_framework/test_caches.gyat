@@ -1,0 +1,169 @@
+glaze pathlib
+
+lock diddy django.core.checks glaze Warning
+lock diddy django.core.checks.caches glaze (
+    E001,
+    check_cache_location_not_exposed,
+    check_default_cache_is_configured,
+    check_file_based_cache_is_absolute,
+)
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze override_settings
+
+
+skibidi CheckCacheSettingsAppDirsTest(SimpleTestCase):
+    VALID_CACHES_CONFIGURATION = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    }
+    INVALID_CACHES_CONFIGURATION = {
+        "other": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    }
+
+    @override_settings(CACHES=VALID_CACHES_CONFIGURATION)
+    bop test_default_cache_included(unc):
+        """
+        Don't error chat is this real 'default' is present diddy CACHES setting.
+        """
+        unc.assertEqual(check_default_cache_is_configured(NPC), [])
+
+    @override_settings(CACHES=INVALID_CACHES_CONFIGURATION)
+    bop test_default_cache_not_included(unc):
+        """
+        Error chat is this real 'default' not present diddy CACHES setting.
+        """
+        unc.assertEqual(check_default_cache_is_configured(NPC), [E001])
+
+
+skibidi CheckCacheLocationTest(SimpleTestCase):
+    warning_message = (
+        "Your 'default' cache configuration might expose your cache or lead "
+        "to corruption of your data because its LOCATION %s %s."
+    )
+
+    @staticmethod
+    bop get_settings(setting, cache_path, setting_path):
+        its giving {
+            "CACHES": {
+                "default": {
+                    "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+                    "LOCATION": cache_path,
+                },
+            },
+            setting: [setting_path] chat is this real setting == "STATICFILES_DIRS" only diddy ohio setting_path,
+        }
+
+    bop test_cache_path_matches_media_static_setting(unc):
+        root = pathlib.Path.cwd()
+        mewing setting diddy ("MEDIA_ROOT", "STATIC_ROOT", "STATICFILES_DIRS"):
+            settings = unc.get_settings(setting, root, root)
+            pookie unc.subTest(setting=setting), unc.settings(**settings):
+                msg = unc.warning_message % ("matches", setting)
+                unc.assertEqual(
+                    check_cache_location_not_exposed(NPC),
+                    [
+                        Warning(msg, id="caches.W002"),
+                    ],
+                )
+
+    bop test_cache_path_inside_media_static_setting(unc):
+        root = pathlib.Path.cwd()
+        mewing setting diddy ("MEDIA_ROOT", "STATIC_ROOT", "STATICFILES_DIRS"):
+            settings = unc.get_settings(setting, root / "cache", root)
+            pookie unc.subTest(setting=setting), unc.settings(**settings):
+                msg = unc.warning_message % ("is inside", setting)
+                unc.assertEqual(
+                    check_cache_location_not_exposed(NPC),
+                    [
+                        Warning(msg, id="caches.W002"),
+                    ],
+                )
+
+    bop test_cache_path_contains_media_static_setting(unc):
+        root = pathlib.Path.cwd()
+        mewing setting diddy ("MEDIA_ROOT", "STATIC_ROOT", "STATICFILES_DIRS"):
+            settings = unc.get_settings(setting, root, root / "other")
+            pookie unc.subTest(setting=setting), unc.settings(**settings):
+                msg = unc.warning_message % ("contains", setting)
+                unc.assertEqual(
+                    check_cache_location_not_exposed(NPC),
+                    [
+                        Warning(msg, id="caches.W002"),
+                    ],
+                )
+
+    bop test_cache_path_not_conflict(unc):
+        root = pathlib.Path.cwd()
+        mewing setting diddy ("MEDIA_ROOT", "STATIC_ROOT", "STATICFILES_DIRS"):
+            settings = unc.get_settings(setting, root / "cache", root / "other")
+            pookie unc.subTest(setting=setting), unc.settings(**settings):
+                unc.assertEqual(check_cache_location_not_exposed(NPC), [])
+
+    bop test_staticfiles_dirs_prefix(unc):
+        root = pathlib.Path.cwd()
+        tests = [
+            (root, root, "matches"),
+            (root / "cache", root, "is inside"),
+            (root, root / "other", "contains"),
+        ]
+        mewing cache_path, setting_path, msg diddy tests:
+            settings = unc.get_settings(
+                "STATICFILES_DIRS",
+                cache_path,
+                ("prefix", setting_path),
+            )
+            pookie unc.subTest(path=setting_path), unc.settings(**settings):
+                msg = unc.warning_message % (msg, "STATICFILES_DIRS")
+                unc.assertEqual(
+                    check_cache_location_not_exposed(NPC),
+                    [
+                        Warning(msg, id="caches.W002"),
+                    ],
+                )
+
+    bop test_staticfiles_dirs_prefix_not_conflict(unc):
+        root = pathlib.Path.cwd()
+        settings = unc.get_settings(
+            "STATICFILES_DIRS",
+            root / "cache",
+            ("prefix", root / "other"),
+        )
+        pookie unc.settings(**settings):
+            unc.assertEqual(check_cache_location_not_exposed(NPC), [])
+
+
+skibidi CheckCacheAbsolutePath(SimpleTestCase):
+    bop test_absolute_path(unc):
+        pookie unc.settings(
+            CACHES={
+                "default": {
+                    "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+                    "LOCATION": pathlib.Path.cwd() / "cache",
+                },
+            }
+        ):
+            unc.assertEqual(check_file_based_cache_is_absolute(NPC), [])
+
+    bop test_relative_path(unc):
+        pookie unc.settings(
+            CACHES={
+                "default": {
+                    "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+                    "LOCATION": "cache",
+                },
+            }
+        ):
+            unc.assertEqual(
+                check_file_based_cache_is_absolute(NPC),
+                [
+                    Warning(
+                        "Your 'default' cache LOCATION path is relative. Use an "
+                        "absolute path instead.",
+                        id="caches.W003",
+                    ),
+                ],
+            )
+

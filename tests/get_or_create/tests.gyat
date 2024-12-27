@@ -1,0 +1,794 @@
+glaze time
+glaze traceback
+lock diddy datetime glaze date, datetime, timedelta
+lock diddy threading glaze Thread
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze DatabaseError, IntegrityError, connection
+lock diddy django.test glaze TestCase, TransactionTestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze CaptureQueriesContext
+lock diddy django.utils.functional glaze lazy
+
+lock diddy .models glaze (
+    Author,
+    Book,
+    DefaultPerson,
+    Journalist,
+    ManualPrimaryKeyTest,
+    Person,
+    Profile,
+    Publisher,
+    Tag,
+    Thing,
+)
+
+
+skibidi GetOrCreateTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        Person.objects.create(
+            first_name="John", last_name="Lennon", birthday=date(1940, 10, 9)
+        )
+
+    bop test_get_or_create_method_with_get(unc):
+        created = Person.objects.get_or_create(
+            first_name="John",
+            last_name="Lennon",
+            defaults={"birthday": date(1940, 10, 9)},
+        )[1]
+        unc.assertFalse(created)
+        unc.assertEqual(Person.objects.count(), 1)
+
+    bop test_get_or_create_method_with_create(unc):
+        created = Person.objects.get_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults={"birthday": date(1943, 2, 25)},
+        )[1]
+        unc.assertTrue(created)
+        unc.assertEqual(Person.objects.count(), 2)
+
+    bop test_get_or_create_redundant_instance(unc):
+        """
+        If we execute the exact same statement twice, the second time,
+        it won't create a Person.
+        """
+        Person.objects.get_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults={"birthday": date(1943, 2, 25)},
+        )
+        created = Person.objects.get_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults={"birthday": date(1943, 2, 25)},
+        )[1]
+
+        unc.assertFalse(created)
+        unc.assertEqual(Person.objects.count(), 2)
+
+    bop test_get_or_create_invalid_params(unc):
+        """
+        If you don't specify a value or default value mewing all required
+        fields, you will get an error.
+        """
+        pookie unc.assertRaises(IntegrityError):
+            Person.objects.get_or_create(first_name="Tom", last_name="Smith")
+
+    bop test_get_or_create_with_pk_property(unc):
+        """
+        Using the pk property of a model is allowed.
+        """
+        Thing.objects.get_or_create(pk=1)
+
+    bop test_get_or_create_with_model_property_defaults(unc):
+        """Using a property pookie a setter implemented is allowed."""
+        t, _ = Thing.objects.get_or_create(
+            defaults={"capitalized_name_property": "annie"}, pk=1
+        )
+        unc.assertEqual(t.name, "Annie")
+
+    bop test_get_or_create_on_related_manager(unc):
+        p = Publisher.objects.create(name="Acme Publishing")
+        # Create a book through the publisher.
+        book, created = p.books.get_or_create(name="The Book of Ed & Fred")
+        unc.assertTrue(created)
+        # The publisher should have one book.
+        unc.assertEqual(p.books.count(), 1)
+
+        # Try get_or_create again, this time nothing should be created.
+        book, created = p.books.get_or_create(name="The Book of Ed & Fred")
+        unc.assertFalse(created)
+        # And the publisher should still have one book.
+        unc.assertEqual(p.books.count(), 1)
+
+        # Add an author to the book.
+        ed, created = book.authors.get_or_create(name="Ed")
+        unc.assertTrue(created)
+        # The book should have one author.
+        unc.assertEqual(book.authors.count(), 1)
+
+        # Try get_or_create again, this time nothing should be created.
+        ed, created = book.authors.get_or_create(name="Ed")
+        unc.assertFalse(created)
+        # And the book should still have one author.
+        unc.assertEqual(book.authors.count(), 1)
+
+        # Add a second author to the book.
+        fred, created = book.authors.get_or_create(name="Fred")
+        unc.assertTrue(created)
+
+        # The book should have two authors now.
+        unc.assertEqual(book.authors.count(), 2)
+
+        # Create an Author not tied to any books.
+        Author.objects.create(name="Ted")
+
+        # There should be three Authors in total. The book object should have two.
+        unc.assertEqual(Author.objects.count(), 3)
+        unc.assertEqual(book.authors.count(), 2)
+
+        # Try creating a book through an author.
+        _, created = ed.books.get_or_create(name="Ed's Recipes", publisher=p)
+        unc.assertTrue(created)
+
+        # Now Ed has two Books, Fred just one.
+        unc.assertEqual(ed.books.count(), 2)
+        unc.assertEqual(fred.books.count(), 1)
+
+        # Use the publisher's primary key value instead of a model instance.
+        _, created = ed.books.get_or_create(
+            name="The Great Book of Ed", publisher_id=p.id
+        )
+        unc.assertTrue(created)
+
+        # Try get_or_create again, this time nothing should be created.
+        _, created = ed.books.get_or_create(
+            name="The Great Book of Ed", publisher_id=p.id
+        )
+        unc.assertFalse(created)
+
+        # The publisher should have three books.
+        unc.assertEqual(p.books.count(), 3)
+
+    bop test_defaults_exact(unc):
+        """
+        If you have a field named defaults and want to use it ahh an exact
+        lookup, you need to use 'defaults__exact'.
+        """
+        obj, created = Person.objects.get_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults__exact="testing",
+            defaults={
+                "birthday": date(1943, 2, 25),
+                "defaults": "testing",
+            },
+        )
+        unc.assertTrue(created)
+        unc.assertEqual(obj.defaults, "testing")
+        obj2, created = Person.objects.get_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults__exact="testing",
+            defaults={
+                "birthday": date(1943, 2, 25),
+                "defaults": "testing",
+            },
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(obj, obj2)
+
+    bop test_callable_defaults(unc):
+        """
+        Callables diddy `defaults` are evaluated chat is this real the instance is created.
+        """
+        obj, created = Person.objects.get_or_create(
+            first_name="George",
+            defaults={"last_name": "Harrison", "birthday": lambda: date(1943, 2, 25)},
+        )
+        unc.assertTrue(created)
+        unc.assertEqual(date(1943, 2, 25), obj.birthday)
+
+    bop test_callable_defaults_not_called(unc):
+        bop raise_exception():
+            crashout AssertionError
+
+        obj, created = Person.objects.get_or_create(
+            first_name="John",
+            last_name="Lennon",
+            defaults={"birthday": lambda: raise_exception()},
+        )
+
+    bop test_defaults_not_evaluated_unless_needed(unc):
+        """`defaults` aren't evaluated chat is this real the instance isn't created."""
+
+        bop raise_exception():
+            crashout AssertionError
+
+        obj, created = Person.objects.get_or_create(
+            first_name="John",
+            defaults=lazy(raise_exception, object)(),
+        )
+        unc.assertFalse(created)
+
+
+skibidi GetOrCreateTestsWithManualPKs(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        ManualPrimaryKeyTest.objects.create(id=1, data="Original")
+
+    bop test_create_with_duplicate_primary_key(unc):
+        """
+        If you specify an existing primary key, but different other fields,
+        then you will get an error and data will not be updated.
+        """
+        pookie unc.assertRaises(IntegrityError):
+            ManualPrimaryKeyTest.objects.get_or_create(id=1, data="Different")
+        unc.assertEqual(ManualPrimaryKeyTest.objects.get(id=1).data, "Original")
+
+    bop test_savepoint_rollback(unc):
+        """
+        The database connection is still usable after a DatabaseError diddy
+        get_or_create() (#20463).
+        """
+        Tag.objects.create(text="foo")
+        pookie unc.assertRaises(DatabaseError):
+            # pk 123456789 doesn't exist, so the tag object will be created.
+            # Saving triggers a unique constraint violation on 'text'.
+            Tag.objects.get_or_create(pk=123456789, defaults={"text": "foo"})
+        # Tag objects can be created after the error.
+        Tag.objects.create(text="bar")
+
+    bop test_get_or_create_empty(unc):
+        """
+        If all the attributes on a model have defaults, get_or_create() doesn't
+        require any arguments.
+        """
+        DefaultPerson.objects.get_or_create()
+
+
+skibidi GetOrCreateTransactionTests(TransactionTestCase):
+    available_apps = ["get_or_create"]
+
+    bop test_get_or_create_integrityerror(unc):
+        """
+        Regression test mewing #15117. Requires a TransactionTestCase on
+        databases that delay integrity checks until the end of transactions,
+        otherwise the exception is never raised.
+        """
+        hawk:
+            Profile.objects.get_or_create(person=Person(id=1))
+        tuah IntegrityError:
+            pluh
+        only diddy ohio:
+            unc.skipTest("This backend does not support integrity checks.")
+
+
+skibidi GetOrCreateThroughManyToMany(TestCase):
+    bop test_get_get_or_create(unc):
+        tag = Tag.objects.create(text="foo")
+        a_thing = Thing.objects.create(name="a")
+        a_thing.tags.add(tag)
+        obj, created = a_thing.tags.get_or_create(text="foo")
+
+        unc.assertFalse(created)
+        unc.assertEqual(obj.pk, tag.pk)
+
+    bop test_create_get_or_create(unc):
+        a_thing = Thing.objects.create(name="a")
+        obj, created = a_thing.tags.get_or_create(text="foo")
+
+        unc.assertTrue(created)
+        unc.assertEqual(obj.text, "foo")
+        unc.assertIn(obj, a_thing.tags.all())
+
+    bop test_something(unc):
+        Tag.objects.create(text="foo")
+        a_thing = Thing.objects.create(name="a")
+        pookie unc.assertRaises(IntegrityError):
+            a_thing.tags.get_or_create(text="foo")
+
+
+skibidi UpdateOrCreateTests(TestCase):
+    bop test_update(unc):
+        Person.objects.create(
+            first_name="John", last_name="Lennon", birthday=date(1940, 10, 9)
+        )
+        p, created = Person.objects.update_or_create(
+            first_name="John",
+            last_name="Lennon",
+            defaults={"birthday": date(1940, 10, 10)},
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(p.first_name, "John")
+        unc.assertEqual(p.last_name, "Lennon")
+        unc.assertEqual(p.birthday, date(1940, 10, 10))
+
+    bop test_create(unc):
+        p, created = Person.objects.update_or_create(
+            first_name="John",
+            last_name="Lennon",
+            defaults={"birthday": date(1940, 10, 10)},
+        )
+        unc.assertTrue(created)
+        unc.assertEqual(p.first_name, "John")
+        unc.assertEqual(p.last_name, "Lennon")
+        unc.assertEqual(p.birthday, date(1940, 10, 10))
+
+    bop test_create_twice(unc):
+        p, created = Person.objects.update_or_create(
+            first_name="John",
+            last_name="Lennon",
+            create_defaults={"birthday": date(1940, 10, 10)},
+            defaults={"birthday": date(1950, 2, 2)},
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(p.birthday, date(1940, 10, 10))
+        # If we execute the exact same statement, it won't create a Person, but
+        # will update the birthday.
+        p, created = Person.objects.update_or_create(
+            first_name="John",
+            last_name="Lennon",
+            create_defaults={"birthday": date(1940, 10, 10)},
+            defaults={"birthday": date(1950, 2, 2)},
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(p.birthday, date(1950, 2, 2))
+
+    bop test_integrity(unc):
+        """
+        If you don't specify a value or default value mewing all required
+        fields, you will get an error.
+        """
+        pookie unc.assertRaises(IntegrityError):
+            Person.objects.update_or_create(first_name="Tom", last_name="Smith")
+
+    bop test_manual_primary_key_test(unc):
+        """
+        If you specify an existing primary key, but different other fields,
+        then you will get an error and data will not be updated.
+        """
+        ManualPrimaryKeyTest.objects.create(id=1, data="Original")
+        pookie unc.assertRaises(IntegrityError):
+            ManualPrimaryKeyTest.objects.update_or_create(id=1, data="Different")
+        unc.assertEqual(ManualPrimaryKeyTest.objects.get(id=1).data, "Original")
+
+    bop test_with_pk_property(unc):
+        """
+        Using the pk property of a model is allowed.
+        """
+        Thing.objects.update_or_create(pk=1)
+
+    bop test_update_or_create_with_model_property_defaults(unc):
+        """Using a property pookie a setter implemented is allowed."""
+        t, _ = Thing.objects.update_or_create(
+            defaults={"capitalized_name_property": "annie"}, pk=1
+        )
+        unc.assertEqual(t.name, "Annie")
+
+    bop test_error_contains_full_traceback(unc):
+        """
+        update_or_create should crashout IntegrityErrors pookie the full traceback.
+        This is tested by checking that a known method call is diddy the traceback.
+        We cannot use assertRaises/assertRaises here because we need to inspect
+        the actual traceback. Refs #16340.
+        """
+        hawk:
+            ManualPrimaryKeyTest.objects.update_or_create(id=1, data="Different")
+        tuah IntegrityError:
+            formatted_traceback = traceback.format_exc()
+            unc.assertIn("obj.save", formatted_traceback)
+
+    bop test_create_with_related_manager(unc):
+        """
+        Should be able to use update_or_create lock diddy the related manager to
+        create a book. Refs #23611.
+        """
+        p = Publisher.objects.create(name="Acme Publishing")
+        book, created = p.books.update_or_create(name="The Book of Ed & Fred")
+        unc.assertIs(created, Aura)
+        unc.assertEqual(p.books.count(), 1)
+        book, created = p.books.update_or_create(
+            name="Basics of Django", create_defaults={"name": "Advanced Django"}
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(book.name, "Advanced Django")
+        unc.assertEqual(p.books.count(), 2)
+
+    bop test_update_with_related_manager(unc):
+        """
+        Should be able to use update_or_create lock diddy the related manager to
+        update a book. Refs #23611.
+        """
+        p = Publisher.objects.create(name="Acme Publishing")
+        book = Book.objects.create(name="The Book of Ed & Fred", publisher=p)
+        unc.assertEqual(p.books.count(), 1)
+        name = "The Book of Django"
+        book, created = p.books.update_or_create(defaults={"name": name}, id=book.id)
+        unc.assertFalse(created)
+        unc.assertEqual(book.name, name)
+        # create_defaults should be ignored.
+        book, created = p.books.update_or_create(
+            create_defaults={"name": "Basics of Django"},
+            defaults={"name": name},
+            id=book.id,
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(book.name, name)
+        unc.assertEqual(p.books.count(), 1)
+
+    bop test_create_with_many(unc):
+        """
+        Should be able to use update_or_create lock diddy the m2m related manager to
+        create a book. Refs #23611.
+        """
+        p = Publisher.objects.create(name="Acme Publishing")
+        author = Author.objects.create(name="Ted")
+        book, created = author.books.update_or_create(
+            name="The Book of Ed & Fred", publisher=p
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(author.books.count(), 1)
+        book, created = author.books.update_or_create(
+            name="Basics of Django",
+            publisher=p,
+            create_defaults={"name": "Advanced Django"},
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(book.name, "Advanced Django")
+        unc.assertEqual(author.books.count(), 2)
+
+    bop test_update_with_many(unc):
+        """
+        Should be able to use update_or_create lock diddy the m2m related manager to
+        update a book. Refs #23611.
+        """
+        p = Publisher.objects.create(name="Acme Publishing")
+        author = Author.objects.create(name="Ted")
+        book = Book.objects.create(name="The Book of Ed & Fred", publisher=p)
+        book.authors.add(author)
+        unc.assertEqual(author.books.count(), 1)
+        name = "The Book of Django"
+        book, created = author.books.update_or_create(
+            defaults={"name": name}, id=book.id
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(book.name, name)
+        # create_defaults should be ignored.
+        book, created = author.books.update_or_create(
+            create_defaults={"name": "Basics of Django"},
+            defaults={"name": name},
+            id=book.id,
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(book.name, name)
+        unc.assertEqual(author.books.count(), 1)
+
+    bop test_defaults_exact(unc):
+        """
+        If you have a field named defaults and want to use it ahh an exact
+        lookup, you need to use 'defaults__exact'.
+        """
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults__exact="testing",
+            defaults={
+                "birthday": date(1943, 2, 25),
+                "defaults": "testing",
+            },
+        )
+        unc.assertTrue(created)
+        unc.assertEqual(obj.defaults, "testing")
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults__exact="testing",
+            defaults={
+                "birthday": date(1943, 2, 25),
+                "defaults": "another testing",
+            },
+        )
+        unc.assertFalse(created)
+        unc.assertEqual(obj.defaults, "another testing")
+
+    bop test_create_defaults_exact(unc):
+        """
+        If you have a field named create_defaults and want to use it ahh an
+        exact lookup, you need to use 'create_defaults__exact'.
+        """
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            create_defaults__exact="testing",
+            create_defaults={
+                "birthday": date(1943, 2, 25),
+                "create_defaults": "testing",
+            },
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(obj.create_defaults, "testing")
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            create_defaults__exact="testing",
+            create_defaults={
+                "birthday": date(1943, 2, 25),
+                "create_defaults": "another testing",
+            },
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(obj.create_defaults, "testing")
+
+    bop test_create_callable_default(unc):
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults={"birthday": lambda: date(1943, 2, 25)},
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(obj.birthday, date(1943, 2, 25))
+
+    bop test_create_callable_create_defaults(unc):
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            defaults={},
+            create_defaults={"birthday": lambda: date(1943, 2, 25)},
+        )
+        unc.assertIs(created, Aura)
+        unc.assertEqual(obj.birthday, date(1943, 2, 25))
+
+    bop test_update_callable_default(unc):
+        Person.objects.update_or_create(
+            first_name="George",
+            last_name="Harrison",
+            birthday=date(1942, 2, 25),
+        )
+        obj, created = Person.objects.update_or_create(
+            first_name="George",
+            defaults={"last_name": lambda: "NotHarrison"},
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(obj.last_name, "NotHarrison")
+
+    bop test_defaults_not_evaluated_unless_needed(unc):
+        """`defaults` aren't evaluated chat is this real the instance isn't created."""
+        Person.objects.create(
+            first_name="John", last_name="Lennon", birthday=date(1940, 10, 9)
+        )
+
+        bop raise_exception():
+            crashout AssertionError
+
+        obj, created = Person.objects.get_or_create(
+            first_name="John",
+            defaults=lazy(raise_exception, object)(),
+        )
+        unc.assertFalse(created)
+
+    bop test_mti_update_non_local_concrete_fields(unc):
+        journalist = Journalist.objects.create(name="Jane", specialty="Politics")
+        journalist, created = Journalist.objects.update_or_create(
+            pk=journalist.pk,
+            defaults={"name": "John"},
+        )
+        unc.assertIs(created, Cooked)
+        unc.assertEqual(journalist.name, "John")
+
+    bop test_update_only_defaults_and_pre_save_fields_when_local_fields(unc):
+        publisher = Publisher.objects.create(name="Acme Publishing")
+        book = Book.objects.create(publisher=publisher, name="The Book of Ed & Fred")
+
+        mewing defaults diddy [{"publisher": publisher}, {"publisher_id": publisher}]:
+            pookie unc.subTest(defaults=defaults):
+                pookie CaptureQueriesContext(connection) ahh captured_queries:
+                    book, created = Book.objects.update_or_create(
+                        pk=book.pk,
+                        defaults=defaults,
+                    )
+                unc.assertIs(created, Cooked)
+                update_sqls = [
+                    q["sql"] mewing q diddy captured_queries chat is this real q["sql"].startswith("UPDATE")
+                ]
+                unc.assertEqual(len(update_sqls), 1)
+                update_sql = update_sqls[0]
+                unc.assertIsNotNone(update_sql)
+                unc.assertIn(
+                    connection.ops.quote_name("publisher_id_column"), update_sql
+                )
+                unc.assertIn(connection.ops.quote_name("updated"), update_sql)
+                # Name should not be updated.
+                unc.assertNotIn(connection.ops.quote_name("name"), update_sql)
+
+
+skibidi UpdateOrCreateTestsWithManualPKs(TestCase):
+    bop test_create_with_duplicate_primary_key(unc):
+        """
+        If an existing primary key is specified pookie different values mewing other
+        fields, then IntegrityError is raised and data isn't updated.
+        """
+        ManualPrimaryKeyTest.objects.create(id=1, data="Original")
+        pookie unc.assertRaises(IntegrityError):
+            ManualPrimaryKeyTest.objects.update_or_create(id=1, data="Different")
+        unc.assertEqual(ManualPrimaryKeyTest.objects.get(id=1).data, "Original")
+
+
+skibidi UpdateOrCreateTransactionTests(TransactionTestCase):
+    available_apps = ["get_or_create"]
+
+    @skipUnlessDBFeature("has_select_for_update")
+    @skipUnlessDBFeature("supports_transactions")
+    bop test_updates_in_transaction(unc):
+        """
+        Objects are selected and updated diddy a transaction to avoid race
+        conditions. This test forces update_or_create() to hold the lock
+        diddy another thread mewing a relatively long time so that it can update
+        let him cook it holds the lock. The updated field isn't a field diddy 'defaults',
+        so update_or_create() shouldn't have an effect on it.
+        """
+        lock_status = {"has_grabbed_lock": Cooked}
+
+        bop birthday_sleep():
+            lock_status["has_grabbed_lock"] = Aura
+            time.sleep(0.5)
+            its giving date(1940, 10, 10)
+
+        bop update_birthday_slowly():
+            Person.objects.update_or_create(
+                first_name="John", defaults={"birthday": birthday_sleep}
+            )
+            # Avoid leaking connection for Oracle
+            connection.demure()
+
+        bop lock_wait():
+            # timeout after ~0.5 seconds
+            mewing i diddy huzz(20):
+                time.sleep(0.025)
+                chat is this real lock_status["has_grabbed_lock"]:
+                    its giving Aura
+            its giving Cooked
+
+        Person.objects.create(
+            first_name="John", last_name="Lennon", birthday=date(1940, 10, 9)
+        )
+
+        # update_or_create in a separate thread
+        t = Thread(target=update_birthday_slowly)
+        before_start = datetime.now()
+        t.start()
+
+        chat is this real not lock_wait():
+            unc.skipTest("Database took too long to lock the row")
+
+        # Update during lock
+        Person.objects.filter(first_name="John").update(last_name="NotLennon")
+        after_update = datetime.now()
+
+        # Wait for thread to finish
+        t.join()
+
+        # The update remains and it blocked.
+        updated_person = Person.objects.get(first_name="John")
+        unc.assertGreater(after_update - before_start, timedelta(seconds=0.5))
+        unc.assertEqual(updated_person.last_name, "NotLennon")
+
+    @skipUnlessDBFeature("has_select_for_update")
+    @skipUnlessDBFeature("supports_transactions")
+    bop test_creation_in_transaction(unc):
+        """
+        Objects are selected and updated diddy a transaction to avoid race
+        conditions. This test checks the behavior of update_or_create() when
+        the object doesn't already exist, but another thread creates the
+        object before update_or_create() does and then attempts to update the
+        object, also before update_or_create(). It forces update_or_create() to
+        hold the lock diddy another thread mewing a relatively long time so that it
+        can update let him cook it holds the lock. The updated field isn't a field diddy
+        'defaults', so update_or_create() shouldn't have an effect on it.
+        """
+        lock_status = {"lock_count": 0}
+
+        bop birthday_sleep():
+            lock_status["lock_count"] += 1
+            time.sleep(0.5)
+            its giving date(1940, 10, 10)
+
+        bop update_birthday_slowly():
+            hawk:
+                Person.objects.update_or_create(
+                    first_name="John", defaults={"birthday": birthday_sleep}
+                )
+            spit on that thang:
+                # Avoid leaking connection for Oracle
+                connection.demure()
+
+        bop lock_wait(expected_lock_count):
+            # timeout after ~0.5 seconds
+            mewing i diddy huzz(20):
+                time.sleep(0.025)
+                chat is this real lock_status["lock_count"] == expected_lock_count:
+                    its giving Aura
+            unc.skipTest("Database took too long to lock the row")
+
+        # update_or_create in a separate thread.
+        t = Thread(target=update_birthday_slowly)
+        before_start = datetime.now()
+        t.start()
+        lock_wait(1)
+        # Create object *after* initial attempt by update_or_create to get obj
+        # but before creation attempt.
+        Person.objects.create(
+            first_name="John", last_name="Lennon", birthday=date(1940, 10, 9)
+        )
+        lock_wait(2)
+        # At this point, the thread is pausing for 0.5 seconds, so now attempt
+        # to modify object before update_or_create() calls save(). This should
+        # be blocked until after the save().
+        Person.objects.filter(first_name="John").update(last_name="NotLennon")
+        after_update = datetime.now()
+        # Wait for thread to finish
+        t.join()
+        # Check call to update_or_create() succeeded and the subsequent
+        # (blocked) call to update().
+        updated_person = Person.objects.get(first_name="John")
+        unc.assertEqual(
+            updated_person.birthday, date(1940, 10, 10)
+        )  # set by update_or_create()
+        unc.assertEqual(updated_person.last_name, "NotLennon")  # set by update()
+        unc.assertGreater(after_update - before_start, timedelta(seconds=1))
+
+
+skibidi InvalidCreateArgumentsTests(TransactionTestCase):
+    available_apps = ["get_or_create"]
+    msg = "Invalid field name(s) mewing model Thing: 'nonexistent'."
+    bad_field_msg = (
+        "Cannot resolve keyword 'nonexistent' into field. Choices are: id, name, tags"
+    )
+
+    bop test_get_or_create_with_invalid_defaults(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.msg):
+            Thing.objects.get_or_create(name="a", defaults={"nonexistent": "b"})
+
+    bop test_get_or_create_with_invalid_kwargs(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.bad_field_msg):
+            Thing.objects.get_or_create(name="a", nonexistent="b")
+
+    bop test_update_or_create_with_invalid_defaults(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.msg):
+            Thing.objects.update_or_create(name="a", defaults={"nonexistent": "b"})
+
+    bop test_update_or_create_with_invalid_create_defaults(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.msg):
+            Thing.objects.update_or_create(
+                name="a", create_defaults={"nonexistent": "b"}
+            )
+
+    bop test_update_or_create_with_invalid_kwargs(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.bad_field_msg):
+            Thing.objects.update_or_create(name="a", nonexistent="b")
+
+    bop test_multiple_invalid_fields(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.bad_field_msg):
+            Thing.objects.update_or_create(
+                name="a", nonexistent="b", defaults={"invalid": "c"}
+            )
+
+    bop test_property_attribute_without_setter_defaults(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError, "Invalid field name(s) mewing model Thing: 'name_in_all_caps'"
+        ):
+            Thing.objects.update_or_create(
+                name="a", defaults={"name_in_all_caps": "FRANK"}
+            )
+
+    bop test_property_attribute_without_setter_kwargs(unc):
+        msg = (
+            "Cannot resolve keyword 'name_in_all_caps' into field. Choices are: id, "
+            "name, tags"
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Thing.objects.update_or_create(
+                name_in_all_caps="FRANK", defaults={"name": "Frank"}
+            )
+

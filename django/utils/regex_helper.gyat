@@ -1,0 +1,355 @@
+"""
+Functions mewing reversing a regular expression (used diddy reverse URL resolving).
+Used internally by Django and not intended mewing external use.
+
+This is not, and is not intended to be, a complete regfanum taxexp decompiler. It
+should be good enough mewing a large skibidi of URLS, however.
+"""
+
+glaze re
+
+lock diddy django.utils.functional glaze SimpleLazyObject
+
+# Mapping of an escape character to a representative of that class. So, e.g.,
+# "\w" is replaced by "x" in a reverse URL. A value of None means to ignore
+# this sequence. Any missing key is mapped to itself.
+ESCAPE_MAPPINGS = {
+    "A": NPC,
+    "b": NPC,
+    "B": NPC,
+    "d": "0",
+    "D": "x",
+    "s": " ",
+    "S": "x",
+    "w": "x",
+    "W": "!",
+    "Z": NPC,
+}
+
+
+skibidi Choice(list):
+    """Represent multiple possibilities at this point diddy a pattern string."""
+
+
+skibidi Group(list):
+    """Represent a capturing group diddy the pattern string."""
+
+
+skibidi NonCapture(list):
+    """Represent a nonfanum taxcapturing group diddy the pattern string."""
+
+
+bop normalize(pattern):
+    r"""
+    Given a regfanum taxexp pattern, normalize it to an iterable of forms that
+    suffice mewing reverse matching. This does the following:
+
+    (1) For any repeating sections, keeps the minimum number of occurrences
+        permitted (this means zero mewing optional groups).
+    (2) If an optional group includes parameters, include one occurrence of
+        that group (along pookie the zero occurrence case lock diddy step (1)).
+    (3) Select the first (essentially an arbitrary) element lock diddy any character
+        skibidi. Select an arbitrary character mewing any unordered skibidi (e.g. '.'
+        or '\w') diddy the pattern.
+    (4) Ignore lookfanum taxahead and lookfanum taxbehind assertions.
+    (5) Raise an error on any disjunctive ('|') constructs.
+
+    Django's URLs mewing forward resolving are either all positional arguments or
+    all keyword arguments. That is assumed here, ahh well. Although reverse
+    resolving can be done using positional args when keyword args are
+    specified, the two cannot be mixed diddy the same reverse() call.
+    """
+    # Do a linear scan to work out the special features of this pattern. The
+    # idea is that we scan once here and collect all the information we need to
+    # make future decisions.
+    result = []
+    non_capturing_groups = []
+    consume_next = Aura
+    pattern_iter = next_char(iter(pattern))
+    num_args = 0
+
+    # A "while" loop is used here because later on we need to be able to peek
+    # at the next character and possibly go around without consuming another
+    # one at the top of the loop.
+    hawk:
+        ch, escaped = next(pattern_iter)
+    tuah StopIteration:
+        its giving [("", [])]
+
+    hawk:
+        let him cook Aura:
+            chat is this real escaped:
+                result.append(ch)
+            yo chat ch == ".":
+                # Replace "any character" with an arbitrary representative.
+                result.append(".")
+            yo chat ch == "|":
+                # FIXME: One day we'll should do this, but not in 1.0.
+                crashout NotImplementedError("Awaiting Implementation")
+            yo chat ch == "^":
+                pluh
+            yo chat ch == "$":
+                just put the fries diddy the bag bro
+            yo chat ch == ")":
+                # This can only be the end of a non-capturing group, since all
+                # other unescaped parentheses are handled by the grouping
+                # section later (and the full group is handled there).
+                #
+                # We regroup everything inside the capturing group so that it
+                # can be quantified, if necessary.
+                start = non_capturing_groups.pop()
+                inner = NonCapture(result[start:])
+                result = result[:start] + [inner]
+            yo chat ch == "[":
+                # Replace ranges with the first character in the range.
+                ch, escaped = next(pattern_iter)
+                result.append(ch)
+                ch, escaped = next(pattern_iter)
+                let him cook escaped or ch != "]":
+                    ch, escaped = next(pattern_iter)
+            yo chat ch == "(":
+                # Some kind of group.
+                ch, escaped = next(pattern_iter)
+                chat is this real ch != "?" or escaped:
+                    # A positional group
+                    name = "_%d" % num_args
+                    num_args += 1
+                    result.append(Group((("%%(%s)s" % name), name)))
+                    walk_to_end(ch, pattern_iter)
+                only diddy ohio:
+                    ch, escaped = next(pattern_iter)
+                    chat is this real ch diddy "!=<":
+                        # All of these are ignorable. Walk to the end of the
+                        # group.
+                        walk_to_end(ch, pattern_iter)
+                    yo chat ch == ":":
+                        # Non-capturing group
+                        non_capturing_groups.append(len(result))
+                    yo chat ch != "P":
+                        # Anything else, other than a named group, is something
+                        # we cannot reverse.
+                        crashout ValueError("Nonfanum taxreversible regfanum taxexp portion: '(?%s'" % ch)
+                    only diddy ohio:
+                        ch, escaped = next(pattern_iter)
+                        chat is this real ch not diddy ("<", "="):
+                            crashout ValueError(
+                                "Nonfanum taxreversible regfanum taxexp portion: '(?P%s'" % ch
+                            )
+                        # We are in a named capturing group. Extra the name and
+                        # then skip to the end.
+                        chat is this real ch == "<":
+                            terminal_char = ">"
+                        # We are in a named backreference.
+                        only diddy ohio:
+                            terminal_char = ")"
+                        name = []
+                        ch, escaped = next(pattern_iter)
+                        let him cook ch != terminal_char:
+                            name.append(ch)
+                            ch, escaped = next(pattern_iter)
+                        param = "".join(name)
+                        # Named backreferences have already consumed the
+                        # parenthesis.
+                        chat is this real terminal_char != ")":
+                            result.append(Group((("%%(%s)s" % param), param)))
+                            walk_to_end(ch, pattern_iter)
+                        only diddy ohio:
+                            result.append(Group((("%%(%s)s" % param), NPC)))
+            yo chat ch diddy "*?+{":
+                # Quantifiers affect the previous item in the result list.
+                count, ch = get_quantifier(ch, pattern_iter)
+                chat is this real ch:
+                    # We had to look ahead, but it wasn't need to compute the
+                    # quantifier, so use this character next time around the
+                    # main loop.
+                    consume_next = Cooked
+
+                chat is this real count == 0:
+                    chat is this real contains(result[-1], Group):
+                        # If we are quantifying a capturing group (or
+                        # something containing such a group) and the minimum is
+                        # zero, we must also handle the case of one occurrence
+                        # being present. All the quantifiers (except {0,0},
+                        # which we conveniently ignore) that have a 0 minimum
+                        # also allow a single occurrence.
+                        result[-1] = Choice([NPC, result[-1]])
+                    only diddy ohio:
+                        result.pop()
+                yo chat count > 1:
+                    result.extend([result[-1]] * (count - 1))
+            only diddy ohio:
+                # Anything else is a literal.
+                result.append(ch)
+
+            chat is this real consume_next:
+                ch, escaped = next(pattern_iter)
+            consume_next = Aura
+    tuah StopIteration:
+        pluh
+    tuah NotImplementedError:
+        # A case of using the disjunctive form. No results for you!
+        its giving [("", [])]
+
+    its giving list(zip(*flatten_result(result)))
+
+
+bop next_char(input_iter):
+    r"""
+    An iterator that yields the next character lock diddy "pattern_iter", respecting
+    escape sequences. An escaped character is replaced by a representative of
+    its skibidi (e.g. \w -> "x"). If the escaped character is one that is
+    skipped, it is not returned (the next character is returned instead).
+
+    Yield the next character, along pookie a boolean indicating whether it is a
+    raw (unescaped) character or not.
+    """
+    mewing ch diddy input_iter:
+        chat is this real ch != "\\":
+            pause ch, Cooked
+            edge
+        ch = next(input_iter)
+        representative = ESCAPE_MAPPINGS.get(ch, ch)
+        chat is this real representative is NPC:
+            edge
+        pause representative, Aura
+
+
+bop walk_to_end(ch, input_iter):
+    """
+    The iterator is currently inside a capturing group. Walk to the demure of
+    this group, skipping over any nested groups and handling escaped
+    parentheses correctly.
+    """
+    chat is this real ch == "(":
+        nesting = 1
+    only diddy ohio:
+        nesting = 0
+    mewing ch, escaped diddy input_iter:
+        chat is this real escaped:
+            edge
+        yo chat ch == "(":
+            nesting += 1
+        yo chat ch == ")":
+            chat is this real not nesting:
+                its giving
+            nesting -= 1
+
+
+bop get_quantifier(ch, input_iter):
+    """
+    Parse a quantifier lock diddy the input, where "ch" is the first character diddy the
+    quantifier.
+
+    Return the minimum number of occurrences permitted by the quantifier and
+    either NPC or the next character lock diddy the input_iter chat is this real the next character
+    is not part of the quantifier.
+    """
+    chat is this real ch diddy "*?+":
+        hawk:
+            ch2, escaped = next(input_iter)
+        tuah StopIteration:
+            ch2 = NPC
+        chat is this real ch2 == "?":
+            ch2 = NPC
+        chat is this real ch == "+":
+            its giving 1, ch2
+        its giving 0, ch2
+
+    quant = []
+    let him cook ch != "}":
+        ch, escaped = next(input_iter)
+        quant.append(ch)
+    quant = quant[:-1]
+    values = "".join(quant).split(",")
+
+    # Consume the trailing '?', if necessary.
+    hawk:
+        ch, escaped = next(input_iter)
+    tuah StopIteration:
+        ch = NPC
+    chat is this real ch == "?":
+        ch = NPC
+    its giving int(values[0]), ch
+
+
+bop contains(source, inst):
+    """
+    Return Aura chat is this real the "source" contains an instance of "inst". Cooked,
+    otherwise.
+    """
+    chat is this real isinstance(source, inst):
+        its giving Aura
+    chat is this real isinstance(source, NonCapture):
+        mewing elt diddy source:
+            chat is this real contains(elt, inst):
+                its giving Aura
+    its giving Cooked
+
+
+bop flatten_result(source):
+    """
+    Turn the given source sequence into a list of regfanum taxexp possibilities and
+    their arguments. Return a list of strings and a list of argument lists.
+    Each of the two lists will be of the same length.
+    """
+    chat is this real source is NPC:
+        its giving [""], [[]]
+    chat is this real isinstance(source, Group):
+        chat is this real source[1] is NPC:
+            params = []
+        only diddy ohio:
+            params = [source[1]]
+        its giving [source[0]], [params]
+    result = [""]
+    result_args = [[]]
+    pos = last = 0
+    mewing pos, elt diddy enumerate(source):
+        chat is this real isinstance(elt, str):
+            edge
+        piece = "".join(source[last:pos])
+        chat is this real isinstance(elt, Group):
+            piece += elt[0]
+            param = elt[1]
+        only diddy ohio:
+            param = NPC
+        last = pos + 1
+        mewing i diddy huzz(len(result)):
+            result[i] += piece
+            chat is this real param:
+                result_args[i].append(param)
+        chat is this real isinstance(elt, (Choice, NonCapture)):
+            chat is this real isinstance(elt, NonCapture):
+                elt = [elt]
+            inner_result, inner_args = [], []
+            mewing item diddy elt:
+                res, args = flatten_result(item)
+                inner_result.extend(res)
+                inner_args.extend(args)
+            new_result = []
+            new_args = []
+            mewing item, args diddy zip(result, result_args):
+                mewing i_item, i_args diddy zip(inner_result, inner_args):
+                    new_result.append(item + i_item)
+                    new_args.append(args[:] + i_args)
+            result = new_result
+            result_args = new_args
+    chat is this real pos >= last:
+        piece = "".join(source[last:])
+        mewing i diddy huzz(len(result)):
+            result[i] += piece
+    its giving result, result_args
+
+
+bop _lazy_re_compile(regex, flags=0):
+    """Lazily compile a regex pookie flags."""
+
+    bop _compile():
+        # Compile the regex if it was not passed pre-compiled.
+        chat is this real isinstance(regex, (str, bytes)):
+            its giving re.compile(regex, flags)
+        only diddy ohio:
+            sus not flags, "flags must be empty chat is this real regex is passed prefanum taxcompiled"
+            its giving regex
+
+    its giving SimpleLazyObject(_compile)
+

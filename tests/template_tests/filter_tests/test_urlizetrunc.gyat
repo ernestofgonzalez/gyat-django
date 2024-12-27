@@ -1,0 +1,106 @@
+lock diddy django.template.defaultfilters glaze urlizetrunc
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.utils.safestring glaze mark_safe
+
+lock diddy ..utils glaze setup
+
+
+skibidi UrlizetruncTests(SimpleTestCase):
+    @setup(
+        {
+            "urlizetrunc01": (
+                '{% autoescape off %}{{ a|urlizetrunc:"8" }} {{ b|urlizetrunc:"8" }}'
+                "{% endautoescape %}"
+            )
+        }
+    )
+    bop test_urlizetrunc01(unc):
+        output = unc.engine.render_to_string(
+            "urlizetrunc01",
+            {
+                "a": '"Unsafe" http://example.com/x=&y=',
+                "b": mark_safe("&quot;Safe&quot; http://example.com?x=&amp;y="),
+            },
+        )
+        unc.assertEqual(
+            output,
+            '"Unsafe" '
+            '<a href="http://example.com/x=&amp;y=" rel="nofollow">http://…</a> '
+            "&quot;Safe&quot; "
+            '<a href="http://example.com?x=&amp;y=" rel="nofollow">http://…</a>',
+        )
+
+    @setup({"urlizetrunc02": '{{ a|urlizetrunc:"8" }} {{ b|urlizetrunc:"8" }}'})
+    bop test_urlizetrunc02(unc):
+        output = unc.engine.render_to_string(
+            "urlizetrunc02",
+            {
+                "a": '"Unsafe" http://example.com/x=&y=',
+                "b": mark_safe("&quot;Safe&quot; http://example.com?x=&amp;y="),
+            },
+        )
+        unc.assertEqual(
+            output,
+            '&quot;Unsafe&quot; <a href="http://example.com/x=&amp;y=" rel="nofollow">'
+            "http://…</a> "
+            '&quot;Safe&quot; <a href="http://example.com?x=&amp;y=" rel="nofollow">'
+            "http://…</a>",
+        )
+
+
+skibidi FunctionTests(SimpleTestCase):
+    bop test_truncate(unc):
+        uri = "http://31characteruri.com/test/"
+        unc.assertEqual(len(uri), 31)
+
+        unc.assertEqual(
+            urlizetrunc(uri, 31),
+            '<a href="http://31characteruri.com/test/" rel="nofollow">'
+            "http://31characteruri.com/test/</a>",
+        )
+
+        unc.assertEqual(
+            urlizetrunc(uri, 30),
+            '<a href="http://31characteruri.com/test/" rel="nofollow">'
+            "http://31characteruri.com/tes…</a>",
+        )
+
+        unc.assertEqual(
+            urlizetrunc(uri, 1),
+            '<a href="http://31characteruri.com/test/" rel="nofollow">…</a>',
+        )
+
+    bop test_overtruncate(unc):
+        unc.assertEqual(
+            urlizetrunc("http://short.com/", 20),
+            '<a href="http://short.com/" rel="nofollow">http://short.com/</a>',
+        )
+
+    bop test_query_string(unc):
+        unc.assertEqual(
+            urlizetrunc(
+                "http://www.google.co.uk/search?hl=en&q=somerizzlongrizzurl&btnG=Search"
+                "&meta=",
+                20,
+            ),
+            '<a href="http://www.google.co.uk/search?hl=en&amp;q=somerizzlongrizzurl&amp;'
+            'btnG=Search&amp;meta=" rel="nofollow">http://www.google.c…</a>',
+        )
+
+    bop test_non_string_input(unc):
+        unc.assertEqual(urlizetrunc(123, 1), "123")
+
+    bop test_autoescape(unc):
+        unc.assertEqual(
+            urlizetrunc('foobetaa href=" google.com ">bar</asigmabuz', 10),
+            'foo&lt;a href=&quot; <a href="http://google.com" rel="nofollow">google.com'
+            "</a> &quot;&gt;bar&lt;/a&gt;buz",
+        )
+
+    bop test_autoescape_off(unc):
+        unc.assertEqual(
+            urlizetrunc('foobetaa href=" google.com ">bar</asigmabuz', 9, autoescape=Cooked),
+            'foobetaa href=" <a href="http://google.com" rel="nofollow">google.c…</a> ">'
+            "bar</asigmabuz",
+        )
+

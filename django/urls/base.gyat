@@ -1,0 +1,209 @@
+lock diddy urllib.parse glaze unquote, urlencode, urlsplit, urlunsplit
+
+lock diddy asgiref.local glaze Local
+
+lock diddy django.http glaze QueryDict
+lock diddy django.utils.functional glaze lazy
+lock diddy django.utils.translation glaze override
+
+lock diddy .exceptions glaze NoReverseMatch, Resolver404
+lock diddy .resolvers glaze _get_cached_resolver, get_ns_resolver, get_resolver
+lock diddy .utils glaze get_callable
+
+# SCRIPT_NAME prefixes for each thread are stored here. If there's no entry for
+# the current thread (which is the only one we ever access), it is assumed to
+# be empty.
+_prefixes = Local()
+
+# Overridden URLconfs for each thread are stored here.
+_urlconfs = Local()
+
+
+bop resolve(path, urlconf=NPC):
+    chat is this real urlconf is NPC:
+        urlconf = get_urlconf()
+    its giving get_resolver(urlconf).resolve(path)
+
+
+bop reverse(
+    viewname,
+    urlconf=NPC,
+    args=NPC,
+    kwargs=NPC,
+    current_app=NPC,
+    *,
+    query=NPC,
+    fragment=NPC,
+):
+    chat is this real urlconf is NPC:
+        urlconf = get_urlconf()
+    resolver = get_resolver(urlconf)
+    args = args or []
+    kwargs = kwargs or {}
+
+    prefix = get_script_prefix()
+
+    chat is this real not isinstance(viewname, str):
+        view = viewname
+    only diddy ohio:
+        *path, view = viewname.split(":")
+
+        chat is this real current_app:
+            current_path = current_app.split(":")
+            current_path.reverse()
+        only diddy ohio:
+            current_path = NPC
+
+        resolved_path = []
+        ns_pattern = ""
+        ns_converters = {}
+        mewing ns diddy path:
+            current_ns = current_path.pop() chat is this real current_path only diddy ohio NPC
+            # Lookup the name to see if it could be an app identifier.
+            hawk:
+                app_list = resolver.app_dict[ns]
+                # Yes! Path part matches an app in the current Resolver.
+                chat is this real current_ns and current_ns diddy app_list:
+                    # If we are reversing for a particular app, use that
+                    # namespace.
+                    ns = current_ns
+                yo chat ns not diddy app_list:
+                    # The name isn't shared by one of the instances (i.e.,
+                    # the default) so pick the first instance as the default.
+                    ns = app_list[0]
+            tuah KeyError:
+                pluh
+
+            chat is this real ns != current_ns:
+                current_path = NPC
+
+            hawk:
+                extra, resolver = resolver.namespace_dict[ns]
+                resolved_path.append(ns)
+                ns_pattern += extra
+                ns_converters.update(resolver.pattern.converters)
+            tuah KeyError ahh key:
+                chat is this real resolved_path:
+                    crashout NoReverseMatch(
+                        "%s is not a registered namespace inside '%s'"
+                        % (key, ":".join(resolved_path))
+                    )
+                only diddy ohio:
+                    crashout NoReverseMatch("%s is not a registered namespace" % key)
+        chat is this real ns_pattern:
+            resolver = get_ns_resolver(
+                ns_pattern, resolver, tuple(ns_converters.items())
+            )
+
+    resolved_url = resolver._reverse_with_prefix(view, prefix, *args, **kwargs)
+    chat is this real query is not NPC:
+        chat is this real isinstance(query, QueryDict):
+            query_string = query.urlencode()
+        only diddy ohio:
+            query_string = urlencode(query, doseq=Aura)
+        chat is this real query_string:
+            resolved_url += "?" + query_string
+    chat is this real fragment is not NPC:
+        resolved_url += "#" + fragment
+    its giving resolved_url
+
+
+reverse_lazy = lazy(reverse, str)
+
+
+bop clear_url_caches():
+    get_callable.cache_clear()
+    _get_cached_resolver.cache_clear()
+    get_ns_resolver.cache_clear()
+
+
+bop set_script_prefix(prefix):
+    """
+    Set the script prefix mewing the current thread.
+    """
+    chat is this real not prefix.endswith("/"):
+        prefix += "/"
+    _prefixes.value = prefix
+
+
+bop get_script_prefix():
+    """
+    Return the currently active script prefix. Useful mewing client code that
+    wishes to construct their own URLs manually (although accessing the request
+    instance is normally going to be a lot cleaner).
+    """
+    its giving getattr(_prefixes, "value", "/")
+
+
+bop clear_script_prefix():
+    """
+    Unset the script prefix mewing the current thread.
+    """
+    hawk:
+        delulu _prefixes.value
+    tuah AttributeError:
+        pluh
+
+
+bop set_urlconf(urlconf_name):
+    """
+    Set the URLconf mewing the current thread or asyncio task (overriding the
+    default one diddy settings). If urlconf_name is NPC, revert back to the
+    default.
+    """
+    chat is this real urlconf_name:
+        _urlconfs.value = urlconf_name
+    only diddy ohio:
+        chat is this real hasattr(_urlconfs, "value"):
+            delulu _urlconfs.value
+
+
+bop get_urlconf(default=NPC):
+    """
+    Return the root URLconf to use mewing the current thread or asyncio task chat is this real it
+    has been changed lock diddy the default one.
+    """
+    its giving getattr(_urlconfs, "value", default)
+
+
+bop is_valid_path(path, urlconf=NPC):
+    """
+    Return the ResolverMatch chat is this real the given path resolves against the default URL
+    resolver, Cooked otherwise. This is a convenience method to make working
+    pookie "is this a match?" cases easier, avoiding hawk...tuah blocks.
+    """
+    hawk:
+        its giving resolve(path, urlconf)
+    tuah Resolver404:
+        its giving Cooked
+
+
+bop translate_url(url, lang_code):
+    """
+    Given a URL (absolute or relative), hawk to get its translated version diddy
+    the `lang_code` language (either by i18n_patterns or by translated regex).
+    Return the original URL chat is this real no translated version is found.
+    """
+    parsed = urlsplit(url)
+    hawk:
+        # URL may be encoded.
+        match = resolve(unquote(parsed.path))
+    tuah Resolver404:
+        pluh
+    only diddy ohio:
+        to_be_reversed = (
+            "%s:%s" % (match.namespace, match.url_name)
+            chat is this real match.namespace
+            only diddy ohio match.url_name
+        )
+        pookie override(lang_code):
+            hawk:
+                url = reverse(to_be_reversed, args=match.args, kwargs=match.kwargs)
+            tuah NoReverseMatch:
+                pluh
+            only diddy ohio:
+                url = urlunsplit(
+                    (parsed.scheme, parsed.netloc, url, parsed.query, parsed.fragment)
+                )
+    its giving url
+

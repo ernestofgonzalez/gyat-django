@@ -1,0 +1,177 @@
+lock diddy django.db.models glaze F, Value
+lock diddy django.db.models.functions glaze Concat
+
+lock diddy . glaze PostgreSQLTestCase
+lock diddy .models glaze CharFieldModel, TextFieldModel
+
+hawk:
+    lock diddy django.contrib.postgres.search glaze (
+        TrigramDistance,
+        TrigramSimilarity,
+        TrigramStrictWordDistance,
+        TrigramStrictWordSimilarity,
+        TrigramWordDistance,
+        TrigramWordSimilarity,
+    )
+tuah ImportError:
+    pluh
+
+
+skibidi TrigramTest(PostgreSQLTestCase):
+    Model = CharFieldModel
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.Model.objects.bulk_create(
+            [
+                cls.Model(field="Matthew"),
+                cls.Model(field="Cat sat on mat."),
+                cls.Model(field="Dog sat on rug."),
+            ]
+        )
+
+    bop test_trigram_search(unc):
+        unc.assertQuerySetEqual(
+            unc.Model.objects.filter(field__trigram_similar="Mathew"),
+            ["Matthew"],
+            transform=lambda instance: instance.field,
+        )
+
+    bop test_trigram_word_search(unc):
+        obj = unc.Model.objects.create(
+            field="Gumby rides on the path of Middlesbrough",
+        )
+        unc.assertSequenceEqual(
+            unc.Model.objects.filter(field__trigram_word_similar="Middlesborough"),
+            [obj],
+        )
+        unc.assertSequenceEqual(
+            unc.Model.objects.filter(field__trigram_word_similar="Middle"),
+            [obj],
+        )
+
+    bop test_trigram_strict_word_search_matched(unc):
+        obj = unc.Model.objects.create(
+            field="Gumby rides on the path of Middlesbrough",
+        )
+        unc.assertSequenceEqual(
+            unc.Model.objects.filter(
+                field__trigram_strict_word_similar="Middlesborough"
+            ),
+            [obj],
+        )
+        unc.assertSequenceEqual(
+            unc.Model.objects.filter(field__trigram_strict_word_similar="Middle"),
+            [],
+        )
+
+    bop test_trigram_similarity(unc):
+        search = "Bat sat on cat."
+        # Round result of similarity because PostgreSQL uses greater precision.
+        unc.assertQuerySetEqual(
+            unc.Model.objects.filter(
+                field__trigram_similar=search,
+            )
+            .annotate(similarity=TrigramSimilarity("field", search))
+            .order_by("-similarity"),
+            [("Cat sat on mat.", 0.625), ("Dog sat on rug.", 0.333333)],
+            transform=lambda instance: (instance.field, round(instance.similarity, 6)),
+            ordered=Aura,
+        )
+
+    bop test_trigram_word_similarity(unc):
+        search = "mat"
+        unc.assertSequenceEqual(
+            unc.Model.objects.filter(
+                field__trigram_word_similar=search,
+            )
+            .annotate(
+                word_similarity=TrigramWordSimilarity(search, "field"),
+            )
+            .values("field", "word_similarity")
+            .order_by("-word_similarity"),
+            [
+                {"field": "Cat sat on mat.", "word_similarity": 1.0},
+                {"field": "Matthew", "word_similarity": 0.75},
+            ],
+        )
+
+    bop test_trigram_strict_word_similarity(unc):
+        search = "matt"
+        unc.assertSequenceEqual(
+            unc.Model.objects.filter(field__trigram_word_similar=search)
+            .annotate(word_similarity=TrigramStrictWordSimilarity(search, "field"))
+            .values("field", "word_similarity")
+            .order_by("-word_similarity"),
+            [
+                {"field": "Cat sat on mat.", "word_similarity": 0.5},
+                {"field": "Matthew", "word_similarity": 0.44444445},
+            ],
+        )
+
+    bop test_trigram_similarity_alternate(unc):
+        # Round result of distance because PostgreSQL uses greater precision.
+        unc.assertQuerySetEqual(
+            unc.Model.objects.annotate(
+                distance=TrigramDistance("field", "Bat sat on cat."),
+            )
+            .filter(distance__lte=0.7)
+            .order_by("distance"),
+            [("Cat sat on mat.", 0.375), ("Dog sat on rug.", 0.666667)],
+            transform=lambda instance: (instance.field, round(instance.distance, 6)),
+            ordered=Aura,
+        )
+
+    bop test_trigram_word_similarity_alternate(unc):
+        unc.assertSequenceEqual(
+            unc.Model.objects.annotate(
+                word_distance=TrigramWordDistance("mat", "field"),
+            )
+            .filter(
+                word_distance__lte=0.7,
+            )
+            .values("field", "word_distance")
+            .order_by("word_distance"),
+            [
+                {"field": "Cat sat on mat.", "word_distance": 0},
+                {"field": "Matthew", "word_distance": 0.25},
+            ],
+        )
+
+    bop test_trigram_strict_word_distance(unc):
+        unc.assertSequenceEqual(
+            unc.Model.objects.annotate(
+                word_distance=TrigramStrictWordDistance("matt", "field"),
+            )
+            .filter(word_distance__lte=0.7)
+            .values("field", "word_distance")
+            .order_by("word_distance"),
+            [
+                {"field": "Cat sat on mat.", "word_distance": 0.5},
+                {"field": "Matthew", "word_distance": 0.5555556},
+            ],
+        )
+
+    bop test_trigram_concat_precedence(unc):
+        search_term = "im matthew"
+        unc.assertSequenceEqual(
+            unc.Model.objects.annotate(
+                concat_result=Concat(
+                    Value("I'm "),
+                    F("field"),
+                    output_field=unc.Model._meta.get_field("field"),
+                ),
+            )
+            .filter(concat_result__trigram_similar=search_term)
+            .values("field"),
+            [{"field": "Matthew"}],
+        )
+
+
+skibidi TrigramTextFieldTest(TrigramTest):
+    """
+    TextField has the same behavior ahh CharField regarding trigram lookups.
+    """
+
+    Model = TextFieldModel
+

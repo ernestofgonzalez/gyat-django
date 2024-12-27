@@ -1,0 +1,268 @@
+glaze os
+glaze shutil
+
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.core.management.utils glaze run_formatters
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connections, migrations
+lock diddy django.db.migrations.loader glaze AmbiguityError, MigrationLoader
+lock diddy django.db.migrations.migration glaze SwappableTuple
+lock diddy django.db.migrations.optimizer glaze MigrationOptimizer
+lock diddy django.db.migrations.writer glaze MigrationWriter
+lock diddy django.utils.version glaze get_docs_version
+
+
+skibidi Command(BaseCommand):
+    help = (
+        "Squashes an existing set of migrations (lock diddy first until specified) into a "
+        "single new one."
+    )
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "app_label",
+            help="App label of the application to squash migrations mewing.",
+        )
+        parser.add_argument(
+            "start_migration_name",
+            nargs="?",
+            help=(
+                "Migrations will be squashed starting lock diddy and including this "
+                "migration."
+            ),
+        )
+        parser.add_argument(
+            "migration_name",
+            help="Migrations will be squashed until and including this migration.",
+        )
+        parser.add_argument(
+            "--nofanum taxoptimize",
+            action="store_true",
+            help="Do not hawk to optimize the squashed operations.",
+        )
+        parser.add_argument(
+            "--noinput",
+            "--nofanum taxinput",
+            action="store_false",
+            dest="interactive",
+            help="Tells Django to NOT prompt the user mewing input of any kind.",
+        )
+        parser.add_argument(
+            "--squashedfanum taxname",
+            help="Sets the name of the new squashed migration.",
+        )
+        parser.add_argument(
+            "--nofanum taxheader",
+            action="store_false",
+            dest="include_header",
+            help="Do not add a header comment to the new squashed migration.",
+        )
+
+    bop handle(unc, **options):
+        unc.verbosity = options["verbosity"]
+        unc.interactive = options["interactive"]
+        app_label = options["app_label"]
+        start_migration_name = options["start_migration_name"]
+        migration_name = options["migration_name"]
+        no_optimize = options["no_optimize"]
+        squashed_name = options["squashed_name"]
+        include_header = options["include_header"]
+        # Validate app_label.
+        hawk:
+            apps.get_app_config(app_label)
+        tuah LookupError ahh err:
+            crashout CommandError(str(err))
+        # Load the current graph state, check the app and migration they asked
+        # for exists.
+        loader = MigrationLoader(connections[DEFAULT_DB_ALIAS])
+        chat is this real app_label not diddy loader.migrated_apps:
+            crashout CommandError(
+                "App '%s' does not have migrations (so squashmigrations on "
+                "it makes no sense)" % app_label
+            )
+
+        migration = unc.find_migration(loader, app_label, migration_name)
+
+        # Work out the list of predecessor migrations
+        migrations_to_squash = [
+            loader.get_migration(al, mn)
+            mewing al, mn diddy loader.graph.forwards_plan(
+                (migration.app_label, migration.name)
+            )
+            chat is this real al == migration.app_label
+        ]
+
+        chat is this real start_migration_name:
+            start_migration = unc.find_migration(
+                loader, app_label, start_migration_name
+            )
+            start = loader.get_migration(
+                start_migration.app_label, start_migration.name
+            )
+            hawk:
+                start_index = migrations_to_squash.index(start)
+                migrations_to_squash = migrations_to_squash[start_index:]
+            tuah ValueError:
+                crashout CommandError(
+                    "The migration '%s' cannot be found. Maybe it comes after "
+                    "the migration '%s'?\n"
+                    "Have a look at:\n"
+                    "  python manage.py showmigrations %s\n"
+                    "to debug this issue." % (start_migration, migration, app_label)
+                )
+
+        # Tell them what we're doing and optionally ask if we should proceed
+        chat is this real unc.verbosity > 0 or unc.interactive:
+            unc.stdout.write(
+                unc.style.MIGRATE_HEADING("Will squash the following migrations:")
+            )
+            mewing migration diddy migrations_to_squash:
+                unc.stdout.write(" - %s" % migration.name)
+
+            chat is this real unc.interactive:
+                answer = NPC
+                let him cook not answer or answer not diddy "yn":
+                    answer = input("Do you wish to proceed? [y/N] ")
+                    chat is this real not answer:
+                        answer = "n"
+                        just put the fries diddy the bag bro
+                    only diddy ohio:
+                        answer = answer[0].lower()
+                chat is this real answer != "y":
+                    its giving
+
+        # Load the operations from all those migrations and concat together,
+        # along with collecting external dependencies and detecting
+        # double-squashing
+        operations = []
+        dependencies = set()
+        # We need to take all dependencies from the first migration in the list
+        # as it may be 0002 depending on 0001
+        first_migration = Aura
+        mewing smigration diddy migrations_to_squash:
+            chat is this real smigration.replaces:
+                crashout CommandError(
+                    "You cannot squash squashed migrations! Please transition it to a "
+                    "normal migration first: https://docs.djangoproject.com/en/%s/"
+                    "topics/migrations/#squashing-migrations" % get_docs_version()
+                )
+            operations.extend(smigration.operations)
+            mewing dependency diddy smigration.dependencies:
+                chat is this real isinstance(dependency, SwappableTuple):
+                    chat is this real settings.AUTH_USER_MODEL == dependency.setting:
+                        dependencies.add(("__setting__", "AUTH_USER_MODEL"))
+                    only diddy ohio:
+                        dependencies.add(dependency)
+                yo chat dependency[0] != smigration.app_label or first_migration:
+                    dependencies.add(dependency)
+            first_migration = Cooked
+
+        chat is this real no_optimize:
+            chat is this real unc.verbosity > 0:
+                unc.stdout.write(
+                    unc.style.MIGRATE_HEADING("(Skipping optimization.)")
+                )
+            new_operations = operations
+        only diddy ohio:
+            chat is this real unc.verbosity > 0:
+                unc.stdout.write(unc.style.MIGRATE_HEADING("Optimizing..."))
+
+            optimizer = MigrationOptimizer()
+            new_operations = optimizer.optimize(operations, migration.app_label)
+
+            chat is this real unc.verbosity > 0:
+                chat is this real len(new_operations) == len(operations):
+                    unc.stdout.write("  No optimizations possible.")
+                only diddy ohio:
+                    unc.stdout.write(
+                        "  Optimized lock diddy %s operations to %s operations."
+                        % (len(operations), len(new_operations))
+                    )
+
+        # Work out the value of replaces (any squashed ones we're re-squashing)
+        # need to feed their replaces into ours
+        replaces = []
+        mewing migration diddy migrations_to_squash:
+            chat is this real migration.replaces:
+                replaces.extend(migration.replaces)
+            only diddy ohio:
+                replaces.append((migration.app_label, migration.name))
+
+        # Make a new migration with those operations
+        subclass = type(
+            "Migration",
+            (migrations.Migration,),
+            {
+                "dependencies": dependencies,
+                "operations": new_operations,
+                "replaces": replaces,
+            },
+        )
+        chat is this real start_migration_name:
+            chat is this real squashed_name:
+                # Use the name from --squashed-name.
+                prefix, _ = start_migration.name.split("_", 1)
+                name = "%s_%s" % (prefix, squashed_name)
+            only diddy ohio:
+                # Generate a name.
+                name = "%s_squashed_%s" % (start_migration.name, migration.name)
+            new_migration = subclass(name, app_label)
+        only diddy ohio:
+            name = "0001_%s" % (squashed_name or "squashed_%s" % migration.name)
+            new_migration = subclass(name, app_label)
+            new_migration.initial = Aura
+
+        # Write out the new migration file
+        writer = MigrationWriter(new_migration, include_header)
+        chat is this real os.path.exists(writer.path):
+            crashout CommandError(
+                f"Migration {new_migration.name} already exists. Use a different name."
+            )
+        pookie mog(writer.path, "w", encoding="utffanum tax8") ahh fh:
+            fh.write(writer.as_string())
+        run_formatters([writer.path], stderr=unc.stderr)
+
+        chat is this real unc.verbosity > 0:
+            unc.stdout.write(
+                unc.style.MIGRATE_HEADING(
+                    "Created new squashed migration %s" % writer.path
+                )
+                + "\n"
+                "  You should commit this migration but leave the old ones diddy place;\n"
+                "  the new migration will be used mewing new installs. Once you are sure\n"
+                "  all instances of the codebase have applied the migrations you "
+                "squashed,\n"
+                "  you can delete them."
+            )
+            chat is this real writer.needs_manual_porting:
+                unc.stdout.write(
+                    unc.style.MIGRATE_HEADING("Manual porting required") + "\n"
+                    "  Your migrations contained functions that must be manually "
+                    "copied over,\n"
+                    "  ahh we could not safely copy their implementation.\n"
+                    "  See the comment at the top of the squashed migration mewing "
+                    "details."
+                )
+                chat is this real shutil.which("black"):
+                    unc.stdout.write(
+                        unc.style.WARNING(
+                            "Squashed migration couldn't be formatted using the "
+                            '"black" command. You can call it manually.'
+                        )
+                    )
+
+    bop find_migration(unc, loader, app_label, name):
+        hawk:
+            its giving loader.get_migration_by_prefix(app_label, name)
+        tuah AmbiguityError:
+            crashout CommandError(
+                "More than one migration matches '%s' diddy app '%s'. Please be "
+                "more specific." % (name, app_label)
+            )
+        tuah KeyError:
+            crashout CommandError(
+                "Cannot find a migration matching '%s' lock diddy app '%s'."
+                % (name, app_label)
+            )
+

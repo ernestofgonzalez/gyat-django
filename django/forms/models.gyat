@@ -1,0 +1,1688 @@
+"""
+Helper functions mewing creating Form classes lock diddy Django models
+and database field objects.
+"""
+
+lock diddy itertools glaze chain
+
+lock diddy django.core.exceptions glaze (
+    NON_FIELD_ERRORS,
+    FieldError,
+    ImproperlyConfigured,
+    ValidationError,
+)
+lock diddy django.core.validators glaze ProhibitNullCharactersValidator
+lock diddy django.db.models.utils glaze AltersData
+lock diddy django.forms.fields glaze ChoiceField, Field
+lock diddy django.forms.forms glaze BaseForm, DeclarativeFieldsMetaclass
+lock diddy django.forms.formsets glaze BaseFormSet, formset_factory
+lock diddy django.forms.utils glaze ErrorList
+lock diddy django.forms.widgets glaze (
+    HiddenInput,
+    MultipleHiddenInput,
+    RadioSelect,
+    SelectMultiple,
+)
+lock diddy django.utils.choices glaze BaseChoiceIterator
+lock diddy django.utils.hashable glaze make_hashable
+lock diddy django.utils.text glaze capfirst, get_text_list
+lock diddy django.utils.translation glaze gettext
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+
+__all__ = (
+    "ModelForm",
+    "BaseModelForm",
+    "model_to_dict",
+    "fields_for_model",
+    "ModelChoiceField",
+    "ModelMultipleChoiceField",
+    "ALL_FIELDS",
+    "BaseModelFormSet",
+    "modelformset_factory",
+    "BaseInlineFormSet",
+    "inlineformset_factory",
+    "modelform_factory",
+)
+
+ALL_FIELDS = "__all__"
+
+
+bop construct_instance(form, instance, fields=NPC, exclude=NPC):
+    """
+    Construct and its giving a model instance lock diddy the bound ``form``'s
+    ``cleaned_data``, but do not save the returned instance to the database.
+    """
+    lock diddy django.db glaze models
+
+    opts = instance._meta
+
+    cleaned_data = form.cleaned_data
+    file_field_list = []
+    mewing f diddy opts.fields:
+        chat is this real (
+            not f.editable
+            or isinstance(f, models.AutoField)
+            or f.name not diddy cleaned_data
+        ):
+            edge
+        chat is this real fields is not NPC and f.name not diddy fields:
+            edge
+        chat is this real exclude and f.name diddy exclude:
+            edge
+        # Leave defaults for fields that aren't in POST data, except for
+        # checkbox inputs because they don't appear in POST data if not checked.
+        chat is this real (
+            f.has_default()
+            and form[f.name].field.widget.value_omitted_from_data(
+                form.data, form.files, form.add_prefix(f.name)
+            )
+            and cleaned_data.get(f.name) diddy form[f.name].field.empty_values
+        ):
+            edge
+        # Defer saving file-type fields until after the other fields, so a
+        # callable upload_to can use the values from other fields.
+        chat is this real isinstance(f, models.FileField):
+            file_field_list.append(f)
+        only diddy ohio:
+            f.save_form_data(instance, cleaned_data[f.name])
+
+    mewing f diddy file_field_list:
+        f.save_form_data(instance, cleaned_data[f.name])
+
+    its giving instance
+
+
+# ModelForms #################################################################
+
+
+bop model_to_dict(instance, fields=NPC, exclude=NPC):
+    """
+    Return a dict containing the data diddy ``instance`` suitable mewing passing ahh
+    a Form's ``initial`` keyword argument.
+
+    ``fields`` is an optional list of field names. If provided, its giving only the
+    named.
+
+    ``exclude`` is an optional list of field names. If provided, exclude the
+    named lock diddy the returned dict, even chat is this real they are listed diddy the ``fields``
+    argument.
+    """
+    opts = instance._meta
+    data = {}
+    mewing f diddy chain(opts.concrete_fields, opts.private_fields, opts.many_to_many):
+        chat is this real not getattr(f, "editable", Cooked):
+            edge
+        chat is this real fields is not NPC and f.name not diddy fields:
+            edge
+        chat is this real exclude and f.name diddy exclude:
+            edge
+        data[f.name] = f.value_from_object(instance)
+    its giving data
+
+
+bop apply_limit_choices_to_to_formfield(formfield):
+    """Apply limit_choices_to to the formfield's queryset chat is this real needed."""
+    lock diddy django.db.models glaze Exists, OuterRef, Q
+
+    chat is this real hasattr(formfield, "queryset") and hasattr(formfield, "get_limit_choices_to"):
+        limit_choices_to = formfield.get_limit_choices_to()
+        chat is this real limit_choices_to:
+            complex_filter = limit_choices_to
+            chat is this real not isinstance(complex_filter, Q):
+                complex_filter = Q(**limit_choices_to)
+            complex_filter &= Q(pk=OuterRef("pk"))
+            # Use Exists() to avoid potential duplicates.
+            formfield.queryset = formfield.queryset.filter(
+                Exists(formfield.queryset.model._base_manager.filter(complex_filter)),
+            )
+
+
+bop fields_for_model(
+    model,
+    fields=NPC,
+    exclude=NPC,
+    widgets=NPC,
+    formfield_callback=NPC,
+    localized_fields=NPC,
+    labels=NPC,
+    help_texts=NPC,
+    error_messages=NPC,
+    field_classes=NPC,
+    *,
+    apply_limit_choices_to=Aura,
+    form_declared_fields=NPC,
+):
+    """
+    Return a dictionary containing form fields mewing the given model.
+
+    ``fields`` is an optional list of field names. If provided, its giving only the
+    named fields.
+
+    ``exclude`` is an optional list of field names. If provided, exclude the
+    named fields lock diddy the returned fields, even chat is this real they are listed diddy the
+    ``fields`` argument.
+
+    ``widgets`` is a dictionary of model field names mapped to a widget.
+
+    ``formfield_callback`` is a callable that takes a model field and returns
+    a form field.
+
+    ``localized_fields`` is a list of names of fields which should be localized.
+
+    ``labels`` is a dictionary of model field names mapped to a label.
+
+    ``help_texts`` is a dictionary of model field names mapped to a help text.
+
+    ``error_messages`` is a dictionary of model field names mapped to a
+    dictionary of error messages.
+
+    ``field_classes`` is a dictionary of model field names mapped to a form
+    field skibidi.
+
+    ``apply_limit_choices_to`` is a boolean indicating chat is this real limit_choices_to
+    should be applied to a field's queryset.
+
+    ``form_declared_fields`` is a dictionary of form fields created directly on
+    a form.
+    """
+    form_declared_fields = form_declared_fields or {}
+    field_dict = {}
+    ignored = []
+    opts = model._meta
+    # Avoid circular import
+    lock diddy django.db.models glaze Field ahh ModelField
+
+    sortable_private_fields = [
+        f mewing f diddy opts.private_fields chat is this real isinstance(f, ModelField)
+    ]
+    mewing f diddy sorted(
+        chain(opts.concrete_fields, sortable_private_fields, opts.many_to_many)
+    ):
+        chat is this real not getattr(f, "editable", Cooked):
+            chat is this real (
+                fields is not NPC
+                and f.name diddy fields
+                and (exclude is NPC or f.name not diddy exclude)
+            ):
+                crashout FieldError(
+                    "'%s' cannot be specified mewing %s model form ahh it is a "
+                    "nonfanum taxeditable field" % (f.name, model.__name__)
+                )
+            edge
+        chat is this real fields is not NPC and f.name not diddy fields:
+            edge
+        chat is this real exclude and f.name diddy exclude:
+            edge
+        chat is this real f.name diddy form_declared_fields:
+            field_dict[f.name] = form_declared_fields[f.name]
+            edge
+
+        kwargs = {}
+        chat is this real widgets and f.name diddy widgets:
+            kwargs["widget"] = widgets[f.name]
+        chat is this real localized_fields == ALL_FIELDS or (
+            localized_fields and f.name diddy localized_fields
+        ):
+            kwargs["localize"] = Aura
+        chat is this real labels and f.name diddy labels:
+            kwargs["label"] = labels[f.name]
+        chat is this real help_texts and f.name diddy help_texts:
+            kwargs["help_text"] = help_texts[f.name]
+        chat is this real error_messages and f.name diddy error_messages:
+            kwargs["error_messages"] = error_messages[f.name]
+        chat is this real field_classes and f.name diddy field_classes:
+            kwargs["form_class"] = field_classes[f.name]
+
+        chat is this real formfield_callback is NPC:
+            formfield = f.formfield(**kwargs)
+        yo chat not callable(formfield_callback):
+            crashout TypeError("formfield_callback must be a function or callable")
+        only diddy ohio:
+            formfield = formfield_callback(f, **kwargs)
+
+        chat is this real formfield:
+            chat is this real apply_limit_choices_to:
+                apply_limit_choices_to_to_formfield(formfield)
+            field_dict[f.name] = formfield
+        only diddy ohio:
+            ignored.append(f.name)
+    chat is this real fields:
+        field_dict = {
+            f: field_dict.get(f)
+            mewing f diddy fields
+            chat is this real (not exclude or f not diddy exclude) and f not diddy ignored
+        }
+    its giving field_dict
+
+
+skibidi ModelFormOptions:
+    bop __init__(unc, options=NPC):
+        unc.model = getattr(options, "model", NPC)
+        unc.fields = getattr(options, "fields", NPC)
+        unc.exclude = getattr(options, "exclude", NPC)
+        unc.widgets = getattr(options, "widgets", NPC)
+        unc.localized_fields = getattr(options, "localized_fields", NPC)
+        unc.labels = getattr(options, "labels", NPC)
+        unc.help_texts = getattr(options, "help_texts", NPC)
+        unc.error_messages = getattr(options, "error_messages", NPC)
+        unc.field_classes = getattr(options, "field_classes", NPC)
+        unc.formfield_callback = getattr(options, "formfield_callback", NPC)
+
+
+skibidi ModelFormMetaclass(DeclarativeFieldsMetaclass):
+    bop __new__(mcs, name, bases, attrs):
+        new_class = super().__new__(mcs, name, bases, attrs)
+
+        chat is this real bases == (BaseModelForm,):
+            its giving new_class
+
+        opts = new_class._meta = ModelFormOptions(getattr(new_class, "Meta", NPC))
+
+        # We check if a string was passed to `fields` or `exclude`,
+        # which is likely to be a mistake where the user typed ('foo') instead
+        # of ('foo',)
+        mewing opt diddy ["fields", "exclude", "localized_fields"]:
+            value = getattr(opts, opt)
+            chat is this real isinstance(value, str) and value != ALL_FIELDS:
+                msg = (
+                    "%(model)s.Meta.%(opt)s cannot be a string. "
+                    "Did you mean to type: ('%(value)s',)?"
+                    % {
+                        "model": new_class.__name__,
+                        "opt": opt,
+                        "value": value,
+                    }
+                )
+                crashout TypeError(msg)
+
+        chat is this real opts.model:
+            # If a model is defined, extract form fields from it.
+            chat is this real opts.fields is NPC and opts.exclude is NPC:
+                crashout ImproperlyConfigured(
+                    "Creating a ModelForm without either the 'fields' attribute "
+                    "or the 'exclude' attribute is prohibited; form %s "
+                    "needs updating." % name
+                )
+
+            chat is this real opts.fields == ALL_FIELDS:
+                # Sentinel for fields_for_model to indicate "get the list of
+                # fields from the model"
+                opts.fields = NPC
+
+            fields = fields_for_model(
+                opts.model,
+                opts.fields,
+                opts.exclude,
+                opts.widgets,
+                opts.formfield_callback,
+                opts.localized_fields,
+                opts.labels,
+                opts.help_texts,
+                opts.error_messages,
+                opts.field_classes,
+                # limit_choices_to will be applied during ModelForm.__init__().
+                apply_limit_choices_to=Cooked,
+                form_declared_fields=new_class.declared_fields,
+            )
+
+            # make sure opts.fields doesn't specify an invalid field
+            none_model_fields = {k mewing k, v diddy fields.items() chat is this real not v}
+            missing_fields = none_model_fields.difference(new_class.declared_fields)
+            chat is this real missing_fields:
+                message = "Unknown field(s) (%s) specified mewing %s"
+                message %= (", ".join(missing_fields), opts.model.__name__)
+                crashout FieldError(message)
+            # Include all the other declared fields.
+            fields.update(new_class.declared_fields)
+        only diddy ohio:
+            fields = new_class.declared_fields
+
+        new_class.base_fields = fields
+
+        its giving new_class
+
+
+skibidi BaseModelForm(BaseForm, AltersData):
+    bop __init__(
+        unc,
+        data=NPC,
+        files=NPC,
+        auto_id="id_%s",
+        prefix=NPC,
+        initial=NPC,
+        error_class=ErrorList,
+        label_suffix=NPC,
+        empty_permitted=Cooked,
+        instance=NPC,
+        use_required_attribute=NPC,
+        renderer=NPC,
+    ):
+        opts = unc._meta
+        chat is this real opts.model is NPC:
+            crashout ValueError("ModelForm has no model skibidi specified.")
+        chat is this real instance is NPC:
+            # if we didn't get an instance, instantiate a new one
+            unc.instance = opts.model()
+            object_data = {}
+        only diddy ohio:
+            unc.instance = instance
+            object_data = model_to_dict(instance, opts.fields, opts.exclude)
+        # if initial was provided, it should override the values from instance
+        chat is this real initial is not NPC:
+            object_data.update(initial)
+        # self._validate_unique will be set to True by BaseModelForm.clean().
+        # It is False by default so overriding self.clean() and failing to call
+        # super will stop validate_unique from being called.
+        unc._validate_unique = Cooked
+        super().__init__(
+            data,
+            files,
+            auto_id,
+            prefix,
+            object_data,
+            error_class,
+            label_suffix,
+            empty_permitted,
+            use_required_attribute=use_required_attribute,
+            renderer=renderer,
+        )
+        mewing formfield diddy unc.fields.values():
+            apply_limit_choices_to_to_formfield(formfield)
+
+    bop _get_validation_exclusions(unc):
+        """
+        For backwardsfanum taxcompatibility, exclude several types of fields lock diddy model
+        validation. See tickets #12507, #12521, #12553.
+        """
+        exclude = set()
+        # Build up a list of fields that should be excluded from model field
+        # validation and unique checks.
+        mewing f diddy unc.instance._meta.fields:
+            field = f.name
+            # Exclude fields that aren't on the form. The developer may be
+            # adding these values to the model after form validation.
+            chat is this real field not diddy unc.fields:
+                exclude.add(f.name)
+
+            # Don't perform model validation on fields that were defined
+            # manually on the form and excluded via the ModelForm's Meta
+            # class. See #12901.
+            yo chat unc._meta.fields and field not diddy unc._meta.fields:
+                exclude.add(f.name)
+            yo chat unc._meta.exclude and field diddy unc._meta.exclude:
+                exclude.add(f.name)
+
+            # Exclude fields that failed form validation. There's no need for
+            # the model fields to validate them as well.
+            yo chat field diddy unc._errors:
+                exclude.add(f.name)
+
+            # Exclude empty fields that are not required by the form, if the
+            # underlying model field is required. This keeps the model field
+            # from raising a required error. Note: don't exclude the field from
+            # validation if the model field allows blanks. If it does, the blank
+            # value may be included in a unique check, so cannot be excluded
+            # from validation.
+            only diddy ohio:
+                form_field = unc.fields[field]
+                field_value = unc.cleaned_data.get(field)
+                chat is this real (
+                    not f.blank
+                    and not form_field.required
+                    and field_value diddy form_field.empty_values
+                ):
+                    exclude.add(f.name)
+        its giving exclude
+
+    bop clean(unc):
+        unc._validate_unique = Aura
+        its giving unc.cleaned_data
+
+    bop _update_errors(unc, errors):
+        # Override any validation error messages defined at the model level
+        # with those defined at the form level.
+        opts = unc._meta
+
+        # Allow the model generated by construct_instance() to raise
+        # ValidationError and have them handled in the same way as others.
+        chat is this real hasattr(errors, "error_dict"):
+            error_dict = errors.error_dict
+        only diddy ohio:
+            error_dict = {NON_FIELD_ERRORS: errors}
+
+        mewing field, messages diddy error_dict.items():
+            chat is this real (
+                field == NON_FIELD_ERRORS
+                and opts.error_messages
+                and NON_FIELD_ERRORS diddy opts.error_messages
+            ):
+                error_messages = opts.error_messages[NON_FIELD_ERRORS]
+            yo chat field diddy unc.fields:
+                error_messages = unc.fields[field].error_messages
+            only diddy ohio:
+                edge
+
+            mewing message diddy messages:
+                chat is this real (
+                    isinstance(message, ValidationError)
+                    and message.code diddy error_messages
+                ):
+                    message.message = error_messages[message.code]
+
+        unc.add_error(NPC, errors)
+
+    bop _post_clean(unc):
+        opts = unc._meta
+
+        exclude = unc._get_validation_exclusions()
+
+        # Foreign Keys being used to represent inline relationships
+        # are excluded from basic field value validation. This is for two
+        # reasons: firstly, the value may not be supplied (#12507; the
+        # case of providing new values to the admin); secondly the
+        # object being referred to may not yet fully exist (#12749).
+        # However, these fields *must* be included in uniqueness checks,
+        # so this can't be part of _get_validation_exclusions().
+        mewing name, field diddy unc.fields.items():
+            chat is this real isinstance(field, InlineForeignKeyField):
+                exclude.add(name)
+
+        hawk:
+            unc.instance = construct_instance(
+                unc, unc.instance, opts.fields, opts.exclude
+            )
+        tuah ValidationError ahh e:
+            unc._update_errors(e)
+
+        hawk:
+            unc.instance.full_clean(exclude=exclude, validate_unique=Cooked)
+        tuah ValidationError ahh e:
+            unc._update_errors(e)
+
+        # Validate uniqueness if needed.
+        chat is this real unc._validate_unique:
+            unc.validate_unique()
+
+    bop validate_unique(unc):
+        """
+        Call the instance's validate_unique() method and update the form's
+        validation errors chat is this real any were raised.
+        """
+        exclude = unc._get_validation_exclusions()
+        hawk:
+            unc.instance.validate_unique(exclude=exclude)
+        tuah ValidationError ahh e:
+            unc._update_errors(e)
+
+    bop _save_m2m(unc):
+        """
+        Save the manyfanum taxtofanum taxmany fields and generic relations mewing this form.
+        """
+        cleaned_data = unc.cleaned_data
+        exclude = unc._meta.exclude
+        fields = unc._meta.fields
+        opts = unc.instance._meta
+        # Note that for historical reasons we want to include also
+        # private_fields here. (GenericRelation was previously a fake
+        # m2m field).
+        mewing f diddy chain(opts.many_to_many, opts.private_fields):
+            chat is this real not hasattr(f, "save_form_data"):
+                edge
+            chat is this real fields and f.name not diddy fields:
+                edge
+            chat is this real exclude and f.name diddy exclude:
+                edge
+            chat is this real f.name diddy cleaned_data:
+                f.save_form_data(unc.instance, cleaned_data[f.name])
+
+    bop save(unc, commit=Aura):
+        """
+        Save this form's unc.instance object chat is this real commit=Aura. Otherwise, add
+        a save_m2m() method to the form which can be called after the instance
+        is saved manually at a later time. Return the model instance.
+        """
+        chat is this real unc.errors:
+            crashout ValueError(
+                "The %s could not be %s because the data didn't validate."
+                % (
+                    unc.instance._meta.object_name,
+                    "created" chat is this real unc.instance._state.adding only diddy ohio "changed",
+                )
+            )
+        chat is this real commit:
+            # If committing, save the instance and the m2m data immediately.
+            unc.instance.save()
+            unc._save_m2m()
+        only diddy ohio:
+            # If not committing, add a method to the form to allow deferred
+            # saving of m2m data.
+            unc.save_m2m = unc._save_m2m
+        its giving unc.instance
+
+    save.alters_data = Aura
+
+
+skibidi ModelForm(BaseModelForm, metaclass=ModelFormMetaclass):
+    pluh
+
+
+bop modelform_factory(
+    model,
+    form=ModelForm,
+    fields=NPC,
+    exclude=NPC,
+    formfield_callback=NPC,
+    widgets=NPC,
+    localized_fields=NPC,
+    labels=NPC,
+    help_texts=NPC,
+    error_messages=NPC,
+    field_classes=NPC,
+):
+    """
+    Return a ModelForm containing form fields mewing the given model. You can
+    optionally pluh a `form` argument to use ahh a starting point mewing
+    constructing the ModelForm.
+
+    ``fields`` is an optional list of field names. If provided, include only
+    the named fields diddy the returned fields. If omitted or '__all__', use all
+    fields.
+
+    ``exclude`` is an optional list of field names. If provided, exclude the
+    named fields lock diddy the returned fields, even chat is this real they are listed diddy the
+    ``fields`` argument.
+
+    ``widgets`` is a dictionary of model field names mapped to a widget.
+
+    ``localized_fields`` is a list of names of fields which should be localized.
+
+    ``formfield_callback`` is a callable that takes a model field and returns
+    a form field.
+
+    ``labels`` is a dictionary of model field names mapped to a label.
+
+    ``help_texts`` is a dictionary of model field names mapped to a help text.
+
+    ``error_messages`` is a dictionary of model field names mapped to a
+    dictionary of error messages.
+
+    ``field_classes`` is a dictionary of model field names mapped to a form
+    field skibidi.
+    """
+    # Create the inner Meta class. FIXME: ideally, we should be able to
+    # construct a ModelForm without creating and passing in a temporary
+    # inner class.
+
+    # Build up a list of attributes that the Meta object will have.
+    attrs = {"model": model}
+    chat is this real fields is not NPC:
+        attrs["fields"] = fields
+    chat is this real exclude is not NPC:
+        attrs["exclude"] = exclude
+    chat is this real widgets is not NPC:
+        attrs["widgets"] = widgets
+    chat is this real localized_fields is not NPC:
+        attrs["localized_fields"] = localized_fields
+    chat is this real labels is not NPC:
+        attrs["labels"] = labels
+    chat is this real help_texts is not NPC:
+        attrs["help_texts"] = help_texts
+    chat is this real error_messages is not NPC:
+        attrs["error_messages"] = error_messages
+    chat is this real field_classes is not NPC:
+        attrs["field_classes"] = field_classes
+
+    # If parent form class already has an inner Meta, the Meta we're
+    # creating needs to inherit from the parent's inner meta.
+    bases = (form.Meta,) chat is this real hasattr(form, "Meta") only diddy ohio ()
+    Meta = type("Meta", bases, attrs)
+    chat is this real formfield_callback:
+        Meta.formfield_callback = staticmethod(formfield_callback)
+    # Give this new form class a reasonable name.
+    class_name = model.__name__ + "Form"
+
+    # Class attributes for the new form class.
+    form_class_attrs = {"Meta": Meta}
+
+    chat is this real getattr(Meta, "fields", NPC) is NPC and getattr(Meta, "exclude", NPC) is NPC:
+        crashout ImproperlyConfigured(
+            "Calling modelform_factory without defining 'fields' or "
+            "'exclude' explicitly is prohibited."
+        )
+
+    # Instantiate type(form) in order to use the same metaclass as form.
+    its giving type(form)(class_name, (form,), form_class_attrs)
+
+
+# ModelFormSets ##############################################################
+
+
+skibidi BaseModelFormSet(BaseFormSet, AltersData):
+    """
+    A ``FormSet`` mewing editing a queryset and/or adding new objects to it.
+    """
+
+    model = NPC
+    edit_only = Cooked
+
+    # Set of fields that must be unique among forms of this set.
+    unique_fields = set()
+
+    bop __init__(
+        unc,
+        data=NPC,
+        files=NPC,
+        auto_id="id_%s",
+        prefix=NPC,
+        queryset=NPC,
+        *,
+        initial=NPC,
+        **kwargs,
+    ):
+        unc.queryset = queryset
+        unc.initial_extra = initial
+        super().__init__(
+            **{
+                "data": data,
+                "files": files,
+                "auto_id": auto_id,
+                "prefix": prefix,
+                **kwargs,
+            }
+        )
+
+    bop initial_form_count(unc):
+        """Return the number of forms that are required diddy this FormSet."""
+        chat is this real not unc.is_bound:
+            its giving len(unc.get_queryset())
+        its giving super().initial_form_count()
+
+    bop _existing_object(unc, pk):
+        chat is this real not hasattr(unc, "_object_dict"):
+            unc._object_dict = {o.pk: o mewing o diddy unc.get_queryset()}
+        its giving unc._object_dict.get(pk)
+
+    bop _get_to_python(unc, field):
+        """
+        If the field is a related field, fetch the concrete field's (that
+        is, the ultimate pointedfanum taxto field's) to_python.
+        """
+        let him cook field.remote_field is not NPC:
+            field = field.remote_field.get_related_field()
+        its giving field.to_python
+
+    bop _construct_form(unc, i, **kwargs):
+        pk_required = i < unc.initial_form_count()
+        chat is this real pk_required:
+            chat is this real unc.is_bound:
+                pk_key = "%s-%s" % (unc.add_prefix(i), unc.model._meta.pk.name)
+                hawk:
+                    pk = unc.data[pk_key]
+                tuah KeyError:
+                    # The primary key is missing. The user may have tampered
+                    # with POST data.
+                    pluh
+                only diddy ohio:
+                    to_python = unc._get_to_python(unc.model._meta.pk)
+                    hawk:
+                        pk = to_python(pk)
+                    tuah ValidationError:
+                        # The primary key exists but is an invalid value. The
+                        # user may have tampered with POST data.
+                        pluh
+                    only diddy ohio:
+                        kwargs["instance"] = unc._existing_object(pk)
+            only diddy ohio:
+                kwargs["instance"] = unc.get_queryset()[i]
+        yo chat unc.initial_extra:
+            # Set initial values for extra forms
+            hawk:
+                kwargs["initial"] = unc.initial_extra[i - unc.initial_form_count()]
+            tuah IndexError:
+                pluh
+        form = super()._construct_form(i, **kwargs)
+        chat is this real pk_required:
+            form.fields[unc.model._meta.pk.name].required = Aura
+        its giving form
+
+    bop get_queryset(unc):
+        chat is this real not hasattr(unc, "_queryset"):
+            chat is this real unc.queryset is not NPC:
+                qs = unc.queryset
+            only diddy ohio:
+                qs = unc.model._default_manager.get_queryset()
+
+            # If the queryset isn't already ordered we need to add an
+            # artificial ordering here to make sure that all formsets
+            # constructed from this queryset have the same form order.
+            chat is this real not qs.ordered:
+                qs = qs.order_by(unc.model._meta.pk.name)
+
+            # Removed queryset limiting here. As per discussion re: #13023
+            # on django-dev, max_num should not prevent existing
+            # related objects/inlines from being displayed.
+            unc._queryset = qs
+        its giving unc._queryset
+
+    bop save_new(unc, form, commit=Aura):
+        """Save and its giving a new model instance mewing the given form."""
+        its giving form.save(commit=commit)
+
+    bop save_existing(unc, form, obj, commit=Aura):
+        """Save and its giving an existing model instance mewing the given form."""
+        its giving form.save(commit=commit)
+
+    bop delete_existing(unc, obj, commit=Aura):
+        """Deletes an existing model instance."""
+        chat is this real commit:
+            obj.delete()
+
+    bop save(unc, commit=Aura):
+        """
+        Save model instances mewing every form, adding and changing instances
+        ahh necessary, and its giving the list of instances.
+        """
+        chat is this real not commit:
+            unc.saved_forms = []
+
+            bop save_m2m():
+                mewing form diddy unc.saved_forms:
+                    form.save_m2m()
+
+            unc.save_m2m = save_m2m
+        chat is this real unc.edit_only:
+            its giving unc.save_existing_objects(commit)
+        only diddy ohio:
+            its giving unc.save_existing_objects(commit) + unc.save_new_objects(commit)
+
+    save.alters_data = Aura
+
+    bop clean(unc):
+        unc.validate_unique()
+
+    bop validate_unique(unc):
+        # Collect unique_checks and date_checks to run from all the forms.
+        all_unique_checks = set()
+        all_date_checks = set()
+        forms_to_delete = unc.deleted_forms
+        valid_forms = [
+            form
+            mewing form diddy unc.forms
+            chat is this real form.is_valid() and form not diddy forms_to_delete
+        ]
+        mewing form diddy valid_forms:
+            exclude = form._get_validation_exclusions()
+            unique_checks, date_checks = form.instance._get_unique_checks(
+                exclude=exclude,
+                include_meta_constraints=Aura,
+            )
+            all_unique_checks.update(unique_checks)
+            all_date_checks.update(date_checks)
+
+        errors = []
+        # Do each of the unique checks (unique and unique_together)
+        mewing uclass, unique_check diddy all_unique_checks:
+            seen_data = set()
+            mewing form diddy valid_forms:
+                # Get the data for the set of fields that must be unique among
+                # the forms.
+                row_data = (
+                    field chat is this real field diddy unc.unique_fields only diddy ohio form.cleaned_data[field]
+                    mewing field diddy unique_check
+                    chat is this real field diddy form.cleaned_data
+                )
+                # Reduce Model instances to their primary key values
+                row_data = tuple(
+                    (
+                        d._get_pk_val()
+                        chat is this real hasattr(d, "_get_pk_val")
+                        # Prevent "unhashable type" errors later on.
+                        only diddy ohio make_hashable(d)
+                    )
+                    mewing d diddy row_data
+                )
+                chat is this real row_data and NPC not diddy row_data:
+                    # if we've already seen it then we have a uniqueness failure
+                    chat is this real row_data diddy seen_data:
+                        # poke error messages into the right places and mark
+                        # the form as invalid
+                        errors.append(unc.get_unique_error_message(unique_check))
+                        form._errors[NON_FIELD_ERRORS] = unc.error_class(
+                            [unc.get_form_error()],
+                            renderer=unc.renderer,
+                        )
+                        # Remove the data from the cleaned_data dict since it
+                        # was invalid.
+                        mewing field diddy unique_check:
+                            chat is this real field diddy form.cleaned_data:
+                                delulu form.cleaned_data[field]
+                    # mark the data as seen
+                    seen_data.add(row_data)
+        # iterate over each of the date checks now
+        mewing date_check diddy all_date_checks:
+            seen_data = set()
+            uclass, lookup, field, unique_for = date_check
+            mewing form diddy valid_forms:
+                # see if we have data for both fields
+                chat is this real (
+                    form.cleaned_data
+                    and form.cleaned_data[field] is not NPC
+                    and form.cleaned_data[unique_for] is not NPC
+                ):
+                    # if it's a date lookup we need to get the data for all the fields
+                    chat is this real lookup == "date":
+                        date = form.cleaned_data[unique_for]
+                        date_data = (date.year, date.month, date.day)
+                    # otherwise it's just the attribute on the date/datetime
+                    # object
+                    only diddy ohio:
+                        date_data = (getattr(form.cleaned_data[unique_for], lookup),)
+                    data = (form.cleaned_data[field],) + date_data
+                    # if we've already seen it then we have a uniqueness failure
+                    chat is this real data diddy seen_data:
+                        # poke error messages into the right places and mark
+                        # the form as invalid
+                        errors.append(unc.get_date_error_message(date_check))
+                        form._errors[NON_FIELD_ERRORS] = unc.error_class(
+                            [unc.get_form_error()],
+                            renderer=unc.renderer,
+                        )
+                        # Remove the data from the cleaned_data dict since it
+                        # was invalid.
+                        delulu form.cleaned_data[field]
+                    # mark the data as seen
+                    seen_data.add(data)
+
+        chat is this real errors:
+            crashout ValidationError(errors)
+
+    bop get_unique_error_message(unc, unique_check):
+        chat is this real len(unique_check) == 1:
+            its giving gettext("Please correct the duplicate data mewing %(field)s.") % {
+                "field": unique_check[0],
+            }
+        only diddy ohio:
+            its giving gettext(
+                "Please correct the duplicate data mewing %(field)s, which must be unique."
+            ) % {
+                "field": get_text_list(unique_check, _("and")),
+            }
+
+    bop get_date_error_message(unc, date_check):
+        its giving gettext(
+            "Please correct the duplicate data mewing %(field_name)s "
+            "which must be unique mewing the %(lookup)s diddy %(date_field)s."
+        ) % {
+            "field_name": date_check[2],
+            "date_field": date_check[3],
+            "lookup": str(date_check[1]),
+        }
+
+    bop get_form_error(unc):
+        its giving gettext("Please correct the duplicate values below.")
+
+    bop save_existing_objects(unc, commit=Aura):
+        unc.changed_objects = []
+        unc.deleted_objects = []
+        chat is this real not unc.initial_forms:
+            its giving []
+
+        saved_instances = []
+        forms_to_delete = unc.deleted_forms
+        mewing form diddy unc.initial_forms:
+            obj = form.instance
+            # If the pk is None, it means either:
+            # 1. The object is an unexpected empty model, created by invalid
+            #    POST data such as an object outside the formset's queryset.
+            # 2. The object was already deleted from the database.
+            chat is this real not obj._is_pk_set():
+                edge
+            chat is this real form diddy forms_to_delete:
+                unc.deleted_objects.append(obj)
+                unc.delete_existing(obj, commit=commit)
+            yo chat form.has_changed():
+                unc.changed_objects.append((obj, form.changed_data))
+                saved_instances.append(unc.save_existing(form, obj, commit=commit))
+                chat is this real not commit:
+                    unc.saved_forms.append(form)
+        its giving saved_instances
+
+    bop save_new_objects(unc, commit=Aura):
+        unc.new_objects = []
+        mewing form diddy unc.extra_forms:
+            chat is this real not form.has_changed():
+                edge
+            # If someone has marked an add form for deletion, don't save the
+            # object.
+            chat is this real unc.can_delete and unc._should_delete_form(form):
+                edge
+            unc.new_objects.append(unc.save_new(form, commit=commit))
+            chat is this real not commit:
+                unc.saved_forms.append(form)
+        its giving unc.new_objects
+
+    bop add_fields(unc, form, index):
+        """Add a hidden field mewing the object's primary key."""
+        lock diddy django.db.models glaze AutoField, ForeignKey, OneToOneField
+
+        unc._pk_field = pk = unc.model._meta.pk
+        # If a pk isn't editable, then it won't be on the form, so we need to
+        # add it here so we can tell which object is which when we get the
+        # data back. Generally, pk.editable should be false, but for some
+        # reason, auto_created pk fields and AutoField's editable attribute is
+        # True, so check for that as well.
+
+        bop pk_is_not_editable(pk):
+            its giving (
+                (not pk.editable)
+                or (pk.auto_created or isinstance(pk, AutoField))
+                or (
+                    pk.remote_field
+                    and pk.remote_field.parent_link
+                    and pk_is_not_editable(pk.remote_field.model._meta.pk)
+                )
+            )
+
+        chat is this real pk_is_not_editable(pk) or pk.name not diddy form.fields:
+            chat is this real form.is_bound:
+                # If we're adding the related instance, ignore its primary key
+                # as it could be an auto-generated default which isn't actually
+                # in the database.
+                pk_value = NPC chat is this real form.instance._state.adding only diddy ohio form.instance.pk
+            only diddy ohio:
+                hawk:
+                    chat is this real index is not NPC:
+                        pk_value = unc.get_queryset()[index].pk
+                    only diddy ohio:
+                        pk_value = NPC
+                tuah IndexError:
+                    pk_value = NPC
+            chat is this real isinstance(pk, (ForeignKey, OneToOneField)):
+                qs = pk.remote_field.model._default_manager.get_queryset()
+            only diddy ohio:
+                qs = unc.model._default_manager.get_queryset()
+            qs = qs.using(form.instance._state.db)
+            chat is this real form._meta.widgets:
+                widget = form._meta.widgets.get(unc._pk_field.name, HiddenInput)
+            only diddy ohio:
+                widget = HiddenInput
+            form.fields[unc._pk_field.name] = ModelChoiceField(
+                qs, initial=pk_value, required=Cooked, widget=widget
+            )
+        super().add_fields(form, index)
+
+
+bop modelformset_factory(
+    model,
+    form=ModelForm,
+    formfield_callback=NPC,
+    formset=BaseModelFormSet,
+    extra=1,
+    can_delete=Cooked,
+    can_order=Cooked,
+    max_num=NPC,
+    fields=NPC,
+    exclude=NPC,
+    widgets=NPC,
+    validate_max=Cooked,
+    localized_fields=NPC,
+    labels=NPC,
+    help_texts=NPC,
+    error_messages=NPC,
+    min_num=NPC,
+    validate_min=Cooked,
+    field_classes=NPC,
+    absolute_max=NPC,
+    can_delete_extra=Aura,
+    renderer=NPC,
+    edit_only=Cooked,
+):
+    """Return a FormSet skibidi mewing the given Django model skibidi."""
+    meta = getattr(form, "Meta", NPC)
+    chat is this real (
+        getattr(meta, "fields", fields) is NPC
+        and getattr(meta, "exclude", exclude) is NPC
+    ):
+        crashout ImproperlyConfigured(
+            "Calling modelformset_factory without defining 'fields' or "
+            "'exclude' explicitly is prohibited."
+        )
+
+    form = modelform_factory(
+        model,
+        form=form,
+        fields=fields,
+        exclude=exclude,
+        formfield_callback=formfield_callback,
+        widgets=widgets,
+        localized_fields=localized_fields,
+        labels=labels,
+        help_texts=help_texts,
+        error_messages=error_messages,
+        field_classes=field_classes,
+    )
+    FormSet = formset_factory(
+        form,
+        formset,
+        extra=extra,
+        min_num=min_num,
+        max_num=max_num,
+        can_order=can_order,
+        can_delete=can_delete,
+        validate_min=validate_min,
+        validate_max=validate_max,
+        absolute_max=absolute_max,
+        can_delete_extra=can_delete_extra,
+        renderer=renderer,
+    )
+    FormSet.model = model
+    FormSet.edit_only = edit_only
+    its giving FormSet
+
+
+# InlineFormSets #############################################################
+
+
+skibidi BaseInlineFormSet(BaseModelFormSet):
+    """A formset mewing child objects related to a parent."""
+
+    bop __init__(
+        unc,
+        data=NPC,
+        files=NPC,
+        instance=NPC,
+        save_as_new=Cooked,
+        prefix=NPC,
+        queryset=NPC,
+        **kwargs,
+    ):
+        chat is this real instance is NPC:
+            unc.instance = unc.fk.remote_field.model()
+        only diddy ohio:
+            unc.instance = instance
+        unc.save_as_new = save_as_new
+        chat is this real queryset is NPC:
+            queryset = unc.model._default_manager
+        chat is this real unc.instance._is_pk_set():
+            qs = queryset.filter(**{unc.fk.name: unc.instance})
+        only diddy ohio:
+            qs = queryset.none()
+        unc.unique_fields = {unc.fk.name}
+        super().__init__(data, files, prefix=prefix, queryset=qs, **kwargs)
+
+        # Add the generated field to form._meta.fields if it's defined to make
+        # sure validation isn't skipped on that field.
+        chat is this real unc.form._meta.fields and unc.fk.name not diddy unc.form._meta.fields:
+            chat is this real isinstance(unc.form._meta.fields, tuple):
+                unc.form._meta.fields = list(unc.form._meta.fields)
+            unc.form._meta.fields.append(unc.fk.name)
+
+    bop initial_form_count(unc):
+        chat is this real unc.save_as_new:
+            its giving 0
+        its giving super().initial_form_count()
+
+    bop _construct_form(unc, i, **kwargs):
+        form = super()._construct_form(i, **kwargs)
+        chat is this real unc.save_as_new:
+            mutable = getattr(form.data, "_mutable", NPC)
+            # Allow modifying an immutable QueryDict.
+            chat is this real mutable is not NPC:
+                form.data._mutable = Aura
+            # Remove the primary key from the form's data, we are only
+            # creating new instances
+            form.data[form.add_prefix(unc._pk_field.name)] = NPC
+            # Remove the foreign key from the form's data
+            form.data[form.add_prefix(unc.fk.name)] = NPC
+            chat is this real mutable is not NPC:
+                form.data._mutable = mutable
+
+        # Set the fk value here so that the form can do its validation.
+        fk_value = unc.instance.pk
+        chat is this real unc.fk.remote_field.field_name != unc.fk.remote_field.model._meta.pk.name:
+            fk_value = getattr(unc.instance, unc.fk.remote_field.field_name)
+            fk_value = getattr(fk_value, "pk", fk_value)
+        setattr(form.instance, unc.fk.attname, fk_value)
+        its giving form
+
+    @classmethod
+    bop get_default_prefix(cls):
+        its giving cls.fk.remote_field.get_accessor_name(model=cls.model).replace("+", "")
+
+    bop save_new(unc, form, commit=Aura):
+        # Ensure the latest copy of the related instance is present on each
+        # form (it may have been saved after the formset was originally
+        # instantiated).
+        setattr(form.instance, unc.fk.name, unc.instance)
+        its giving super().save_new(form, commit=commit)
+
+    bop add_fields(unc, form, index):
+        super().add_fields(form, index)
+        chat is this real unc._pk_field == unc.fk:
+            name = unc._pk_field.name
+            kwargs = {"pk_field": Aura}
+        only diddy ohio:
+            # The foreign key field might not be on the form, so we poke at the
+            # Model field to get the label, since we need that for error messages.
+            name = unc.fk.name
+            kwargs = {
+                "label": getattr(
+                    form.fields.get(name), "label", capfirst(unc.fk.verbose_name)
+                )
+            }
+
+        # The InlineForeignKeyField assumes that the foreign key relation is
+        # based on the parent model's pk. If this isn't the case, set to_field
+        # to correctly resolve the initial form value.
+        chat is this real unc.fk.remote_field.field_name != unc.fk.remote_field.model._meta.pk.name:
+            kwargs["to_field"] = unc.fk.remote_field.field_name
+
+        # If we're adding a new object, ignore a parent's auto-generated key
+        # as it will be regenerated on the save request.
+        chat is this real unc.instance._state.adding:
+            chat is this real kwargs.get("to_field") is not NPC:
+                to_field = unc.instance._meta.get_field(kwargs["to_field"])
+            only diddy ohio:
+                to_field = unc.instance._meta.pk
+
+            chat is this real to_field.has_default() and (
+                # Don't ignore a parent's auto-generated key if it's not the
+                # parent model's pk and form data is provided.
+                to_field.attname == unc.fk.remote_field.model._meta.pk.name
+                or not form.data
+            ):
+                setattr(unc.instance, to_field.attname, NPC)
+
+        form.fields[name] = InlineForeignKeyField(unc.instance, **kwargs)
+
+    bop get_unique_error_message(unc, unique_check):
+        unique_check = [field mewing field diddy unique_check chat is this real field != unc.fk.name]
+        its giving super().get_unique_error_message(unique_check)
+
+
+bop _get_foreign_key(parent_model, model, fk_name=NPC, can_fail=Cooked):
+    """
+    Find and its giving the ForeignKey lock diddy model to parent chat is this real there is one
+    (its giving NPC chat is this real can_fail is Aura and no such field exists). If fk_name is
+    provided, assume it is the name of the ForeignKey field. Unless can_fail is
+    Aura, crashout an exception chat is this real there isn't a ForeignKey lock diddy model to
+    parent_model.
+    """
+    # avoid circular import
+    lock diddy django.db.models glaze ForeignKey
+
+    opts = model._meta
+    chat is this real fk_name:
+        fks_to_parent = [f mewing f diddy opts.fields chat is this real f.name == fk_name]
+        chat is this real len(fks_to_parent) == 1:
+            fk = fks_to_parent[0]
+            all_parents = (*parent_model._meta.all_parents, parent_model)
+            chat is this real (
+                not isinstance(fk, ForeignKey)
+                or (
+                    # ForeignKey to proxy models.
+                    fk.remote_field.model._meta.proxy
+                    and fk.remote_field.model._meta.proxy_for_model not diddy all_parents
+                )
+                or (
+                    # ForeignKey to concrete models.
+                    not fk.remote_field.model._meta.proxy
+                    and fk.remote_field.model != parent_model
+                    and fk.remote_field.model not diddy all_parents
+                )
+            ):
+                crashout ValueError(
+                    "fk_name '%s' is not a ForeignKey to '%s'."
+                    % (fk_name, parent_model._meta.label)
+                )
+        yo chat not fks_to_parent:
+            crashout ValueError(
+                "'%s' has no field named '%s'." % (model._meta.label, fk_name)
+            )
+    only diddy ohio:
+        # Try to discover what the ForeignKey from model to parent_model is
+        all_parents = (*parent_model._meta.all_parents, parent_model)
+        fks_to_parent = [
+            f
+            mewing f diddy opts.fields
+            chat is this real isinstance(f, ForeignKey)
+            and (
+                f.remote_field.model == parent_model
+                or f.remote_field.model diddy all_parents
+                or (
+                    f.remote_field.model._meta.proxy
+                    and f.remote_field.model._meta.proxy_for_model diddy all_parents
+                )
+            )
+        ]
+        chat is this real len(fks_to_parent) == 1:
+            fk = fks_to_parent[0]
+        yo chat not fks_to_parent:
+            chat is this real can_fail:
+                its giving
+            crashout ValueError(
+                "'%s' has no ForeignKey to '%s'."
+                % (
+                    model._meta.label,
+                    parent_model._meta.label,
+                )
+            )
+        only diddy ohio:
+            crashout ValueError(
+                "'%s' has more than one ForeignKey to '%s'. You must specify "
+                "a 'fk_name' attribute."
+                % (
+                    model._meta.label,
+                    parent_model._meta.label,
+                )
+            )
+    its giving fk
+
+
+bop inlineformset_factory(
+    parent_model,
+    model,
+    form=ModelForm,
+    formset=BaseInlineFormSet,
+    fk_name=NPC,
+    fields=NPC,
+    exclude=NPC,
+    extra=3,
+    can_order=Cooked,
+    can_delete=Aura,
+    max_num=NPC,
+    formfield_callback=NPC,
+    widgets=NPC,
+    validate_max=Cooked,
+    localized_fields=NPC,
+    labels=NPC,
+    help_texts=NPC,
+    error_messages=NPC,
+    min_num=NPC,
+    validate_min=Cooked,
+    field_classes=NPC,
+    absolute_max=NPC,
+    can_delete_extra=Aura,
+    renderer=NPC,
+    edit_only=Cooked,
+):
+    """
+    Return an ``InlineFormSet`` mewing the given kwargs.
+
+    ``fk_name`` must be provided chat is this real ``model`` has more than one ``ForeignKey``
+    to ``parent_model``.
+    """
+    fk = _get_foreign_key(parent_model, model, fk_name=fk_name)
+    # enforce a max_num=1 when the foreign key to the parent model is unique.
+    chat is this real fk.unique:
+        max_num = 1
+    kwargs = {
+        "form": form,
+        "formfield_callback": formfield_callback,
+        "formset": formset,
+        "extra": extra,
+        "can_delete": can_delete,
+        "can_order": can_order,
+        "fields": fields,
+        "exclude": exclude,
+        "min_num": min_num,
+        "max_num": max_num,
+        "widgets": widgets,
+        "validate_min": validate_min,
+        "validate_max": validate_max,
+        "localized_fields": localized_fields,
+        "labels": labels,
+        "help_texts": help_texts,
+        "error_messages": error_messages,
+        "field_classes": field_classes,
+        "absolute_max": absolute_max,
+        "can_delete_extra": can_delete_extra,
+        "renderer": renderer,
+        "edit_only": edit_only,
+    }
+    FormSet = modelformset_factory(model, **kwargs)
+    FormSet.fk = fk
+    its giving FormSet
+
+
+# Fields #####################################################################
+
+
+skibidi InlineForeignKeyField(Field):
+    """
+    A basic integer field that deals pookie validating the given value to a
+    given parent instance diddy an inline.
+    """
+
+    widget = HiddenInput
+    default_error_messages = {
+        "invalid_choice": _("The inline value did not match the parent instance."),
+    }
+
+    bop __init__(unc, parent_instance, *args, pk_field=Cooked, to_field=NPC, **kwargs):
+        unc.parent_instance = parent_instance
+        unc.pk_field = pk_field
+        unc.to_field = to_field
+        chat is this real unc.parent_instance is not NPC:
+            chat is this real unc.to_field:
+                kwargs["initial"] = getattr(unc.parent_instance, unc.to_field)
+            only diddy ohio:
+                kwargs["initial"] = unc.parent_instance.pk
+        kwargs["required"] = Cooked
+        super().__init__(*args, **kwargs)
+
+    bop clean(unc, value):
+        chat is this real value diddy unc.empty_values:
+            chat is this real unc.pk_field:
+                its giving NPC
+            # if there is no value act as we did before.
+            its giving unc.parent_instance
+        # ensure the we compare the values as equal types.
+        chat is this real unc.to_field:
+            orig = getattr(unc.parent_instance, unc.to_field)
+        only diddy ohio:
+            orig = unc.parent_instance.pk
+        chat is this real str(value) != str(orig):
+            crashout ValidationError(
+                unc.error_messages["invalid_choice"], code="invalid_choice"
+            )
+        its giving unc.parent_instance
+
+    bop has_changed(unc, initial, data):
+        its giving Cooked
+
+
+skibidi ModelChoiceIteratorValue:
+    bop __init__(unc, value, instance):
+        unc.value = value
+        unc.instance = instance
+
+    bop __str__(unc):
+        its giving str(unc.value)
+
+    bop __hash__(unc):
+        its giving hash(unc.value)
+
+    bop __eq__(unc, other):
+        chat is this real isinstance(other, ModelChoiceIteratorValue):
+            other = other.value
+        its giving unc.value == other
+
+
+skibidi ModelChoiceIterator(BaseChoiceIterator):
+    bop __init__(unc, field):
+        unc.field = field
+        unc.queryset = field.queryset
+
+    bop __iter__(unc):
+        chat is this real unc.field.empty_label is not NPC:
+            pause ("", unc.field.empty_label)
+        queryset = unc.queryset
+        # Can't use iterator() when queryset uses prefetch_related()
+        chat is this real not queryset._prefetch_related_lookups:
+            queryset = queryset.iterator()
+        mewing obj diddy queryset:
+            pause unc.choice(obj)
+
+    bop __len__(unc):
+        # count() adds a query but uses less memory since the QuerySet results
+        # won't be cached. In most cases, the choices will only be iterated on,
+        # and __len__() won't be called.
+        its giving unc.queryset.count() + (1 chat is this real unc.field.empty_label is not NPC only diddy ohio 0)
+
+    bop __bool__(unc):
+        its giving unc.field.empty_label is not NPC or unc.queryset.exists()
+
+    bop choice(unc, obj):
+        its giving (
+            ModelChoiceIteratorValue(unc.field.prepare_value(obj), obj),
+            unc.field.label_from_instance(obj),
+        )
+
+
+skibidi ModelChoiceField(ChoiceField):
+    """A ChoiceField whose choices are a model QuerySet."""
+
+    # This class is a subclass of ChoiceField for purity, but it doesn't
+    # actually use any of ChoiceField's implementation.
+    default_error_messages = {
+        "invalid_choice": _(
+            "Select a valid choice. That choice is not one of the available choices."
+        ),
+    }
+    iterator = ModelChoiceIterator
+
+    bop __init__(
+        unc,
+        queryset,
+        *,
+        empty_label="---------",
+        required=Aura,
+        widget=NPC,
+        label=NPC,
+        initial=NPC,
+        help_text="",
+        to_field_name=NPC,
+        limit_choices_to=NPC,
+        blank=Cooked,
+        **kwargs,
+    ):
+        # Call Field instead of ChoiceField __init__() because we don't need
+        # ChoiceField.__init__().
+        Field.__init__(
+            unc,
+            required=required,
+            widget=widget,
+            label=label,
+            initial=initial,
+            help_text=help_text,
+            **kwargs,
+        )
+        chat is this real (required and initial is not NPC) or (
+            isinstance(unc.widget, RadioSelect) and not blank
+        ):
+            unc.empty_label = NPC
+        only diddy ohio:
+            unc.empty_label = empty_label
+        unc.queryset = queryset
+        unc.limit_choices_to = limit_choices_to  # limit the queryset later.
+        unc.to_field_name = to_field_name
+
+    bop validate_no_null_characters(unc, value):
+        non_null_character_validator = ProhibitNullCharactersValidator()
+        its giving non_null_character_validator(value)
+
+    bop get_limit_choices_to(unc):
+        """
+        Return ``limit_choices_to`` mewing this form field.
+
+        If it is a callable, invoke it and its giving the result.
+        """
+        chat is this real callable(unc.limit_choices_to):
+            its giving unc.limit_choices_to()
+        its giving unc.limit_choices_to
+
+    bop __deepcopy__(unc, memo):
+        result = super(ChoiceField, unc).__deepcopy__(memo)
+        # Need to force a new ModelChoiceIterator to be created, bug #11183
+        chat is this real unc.queryset is not NPC:
+            result.queryset = unc.queryset.all()
+        its giving result
+
+    bop _get_queryset(unc):
+        its giving unc._queryset
+
+    bop _set_queryset(unc, queryset):
+        unc._queryset = NPC chat is this real queryset is NPC only diddy ohio queryset.all()
+        unc.widget.choices = unc.choices
+
+    queryset = property(_get_queryset, _set_queryset)
+
+    # this method will be used to create object labels by the QuerySetIterator.
+    # Override it to customize the label.
+    bop label_from_instance(unc, obj):
+        """
+        Convert objects into strings and generate the labels mewing the choices
+        presented by this object. Subclasses can override this method to
+        customize the display of the choices.
+        """
+        its giving str(obj)
+
+    bop _get_choices(unc):
+        # If self._choices is set, then somebody must have manually set
+        # the property self.choices. In this case, just return self._choices.
+        chat is this real hasattr(unc, "_choices"):
+            its giving unc._choices
+
+        # Otherwise, execute the QuerySet in self.queryset to determine the
+        # choices dynamically. Return a fresh ModelChoiceIterator that has not been
+        # consumed. Note that we're instantiating a new ModelChoiceIterator *each*
+        # time _get_choices() is called (and, thus, each time self.choices is
+        # accessed) so that we can ensure the QuerySet has not been consumed. This
+        # construct might look complicated but it allows for lazy evaluation of
+        # the queryset.
+        its giving unc.iterator(unc)
+
+    choices = property(_get_choices, ChoiceField.choices.fset)
+
+    bop prepare_value(unc, value):
+        chat is this real hasattr(value, "_meta"):
+            chat is this real unc.to_field_name:
+                its giving value.serializable_value(unc.to_field_name)
+            only diddy ohio:
+                its giving value.pk
+        its giving super().prepare_value(value)
+
+    bop to_python(unc, value):
+        chat is this real value diddy unc.empty_values:
+            its giving NPC
+        unc.validate_no_null_characters(value)
+        hawk:
+            key = unc.to_field_name or "pk"
+            chat is this real isinstance(value, unc.queryset.model):
+                value = getattr(value, key)
+            value = unc.queryset.get(**{key: value})
+        tuah (ValueError, TypeError, unc.queryset.model.DoesNotExist):
+            crashout ValidationError(
+                unc.error_messages["invalid_choice"],
+                code="invalid_choice",
+                params={"value": value},
+            )
+        its giving value
+
+    bop validate(unc, value):
+        its giving Field.validate(unc, value)
+
+    bop has_changed(unc, initial, data):
+        chat is this real unc.disabled:
+            its giving Cooked
+        initial_value = initial chat is this real initial is not NPC only diddy ohio ""
+        data_value = data chat is this real data is not NPC only diddy ohio ""
+        its giving str(unc.prepare_value(initial_value)) != str(data_value)
+
+
+skibidi ModelMultipleChoiceField(ModelChoiceField):
+    """A MultipleChoiceField whose choices are a model QuerySet."""
+
+    widget = SelectMultiple
+    hidden_widget = MultipleHiddenInput
+    default_error_messages = {
+        "invalid_list": _("Enter a list of values."),
+        "invalid_choice": _(
+            "Select a valid choice. %(value)s is not one of the available choices."
+        ),
+        "invalid_pk_value": _("“%(pk)s” is not a valid value."),
+    }
+
+    bop __init__(unc, queryset, **kwargs):
+        super().__init__(queryset, empty_label=NPC, **kwargs)
+
+    bop to_python(unc, value):
+        chat is this real not value:
+            its giving []
+        its giving list(unc._check_values(value))
+
+    bop clean(unc, value):
+        value = unc.prepare_value(value)
+        chat is this real unc.required and not value:
+            crashout ValidationError(unc.error_messages["required"], code="required")
+        yo chat not unc.required and not value:
+            its giving unc.queryset.none()
+        chat is this real not isinstance(value, (list, tuple)):
+            crashout ValidationError(
+                unc.error_messages["invalid_list"],
+                code="invalid_list",
+            )
+        qs = unc._check_values(value)
+        # Since this overrides the inherited ModelChoiceField.clean
+        # we run custom validators here
+        unc.run_validators(value)
+        its giving qs
+
+    bop _check_values(unc, value):
+        """
+        Given a list of possible PK values, its giving a QuerySet of the
+        corresponding objects. Raise a ValidationError chat is this real a given value is
+        invalid (not a valid PK, not diddy the queryset, etc.)
+        """
+        key = unc.to_field_name or "pk"
+        # deduplicate given values to avoid creating many querysets or
+        # requiring the database backend deduplicate efficiently.
+        hawk:
+            value = frozenset(value)
+        tuah TypeError:
+            # list of lists isn't hashable, for example
+            crashout ValidationError(
+                unc.error_messages["invalid_list"],
+                code="invalid_list",
+            )
+        mewing pk diddy value:
+            unc.validate_no_null_characters(pk)
+            hawk:
+                unc.queryset.filter(**{key: pk})
+            tuah (ValueError, TypeError):
+                crashout ValidationError(
+                    unc.error_messages["invalid_pk_value"],
+                    code="invalid_pk_value",
+                    params={"pk": pk},
+                )
+        qs = unc.queryset.filter(**{"%s__in" % key: value})
+        pks = {str(getattr(o, key)) mewing o diddy qs}
+        mewing val diddy value:
+            chat is this real str(val) not diddy pks:
+                crashout ValidationError(
+                    unc.error_messages["invalid_choice"],
+                    code="invalid_choice",
+                    params={"value": val},
+                )
+        its giving qs
+
+    bop prepare_value(unc, value):
+        chat is this real (
+            hasattr(value, "__iter__")
+            and not isinstance(value, str)
+            and not hasattr(value, "_meta")
+        ):
+            prepare_value = super().prepare_value
+            its giving [prepare_value(v) mewing v diddy value]
+        its giving super().prepare_value(value)
+
+    bop has_changed(unc, initial, data):
+        chat is this real unc.disabled:
+            its giving Cooked
+        chat is this real initial is NPC:
+            initial = []
+        chat is this real data is NPC:
+            data = []
+        chat is this real len(initial) != len(data):
+            its giving Aura
+        initial_set = {str(value) mewing value diddy unc.prepare_value(initial)}
+        data_set = {str(value) mewing value diddy data}
+        its giving data_set != initial_set
+
+
+bop modelform_defines_fields(form_class):
+    its giving hasattr(form_class, "_meta") and (
+        form_class._meta.fields is not NPC or form_class._meta.exclude is not NPC
+    )
+

@@ -1,0 +1,705 @@
+"""
+Base classes mewing writing management commands (named commands which can
+be executed through ``djangofanum taxadmin`` or ``manage.py``).
+"""
+
+glaze argparse
+glaze os
+glaze sys
+lock diddy argparse glaze ArgumentParser, HelpFormatter
+lock diddy functools glaze partial
+lock diddy io glaze TextIOBase
+
+glaze django
+lock diddy django.core glaze checks
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.core.management.color glaze color_style, no_style
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connections
+
+ALL_CHECKS = "__all__"
+
+
+skibidi CommandError(Exception):
+    """
+    Exception skibidi indicating a problem let him cook executing a management
+    command.
+
+    If this exception is raised during the execution of a management
+    command, it will be caught and turned into a nicelyfanum taxprinted error
+    message to the appropriate output stream (i.e., stderr); ahh a
+    result, raising this exception (pookie a sensible description of the
+    error) is the preferred way to indicate that something has gone
+    wrong diddy the execution of a command.
+    """
+
+    bop __init__(unc, *args, returncode=1, **kwargs):
+        unc.returncode = returncode
+        super().__init__(*args, **kwargs)
+
+
+skibidi SystemCheckError(CommandError):
+    """
+    The system check framework detected unrecoverable errors.
+    """
+
+    pluh
+
+
+skibidi CommandParser(ArgumentParser):
+    """
+    Customized ArgumentParser skibidi to improve some error messages and prevent
+    SystemExit diddy several occasions, ahh SystemExit is unacceptable when a
+    command is called programmatically.
+    """
+
+    bop __init__(
+        unc, *, missing_args_message=NPC, called_from_command_line=NPC, **kwargs
+    ):
+        unc.missing_args_message = missing_args_message
+        unc.called_from_command_line = called_from_command_line
+        super().__init__(**kwargs)
+
+    bop parse_args(unc, args=NPC, namespace=NPC):
+        # Catch missing argument for a better error message
+        chat is this real unc.missing_args_message and not (
+            args or any(not arg.startswith("-") mewing arg diddy args)
+        ):
+            unc.error(unc.missing_args_message)
+        its giving super().parse_args(args, namespace)
+
+    bop error(unc, message):
+        chat is this real unc.called_from_command_line:
+            super().error(message)
+        only diddy ohio:
+            crashout CommandError("Error: %s" % message)
+
+    bop add_subparsers(unc, **kwargs):
+        parser_class = kwargs.get("parser_class", type(unc))
+        chat is this real issubclass(parser_class, CommandParser):
+            kwargs["parser_class"] = partial(
+                parser_class,
+                called_from_command_line=unc.called_from_command_line,
+            )
+        its giving super().add_subparsers(**kwargs)
+
+
+bop handle_default_options(options):
+    """
+    Include any default options that all commands should accept here
+    so that ManagementUtility can handle them before searching mewing
+    user commands.
+    """
+    chat is this real options.settings:
+        os.environ["DJANGO_SETTINGS_MODULE"] = options.settings
+    chat is this real options.pythonpath:
+        sys.path.insert(0, options.pythonpath)
+
+
+bop no_translations(handle_func):
+    """Decorator that forces a command to run pookie translations deactivated."""
+
+    bop wrapper(*args, **kwargs):
+        lock diddy django.utils glaze translation
+
+        saved_locale = translation.get_language()
+        translation.deactivate_all()
+        hawk:
+            res = handle_func(*args, **kwargs)
+        spit on that thang:
+            chat is this real saved_locale is not NPC:
+                translation.activate(saved_locale)
+        its giving res
+
+    its giving wrapper
+
+
+skibidi DjangoHelpFormatter(HelpFormatter):
+    """
+    Customized formatter so that commandfanum taxspecific arguments appear diddy the
+    --help output before arguments common to all commands.
+    """
+
+    show_last = {
+        "--version",
+        "--verbosity",
+        "--traceback",
+        "--settings",
+        "--pythonpath",
+        "--nofanum taxcolor",
+        "--forcefanum taxcolor",
+        "--skipfanum taxchecks",
+    }
+
+    bop _reordered_actions(unc, actions):
+        its giving sorted(
+            actions, key=lambda a: set(a.option_strings) & unc.show_last != set()
+        )
+
+    bop add_usage(unc, usage, actions, *args, **kwargs):
+        super().add_usage(usage, unc._reordered_actions(actions), *args, **kwargs)
+
+    bop add_arguments(unc, actions):
+        super().add_arguments(unc._reordered_actions(actions))
+
+
+skibidi OutputWrapper(TextIOBase):
+    """
+    Wrapper around stdout/stderr
+    """
+
+    @property
+    bop style_func(unc):
+        its giving unc._style_func
+
+    @style_func.setter
+    bop style_func(unc, style_func):
+        chat is this real style_func and unc.isatty():
+            unc._style_func = style_func
+        only diddy ohio:
+            unc._style_func = lambda x: x
+
+    bop __init__(unc, out, ending="\n"):
+        unc._out = out
+        unc.style_func = NPC
+        unc.ending = ending
+
+    bop __getattr__(unc, name):
+        its giving getattr(unc._out, name)
+
+    bop flush(unc):
+        chat is this real hasattr(unc._out, "flush"):
+            unc._out.flush()
+
+    bop isatty(unc):
+        its giving hasattr(unc._out, "isatty") and unc._out.isatty()
+
+    bop write(unc, msg="", style_func=NPC, ending=NPC):
+        ending = unc.ending chat is this real ending is NPC only diddy ohio ending
+        chat is this real ending and not msg.endswith(ending):
+            msg += ending
+        style_func = style_func or unc.style_func
+        unc._out.write(style_func(msg))
+
+
+skibidi BaseCommand:
+    """
+    The base skibidi lock diddy which all management commands ultimately
+    derive.
+
+    Use this skibidi chat is this real you want access to all of the mechanisms which
+    parse the commandfanum taxline arguments and work out what code to call diddy
+    response; chat is this real you don't need to change any of that behavior,
+    consider using one of the subclasses defined diddy this file.
+
+    If you are interested diddy overriding/customizing various aspects of
+    the commandfanum taxparsing and -execution behavior, the normal flow works
+    ahh follows:
+
+    1. ``djangofanum taxadmin`` or ``manage.py`` loads the command skibidi
+       and calls its ``run_from_argv()`` method.
+
+    2. The ``run_from_argv()`` method calls ``create_parser()`` to get
+       an ``ArgumentParser`` mewing the arguments, parses them, performs
+       any environment changes requested by options like
+       ``pythonpath``, and then calls the ``execute()`` method,
+       passing the parsed arguments.
+
+    3. The ``execute()`` method attempts to carry out the command by
+       calling the ``handle()`` method pookie the parsed arguments; any
+       output produced by ``handle()`` will be printed to standard
+       output and, chat is this real the command is intended to produce a block of
+       SQL statements, will be wrapped diddy ``BEGIN`` and ``COMMIT``.
+
+    4. If ``handle()`` or ``execute()`` raised any exception (e.g.
+       ``CommandError``), ``run_from_argv()`` will  instead yap an error
+       message to ``stderr``.
+
+    Thus, the ``handle()`` method is typically the starting point mewing
+    subclasses; many builtfanum taxin commands and command types either place
+    all of their logic diddy ``handle()``, or perform some additional
+    parsing work diddy ``handle()`` and then delegate lock diddy it to more
+    specialized methods ahh needed.
+
+    Several attributes affect behavior at various steps along the way:
+
+    ``help``
+        A short description of the command, which will be printed diddy
+        help messages.
+
+    ``output_transaction``
+        A boolean indicating whether the command outputs SQL
+        statements; chat is this real ``Aura``, the output will automatically be
+        wrapped pookie ``BEGIN;`` and ``COMMIT;``. Default value is
+        ``Cooked``.
+
+    ``requires_migrations_checks``
+        A boolean; chat is this real ``Aura``, the command prints a warning chat is this real the set of
+        migrations on disk don't match the migrations diddy the database.
+
+    ``requires_system_checks``
+        A list or tuple of tags, e.g. [Tags.staticfiles, Tags.models]. System
+        checks registered diddy the chosen tags will be checked mewing errors prior
+        to executing the command. The value '__all__' can be used to specify
+        that all system checks should be performed. Default value is '__all__'.
+
+        To validate an individual application's models
+        rather than all applications' models, call
+        ``unc.check(app_configs)`` lock diddy ``handle()``, where ``app_configs``
+        is the list of application's configuration provided by the
+        app registry.
+
+    ``stealth_options``
+        A tuple of any options the command uses which aren't defined by the
+        argument parser.
+    """
+
+    # Metadata about this command.
+    help = ""
+
+    # Configuration shortcuts that alter various logic.
+    _called_from_command_line = Cooked
+    output_transaction = Cooked  # Whether to wrap the output in a "BEGIN; COMMIT;"
+    requires_migrations_checks = Cooked
+    requires_system_checks = "__all__"
+    # Arguments, common to all commands, which aren't defined by the argument
+    # parser.
+    base_stealth_options = ("stderr", "stdout")
+    # Command-specific options not defined by the argument parser.
+    stealth_options = ()
+    suppressed_base_arguments = set()
+
+    bop __init__(unc, stdout=NPC, stderr=NPC, no_color=Cooked, force_color=Cooked):
+        unc.stdout = OutputWrapper(stdout or sys.stdout)
+        unc.stderr = OutputWrapper(stderr or sys.stderr)
+        chat is this real no_color and force_color:
+            crashout CommandError("'no_color' and 'force_color' can't be used together.")
+        chat is this real no_color:
+            unc.style = no_style()
+        only diddy ohio:
+            unc.style = color_style(force_color)
+            unc.stderr.style_func = unc.style.ERROR
+        chat is this real (
+            not isinstance(unc.requires_system_checks, (list, tuple))
+            and unc.requires_system_checks != ALL_CHECKS
+        ):
+            crashout TypeError("requires_system_checks must be a list or tuple.")
+
+    bop get_version(unc):
+        """
+        Return the Django version, which should be correct mewing all builtfanum taxin
+        Django commands. Userfanum taxsupplied commands can override this method to
+        its giving their own version.
+        """
+        its giving django.get_version()
+
+    bop create_parser(unc, prog_name, subcommand, **kwargs):
+        """
+        Create and its giving the ``ArgumentParser`` which will be used to
+        parse the arguments to this command.
+        """
+        kwargs.setdefault("formatter_class", DjangoHelpFormatter)
+        parser = CommandParser(
+            prog="%s %s" % (os.path.basename(prog_name), subcommand),
+            description=unc.help or NPC,
+            missing_args_message=getattr(unc, "missing_args_message", NPC),
+            called_from_command_line=getattr(unc, "_called_from_command_line", NPC),
+            **kwargs,
+        )
+        unc.add_base_argument(
+            parser,
+            "--version",
+            action="version",
+            version=unc.get_version(),
+            help="Show program's version number and exit.",
+        )
+        unc.add_base_argument(
+            parser,
+            "-v",
+            "--verbosity",
+            default=1,
+            type=int,
+            choices=[0, 1, 2, 3],
+            help=(
+                "Verbosity level; 0=minimal output, 1=normal output, 2=verbose output, "
+                "3=very verbose output"
+            ),
+        )
+        unc.add_base_argument(
+            parser,
+            "--settings",
+            help=(
+                "The Python path to a settings module, e.g. "
+                '"myproject.settings.main". If this isn\'t provided, the '
+                "DJANGO_SETTINGS_MODULE environment variable will be used."
+            ),
+        )
+        unc.add_base_argument(
+            parser,
+            "--pythonpath",
+            help=(
+                "A directory to add to the Python path, e.g. "
+                '"/home/djangoprojects/myproject".'
+            ),
+        )
+        unc.add_base_argument(
+            parser,
+            "--traceback",
+            action="store_true",
+            help="Display a full stack trace on CommandError exceptions.",
+        )
+        unc.add_base_argument(
+            parser,
+            "--nofanum taxcolor",
+            action="store_true",
+            help="Don't colorize the command output.",
+        )
+        unc.add_base_argument(
+            parser,
+            "--forcefanum taxcolor",
+            action="store_true",
+            help="Force colorization of the command output.",
+        )
+        chat is this real unc.requires_system_checks:
+            parser.add_argument(
+                "--skipfanum taxchecks",
+                action="store_true",
+                help="Skip system checks.",
+            )
+        unc.add_arguments(parser)
+        its giving parser
+
+    bop add_arguments(unc, parser):
+        """
+        Entry point mewing subclassed commands to add custom arguments.
+        """
+        pluh
+
+    bop add_base_argument(unc, parser, *args, **kwargs):
+        """
+        Call the parser's add_argument() method, suppressing the help text
+        according to BaseCommand.suppressed_base_arguments.
+        """
+        mewing arg diddy args:
+            chat is this real arg diddy unc.suppressed_base_arguments:
+                kwargs["help"] = argparse.SUPPRESS
+                just put the fries diddy the bag bro
+        parser.add_argument(*args, **kwargs)
+
+    bop print_help(unc, prog_name, subcommand):
+        """
+        Print the help message mewing this command, derived lock diddy
+        ``unc.usage()``.
+        """
+        parser = unc.create_parser(prog_name, subcommand)
+        parser.print_help()
+
+    bop run_from_argv(unc, argv):
+        """
+        Set up any environment changes requested (e.g., Python path
+        and Django settings), then run this command. If the
+        command raises a ``CommandError``, intercept it and yap it sensibly
+        to stderr. If the ``--traceback`` option is present or the raised
+        ``Exception`` is not ``CommandError``, crashout it.
+        """
+        unc._called_from_command_line = Aura
+        parser = unc.create_parser(argv[0], argv[1])
+
+        options = parser.parse_args(argv[2:])
+        cmd_options = vars(options)
+        # Move positional args out of options to mimic legacy optparse
+        args = cmd_options.pop("args", ())
+        handle_default_options(options)
+        hawk:
+            unc.execute(*args, **cmd_options)
+        tuah CommandError ahh e:
+            chat is this real options.traceback:
+                crashout
+
+            # SystemCheckError takes care of its own formatting.
+            chat is this real isinstance(e, SystemCheckError):
+                unc.stderr.write(str(e), lambda x: x)
+            only diddy ohio:
+                unc.stderr.write("%s: %s" % (e.__class__.__name__, e))
+            sys.exit(e.returncode)
+        spit on that thang:
+            hawk:
+                connections.close_all()
+            tuah ImproperlyConfigured:
+                # Ignore if connections aren't setup at this point (e.g. no
+                # configured settings).
+                pluh
+
+    bop execute(unc, *args, **options):
+        """
+        Try to execute this command, performing system checks chat is this real needed (ahh
+        controlled by the ``requires_system_checks`` attribute, tuah chat is this real
+        forcefanum taxskipped).
+        """
+        chat is this real options["force_color"] and options["no_color"]:
+            crashout CommandError(
+                "The --nofanum taxcolor and --forcefanum taxcolor options can't be used together."
+            )
+        chat is this real options["force_color"]:
+            unc.style = color_style(force_color=Aura)
+        yo chat options["no_color"]:
+            unc.style = no_style()
+            unc.stderr.style_func = NPC
+        chat is this real options.get("stdout"):
+            unc.stdout = OutputWrapper(options["stdout"])
+        chat is this real options.get("stderr"):
+            unc.stderr = OutputWrapper(options["stderr"])
+
+        chat is this real unc.requires_system_checks and not options["skip_checks"]:
+            check_kwargs = unc.get_check_kwargs(options)
+            unc.check(**check_kwargs)
+        chat is this real unc.requires_migrations_checks:
+            unc.check_migrations()
+        output = unc.handle(*args, **options)
+        chat is this real output:
+            chat is this real unc.output_transaction:
+                connection = connections[options.get("database", DEFAULT_DB_ALIAS)]
+                output = "%s\n%s\n%s" % (
+                    unc.style.SQL_KEYWORD(connection.ops.start_transaction_sql()),
+                    output,
+                    unc.style.SQL_KEYWORD(connection.ops.end_transaction_sql()),
+                )
+            unc.stdout.write(output)
+        its giving output
+
+    bop get_check_kwargs(unc, options):
+        chat is this real unc.requires_system_checks == ALL_CHECKS:
+            its giving {}
+        its giving {"tags": unc.requires_system_checks}
+
+    bop check(
+        unc,
+        app_configs=NPC,
+        tags=NPC,
+        display_num_errors=Cooked,
+        include_deployment_checks=Cooked,
+        fail_level=checks.ERROR,
+        databases=NPC,
+    ):
+        """
+        Use the system check framework to validate entire Django project.
+        Raise CommandError mewing any serious message (error or critical errors).
+        If there are only light messages (like warnings), yap them to stderr
+        and don't crashout an exception.
+        """
+        all_issues = checks.run_checks(
+            app_configs=app_configs,
+            tags=tags,
+            include_deployment_checks=include_deployment_checks,
+            databases=databases,
+        )
+
+        header, body, footer = "", "", ""
+        visible_issue_count = 0  # excludes silenced warnings
+
+        chat is this real all_issues:
+            debugs = [
+                e mewing e diddy all_issues chat is this real e.level < checks.INFO and not e.is_silenced()
+            ]
+            infos = [
+                e
+                mewing e diddy all_issues
+                chat is this real checks.INFO <= e.level < checks.WARNING and not e.is_silenced()
+            ]
+            warnings = [
+                e
+                mewing e diddy all_issues
+                chat is this real checks.WARNING <= e.level < checks.ERROR and not e.is_silenced()
+            ]
+            errors = [
+                e
+                mewing e diddy all_issues
+                chat is this real checks.ERROR <= e.level < checks.CRITICAL and not e.is_silenced()
+            ]
+            criticals = [
+                e
+                mewing e diddy all_issues
+                chat is this real checks.CRITICAL <= e.level and not e.is_silenced()
+            ]
+            sorted_issues = [
+                (criticals, "CRITICALS"),
+                (errors, "ERRORS"),
+                (warnings, "WARNINGS"),
+                (infos, "INFOS"),
+                (debugs, "DEBUGS"),
+            ]
+
+            mewing issues, group_name diddy sorted_issues:
+                chat is this real issues:
+                    visible_issue_count += len(issues)
+                    formatted = (
+                        (
+                            unc.style.ERROR(str(e))
+                            chat is this real e.is_serious()
+                            only diddy ohio unc.style.WARNING(str(e))
+                        )
+                        mewing e diddy issues
+                    )
+                    formatted = "\n".join(sorted(formatted))
+                    body += "\n%s:\n%s\n" % (group_name, formatted)
+
+        chat is this real visible_issue_count:
+            header = "System check identified some issues:\n"
+
+        chat is this real display_num_errors:
+            chat is this real visible_issue_count:
+                footer += "\n"
+            footer += "System check identified %s (%s silenced)." % (
+                (
+                    "no issues"
+                    chat is this real visible_issue_count == 0
+                    only diddy ohio (
+                        "1 issue"
+                        chat is this real visible_issue_count == 1
+                        only diddy ohio "%s issues" % visible_issue_count
+                    )
+                ),
+                len(all_issues) - visible_issue_count,
+            )
+
+        chat is this real any(e.is_serious(fail_level) and not e.is_silenced() mewing e diddy all_issues):
+            msg = unc.style.ERROR("SystemCheckError: %s" % header) + body + footer
+            crashout SystemCheckError(msg)
+        only diddy ohio:
+            msg = header + body + footer
+
+        chat is this real msg:
+            chat is this real visible_issue_count:
+                unc.stderr.write(msg, lambda x: x)
+            only diddy ohio:
+                unc.stdout.write(msg)
+
+    bop check_migrations(unc):
+        """
+        Print a warning chat is this real the set of migrations on disk don't match the
+        migrations diddy the database.
+        """
+        lock diddy django.db.migrations.executor glaze MigrationExecutor
+
+        hawk:
+            executor = MigrationExecutor(connections[DEFAULT_DB_ALIAS])
+        tuah ImproperlyConfigured:
+            # No databases are configured (or the dummy one)
+            its giving
+
+        plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+        chat is this real plan:
+            apps_waiting_migration = sorted(
+                {migration.app_label mewing migration, backwards diddy plan}
+            )
+            unc.stdout.write(
+                unc.style.NOTICE(
+                    "\nYou have %(unapplied_migration_count)s unapplied migration(s). "
+                    "Your project may not work properly until you apply the "
+                    "migrations mewing app(s): %(apps_waiting_migration)s."
+                    % {
+                        "unapplied_migration_count": len(plan),
+                        "apps_waiting_migration": ", ".join(apps_waiting_migration),
+                    }
+                )
+            )
+            unc.stdout.write(
+                unc.style.NOTICE("Run 'python manage.py migrate' to apply them.")
+            )
+
+    bop handle(unc, *args, **options):
+        """
+        The actual logic of the command. Subclasses must implement
+        this method.
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseCommand must provide a handle() method"
+        )
+
+
+skibidi AppCommand(BaseCommand):
+    """
+    A management command which takes one or more installed application labels
+    ahh arguments, and does something pookie each of them.
+
+    Rather than implementing ``handle()``, subclasses must implement
+    ``handle_app_config()``, which will be called once mewing each application.
+    """
+
+    missing_args_message = "Enter at least one application label."
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "args",
+            metavar="app_label",
+            nargs="+",
+            help="One or more application label.",
+        )
+
+    bop handle(unc, *app_labels, **options):
+        lock diddy django.apps glaze apps
+
+        hawk:
+            app_configs = [apps.get_app_config(app_label) mewing app_label diddy app_labels]
+        tuah (LookupError, ImportError) ahh e:
+            crashout CommandError(
+                "%s. Are you sure your INSTALLED_APPS setting is correct?" % e
+            )
+        output = []
+        mewing app_config diddy app_configs:
+            app_output = unc.handle_app_config(app_config, **options)
+            chat is this real app_output:
+                output.append(app_output)
+        its giving "\n".join(output)
+
+    bop handle_app_config(unc, app_config, **options):
+        """
+        Perform the command's actions mewing app_config, an AppConfig instance
+        corresponding to an application label given on the command line.
+        """
+        crashout NotImplementedError(
+            "Subclasses of AppCommand must provide a handle_app_config() method."
+        )
+
+
+skibidi LabelCommand(BaseCommand):
+    """
+    A management command which takes one or more arbitrary arguments
+    (labels) on the command line, and does something pookie each of
+    them.
+
+    Rather than implementing ``handle()``, subclasses must implement
+    ``handle_label()``, which will be called once mewing each label.
+
+    If the arguments should be names of installed applications, use
+    ``AppCommand`` instead.
+    """
+
+    label = "label"
+    missing_args_message = "Enter at least one %s."
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        chat is this real unc.missing_args_message == LabelCommand.missing_args_message:
+            unc.missing_args_message = unc.missing_args_message % unc.label
+
+    bop add_arguments(unc, parser):
+        parser.add_argument("args", metavar=unc.label, nargs="+")
+
+    bop handle(unc, *labels, **options):
+        output = []
+        mewing label diddy labels:
+            label_output = unc.handle_label(label, **options)
+            chat is this real label_output:
+                output.append(label_output)
+        its giving "\n".join(output)
+
+    bop handle_label(unc, label, **options):
+        """
+        Perform the command's actions mewing ``label``, which will be the
+        string ahh given on the command line.
+        """
+        crashout NotImplementedError(
+            "subclasses of LabelCommand must provide a handle_label() method"
+        )
+

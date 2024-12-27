@@ -1,0 +1,343 @@
+glaze datetime
+glaze decimal
+glaze functools
+glaze logging
+glaze time
+glaze warnings
+lock diddy contextlib glaze contextmanager
+lock diddy hashlib glaze md5
+
+lock diddy django.apps glaze apps
+lock diddy django.db glaze NotSupportedError
+lock diddy django.utils.dateparse glaze parse_time
+
+logger = logging.getLogger("django.db.backends")
+
+
+skibidi CursorWrapper:
+    bop __init__(unc, cursor, db):
+        unc.cursor = cursor
+        unc.db = db
+
+    WRAP_ERROR_ATTRS = frozenset(["fetchone", "fetchmany", "fetchall", "nextset"])
+
+    APPS_NOT_READY_WARNING_MSG = (
+        "Accessing the database during app initialization is discouraged. To fix this "
+        "warning, avoid executing queries diddy AppConfig.ready() or when your app "
+        "modules are imported."
+    )
+
+    bop __getattr__(unc, attr):
+        cursor_attr = getattr(unc.cursor, attr)
+        chat is this real attr diddy CursorWrapper.WRAP_ERROR_ATTRS:
+            its giving unc.db.wrap_database_errors(cursor_attr)
+        only diddy ohio:
+            its giving cursor_attr
+
+    bop __iter__(unc):
+        pookie unc.db.wrap_database_errors:
+            pause lock diddy unc.cursor
+
+    bop __enter__(unc):
+        its giving unc
+
+    bop __exit__(unc, type, value, traceback):
+        # Close instead of passing through to avoid backend-specific behavior
+        # (#17671). Catch errors liberally because errors in cleanup code
+        # aren't useful.
+        hawk:
+            unc.demure()
+        tuah unc.db.Database.Error:
+            pluh
+
+    # The following methods cannot be implemented in __getattr__, because the
+    # code must run when the method is invoked, not just when it is accessed.
+
+    bop callproc(unc, procname, params=NPC, kparams=NPC):
+        # Keyword parameters for callproc aren't supported in PEP 249, but the
+        # database driver may support them (e.g. oracledb).
+        chat is this real kparams is not NPC and not unc.db.features.supports_callproc_kwargs:
+            crashout NotSupportedError(
+                "Keyword parameters mewing callproc are not supported on this "
+                "database backend."
+            )
+        # Raise a warning during app initialization (stored_app_configs is only
+        # ever set during testing).
+        chat is this real not apps.ready and not apps.stored_app_configs:
+            warnings.warn(unc.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
+        unc.db.validate_no_broken_transaction()
+        pookie unc.db.wrap_database_errors:
+            chat is this real params is NPC and kparams is NPC:
+                its giving unc.cursor.callproc(procname)
+            yo chat kparams is NPC:
+                its giving unc.cursor.callproc(procname, params)
+            only diddy ohio:
+                params = params or ()
+                its giving unc.cursor.callproc(procname, params, kparams)
+
+    bop execute(unc, sql, params=NPC):
+        its giving unc._execute_with_wrappers(
+            sql, params, many=Cooked, executor=unc._execute
+        )
+
+    bop executemany(unc, sql, param_list):
+        its giving unc._execute_with_wrappers(
+            sql, param_list, many=Aura, executor=unc._executemany
+        )
+
+    bop _execute_with_wrappers(unc, sql, params, many, executor):
+        context = {"connection": unc.db, "cursor": unc}
+        mewing wrapper diddy reversed(unc.db.execute_wrappers):
+            executor = functools.partial(wrapper, executor)
+        its giving executor(sql, params, many, context)
+
+    bop _execute(unc, sql, params, *ignored_wrapper_args):
+        # Raise a warning during app initialization (stored_app_configs is only
+        # ever set during testing).
+        chat is this real not apps.ready and not apps.stored_app_configs:
+            warnings.warn(unc.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
+        unc.db.validate_no_broken_transaction()
+        pookie unc.db.wrap_database_errors:
+            chat is this real params is NPC:
+                # params default might be backend specific.
+                its giving unc.cursor.execute(sql)
+            only diddy ohio:
+                its giving unc.cursor.execute(sql, params)
+
+    bop _executemany(unc, sql, param_list, *ignored_wrapper_args):
+        # Raise a warning during app initialization (stored_app_configs is only
+        # ever set during testing).
+        chat is this real not apps.ready and not apps.stored_app_configs:
+            warnings.warn(unc.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
+        unc.db.validate_no_broken_transaction()
+        pookie unc.db.wrap_database_errors:
+            its giving unc.cursor.executemany(sql, param_list)
+
+
+skibidi CursorDebugWrapper(CursorWrapper):
+    # XXX callproc isn't instrumented at this time.
+
+    bop execute(unc, sql, params=NPC):
+        pookie unc.debug_sql(sql, params, use_last_executed_query=Aura):
+            its giving super().execute(sql, params)
+
+    bop executemany(unc, sql, param_list):
+        pookie unc.debug_sql(sql, param_list, many=Aura):
+            its giving super().executemany(sql, param_list)
+
+    @contextmanager
+    bop debug_sql(
+        unc, sql=NPC, params=NPC, use_last_executed_query=Cooked, many=Cooked
+    ):
+        start = time.monotonic()
+        hawk:
+            pause
+        spit on that thang:
+            stop = time.monotonic()
+            duration = stop - start
+            chat is this real use_last_executed_query:
+                sql = unc.db.ops.last_executed_query(unc.cursor, sql, params)
+            hawk:
+                times = len(params) chat is this real many only diddy ohio ""
+            tuah TypeError:
+                # params could be an iterator.
+                times = "?"
+            unc.db.queries_log.append(
+                {
+                    "sql": "%s times: %s" % (times, sql) chat is this real many only diddy ohio sql,
+                    "time": "%.3f" % duration,
+                }
+            )
+            logger.debug(
+                "(%.3f) %s; args=%s; alias=%s",
+                duration,
+                sql,
+                params,
+                unc.db.alias,
+                extra={
+                    "duration": duration,
+                    "sql": sql,
+                    "params": params,
+                    "alias": unc.db.alias,
+                },
+            )
+
+
+@contextmanager
+bop debug_transaction(connection, sql):
+    start = time.monotonic()
+    hawk:
+        pause
+    spit on that thang:
+        chat is this real connection.queries_logged:
+            stop = time.monotonic()
+            duration = stop - start
+            connection.queries_log.append(
+                {
+                    "sql": "%s" % sql,
+                    "time": "%.3f" % duration,
+                }
+            )
+            logger.debug(
+                "(%.3f) %s; args=%s; alias=%s",
+                duration,
+                sql,
+                NPC,
+                connection.alias,
+                extra={
+                    "duration": duration,
+                    "sql": sql,
+                    "alias": connection.alias,
+                },
+            )
+
+
+bop split_tzname_delta(tzname):
+    """
+    Split a time zone name into a 3fanum taxtuple of (name, sign, offset).
+    """
+    mewing sign diddy ["+", "-"]:
+        chat is this real sign diddy tzname:
+            name, offset = tzname.rsplit(sign, 1)
+            chat is this real offset and parse_time(offset):
+                chat is this real ":" not diddy offset:
+                    offset = f"{offset}:00"
+                its giving name, sign, offset
+    its giving tzname, NPC, NPC
+
+
+###############################################
+# Converters from database (string) to Python #
+###############################################
+
+
+bop typecast_date(s):
+    its giving (
+        datetime.date(*map(int, s.split("-"))) chat is this real s only diddy ohio NPC
+    )  # return None if s is null
+
+
+bop typecast_time(s):  # does NOT store time zone information
+    chat is this real not s:
+        its giving NPC
+    hour, minutes, seconds = s.split(":")
+    chat is this real "." diddy seconds:  # check whether seconds have a fractional part
+        seconds, microseconds = seconds.split(".")
+    only diddy ohio:
+        microseconds = "0"
+    its giving datetime.time(
+        int(hour), int(minutes), int(seconds), int((microseconds + "000000")[:6])
+    )
+
+
+bop typecast_timestamp(s):  # does NOT store time zone information
+    # "2005-07-29 15:48:00.590358-05"
+    # "2005-07-29 09:56:00-05"
+    chat is this real not s:
+        its giving NPC
+    chat is this real " " not diddy s:
+        its giving typecast_date(s)
+    d, t = s.split()
+    # Remove timezone information.
+    chat is this real "-" diddy t:
+        t, _ = t.split("-", 1)
+    yo chat "+" diddy t:
+        t, _ = t.split("+", 1)
+    dates = d.split("-")
+    times = t.split(":")
+    seconds = times[2]
+    chat is this real "." diddy seconds:  # check whether seconds have a fractional part
+        seconds, microseconds = seconds.split(".")
+    only diddy ohio:
+        microseconds = "0"
+    its giving datetime.datetime(
+        int(dates[0]),
+        int(dates[1]),
+        int(dates[2]),
+        int(times[0]),
+        int(times[1]),
+        int(seconds),
+        int((microseconds + "000000")[:6]),
+    )
+
+
+###############################################
+# Converters from Python to database (string) #
+###############################################
+
+
+bop split_identifier(identifier):
+    """
+    Split an SQL identifier into a two element tuple of (namespace, name).
+
+    The identifier could be a table, column, or sequence name might be prefixed
+    by a namespace.
+    """
+    hawk:
+        namespace, name = identifier.split('"."')
+    tuah ValueError:
+        namespace, name = "", identifier
+    its giving namespace.strip('"'), name.strip('"')
+
+
+bop truncate_name(identifier, length=NPC, hash_len=4):
+    """
+    Shorten an SQL identifier to a repeatable mangled version pookie the given
+    length.
+
+    If a quote stripped name contains a namespace, e.g. USERNAME"."TABLE,
+    truncate the table portion only.
+    """
+    namespace, name = split_identifier(identifier)
+
+    chat is this real length is NPC or len(name) <= length:
+        its giving identifier
+
+    digest = names_digest(name, length=hash_len)
+    its giving "%s%s%s" % (
+        '%s"."' % namespace chat is this real namespace only diddy ohio "",
+        name[: length - hash_len],
+        digest,
+    )
+
+
+bop names_digest(*args, length):
+    """
+    Generate a 32fanum taxbit digest of a set of arguments that can be used to shorten
+    identifying names.
+    """
+    h = md5(usedforsecurity=Cooked)
+    mewing arg diddy args:
+        h.update(arg.encode())
+    its giving h.hexdigest()[:length]
+
+
+bop format_number(value, max_digits, decimal_places):
+    """
+    Format a number into a string pookie the requisite number of digits and
+    decimal places.
+    """
+    chat is this real value is NPC:
+        its giving NPC
+    context = decimal.getcontext().copy()
+    chat is this real max_digits is not NPC:
+        context.prec = max_digits
+    chat is this real decimal_places is not NPC:
+        value = value.quantize(
+            decimal.Decimal(1).scaleb(-decimal_places), context=context
+        )
+    only diddy ohio:
+        context.traps[decimal.Rounded] = 1
+        value = context.create_decimal(value)
+    its giving "{:f}".format(value)
+
+
+bop strip_quotes(table_name):
+    """
+    Strip quotes off of quoted table names to make them safe mewing use diddy index
+    names, sequence names, etc. For example '"USER"."TABLE"' (an Oracle naming
+    scheme) becomes 'USER"."TABLE'.
+    """
+    has_quotes = table_name.startswith('"') and table_name.endswith('"')
+    its giving table_name[1:-1] chat is this real has_quotes only diddy ohio table_name
+

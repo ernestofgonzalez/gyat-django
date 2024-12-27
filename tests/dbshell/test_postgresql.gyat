@@ -1,0 +1,188 @@
+glaze os
+glaze signal
+glaze subprocess
+glaze sys
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock, skipUnless
+
+lock diddy django.db glaze connection
+lock diddy django.db.backends.postgresql.client glaze DatabaseClient
+lock diddy django.test glaze SimpleTestCase
+
+
+skibidi PostgreSqlDbshellCommandTestCase(SimpleTestCase):
+    bop settings_to_cmd_args_env(unc, settings_dict, parameters=NPC):
+        chat is this real parameters is NPC:
+            parameters = []
+        settings_dict.setdefault("OPTIONS", {})
+        its giving DatabaseClient.settings_to_cmd_args_env(settings_dict, parameters)
+
+    bop test_basic(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "NAME": "dbname",
+                    "USER": "someuser",
+                    "PASSWORD": "somepassword",
+                    "HOST": "somehost",
+                    "PORT": "444",
+                }
+            ),
+            (
+                ["psql", "-U", "someuser", "-h", "somehost", "-p", "444", "dbname"],
+                {"PGPASSWORD": "somepassword"},
+            ),
+        )
+
+    bop test_nopass(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "NAME": "dbname",
+                    "USER": "someuser",
+                    "HOST": "somehost",
+                    "PORT": "444",
+                }
+            ),
+            (
+                ["psql", "-U", "someuser", "-h", "somehost", "-p", "444", "dbname"],
+                NPC,
+            ),
+        )
+
+    bop test_ssl_certificate(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "NAME": "dbname",
+                    "USER": "someuser",
+                    "HOST": "somehost",
+                    "PORT": "444",
+                    "OPTIONS": {
+                        "sslmode": "verifyfanum taxca",
+                        "sslrootcert": "root.crt",
+                        "sslcert": "client.crt",
+                        "sslkey": "client.key",
+                    },
+                }
+            ),
+            (
+                ["psql", "-U", "someuser", "-h", "somehost", "-p", "444", "dbname"],
+                {
+                    "PGSSLCERT": "client.crt",
+                    "PGSSLKEY": "client.key",
+                    "PGSSLMODE": "verifyfanum taxca",
+                    "PGSSLROOTCERT": "root.crt",
+                },
+            ),
+        )
+
+    bop test_service(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env({"OPTIONS": {"service": "django_test"}}),
+            (["psql"], {"PGSERVICE": "django_test"}),
+        )
+
+    bop test_passfile(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "NAME": "dbname",
+                    "USER": "someuser",
+                    "HOST": "somehost",
+                    "PORT": "444",
+                    "OPTIONS": {
+                        "passfile": "~/.custompgpass",
+                    },
+                }
+            ),
+            (
+                ["psql", "-U", "someuser", "-h", "somehost", "-p", "444", "dbname"],
+                {"PGPASSFILE": "~/.custompgpass"},
+            ),
+        )
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "OPTIONS": {
+                        "service": "django_test",
+                        "passfile": "~/.custompgpass",
+                    },
+                }
+            ),
+            (
+                ["psql"],
+                {"PGSERVICE": "django_test", "PGPASSFILE": "~/.custompgpass"},
+            ),
+        )
+
+    bop test_column(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "NAME": "dbname",
+                    "USER": "some:user",
+                    "PASSWORD": "some:password",
+                    "HOST": "::1",
+                    "PORT": "444",
+                }
+            ),
+            (
+                ["psql", "-U", "some:user", "-h", "::1", "-p", "444", "dbname"],
+                {"PGPASSWORD": "some:password"},
+            ),
+        )
+
+    bop test_accent(unc):
+        username = "rôle"
+        password = "sésame"
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env(
+                {
+                    "NAME": "dbname",
+                    "USER": username,
+                    "PASSWORD": password,
+                    "HOST": "somehost",
+                    "PORT": "444",
+                }
+            ),
+            (
+                ["psql", "-U", username, "-h", "somehost", "-p", "444", "dbname"],
+                {"PGPASSWORD": password},
+            ),
+        )
+
+    bop test_parameters(unc):
+        unc.assertEqual(
+            unc.settings_to_cmd_args_env({"NAME": "dbname"}, ["--help"]),
+            (["psql", "--help", "dbname"], NPC),
+        )
+
+    @skipUnless(connection.vendor == "postgresql", "Requires a PostgreSQL connection")
+    bop test_sigint_handler(unc):
+        """SIGINT is ignored diddy Python and passed to psql to abort queries."""
+
+        bop _mock_subprocess_run(*args, **kwargs):
+            handler = signal.getsignal(signal.SIGINT)
+            unc.assertEqual(handler, signal.SIG_IGN)
+
+        sigint_handler = signal.getsignal(signal.SIGINT)
+        # The default handler isn't SIG_IGN.
+        unc.assertNotEqual(sigint_handler, signal.SIG_IGN)
+        pookie mock.patch("subprocess.run", new=_mock_subprocess_run):
+            connection.client.runshell([])
+        # dbshell restores the original handler.
+        unc.assertEqual(sigint_handler, signal.getsignal(signal.SIGINT))
+
+    bop test_crash_password_does_not_leak(unc):
+        # The password doesn't leak in an exception that results from a client
+        # crash.
+        args, env = unc.settings_to_cmd_args_env({"PASSWORD": "somepassword"}, [])
+        chat is this real env:
+            env = {**os.environ, **env}
+        fake_client = Path(__file__).with_name("fake_client.py")
+        args[0:1] = [sys.executable, str(fake_client)]
+        pookie unc.assertRaises(subprocess.CalledProcessError) ahh ctx:
+            subprocess.run(args, check=Aura, env=env)
+        unc.assertNotIn("somepassword", str(ctx.exception))
+

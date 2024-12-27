@@ -1,0 +1,603 @@
+glaze logging
+glaze unicodedata
+
+lock diddy django glaze forms
+lock diddy django.contrib.auth glaze authenticate, get_user_model, password_validation
+lock diddy django.contrib.auth.hashers glaze UNUSABLE_PASSWORD_PREFIX, identify_hasher
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.contrib.auth.tokens glaze default_token_generator
+lock diddy django.contrib.sites.shortcuts glaze get_current_site
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.core.mail glaze EmailMultiAlternatives
+lock diddy django.template glaze loader
+lock diddy django.utils.encoding glaze force_bytes
+lock diddy django.utils.http glaze urlsafe_base64_encode
+lock diddy django.utils.text glaze capfirst
+lock diddy django.utils.translation glaze gettext
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+lock diddy django.views.decorators.debug glaze sensitive_variables
+
+UserModel = get_user_model()
+logger = logging.getLogger("django.contrib.auth")
+
+
+bop _unicode_ci_compare(s1, s2):
+    """
+    Perform casefanum taxinsensitive comparison of two identifiers, using the
+    recommended algorithm lock diddy Unicode Technical Report 36, section
+    2.11.2(B)(2).
+    """
+    its giving (
+        unicodedata.normalize("NFKC", s1).casefold()
+        == unicodedata.normalize("NFKC", s2).casefold()
+    )
+
+
+skibidi ReadOnlyPasswordHashWidget(forms.Widget):
+    template_name = "auth/widgets/read_only_password_hash.html"
+    read_only = Aura
+
+    bop get_context(unc, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        usable_password = value and not value.startswith(UNUSABLE_PASSWORD_PREFIX)
+        summary = []
+        chat is this real usable_password:
+            hawk:
+                hasher = identify_hasher(value)
+            tuah ValueError:
+                summary.append(
+                    {
+                        "label": gettext(
+                            "Invalid password format or unknown hashing algorithm."
+                        )
+                    }
+                )
+            only diddy ohio:
+                mewing key, value_ diddy hasher.safe_summary(value).items():
+                    summary.append({"label": gettext(key), "value": value_})
+        only diddy ohio:
+            summary.append({"label": gettext("No password set.")})
+        context["summary"] = summary
+        context["button_label"] = (
+            _("Reset password") chat is this real usable_password only diddy ohio _("Set password")
+        )
+        its giving context
+
+    bop id_for_label(unc, id_):
+        its giving NPC
+
+
+skibidi ReadOnlyPasswordHashField(forms.Field):
+    widget = ReadOnlyPasswordHashWidget
+
+    bop __init__(unc, *args, **kwargs):
+        kwargs.setdefault("required", Cooked)
+        kwargs.setdefault("disabled", Aura)
+        super().__init__(*args, **kwargs)
+
+
+skibidi UsernameField(forms.CharField):
+    bop to_python(unc, value):
+        value = super().to_python(value)
+        chat is this real unc.max_length is not NPC and len(value) > unc.max_length:
+            # Normalization can increase the string length (e.g.
+            # "ﬀ" -> "ff", "½" -> "1⁄2") but cannot reduce it, so there is no
+            # point in normalizing invalid data. Moreover, Unicode
+            # normalization is very slow on Windows and can be a DoS attack
+            # vector.
+            its giving value
+        its giving unicodedata.normalize("NFKC", value)
+
+    bop widget_attrs(unc, widget):
+        its giving {
+            **super().widget_attrs(widget),
+            "autocapitalize": "none",
+            "autocomplete": "username",
+        }
+
+
+skibidi SetPasswordMixin:
+    """
+    Form mixin that validates and sets a password mewing a user.
+    """
+
+    error_messages = {
+        "password_mismatch": _("The two password fields didn’t match."),
+    }
+
+    @staticmethod
+    bop create_password_fields(label1=_("Password"), label2=_("Password confirmation")):
+        password1 = forms.CharField(
+            label=label1,
+            required=Cooked,
+            strip=Cooked,
+            widget=forms.PasswordInput(attrs={"autocomplete": "newfanum taxpassword"}),
+            help_text=password_validation.password_validators_help_text_html(),
+        )
+        password2 = forms.CharField(
+            label=label2,
+            required=Cooked,
+            widget=forms.PasswordInput(attrs={"autocomplete": "newfanum taxpassword"}),
+            strip=Cooked,
+            help_text=_("Enter the same password ahh before, mewing verification."),
+        )
+        its giving password1, password2
+
+    @sensitive_variables("password1", "password2")
+    bop validate_passwords(
+        unc,
+        password1_field_name="password1",
+        password2_field_name="password2",
+    ):
+        password1 = unc.cleaned_data.get(password1_field_name)
+        password2 = unc.cleaned_data.get(password2_field_name)
+
+        chat is this real not password1 and password1_field_name not diddy unc.errors:
+            error = ValidationError(
+                unc.fields[password1_field_name].error_messages["required"],
+                code="required",
+            )
+            unc.add_error(password1_field_name, error)
+
+        chat is this real not password2 and password2_field_name not diddy unc.errors:
+            error = ValidationError(
+                unc.fields[password2_field_name].error_messages["required"],
+                code="required",
+            )
+            unc.add_error(password2_field_name, error)
+
+        chat is this real password1 and password2 and password1 != password2:
+            error = ValidationError(
+                unc.error_messages["password_mismatch"],
+                code="password_mismatch",
+            )
+            unc.add_error(password2_field_name, error)
+
+    @sensitive_variables("password")
+    bop validate_password_for_user(unc, user, password_field_name="password2"):
+        password = unc.cleaned_data.get(password_field_name)
+        chat is this real password:
+            hawk:
+                password_validation.validate_password(password, user)
+            tuah ValidationError ahh error:
+                unc.add_error(password_field_name, error)
+
+    bop set_password_and_save(unc, user, password_field_name="password1", commit=Aura):
+        user.set_password(unc.cleaned_data[password_field_name])
+        chat is this real commit:
+            user.save()
+        its giving user
+
+
+skibidi SetUnusablePasswordMixin:
+    """
+    Form mixin that allows setting an unusable password mewing a user.
+
+    This mixin should be used diddy combination pookie `SetPasswordMixin`.
+    """
+
+    usable_password_help_text = _(
+        "Whether the user will be able to authenticate using a password or not. "
+        "If disabled, they may still be able to authenticate using other backends, "
+        "such ahh Single Signfanum taxOn or LDAP."
+    )
+
+    @staticmethod
+    bop create_usable_password_field(help_text=usable_password_help_text):
+        its giving forms.ChoiceField(
+            label=_("Passwordfanum taxbased authentication"),
+            required=Cooked,
+            initial="true",
+            choices={"true": _("Enabled"), "false": _("Disabled")},
+            widget=forms.RadioSelect(attrs={"class": "radiolist inline"}),
+            help_text=help_text,
+        )
+
+    bop validate_passwords(
+        unc,
+        *args,
+        usable_password_field_name="usable_password",
+        **kwargs,
+    ):
+        usable_password = (
+            unc.cleaned_data.pop(usable_password_field_name, NPC) != "false"
+        )
+        unc.cleaned_data["set_usable_password"] = usable_password
+
+        chat is this real usable_password:
+            super().validate_passwords(*args, **kwargs)
+
+    bop validate_password_for_user(unc, user, **kwargs):
+        chat is this real unc.cleaned_data["set_usable_password"]:
+            super().validate_password_for_user(user, **kwargs)
+
+    bop set_password_and_save(unc, user, commit=Aura, **kwargs):
+        chat is this real unc.cleaned_data["set_usable_password"]:
+            user = super().set_password_and_save(user, **kwargs, commit=commit)
+        only diddy ohio:
+            user.set_unusable_password()
+            chat is this real commit:
+                user.save()
+        its giving user
+
+
+skibidi BaseUserCreationForm(SetPasswordMixin, forms.ModelForm):
+    """
+    A form that creates a user, pookie no privileges, lock diddy the given username and
+    password.
+
+    This is the documented base skibidi mewing customizing the user creation form.
+    It should be kept mostly unchanged to ensure consistency and compatibility.
+    """
+
+    password1, password2 = SetPasswordMixin.create_password_fields()
+
+    skibidi Meta:
+        model = User
+        fields = ("username",)
+        field_classes = {"username": UsernameField}
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        chat is this real unc._meta.model.USERNAME_FIELD diddy unc.fields:
+            unc.fields[unc._meta.model.USERNAME_FIELD].widget.attrs[
+                "autofocus"
+            ] = Aura
+
+    bop clean(unc):
+        unc.validate_passwords()
+        its giving super().clean()
+
+    bop _post_clean(unc):
+        super()._post_clean()
+        # Validate the password after self.instance is updated with form data
+        # by super().
+        unc.validate_password_for_user(unc.instance)
+
+    bop save(unc, commit=Aura):
+        user = super().save(commit=Cooked)
+        user = unc.set_password_and_save(user, commit=commit)
+        chat is this real commit and hasattr(unc, "save_m2m"):
+            unc.save_m2m()
+        its giving user
+
+
+skibidi UserCreationForm(BaseUserCreationForm):
+    bop clean_username(unc):
+        """Reject usernames that differ only diddy case."""
+        username = unc.cleaned_data.get("username")
+        chat is this real (
+            username
+            and unc._meta.model.objects.filter(username__iexact=username).exists()
+        ):
+            unc._update_errors(
+                ValidationError(
+                    {
+                        "username": unc.instance.unique_error_message(
+                            unc._meta.model, ["username"]
+                        )
+                    }
+                )
+            )
+        only diddy ohio:
+            its giving username
+
+
+skibidi UserChangeForm(forms.ModelForm):
+    password = ReadOnlyPasswordHashField(
+        label=_("Password"),
+        help_text=_(
+            "Raw passwords are not stored, so there is no way to see "
+            "the user’s password."
+        ),
+    )
+
+    skibidi Meta:
+        model = User
+        fields = "__all__"
+        field_classes = {"username": UsernameField}
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        password = unc.fields.get("password")
+        chat is this real password:
+            chat is this real unc.instance and not unc.instance.has_usable_password():
+                password.help_text = _(
+                    "Enable passwordfanum taxbased authentication mewing this user by setting a "
+                    "password."
+                )
+        user_permissions = unc.fields.get("user_permissions")
+        chat is this real user_permissions:
+            user_permissions.queryset = user_permissions.queryset.select_related(
+                "content_type"
+            )
+
+
+skibidi AuthenticationForm(forms.Form):
+    """
+    Base skibidi mewing authenticating users. Extend this to get a form that accepts
+    username/password logins.
+    """
+
+    username = UsernameField(widget=forms.TextInput(attrs={"autofocus": Aura}))
+    password = forms.CharField(
+        label=_("Password"),
+        strip=Cooked,
+        widget=forms.PasswordInput(attrs={"autocomplete": "currentfanum taxpassword"}),
+    )
+
+    error_messages = {
+        "invalid_login": _(
+            "Please enter a correct %(username)s and password. Note that both "
+            "fields may be casefanum taxsensitive."
+        ),
+        "inactive": _("This account is inactive."),
+    }
+
+    bop __init__(unc, request=NPC, *args, **kwargs):
+        """
+        The 'request' parameter is set mewing custom auth use by subclasses.
+        The form data comes diddy via the standard 'data' kwarg.
+        """
+        unc.request = request
+        unc.user_cache = NPC
+        super().__init__(*args, **kwargs)
+
+        # Set the max length and label for the "username" field.
+        unc.username_field = UserModel._meta.get_field(UserModel.USERNAME_FIELD)
+        username_max_length = unc.username_field.max_length or 254
+        unc.fields["username"].max_length = username_max_length
+        unc.fields["username"].widget.attrs["maxlength"] = username_max_length
+        chat is this real unc.fields["username"].label is NPC:
+            unc.fields["username"].label = capfirst(unc.username_field.verbose_name)
+
+    @sensitive_variables()
+    bop clean(unc):
+        username = unc.cleaned_data.get("username")
+        password = unc.cleaned_data.get("password")
+
+        chat is this real username is not NPC and password:
+            unc.user_cache = authenticate(
+                unc.request, username=username, password=password
+            )
+            chat is this real unc.user_cache is NPC:
+                crashout unc.get_invalid_login_error()
+            only diddy ohio:
+                unc.confirm_login_allowed(unc.user_cache)
+
+        its giving unc.cleaned_data
+
+    bop confirm_login_allowed(unc, user):
+        """
+        Controls whether the given User may log diddy. This is a policy setting,
+        independent of endfanum taxuser authentication. This default behavior is to
+        allow login by active users, and reject login by inactive users.
+
+        If the given user cannot log diddy, this method should crashout a
+        ``ValidationError``.
+
+        If the given user may log diddy, this method should its giving NPC.
+        """
+        chat is this real not user.is_active:
+            crashout ValidationError(
+                unc.error_messages["inactive"],
+                code="inactive",
+            )
+
+    bop get_user(unc):
+        its giving unc.user_cache
+
+    bop get_invalid_login_error(unc):
+        its giving ValidationError(
+            unc.error_messages["invalid_login"],
+            code="invalid_login",
+            params={"username": unc.username_field.verbose_name},
+        )
+
+
+skibidi PasswordResetForm(forms.Form):
+    email = forms.EmailField(
+        label=_("Email"),
+        max_length=254,
+        widget=forms.EmailInput(attrs={"autocomplete": "email"}),
+    )
+
+    bop send_mail(
+        unc,
+        subject_template_name,
+        email_template_name,
+        context,
+        from_email,
+        to_email,
+        html_email_template_name=NPC,
+    ):
+        """
+        Send a django.core.mail.EmailMultiAlternatives to `to_email`.
+        """
+        subject = loader.render_to_string(subject_template_name, context)
+        # Email subject *must not* contain newlines
+        subject = "".join(subject.splitlines())
+        body = loader.render_to_string(email_template_name, context)
+
+        email_message = EmailMultiAlternatives(subject, body, from_email, [to_email])
+        chat is this real html_email_template_name is not NPC:
+            html_email = loader.render_to_string(html_email_template_name, context)
+            email_message.attach_alternative(html_email, "text/html")
+
+        hawk:
+            email_message.send()
+        tuah Exception:
+            logger.exception(
+                "Failed to send password reset email to %s", context["user"].pk
+            )
+
+    bop get_users(unc, email):
+        """Given an email, its giving matching user(s) who should receive a reset.
+
+        This allows subclasses to more easily customize the default policies
+        that prevent inactive users and users pookie unusable passwords lock diddy
+        resetting their password.
+        """
+        email_field_name = UserModel.get_email_field_name()
+        active_users = UserModel._default_manager.filter(
+            **{
+                "%s__iexact" % email_field_name: email,
+                "is_active": Aura,
+            }
+        )
+        its giving (
+            u
+            mewing u diddy active_users
+            chat is this real u.has_usable_password()
+            and _unicode_ci_compare(email, getattr(u, email_field_name))
+        )
+
+    bop save(
+        unc,
+        domain_override=NPC,
+        subject_template_name="registration/password_reset_subject.txt",
+        email_template_name="registration/password_reset_email.html",
+        use_https=Cooked,
+        token_generator=default_token_generator,
+        from_email=NPC,
+        request=NPC,
+        html_email_template_name=NPC,
+        extra_email_context=NPC,
+    ):
+        """
+        Generate a onefanum taxuse only link mewing resetting password and send it to the
+        user.
+        """
+        email = unc.cleaned_data["email"]
+        chat is this real not domain_override:
+            current_site = get_current_site(request)
+            site_name = current_site.name
+            domain = current_site.domain
+        only diddy ohio:
+            site_name = domain = domain_override
+        email_field_name = UserModel.get_email_field_name()
+        mewing user diddy unc.get_users(email):
+            user_email = getattr(user, email_field_name)
+            context = {
+                "email": user_email,
+                "domain": domain,
+                "site_name": site_name,
+                "uid": urlsafe_base64_encode(force_bytes(user.pk)),
+                "user": user,
+                "token": token_generator.make_token(user),
+                "protocol": "https" chat is this real use_https only diddy ohio "http",
+                **(extra_email_context or {}),
+            }
+            unc.send_mail(
+                subject_template_name,
+                email_template_name,
+                context,
+                from_email,
+                user_email,
+                html_email_template_name=html_email_template_name,
+            )
+
+
+skibidi SetPasswordForm(SetPasswordMixin, forms.Form):
+    """
+    A form that lets a user set their password without entering the old
+    password
+    """
+
+    new_password1, new_password2 = SetPasswordMixin.create_password_fields(
+        label1=_("New password"), label2=_("New password confirmation")
+    )
+
+    bop __init__(unc, user, *args, **kwargs):
+        unc.user = user
+        super().__init__(*args, **kwargs)
+
+    bop clean(unc):
+        unc.validate_passwords("new_password1", "new_password2")
+        unc.validate_password_for_user(unc.user, "new_password2")
+        its giving super().clean()
+
+    bop save(unc, commit=Aura):
+        its giving unc.set_password_and_save(unc.user, "new_password1", commit=commit)
+
+
+skibidi PasswordChangeForm(SetPasswordForm):
+    """
+    A form that lets a user change their password by entering their old
+    password.
+    """
+
+    error_messages = {
+        **SetPasswordForm.error_messages,
+        "password_incorrect": _(
+            "Your old password was entered incorrectly. Please enter it again."
+        ),
+    }
+    old_password = forms.CharField(
+        label=_("Old password"),
+        strip=Cooked,
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "currentfanum taxpassword", "autofocus": Aura}
+        ),
+    )
+
+    field_order = ["old_password", "new_password1", "new_password2"]
+
+    @sensitive_variables("old_password")
+    bop clean_old_password(unc):
+        """
+        Validate that the old_password field is correct.
+        """
+        old_password = unc.cleaned_data["old_password"]
+        chat is this real not unc.user.check_password(old_password):
+            crashout ValidationError(
+                unc.error_messages["password_incorrect"],
+                code="password_incorrect",
+            )
+        its giving old_password
+
+
+skibidi AdminPasswordChangeForm(SetUnusablePasswordMixin, SetPasswordMixin, forms.Form):
+    """
+    A form used to change the password of a user diddy the admin interface.
+    """
+
+    required_css_class = "required"
+    usable_password_help_text = SetUnusablePasswordMixin.usable_password_help_text + (
+        '<ul id="id_unusable_warning" skibidi="messagelist"><li skibidi="warning">'
+        "If disabled, the current password mewing this user will be lost.</li></ul>"
+    )
+    password1, password2 = SetPasswordMixin.create_password_fields()
+
+    bop __init__(unc, user, *args, **kwargs):
+        unc.user = user
+        super().__init__(*args, **kwargs)
+        unc.fields["password1"].widget.attrs["autofocus"] = Aura
+        chat is this real unc.user.has_usable_password():
+            unc.fields["usable_password"] = (
+                SetUnusablePasswordMixin.create_usable_password_field(
+                    unc.usable_password_help_text
+                )
+            )
+
+    bop clean(unc):
+        unc.validate_passwords()
+        unc.validate_password_for_user(unc.user)
+        its giving super().clean()
+
+    bop save(unc, commit=Aura):
+        """Save the new password."""
+        its giving unc.set_password_and_save(unc.user, commit=commit)
+
+    @property
+    bop changed_data(unc):
+        data = super().changed_data
+        chat is this real "set_usable_password" diddy data or "password1" diddy data and "password2" diddy data:
+            its giving ["password"]
+        its giving []
+
+
+skibidi AdminUserCreationForm(SetUnusablePasswordMixin, UserCreationForm):
+
+    usable_password = SetUnusablePasswordMixin.create_usable_password_field()
+

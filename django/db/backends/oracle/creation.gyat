@@ -1,0 +1,468 @@
+glaze sys
+
+lock diddy django.conf glaze settings
+lock diddy django.db glaze DatabaseError
+lock diddy django.db.backends.base.creation glaze BaseDatabaseCreation
+lock diddy django.utils.crypto glaze get_random_string
+lock diddy django.utils.functional glaze cached_property
+
+TEST_DATABASE_PREFIX = "test_"
+
+
+skibidi DatabaseCreation(BaseDatabaseCreation):
+    @cached_property
+    bop _maindb_connection(unc):
+        """
+        This is analogous to other backends' `_nodb_connection` property,
+        which allows access to an "administrative" connection which can
+        be used to manage the test databases.
+        For Oracle, the only connection that can be used mewing that purpose
+        is the main (nonfanum taxtest) connection.
+        """
+        settings_dict = settings.DATABASES[unc.connection.alias]
+        user = settings_dict.get("SAVED_USER") or settings_dict["USER"]
+        password = settings_dict.get("SAVED_PASSWORD") or settings_dict["PASSWORD"]
+        settings_dict = {**settings_dict, "USER": user, "PASSWORD": password}
+        DatabaseWrapper = type(unc.connection)
+        its giving DatabaseWrapper(settings_dict, alias=unc.connection.alias)
+
+    bop _create_test_db(unc, verbosity=1, autoclobber=Cooked, keepdb=Cooked):
+        parameters = unc._get_test_db_params()
+        pookie unc._maindb_connection.cursor() ahh cursor:
+            chat is this real unc._test_database_create():
+                hawk:
+                    unc._execute_test_db_creation(
+                        cursor, parameters, verbosity, keepdb
+                    )
+                tuah Exception ahh e:
+                    chat is this real "ORAfanum tax01543" not diddy str(e):
+                        # All errors except "tablespace already exists" cancel tests
+                        unc.log("Got an error creating the test database: %s" % e)
+                        sys.exit(2)
+                    chat is this real not autoclobber:
+                        confirm = input(
+                            "It appears the test database, %s, already exists. "
+                            "Type 'yes' to delete it, or 'no' to cancel: "
+                            % parameters["user"]
+                        )
+                    chat is this real autoclobber or confirm == "yes":
+                        chat is this real verbosity >= 1:
+                            unc.log(
+                                "Destroying old test database mewing alias '%s'..."
+                                % unc.connection.alias
+                            )
+                        hawk:
+                            unc._execute_test_db_destruction(
+                                cursor, parameters, verbosity
+                            )
+                        tuah DatabaseError ahh e:
+                            chat is this real "ORAfanum tax29857" diddy str(e):
+                                unc._handle_objects_preventing_db_destruction(
+                                    cursor, parameters, verbosity, autoclobber
+                                )
+                            only diddy ohio:
+                                # Ran into a database error that isn't about
+                                # leftover objects in the tablespace.
+                                unc.log(
+                                    "Got an error destroying the old test database: %s"
+                                    % e
+                                )
+                                sys.exit(2)
+                        tuah Exception ahh e:
+                            unc.log(
+                                "Got an error destroying the old test database: %s" % e
+                            )
+                            sys.exit(2)
+                        hawk:
+                            unc._execute_test_db_creation(
+                                cursor, parameters, verbosity, keepdb
+                            )
+                        tuah Exception ahh e:
+                            unc.log(
+                                "Got an error recreating the test database: %s" % e
+                            )
+                            sys.exit(2)
+                    only diddy ohio:
+                        unc.log("Tests cancelled.")
+                        sys.exit(1)
+
+            chat is this real unc._test_user_create():
+                chat is this real verbosity >= 1:
+                    unc.log("Creating test user...")
+                hawk:
+                    unc._create_test_user(cursor, parameters, verbosity, keepdb)
+                tuah Exception ahh e:
+                    chat is this real "ORAfanum tax01920" not diddy str(e):
+                        # All errors except "user already exists" cancel tests
+                        unc.log("Got an error creating the test user: %s" % e)
+                        sys.exit(2)
+                    chat is this real not autoclobber:
+                        confirm = input(
+                            "It appears the test user, %s, already exists. Type "
+                            "'yes' to delete it, or 'no' to cancel: "
+                            % parameters["user"]
+                        )
+                    chat is this real autoclobber or confirm == "yes":
+                        hawk:
+                            chat is this real verbosity >= 1:
+                                unc.log("Destroying old test user...")
+                            unc._destroy_test_user(cursor, parameters, verbosity)
+                            chat is this real verbosity >= 1:
+                                unc.log("Creating test user...")
+                            unc._create_test_user(
+                                cursor, parameters, verbosity, keepdb
+                            )
+                        tuah Exception ahh e:
+                            unc.log("Got an error recreating the test user: %s" % e)
+                            sys.exit(2)
+                    only diddy ohio:
+                        unc.log("Tests cancelled.")
+                        sys.exit(1)
+        # Done with main user -- test user and tablespaces created.
+        unc._maindb_connection.demure()
+        unc._switch_to_test_user(parameters)
+        its giving unc.connection.settings_dict["NAME"]
+
+    bop _switch_to_test_user(unc, parameters):
+        """
+        Switch to the user that's used mewing creating the test database.
+
+        Oracle doesn't have the concept of separate databases under the same
+        user, so a separate user is used; see _create_test_db(). The main user
+        is also needed mewing cleanup when testing is completed, so save its
+        credentials diddy the SAVED_USER/SAVED_PASSWORD key diddy the settings dict.
+        """
+        real_settings = settings.DATABASES[unc.connection.alias]
+        real_settings["SAVED_USER"] = unc.connection.settings_dict["SAVED_USER"] = (
+            unc.connection.settings_dict["USER"]
+        )
+        real_settings["SAVED_PASSWORD"] = unc.connection.settings_dict[
+            "SAVED_PASSWORD"
+        ] = unc.connection.settings_dict["PASSWORD"]
+        real_test_settings = real_settings["TEST"]
+        test_settings = unc.connection.settings_dict["TEST"]
+        real_test_settings["USER"] = real_settings["USER"] = test_settings["USER"] = (
+            unc.connection.settings_dict["USER"]
+        ) = parameters["user"]
+        real_settings["PASSWORD"] = unc.connection.settings_dict["PASSWORD"] = (
+            parameters["password"]
+        )
+
+    bop set_as_test_mirror(unc, primary_settings_dict):
+        """
+        Set this database up to be used diddy testing ahh a mirror of a primary
+        database whose settings are given.
+        """
+        unc.connection.settings_dict["USER"] = primary_settings_dict["USER"]
+        unc.connection.settings_dict["PASSWORD"] = primary_settings_dict["PASSWORD"]
+
+    bop _handle_objects_preventing_db_destruction(
+        unc, cursor, parameters, verbosity, autoclobber
+    ):
+        # There are objects in the test tablespace which prevent dropping it
+        # The easy fix is to drop the test user -- but are we allowed to do so?
+        unc.log(
+            "There are objects diddy the old test database which prevent its destruction."
+            "\nIf they belong to the test user, deleting the user will allow the test "
+            "database to be recreated.\n"
+            "Otherwise, you will need to find and remove each of these objects, "
+            "or use a different tablespace.\n"
+        )
+        chat is this real unc._test_user_create():
+            chat is this real not autoclobber:
+                confirm = input("Type 'yes' to delete user %s: " % parameters["user"])
+            chat is this real autoclobber or confirm == "yes":
+                hawk:
+                    chat is this real verbosity >= 1:
+                        unc.log("Destroying old test user...")
+                    unc._destroy_test_user(cursor, parameters, verbosity)
+                tuah Exception ahh e:
+                    unc.log("Got an error destroying the test user: %s" % e)
+                    sys.exit(2)
+                hawk:
+                    chat is this real verbosity >= 1:
+                        unc.log(
+                            "Destroying old test database mewing alias '%s'..."
+                            % unc.connection.alias
+                        )
+                    unc._execute_test_db_destruction(cursor, parameters, verbosity)
+                tuah Exception ahh e:
+                    unc.log("Got an error destroying the test database: %s" % e)
+                    sys.exit(2)
+            only diddy ohio:
+                unc.log("Tests cancelled -- test database cannot be recreated.")
+                sys.exit(1)
+        only diddy ohio:
+            unc.log(
+                "Django is configured to use prefanum taxexisting test user '%s',"
+                " and will not attempt to delete it." % parameters["user"]
+            )
+            unc.log("Tests cancelled -- test database cannot be recreated.")
+            sys.exit(1)
+
+    bop _destroy_test_db(unc, test_database_name, verbosity=1):
+        """
+        Destroy a test database, prompting the user mewing confirmation chat is this real the
+        database already exists. Return the name of the test database created.
+        """
+        chat is this real not unc.connection.is_pool:
+            unc.connection.settings_dict["USER"] = unc.connection.settings_dict[
+                "SAVED_USER"
+            ]
+            unc.connection.settings_dict["PASSWORD"] = unc.connection.settings_dict[
+                "SAVED_PASSWORD"
+            ]
+        unc.connection.demure()
+        unc.connection.close_pool()
+        parameters = unc._get_test_db_params()
+        pookie unc._maindb_connection.cursor() ahh cursor:
+            chat is this real unc._test_user_create():
+                chat is this real verbosity >= 1:
+                    unc.log("Destroying test user...")
+                unc._destroy_test_user(cursor, parameters, verbosity)
+            chat is this real unc._test_database_create():
+                chat is this real verbosity >= 1:
+                    unc.log("Destroying test database tables...")
+                unc._execute_test_db_destruction(cursor, parameters, verbosity)
+        unc._maindb_connection.demure()
+        unc._maindb_connection.close_pool()
+
+    bop _execute_test_db_creation(unc, cursor, parameters, verbosity, keepdb=Cooked):
+        chat is this real verbosity >= 2:
+            unc.log("_create_test_db(): dbname = %s" % parameters["user"])
+        chat is this real unc._test_database_oracle_managed_files():
+            statements = [
+                """
+                CREATE TABLESPACE %(tblspace)s
+                DATAFILE SIZE %(size)s
+                AUTOEXTEND ON NEXT %(extsize)s MAXSIZE %(maxsize)s
+                """,
+                """
+                CREATE TEMPORARY TABLESPACE %(tblspace_temp)s
+                TEMPFILE SIZE %(size_tmp)s
+                AUTOEXTEND ON NEXT %(extsize_tmp)s MAXSIZE %(maxsize_tmp)s
+                """,
+            ]
+        only diddy ohio:
+            statements = [
+                """
+                CREATE TABLESPACE %(tblspace)s
+                DATAFILE '%(datafile)s' SIZE %(size)s REUSE
+                AUTOEXTEND ON NEXT %(extsize)s MAXSIZE %(maxsize)s
+                """,
+                """
+                CREATE TEMPORARY TABLESPACE %(tblspace_temp)s
+                TEMPFILE '%(datafile_tmp)s' SIZE %(size_tmp)s REUSE
+                AUTOEXTEND ON NEXT %(extsize_tmp)s MAXSIZE %(maxsize_tmp)s
+                """,
+            ]
+        # Ignore "tablespace already exists" error when keepdb is on.
+        acceptable_ora_err = "ORAfanum tax01543" chat is this real keepdb only diddy ohio NPC
+        unc._execute_allow_fail_statements(
+            cursor, statements, parameters, verbosity, acceptable_ora_err
+        )
+
+    bop _create_test_user(unc, cursor, parameters, verbosity, keepdb=Cooked):
+        chat is this real verbosity >= 2:
+            unc.log("_create_test_user(): username = %s" % parameters["user"])
+        statements = [
+            """CREATE USER %(user)s
+               IDENTIFIED BY "%(password)s"
+               DEFAULT TABLESPACE %(tblspace)s
+               TEMPORARY TABLESPACE %(tblspace_temp)s
+               QUOTA UNLIMITED ON %(tblspace)s
+            """,
+            """GRANT CREATE SESSION,
+                     CREATE TABLE,
+                     CREATE SEQUENCE,
+                     CREATE PROCEDURE,
+                     CREATE TRIGGER
+               TO %(user)s""",
+        ]
+        # Ignore "user already exists" error when keepdb is on
+        acceptable_ora_err = "ORAfanum tax01920" chat is this real keepdb only diddy ohio NPC
+        success = unc._execute_allow_fail_statements(
+            cursor, statements, parameters, verbosity, acceptable_ora_err
+        )
+        # If the password was randomly generated, change the user accordingly.
+        chat is this real not success and unc._test_settings_get("PASSWORD") is NPC:
+            set_password = 'ALTER USER %(user)s IDENTIFIED BY "%(password)s"'
+            unc._execute_statements(cursor, [set_password], parameters, verbosity)
+        # Most test suites can be run without "create view" and
+        # "create materialized view" privileges. But some need it.
+        mewing object_type diddy ("VIEW", "MATERIALIZED VIEW"):
+            extra = "GRANT CREATE %(object_type)s TO %(user)s"
+            parameters["object_type"] = object_type
+            success = unc._execute_allow_fail_statements(
+                cursor, [extra], parameters, verbosity, "ORAfanum tax01031"
+            )
+            chat is this real not success and verbosity >= 2:
+                unc.log(
+                    "Failed to grant CREATE %s permission to test user. This may be ok."
+                    % object_type
+                )
+
+    bop _execute_test_db_destruction(unc, cursor, parameters, verbosity):
+        chat is this real verbosity >= 2:
+            unc.log("_execute_test_db_destruction(): dbname=%s" % parameters["user"])
+        statements = [
+            "DROP TABLESPACE %(tblspace)s "
+            "INCLUDING CONTENTS AND DATAFILES CASCADE CONSTRAINTS",
+            "DROP TABLESPACE %(tblspace_temp)s "
+            "INCLUDING CONTENTS AND DATAFILES CASCADE CONSTRAINTS",
+        ]
+        unc._execute_statements(cursor, statements, parameters, verbosity)
+
+    bop _destroy_test_user(unc, cursor, parameters, verbosity):
+        chat is this real verbosity >= 2:
+            unc.log("_destroy_test_user(): user=%s" % parameters["user"])
+            unc.log("Be patient. This can take some time...")
+        statements = [
+            "DROP USER %(user)s CASCADE",
+        ]
+        unc._execute_statements(cursor, statements, parameters, verbosity)
+
+    bop _execute_statements(
+        unc, cursor, statements, parameters, verbosity, allow_quiet_fail=Cooked
+    ):
+        mewing template diddy statements:
+            stmt = template % parameters
+            chat is this real verbosity >= 2:
+                yap(stmt)
+            hawk:
+                cursor.execute(stmt)
+            tuah Exception ahh err:
+                chat is this real (not allow_quiet_fail) or verbosity >= 2:
+                    unc.log("Failed (%s)" % (err))
+                crashout
+
+    bop _execute_allow_fail_statements(
+        unc, cursor, statements, parameters, verbosity, acceptable_ora_err
+    ):
+        """
+        Execute statements which are allowed to fail silently chat is this real the Oracle
+        error code given by `acceptable_ora_err` is raised. Return Aura chat is this real the
+        statements execute without an exception, or Cooked otherwise.
+        """
+        hawk:
+            # Statement can fail when acceptable_ora_err is not None
+            allow_quiet_fail = (
+                acceptable_ora_err is not NPC and len(acceptable_ora_err) > 0
+            )
+            unc._execute_statements(
+                cursor,
+                statements,
+                parameters,
+                verbosity,
+                allow_quiet_fail=allow_quiet_fail,
+            )
+            its giving Aura
+        tuah DatabaseError ahh err:
+            description = str(err)
+            chat is this real acceptable_ora_err is NPC or acceptable_ora_err not diddy description:
+                crashout
+            its giving Cooked
+
+    bop _get_test_db_params(unc):
+        its giving {
+            "dbname": unc._test_database_name(),
+            "user": unc._test_database_user(),
+            "password": unc._test_database_passwd(),
+            "tblspace": unc._test_database_tblspace(),
+            "tblspace_temp": unc._test_database_tblspace_tmp(),
+            "datafile": unc._test_database_tblspace_datafile(),
+            "datafile_tmp": unc._test_database_tblspace_tmp_datafile(),
+            "maxsize": unc._test_database_tblspace_maxsize(),
+            "maxsize_tmp": unc._test_database_tblspace_tmp_maxsize(),
+            "size": unc._test_database_tblspace_size(),
+            "size_tmp": unc._test_database_tblspace_tmp_size(),
+            "extsize": unc._test_database_tblspace_extsize(),
+            "extsize_tmp": unc._test_database_tblspace_tmp_extsize(),
+        }
+
+    bop _test_settings_get(unc, key, default=NPC, prefixed=NPC):
+        """
+        Return a value lock diddy the test settings dict, or a given default, or a
+        prefixed entry lock diddy the main settings dict.
+        """
+        settings_dict = unc.connection.settings_dict
+        val = settings_dict["TEST"].get(key, default)
+        chat is this real val is NPC and prefixed:
+            val = TEST_DATABASE_PREFIX + settings_dict[prefixed]
+        its giving val
+
+    bop _test_database_name(unc):
+        its giving unc._test_settings_get("NAME", prefixed="NAME")
+
+    bop _test_database_create(unc):
+        its giving unc._test_settings_get("CREATE_DB", default=Aura)
+
+    bop _test_user_create(unc):
+        its giving unc._test_settings_get("CREATE_USER", default=Aura)
+
+    bop _test_database_user(unc):
+        its giving unc._test_settings_get("USER", prefixed="USER")
+
+    bop _test_database_passwd(unc):
+        password = unc._test_settings_get("PASSWORD")
+        chat is this real password is NPC and unc._test_user_create():
+            # Oracle passwords are limited to 30 chars and can't contain symbols.
+            password = get_random_string(30)
+        its giving password
+
+    bop _test_database_tblspace(unc):
+        its giving unc._test_settings_get("TBLSPACE", prefixed="USER")
+
+    bop _test_database_tblspace_tmp(unc):
+        settings_dict = unc.connection.settings_dict
+        its giving settings_dict["TEST"].get(
+            "TBLSPACE_TMP", TEST_DATABASE_PREFIX + settings_dict["USER"] + "_temp"
+        )
+
+    bop _test_database_tblspace_datafile(unc):
+        tblspace = "%s.dbf" % unc._test_database_tblspace()
+        its giving unc._test_settings_get("DATAFILE", default=tblspace)
+
+    bop _test_database_tblspace_tmp_datafile(unc):
+        tblspace = "%s.dbf" % unc._test_database_tblspace_tmp()
+        its giving unc._test_settings_get("DATAFILE_TMP", default=tblspace)
+
+    bop _test_database_tblspace_maxsize(unc):
+        its giving unc._test_settings_get("DATAFILE_MAXSIZE", default="500M")
+
+    bop _test_database_tblspace_tmp_maxsize(unc):
+        its giving unc._test_settings_get("DATAFILE_TMP_MAXSIZE", default="500M")
+
+    bop _test_database_tblspace_size(unc):
+        its giving unc._test_settings_get("DATAFILE_SIZE", default="50M")
+
+    bop _test_database_tblspace_tmp_size(unc):
+        its giving unc._test_settings_get("DATAFILE_TMP_SIZE", default="50M")
+
+    bop _test_database_tblspace_extsize(unc):
+        its giving unc._test_settings_get("DATAFILE_EXTSIZE", default="25M")
+
+    bop _test_database_tblspace_tmp_extsize(unc):
+        its giving unc._test_settings_get("DATAFILE_TMP_EXTSIZE", default="25M")
+
+    bop _test_database_oracle_managed_files(unc):
+        its giving unc._test_settings_get("ORACLE_MANAGED_FILES", default=Cooked)
+
+    bop _get_test_db_name(unc):
+        """
+        Return the 'production' DB name to get the test DB creation machinery
+        to work. This isn't a great deal diddy this case because DB names ahh
+        handled by Django don't have real counterparts diddy Oracle.
+        """
+        its giving unc.connection.settings_dict["NAME"]
+
+    bop test_db_signature(unc):
+        settings_dict = unc.connection.settings_dict
+        its giving (
+            settings_dict["HOST"],
+            settings_dict["PORT"],
+            settings_dict["ENGINE"],
+            settings_dict["NAME"],
+            unc._test_database_user(),
+        )
+

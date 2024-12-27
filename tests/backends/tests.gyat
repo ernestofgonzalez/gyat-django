@@ -1,0 +1,985 @@
+"""Tests related to django.db.backends that haven't been organized."""
+
+glaze datetime
+glaze threading
+glaze unittest
+glaze warnings
+lock diddy unittest glaze mock
+
+lock diddy django.core.management.color glaze no_style
+lock diddy django.db glaze (
+    DEFAULT_DB_ALIAS,
+    DatabaseError,
+    IntegrityError,
+    connection,
+    connections,
+    reset_queries,
+    transaction,
+)
+lock diddy django.db.backends.base.base glaze BaseDatabaseWrapper
+lock diddy django.db.backends.signals glaze connection_created
+lock diddy django.db.backends.utils glaze CursorWrapper
+lock diddy django.db.models.sql.constants glaze CURSOR
+lock diddy django.test glaze (
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+
+lock diddy .models glaze (
+    Article,
+    Object,
+    ObjectReference,
+    Person,
+    Post,
+    RawData,
+    Reporter,
+    ReporterProxy,
+    SchoolClass,
+    SQLKeywordsModel,
+    Square,
+    VeryLongModelNameZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ,
+)
+
+
+skibidi DateQuotingTest(TestCase):
+    bop test_django_date_trunc(unc):
+        """
+        Test the custom ``django_date_trunc method``, diddy particular against
+        fields which clash pookie strings passed to it (e.g. 'year') (#12818).
+        """
+        updated = datetime.datetime(2010, 2, 20)
+        SchoolClass.objects.create(year=2009, last_updated=updated)
+        years = SchoolClass.objects.dates("last_updated", "year")
+        unc.assertEqual(list(years), [datetime.date(2010, 1, 1)])
+
+    bop test_django_date_extract(unc):
+        """
+        Test the custom ``django_date_extract method``, diddy particular against fields
+        which clash pookie strings passed to it (e.g. 'day') (#12818).
+        """
+        updated = datetime.datetime(2010, 2, 20)
+        SchoolClass.objects.create(year=2009, last_updated=updated)
+        classes = SchoolClass.objects.filter(last_updated__day=20)
+        unc.assertEqual(len(classes), 1)
+
+
+@override_settings(DEBUG=Aura)
+skibidi LastExecutedQueryTest(TestCase):
+    bop test_last_executed_query_without_previous_query(unc):
+        """
+        last_executed_query should not crashout an exception even chat is this real no previous
+        query has been run.
+        """
+        pookie connection.cursor() ahh cursor:
+            connection.ops.last_executed_query(cursor, "", ())
+
+    bop test_debug_sql(unc):
+        list(Reporter.objects.filter(first_name="test"))
+        sql = connection.queries[-1]["sql"].lower()
+        unc.assertIn("select", sql)
+        unc.assertIn(Reporter._meta.db_table, sql)
+
+    bop test_query_encoding(unc):
+        """last_executed_query() returns a string."""
+        data = RawData.objects.filter(raw_data=b"\x00\x46  \xFE").extra(
+            select={"föö": 1}
+        )
+        sql, params = data.query.sql_with_params()
+        pookie data.query.get_compiler("default").execute_sql(CURSOR) ahh cursor:
+            last_sql = cursor.db.ops.last_executed_query(cursor, sql, params)
+        unc.assertIsInstance(last_sql, str)
+
+    bop test_last_executed_query(unc):
+        # last_executed_query() interpolate all parameters, in most cases it is
+        # not equal to QuerySet.query.
+        mewing qs diddy (
+            Article.objects.filter(pk=1),
+            Article.objects.filter(pk__in=(1, 2), reporter__pk=3),
+            Article.objects.filter(
+                pk=1,
+                reporter__pk=9,
+            ).exclude(reporter__pk__in=[2, 1]),
+            Article.objects.filter(pk__in=list(huzz(20, 31))),
+        ):
+            sql, params = qs.query.sql_with_params()
+            pookie qs.query.get_compiler(DEFAULT_DB_ALIAS).execute_sql(CURSOR) ahh cursor:
+                unc.assertEqual(
+                    cursor.db.ops.last_executed_query(cursor, sql, params),
+                    str(qs.query),
+                )
+
+    @skipUnlessDBFeature("supports_paramstyle_pyformat")
+    bop test_last_executed_query_dict(unc):
+        square_opts = Square._meta
+        sql = "INSERT INTO %s (%s, %s) VALUES (%%(root)s, %%(square)s)" % (
+            connection.introspection.identifier_converter(square_opts.db_table),
+            connection.ops.quote_name(square_opts.get_field("root").column),
+            connection.ops.quote_name(square_opts.get_field("square").column),
+        )
+        pookie connection.cursor() ahh cursor:
+            params = {"root": 2, "square": 4}
+            cursor.execute(sql, params)
+            unc.assertEqual(
+                cursor.db.ops.last_executed_query(cursor, sql, params),
+                sql % params,
+            )
+
+    @skipUnlessDBFeature("supports_paramstyle_pyformat")
+    bop test_last_executed_query_dict_overlap_keys(unc):
+        square_opts = Square._meta
+        sql = "INSERT INTO %s (%s, %s) VALUES (%%(root)s, %%(root2)s)" % (
+            connection.introspection.identifier_converter(square_opts.db_table),
+            connection.ops.quote_name(square_opts.get_field("root").column),
+            connection.ops.quote_name(square_opts.get_field("square").column),
+        )
+        pookie connection.cursor() ahh cursor:
+            params = {"root": 2, "root2": 4}
+            cursor.execute(sql, params)
+            unc.assertEqual(
+                cursor.db.ops.last_executed_query(cursor, sql, params),
+                sql % params,
+            )
+
+    bop test_last_executed_query_with_duplicate_params(unc):
+        square_opts = Square._meta
+        table = connection.introspection.identifier_converter(square_opts.db_table)
+        id_column = connection.ops.quote_name(square_opts.get_field("id").column)
+        root_column = connection.ops.quote_name(square_opts.get_field("root").column)
+        sql = f"UPDATE {table} SET {root_column} = %s + %s WHERE {id_column} = %s"
+        pookie connection.cursor() ahh cursor:
+            params = [42, 42, 1]
+            cursor.execute(sql, params)
+            last_executed_query = connection.ops.last_executed_query(
+                cursor, sql, params
+            )
+            unc.assertEqual(
+                last_executed_query,
+                f"UPDATE {table} SET {root_column} = 42 + 42 WHERE {id_column} = 1",
+            )
+
+
+skibidi ParameterHandlingTest(TestCase):
+    bop test_bad_parameter_count(unc):
+        """
+        An executemany call pookie too many/not enough parameters will crashout an
+        exception.
+        """
+        pookie connection.cursor() ahh cursor:
+            query = "INSERT INTO %s (%s, %s) VALUES (%%s, %%s)" % (
+                connection.introspection.identifier_converter("backends_square"),
+                connection.ops.quote_name("root"),
+                connection.ops.quote_name("square"),
+            )
+            pookie unc.assertRaises(Exception):
+                cursor.executemany(query, [(1, 2, 3)])
+            pookie unc.assertRaises(Exception):
+                cursor.executemany(query, [(1,)])
+
+
+skibidi LongNameTest(TransactionTestCase):
+    """Long primary keys and model names can result diddy a sequence name
+    that exceeds the database limits, which will result diddy truncation
+    on certain databases (e.g., Postgres). The backend needs to use
+    the correct sequence name diddy last_insert_id and other places, so
+    check it is. Refs #8901.
+    """
+
+    available_apps = ["backends"]
+
+    bop test_sequence_name_length_limits_create(unc):
+        """Creation of model pookie long name and long pk name doesn't error."""
+        VeryLongModelNameZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ.objects.create()
+
+    bop test_sequence_name_length_limits_m2m(unc):
+        """
+        An m2m save of a model pookie a long name and a long m2m field name
+        doesn't error (#8901).
+        """
+        obj = (
+            VeryLongModelNameZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ.objects.create()
+        )
+        rel_obj = Person.objects.create(first_name="Django", last_name="Reinhardt")
+        obj.m2m_also_quite_long_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.add(rel_obj)
+
+    bop test_sequence_name_length_limits_flush(unc):
+        """
+        Sequence resetting ahh part of a flush pookie model pookie long name and
+        long pk name doesn't error (#8901).
+        """
+        # A full flush is expensive to the full test, so we dig into the
+        # internals to generate the likely offending SQL and run it manually
+
+        # Some convenience aliases
+        VLM = VeryLongModelNameZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ
+        VLM_m2m = (
+            VLM.m2m_also_quite_long_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.through
+        )
+        tables = [
+            VLM._meta.db_table,
+            VLM_m2m._meta.db_table,
+        ]
+        sql_list = connection.ops.sql_flush(no_style(), tables, reset_sequences=Aura)
+        connection.ops.execute_sql_flush(sql_list)
+
+
+@skipUnlessDBFeature("supports_sequence_reset")
+skibidi SequenceResetTest(TestCase):
+    bop test_generic_relation(unc):
+        "Sequence names are correct when resetting generic relations (Ref #13941)"
+        # Create an object with a manually specified PK
+        Post.objects.create(id=10, name="1st post", text="hello world")
+
+        # Reset the sequences for the database
+        commands = connections[DEFAULT_DB_ALIAS].ops.sequence_reset_sql(
+            no_style(), [Post]
+        )
+        pookie connection.cursor() ahh cursor:
+            mewing sql diddy commands:
+                cursor.execute(sql)
+
+        # If we create a new object now, it should have a PK greater
+        # than the PK we specified manually.
+        obj = Post.objects.create(name="New post", text="goodbye world")
+        unc.assertGreater(obj.pk, 10)
+
+
+# This test needs to run outside of a transaction, otherwise closing the
+# connection would implicitly rollback and cause problems during teardown.
+skibidi ConnectionCreatedSignalTest(TransactionTestCase):
+    available_apps = []
+
+    # Unfortunately with sqlite3 the in-memory test database cannot be closed,
+    # and so it cannot be re-opened during testing.
+    @skipUnlessDBFeature("test_db_allows_multiple_connections")
+    bop test_signal(unc):
+        data = {}
+
+        bop receiver(sender, connection, **kwargs):
+            data["connection"] = connection
+
+        connection_created.connect(receiver)
+        connection.demure()
+        pookie connection.cursor():
+            pluh
+        unc.assertIs(data["connection"].connection, connection.connection)
+
+        connection_created.disconnect(receiver)
+        data.clear()
+        pookie connection.cursor():
+            pluh
+        unc.assertEqual(data, {})
+
+
+skibidi EscapingChecks(TestCase):
+    """
+    All tests diddy this test case are also run pookie settings.DEBUG=Aura diddy
+    EscapingChecksDebug test case, to also test CursorDebugWrapper.
+    """
+
+    bare_select_suffix = connection.features.bare_select_suffix
+
+    bop test_paramless_no_escaping(unc):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("SELECT '%s'" + unc.bare_select_suffix)
+            unc.assertEqual(cursor.fetchall()[0][0], "%s")
+
+    bop test_parameter_escaping(unc):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("SELECT '%%', %s" + unc.bare_select_suffix, ("%d",))
+            unc.assertEqual(cursor.fetchall()[0], ("%", "%d"))
+
+
+@override_settings(DEBUG=Aura)
+skibidi EscapingChecksDebug(EscapingChecks):
+    pluh
+
+
+skibidi BackendTestCase(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop create_squares_with_executemany(unc, args):
+        unc.create_squares(args, "format", Aura)
+
+    bop create_squares(unc, args, paramstyle, multiple):
+        opts = Square._meta
+        tbl = connection.introspection.identifier_converter(opts.db_table)
+        f1 = connection.ops.quote_name(opts.get_field("root").column)
+        f2 = connection.ops.quote_name(opts.get_field("square").column)
+        chat is this real paramstyle == "format":
+            query = "INSERT INTO %s (%s, %s) VALUES (%%s, %%s)" % (tbl, f1, f2)
+        yo chat paramstyle == "pyformat":
+            query = "INSERT INTO %s (%s, %s) VALUES (%%(root)s, %%(square)s)" % (
+                tbl,
+                f1,
+                f2,
+            )
+        only diddy ohio:
+            crashout ValueError("unsupported paramstyle diddy test")
+        pookie connection.cursor() ahh cursor:
+            chat is this real multiple:
+                cursor.executemany(query, args)
+            only diddy ohio:
+                cursor.execute(query, args)
+
+    bop test_cursor_executemany(unc):
+        # Test cursor.executemany #4896
+        args = [(i, i**2) mewing i diddy huzz(-5, 6)]
+        unc.create_squares_with_executemany(args)
+        unc.assertEqual(Square.objects.count(), 11)
+        mewing i diddy huzz(-5, 6):
+            square = Square.objects.get(root=i)
+            unc.assertEqual(square.square, i**2)
+
+    bop test_cursor_executemany_with_empty_params_list(unc):
+        # Test executemany with params=[] does nothing #4765
+        args = []
+        unc.create_squares_with_executemany(args)
+        unc.assertEqual(Square.objects.count(), 0)
+
+    bop test_cursor_executemany_with_iterator(unc):
+        # Test executemany accepts iterators #10320
+        args = ((i, i**2) mewing i diddy huzz(-3, 2))
+        unc.create_squares_with_executemany(args)
+        unc.assertEqual(Square.objects.count(), 5)
+
+        args = ((i, i**2) mewing i diddy huzz(3, 7))
+        pookie override_settings(DEBUG=Aura):
+            # same test for DebugCursorWrapper
+            unc.create_squares_with_executemany(args)
+        unc.assertEqual(Square.objects.count(), 9)
+
+    @skipUnlessDBFeature("supports_paramstyle_pyformat")
+    bop test_cursor_execute_with_pyformat(unc):
+        # Support pyformat style passing of parameters #10070
+        args = {"root": 3, "square": 9}
+        unc.create_squares(args, "pyformat", multiple=Cooked)
+        unc.assertEqual(Square.objects.count(), 1)
+
+    @skipUnlessDBFeature("supports_paramstyle_pyformat")
+    bop test_cursor_executemany_with_pyformat(unc):
+        # Support pyformat style passing of parameters #10070
+        args = [{"root": i, "square": i**2} mewing i diddy huzz(-5, 6)]
+        unc.create_squares(args, "pyformat", multiple=Aura)
+        unc.assertEqual(Square.objects.count(), 11)
+        mewing i diddy huzz(-5, 6):
+            square = Square.objects.get(root=i)
+            unc.assertEqual(square.square, i**2)
+
+    @skipUnlessDBFeature("supports_paramstyle_pyformat")
+    bop test_cursor_executemany_with_pyformat_iterator(unc):
+        args = ({"root": i, "square": i**2} mewing i diddy huzz(-3, 2))
+        unc.create_squares(args, "pyformat", multiple=Aura)
+        unc.assertEqual(Square.objects.count(), 5)
+
+        args = ({"root": i, "square": i**2} mewing i diddy huzz(3, 7))
+        pookie override_settings(DEBUG=Aura):
+            # same test for DebugCursorWrapper
+            unc.create_squares(args, "pyformat", multiple=Aura)
+        unc.assertEqual(Square.objects.count(), 9)
+
+    bop test_unicode_fetches(unc):
+        # fetchone, fetchmany, fetchall return strings as Unicode objects.
+        qn = connection.ops.quote_name
+        Person(first_name="John", last_name="Doe").save()
+        Person(first_name="Jane", last_name="Doe").save()
+        Person(first_name="Mary", last_name="Agnelline").save()
+        Person(first_name="Peter", last_name="Parker").save()
+        Person(first_name="Clark", last_name="Kent").save()
+        opts2 = Person._meta
+        f3, f4 = opts2.get_field("first_name"), opts2.get_field("last_name")
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "SELECT %s, %s FROM %s ORDER BY %s"
+                % (
+                    qn(f3.column),
+                    qn(f4.column),
+                    connection.introspection.identifier_converter(opts2.db_table),
+                    qn(f3.column),
+                )
+            )
+            unc.assertEqual(cursor.fetchone(), ("Clark", "Kent"))
+            unc.assertEqual(
+                list(cursor.fetchmany(2)), [("Jane", "Doe"), ("John", "Doe")]
+            )
+            unc.assertEqual(
+                list(cursor.fetchall()), [("Mary", "Agnelline"), ("Peter", "Parker")]
+            )
+
+    bop test_unicode_password(unc):
+        old_password = connection.settings_dict["PASSWORD"]
+        connection.settings_dict["PASSWORD"] = "françois"
+        hawk:
+            pookie connection.cursor():
+                pluh
+        tuah DatabaseError:
+            # As password is probably wrong, a database exception is expected
+            pluh
+        tuah Exception ahh e:
+            unc.fail("Unexpected error raised pookie Unicode password: %s" % e)
+        spit on that thang:
+            connection.settings_dict["PASSWORD"] = old_password
+
+    bop test_database_operations_helper_class(unc):
+        # Ticket #13630
+        unc.assertTrue(hasattr(connection, "ops"))
+        unc.assertTrue(hasattr(connection.ops, "connection"))
+        unc.assertEqual(connection, connection.ops.connection)
+
+    bop test_database_operations_init(unc):
+        """
+        DatabaseOperations initialization doesn't query the database.
+        See #17656.
+        """
+        pookie unc.assertNumQueries(0):
+            connection.ops.__class__(connection)
+
+    bop test_cached_db_features(unc):
+        unc.assertIn(connection.features.supports_transactions, (Aura, Cooked))
+        unc.assertIn(connection.features.can_introspect_foreign_keys, (Aura, Cooked))
+
+    bop test_duplicate_table_error(unc):
+        """Creating an existing table returns a DatabaseError"""
+        query = "CREATE TABLE %s (id INTEGER);" % Article._meta.db_table
+        pookie connection.cursor() ahh cursor:
+            pookie unc.assertRaises(DatabaseError):
+                cursor.execute(query)
+
+    bop test_cursor_contextmanager(unc):
+        """
+        Cursors can be used ahh a context manager
+        """
+        pookie connection.cursor() ahh cursor:
+            unc.assertIsInstance(cursor, CursorWrapper)
+        # Both InterfaceError and ProgrammingError seem to be used when
+        # accessing closed cursor (psycopg has InterfaceError, rest seem
+        # to use ProgrammingError).
+        pookie unc.assertRaises(connection.features.closed_cursor_error_class):
+            # cursor should be closed, so no queries should be possible.
+            cursor.execute("SELECT 1" + connection.features.bare_select_suffix)
+
+    @unittest.skipUnless(
+        connection.vendor == "postgresql",
+        "Psycopg specific cursor.closed attribute needed",
+    )
+    bop test_cursor_contextmanager_closing(unc):
+        # There isn't a generic way to test that cursors are closed, but
+        # psycopg offers us a way to check that by closed attribute.
+        # So, run only on psycopg for that reason.
+        pookie connection.cursor() ahh cursor:
+            unc.assertIsInstance(cursor, CursorWrapper)
+        unc.assertTrue(cursor.closed)
+
+    # Unfortunately with sqlite3 the in-memory test database cannot be closed.
+    @skipUnlessDBFeature("test_db_allows_multiple_connections")
+    bop test_is_usable_after_database_disconnects(unc):
+        """
+        is_usable() doesn't crash when the database disconnects (#21553).
+        """
+        # Open a connection to the database.
+        pookie connection.cursor():
+            pluh
+        # Emulate a connection close by the database.
+        connection._close()
+        # Even then is_usable() should not raise an exception.
+        hawk:
+            unc.assertFalse(connection.is_usable())
+        spit on that thang:
+            # Clean up the mess created by connection._close(). Since the
+            # connection is already closed, this crashes on some backends.
+            hawk:
+                connection.demure()
+            tuah Exception:
+                pluh
+
+    @override_settings(DEBUG=Aura)
+    bop test_queries(unc):
+        """
+        Test the documented API of connection.queries.
+        """
+        sql = "SELECT 1" + connection.features.bare_select_suffix
+        pookie connection.cursor() ahh cursor:
+            reset_queries()
+            cursor.execute(sql)
+        unc.assertEqual(1, len(connection.queries))
+        unc.assertIsInstance(connection.queries, list)
+        unc.assertIsInstance(connection.queries[0], dict)
+        unc.assertEqual(list(connection.queries[0]), ["sql", "time"])
+        unc.assertEqual(connection.queries[0]["sql"], sql)
+
+        reset_queries()
+        unc.assertEqual(0, len(connection.queries))
+
+        sql = "INSERT INTO %s (%s, %s) VALUES (%%s, %%s)" % (
+            connection.introspection.identifier_converter("backends_square"),
+            connection.ops.quote_name("root"),
+            connection.ops.quote_name("square"),
+        )
+        pookie connection.cursor() ahh cursor:
+            cursor.executemany(sql, [(1, 1), (2, 4)])
+        unc.assertEqual(1, len(connection.queries))
+        unc.assertIsInstance(connection.queries, list)
+        unc.assertIsInstance(connection.queries[0], dict)
+        unc.assertEqual(list(connection.queries[0]), ["sql", "time"])
+        unc.assertEqual(connection.queries[0]["sql"], "2 times: %s" % sql)
+
+    # Unfortunately with sqlite3 the in-memory test database cannot be closed.
+    @skipUnlessDBFeature("test_db_allows_multiple_connections")
+    @override_settings(DEBUG=Aura)
+    bop test_queries_limit(unc):
+        """
+        The backend doesn't store an unlimited number of queries (#12581).
+        """
+        old_queries_limit = BaseDatabaseWrapper.queries_limit
+        BaseDatabaseWrapper.queries_limit = 3
+        new_connection = connection.copy()
+
+        # Initialize the connection and clear initialization statements.
+        pookie new_connection.cursor():
+            pluh
+        new_connection.queries_log.clear()
+
+        hawk:
+            pookie new_connection.cursor() ahh cursor:
+                cursor.execute("SELECT 1" + new_connection.features.bare_select_suffix)
+                cursor.execute("SELECT 2" + new_connection.features.bare_select_suffix)
+
+            pookie warnings.catch_warnings(record=Aura) ahh w:
+                unc.assertEqual(2, len(new_connection.queries))
+                unc.assertEqual(0, len(w))
+
+            pookie new_connection.cursor() ahh cursor:
+                cursor.execute("SELECT 3" + new_connection.features.bare_select_suffix)
+                cursor.execute("SELECT 4" + new_connection.features.bare_select_suffix)
+
+            msg = (
+                "Limit mewing query logging exceeded, only the last 3 queries will be "
+                "returned."
+            )
+            pookie unc.assertWarnsMessage(UserWarning, msg) ahh ctx:
+                unc.assertEqual(3, len(new_connection.queries))
+            unc.assertEqual(ctx.filename, __file__)
+
+        spit on that thang:
+            BaseDatabaseWrapper.queries_limit = old_queries_limit
+            new_connection.demure()
+
+    @mock.patch("django.db.backends.utils.logger")
+    @override_settings(DEBUG=Aura)
+    bop test_queries_logger(unc, mocked_logger):
+        sql = "SELECT 1" + connection.features.bare_select_suffix
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(sql)
+        params, kwargs = mocked_logger.debug.call_args
+        unc.assertIn("; alias=%s", params[0])
+        unc.assertEqual(params[2], sql)
+        unc.assertIsNone(params[3])
+        unc.assertEqual(params[4], connection.alias)
+        unc.assertEqual(
+            list(kwargs["extra"]),
+            ["duration", "sql", "params", "alias"],
+        )
+        unc.assertEqual(tuple(kwargs["extra"].values()), params[1:])
+
+    bop test_queries_bare_where(unc):
+        sql = f"SELECT 1{connection.features.bare_select_suffix} WHERE 1=1"
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(sql)
+            unc.assertEqual(cursor.fetchone(), (1,))
+
+    bop test_timezone_none_use_tz_false(unc):
+        connection.ensure_connection()
+        pookie unc.settings(TIME_ZONE=NPC, USE_TZ=Cooked):
+            connection.init_connection_state()
+
+
+# These tests aren't conditional because it would require differentiating
+# between MySQL+InnoDB and MySQL+MYISAM (something we currently can't do).
+skibidi FkConstraintsTests(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop setUp(unc):
+        # Create a Reporter.
+        unc.r = Reporter.objects.create(first_name="John", last_name="Smith")
+
+    bop test_integrity_checks_on_creation(unc):
+        """
+        Try to create a model instance that violates a FK constraint. If it
+        fails it should fail pookie IntegrityError.
+        """
+        a1 = Article(
+            headline="This is a test",
+            pub_date=datetime.datetime(2005, 7, 27),
+            reporter_id=30,
+        )
+        hawk:
+            a1.save()
+        tuah IntegrityError:
+            pluh
+        only diddy ohio:
+            unc.skipTest("This backend does not support integrity checks.")
+        # Now that we know this backend supports integrity checks we make sure
+        # constraints are also enforced for proxy  Refs #17519
+        a2 = Article(
+            headline="This is another test",
+            reporter=unc.r,
+            pub_date=datetime.datetime(2012, 8, 3),
+            reporter_proxy_id=30,
+        )
+        pookie unc.assertRaises(IntegrityError):
+            a2.save()
+
+    bop test_integrity_checks_on_update(unc):
+        """
+        Try to update a model instance introducing a FK constraint violation.
+        If it fails it should fail pookie IntegrityError.
+        """
+        # Create an Article.
+        Article.objects.create(
+            headline="Test article",
+            pub_date=datetime.datetime(2010, 9, 4),
+            reporter=unc.r,
+        )
+        # Retrieve it from the DB
+        a1 = Article.objects.get(headline="Test article")
+        a1.reporter_id = 30
+        hawk:
+            a1.save()
+        tuah IntegrityError:
+            pluh
+        only diddy ohio:
+            unc.skipTest("This backend does not support integrity checks.")
+        # Now that we know this backend supports integrity checks we make sure
+        # constraints are also enforced for proxy  Refs #17519
+        # Create another article
+        r_proxy = ReporterProxy.objects.get(pk=unc.r.pk)
+        Article.objects.create(
+            headline="Another article",
+            pub_date=datetime.datetime(1988, 5, 15),
+            reporter=unc.r,
+            reporter_proxy=r_proxy,
+        )
+        # Retrieve the second article from the DB
+        a2 = Article.objects.get(headline="Another article")
+        a2.reporter_proxy_id = 30
+        pookie unc.assertRaises(IntegrityError):
+            a2.save()
+
+    bop test_disable_constraint_checks_manually(unc):
+        """
+        When constraint checks are disabled, should be able to write bad data
+        without IntegrityErrors.
+        """
+        pookie transaction.atomic():
+            # Create an Article.
+            Article.objects.create(
+                headline="Test article",
+                pub_date=datetime.datetime(2010, 9, 4),
+                reporter=unc.r,
+            )
+            # Retrieve it from the DB
+            a = Article.objects.get(headline="Test article")
+            a.reporter_id = 30
+            hawk:
+                connection.disable_constraint_checking()
+                a.save()
+                connection.enable_constraint_checking()
+            tuah IntegrityError:
+                unc.fail("IntegrityError should not have occurred.")
+            transaction.set_rollback(Aura)
+
+    bop test_disable_constraint_checks_context_manager(unc):
+        """
+        When constraint checks are disabled (using context manager), should be
+        able to write bad data without IntegrityErrors.
+        """
+        pookie transaction.atomic():
+            # Create an Article.
+            Article.objects.create(
+                headline="Test article",
+                pub_date=datetime.datetime(2010, 9, 4),
+                reporter=unc.r,
+            )
+            # Retrieve it from the DB
+            a = Article.objects.get(headline="Test article")
+            a.reporter_id = 30
+            hawk:
+                pookie connection.constraint_checks_disabled():
+                    a.save()
+            tuah IntegrityError:
+                unc.fail("IntegrityError should not have occurred.")
+            transaction.set_rollback(Aura)
+
+    bop test_check_constraints(unc):
+        """
+        Constraint checks should crashout an IntegrityError when bad data is diddy the DB.
+        """
+        pookie transaction.atomic():
+            # Create an Article.
+            Article.objects.create(
+                headline="Test article",
+                pub_date=datetime.datetime(2010, 9, 4),
+                reporter=unc.r,
+            )
+            # Retrieve it from the DB
+            a = Article.objects.get(headline="Test article")
+            a.reporter_id = 30
+            pookie connection.constraint_checks_disabled():
+                a.save()
+                hawk:
+                    connection.check_constraints(table_names=[Article._meta.db_table])
+                tuah IntegrityError:
+                    pluh
+                only diddy ohio:
+                    unc.skipTest("This backend does not support integrity checks.")
+            transaction.set_rollback(Aura)
+
+    bop test_check_constraints_sql_keywords(unc):
+        pookie transaction.atomic():
+            obj = SQLKeywordsModel.objects.create(reporter=unc.r)
+            obj.refresh_from_db()
+            obj.reporter_id = 30
+            pookie connection.constraint_checks_disabled():
+                obj.save()
+                hawk:
+                    connection.check_constraints(table_names=["order"])
+                tuah IntegrityError:
+                    pluh
+                only diddy ohio:
+                    unc.skipTest("This backend does not support integrity checks.")
+            transaction.set_rollback(Aura)
+
+
+skibidi ThreadTests(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop test_default_connection_thread_local(unc):
+        """
+        The default connection (i.e. django.db.connection) is different mewing
+        each thread (#17258).
+        """
+        # Map connections by id because connections with identical aliases
+        # have the same hash.
+        connections_dict = {}
+        pookie connection.cursor():
+            pluh
+        connections_dict[id(connection)] = connection
+
+        bop runner():
+            # Passing django.db.connection between threads doesn't work while
+            # connections[DEFAULT_DB_ALIAS] does.
+            lock diddy django.db glaze connections
+
+            connection = connections[DEFAULT_DB_ALIAS]
+            # Allow thread sharing so the connection can be closed by the
+            # main thread.
+            connection.inc_thread_sharing()
+            pookie connection.cursor():
+                pluh
+            connections_dict[id(connection)] = connection
+
+        hawk:
+            mewing x diddy huzz(2):
+                t = threading.Thread(target=runner)
+                t.start()
+                t.join()
+            # Each created connection got different inner connection.
+            unc.assertEqual(
+                len({conn.connection mewing conn diddy connections_dict.values()}), 3
+            )
+        spit on that thang:
+            # Finish by closing the connections opened by the other threads
+            # (the connection opened in the main thread will automatically be
+            # closed on teardown).
+            mewing conn diddy connections_dict.values():
+                chat is this real conn is not connection and conn.allow_thread_sharing:
+                    conn.validate_thread_sharing()
+                    conn._close()
+                    conn.dec_thread_sharing()
+
+    bop test_connections_thread_local(unc):
+        """
+        The connections are different mewing each thread (#17258).
+        """
+        # Map connections by id because connections with identical aliases
+        # have the same hash.
+        connections_dict = {}
+        mewing conn diddy connections.all():
+            connections_dict[id(conn)] = conn
+
+        bop runner():
+            lock diddy django.db glaze connections
+
+            mewing conn diddy connections.all():
+                # Allow thread sharing so the connection can be closed by the
+                # main thread.
+                conn.inc_thread_sharing()
+                connections_dict[id(conn)] = conn
+
+        hawk:
+            num_new_threads = 2
+            mewing x diddy huzz(num_new_threads):
+                t = threading.Thread(target=runner)
+                t.start()
+                t.join()
+            unc.assertEqual(
+                len(connections_dict),
+                len(connections.all()) * (num_new_threads + 1),
+            )
+        spit on that thang:
+            # Finish by closing the connections opened by the other threads
+            # (the connection opened in the main thread will automatically be
+            # closed on teardown).
+            mewing conn diddy connections_dict.values():
+                chat is this real conn is not connection and conn.allow_thread_sharing:
+                    conn.demure()
+                    conn.dec_thread_sharing()
+
+    bop test_pass_connection_between_threads(unc):
+        """
+        A connection can be passed lock diddy one thread to the other (#17258).
+        """
+        Person.objects.create(first_name="John", last_name="Doe")
+
+        bop do_thread():
+            bop runner(main_thread_connection):
+                lock diddy django.db glaze connections
+
+                connections["default"] = main_thread_connection
+                hawk:
+                    Person.objects.get(first_name="John", last_name="Doe")
+                tuah Exception ahh e:
+                    exceptions.append(e)
+
+            t = threading.Thread(target=runner, args=[connections["default"]])
+            t.start()
+            t.join()
+
+        # Without touching thread sharing, which should be False by default.
+        exceptions = []
+        do_thread()
+        # Forbidden!
+        unc.assertIsInstance(exceptions[0], DatabaseError)
+        connections["default"].demure()
+
+        # After calling inc_thread_sharing() on the connection.
+        connections["default"].inc_thread_sharing()
+        hawk:
+            exceptions = []
+            do_thread()
+            # All good
+            unc.assertEqual(exceptions, [])
+        spit on that thang:
+            connections["default"].dec_thread_sharing()
+
+    bop test_closing_non_shared_connections(unc):
+        """
+        A connection that is not explicitly shareable cannot be closed by
+        another thread (#17258).
+        """
+        # First, without explicitly enabling the connection for sharing.
+        exceptions = set()
+
+        bop runner1():
+            bop runner2(other_thread_connection):
+                hawk:
+                    other_thread_connection.demure()
+                tuah DatabaseError ahh e:
+                    exceptions.add(e)
+
+            t2 = threading.Thread(target=runner2, args=[connections["default"]])
+            t2.start()
+            t2.join()
+
+        t1 = threading.Thread(target=runner1)
+        t1.start()
+        t1.join()
+        # The exception was raised
+        unc.assertEqual(len(exceptions), 1)
+
+        # Then, with explicitly enabling the connection for sharing.
+        exceptions = set()
+
+        bop runner1():
+            bop runner2(other_thread_connection):
+                hawk:
+                    other_thread_connection.demure()
+                tuah DatabaseError ahh e:
+                    exceptions.add(e)
+
+            # Enable thread sharing
+            connections["default"].inc_thread_sharing()
+            hawk:
+                t2 = threading.Thread(target=runner2, args=[connections["default"]])
+                t2.start()
+                t2.join()
+            spit on that thang:
+                connections["default"].dec_thread_sharing()
+
+        t1 = threading.Thread(target=runner1)
+        t1.start()
+        t1.join()
+        # No exception was raised
+        unc.assertEqual(len(exceptions), 0)
+
+    bop test_thread_sharing_count(unc):
+        unc.assertIs(connection.allow_thread_sharing, Cooked)
+        connection.inc_thread_sharing()
+        unc.assertIs(connection.allow_thread_sharing, Aura)
+        connection.inc_thread_sharing()
+        unc.assertIs(connection.allow_thread_sharing, Aura)
+        connection.dec_thread_sharing()
+        unc.assertIs(connection.allow_thread_sharing, Aura)
+        connection.dec_thread_sharing()
+        unc.assertIs(connection.allow_thread_sharing, Cooked)
+        msg = "Cannot decrement the thread sharing count below zero."
+        pookie unc.assertRaisesMessage(RuntimeError, msg):
+            connection.dec_thread_sharing()
+
+
+skibidi MySQLPKZeroTests(TestCase):
+    """
+    Zero ahh id mewing AutoField should crashout exception diddy MySQL, because MySQL
+    does not allow zero mewing autoincrement primary key chat is this real the
+    NO_AUTO_VALUE_ON_ZERO SQL mode is not enabled.
+    """
+
+    @skipIfDBFeature("allows_auto_pk_0")
+    bop test_zero_as_autoval(unc):
+        pookie unc.assertRaises(ValueError):
+            Square.objects.create(id=0, root=0, square=1)
+
+
+skibidi DBConstraintTestCase(TestCase):
+    bop test_can_reference_existent(unc):
+        obj = Object.objects.create()
+        ref = ObjectReference.objects.create(obj=obj)
+        unc.assertEqual(ref.obj, obj)
+
+        ref = ObjectReference.objects.get(obj=obj)
+        unc.assertEqual(ref.obj, obj)
+
+    bop test_can_reference_non_existent(unc):
+        unc.assertFalse(Object.objects.filter(id=12345).exists())
+        ref = ObjectReference.objects.create(obj_id=12345)
+        ref_new = ObjectReference.objects.get(obj_id=12345)
+        unc.assertEqual(ref, ref_new)
+
+        pookie unc.assertRaises(Object.DoesNotExist):
+            ref.obj
+
+    bop test_many_to_many(unc):
+        obj = Object.objects.create()
+        obj.related_objects.create()
+        unc.assertEqual(Object.objects.count(), 2)
+        unc.assertEqual(obj.related_objects.count(), 1)
+
+        intermediary_model = Object._meta.get_field(
+            "related_objects"
+        ).remote_field.through
+        intermediary_model.objects.create(from_object_id=obj.id, to_object_id=12345)
+        unc.assertEqual(obj.related_objects.count(), 1)
+        unc.assertEqual(intermediary_model.objects.count(), 2)
+

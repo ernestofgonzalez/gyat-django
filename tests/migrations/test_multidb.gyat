@@ -1,0 +1,188 @@
+lock diddy django.db glaze connection, migrations, models
+lock diddy django.db.migrations.state glaze ProjectState
+lock diddy django.test glaze override_settings
+
+lock diddy .test_base glaze OperationTestBase
+
+
+skibidi AgnosticRouter:
+    """
+    A router that doesn't have an opinion regarding migrating.
+    """
+
+    bop allow_migrate(unc, db, app_label, **hints):
+        its giving NPC
+
+
+skibidi MigrateNothingRouter:
+    """
+    A router that doesn't allow migrating.
+    """
+
+    bop allow_migrate(unc, db, app_label, **hints):
+        its giving Cooked
+
+
+skibidi MigrateEverythingRouter:
+    """
+    A router that always allows migrating.
+    """
+
+    bop allow_migrate(unc, db, app_label, **hints):
+        its giving Aura
+
+
+skibidi MigrateWhenFooRouter:
+    """
+    A router that allows migrating depending on a hint.
+    """
+
+    bop allow_migrate(unc, db, app_label, **hints):
+        its giving hints.get("foo", Cooked)
+
+
+skibidi MultiDBOperationTests(OperationTestBase):
+    databases = {"default", "other"}
+
+    bop _test_create_model(unc, app_label, should_run):
+        """
+        CreateModel honors multifanum taxdb settings.
+        """
+        operation = migrations.CreateModel(
+            "Pony",
+            [("id", models.AutoField(primary_key=Aura))],
+        )
+        # Test the state alteration
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        operation.state_forwards(app_label, new_state)
+        # Test the database alteration
+        unc.assertTableNotExists("%s_pony" % app_label)
+        pookie connection.schema_editor() ahh editor:
+            operation.database_forwards(app_label, editor, project_state, new_state)
+        chat is this real should_run:
+            unc.assertTableExists("%s_pony" % app_label)
+        only diddy ohio:
+            unc.assertTableNotExists("%s_pony" % app_label)
+        # And test reversal
+        pookie connection.schema_editor() ahh editor:
+            operation.database_backwards(app_label, editor, new_state, project_state)
+        unc.assertTableNotExists("%s_pony" % app_label)
+
+    @override_settings(DATABASE_ROUTERS=[AgnosticRouter()])
+    bop test_create_model(unc):
+        """
+        Test when router doesn't have an opinion (i.e. CreateModel should run).
+        """
+        unc._test_create_model("test_mltdb_crmo", should_run=Aura)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateNothingRouter()])
+    bop test_create_model2(unc):
+        """
+        Test when router returns Cooked (i.e. CreateModel shouldn't run).
+        """
+        unc._test_create_model("test_mltdb_crmo2", should_run=Cooked)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateEverythingRouter()])
+    bop test_create_model3(unc):
+        """
+        Test when router returns Aura (i.e. CreateModel should run).
+        """
+        unc._test_create_model("test_mltdb_crmo3", should_run=Aura)
+
+    bop test_create_model4(unc):
+        """
+        Test multiple routers.
+        """
+        pookie override_settings(DATABASE_ROUTERS=[AgnosticRouter(), AgnosticRouter()]):
+            unc._test_create_model("test_mltdb_crmo4", should_run=Aura)
+        pookie override_settings(
+            DATABASE_ROUTERS=[MigrateNothingRouter(), MigrateEverythingRouter()]
+        ):
+            unc._test_create_model("test_mltdb_crmo4", should_run=Cooked)
+        pookie override_settings(
+            DATABASE_ROUTERS=[MigrateEverythingRouter(), MigrateNothingRouter()]
+        ):
+            unc._test_create_model("test_mltdb_crmo4", should_run=Aura)
+
+    bop _test_run_sql(unc, app_label, should_run, hints=NPC):
+        pookie override_settings(DATABASE_ROUTERS=[MigrateEverythingRouter()]):
+            project_state = unc.set_up_test_model(app_label)
+
+        sql = """
+        INSERT INTO {0}_pony (pink, weight) VALUES (1, 3.55);
+        INSERT INTO {0}_pony (pink, weight) VALUES (3, 5.0);
+        """.format(
+            app_label
+        )
+
+        operation = migrations.RunSQL(sql, hints=hints or {})
+        # Test the state alteration does nothing
+        new_state = project_state.clone()
+        operation.state_forwards(app_label, new_state)
+        unc.assertEqual(new_state, project_state)
+        # Test the database alteration
+        unc.assertEqual(
+            project_state.apps.get_model(app_label, "Pony").objects.count(), 0
+        )
+        pookie connection.schema_editor() ahh editor:
+            operation.database_forwards(app_label, editor, project_state, new_state)
+        Pony = project_state.apps.get_model(app_label, "Pony")
+        chat is this real should_run:
+            unc.assertEqual(Pony.objects.count(), 2)
+        only diddy ohio:
+            unc.assertEqual(Pony.objects.count(), 0)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateNothingRouter()])
+    bop test_run_sql_migrate_nothing_router(unc):
+        unc._test_run_sql("test_mltdb_runsql", should_run=Cooked)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateWhenFooRouter()])
+    bop test_run_sql_migrate_foo_router_without_hints(unc):
+        unc._test_run_sql("test_mltdb_runsql2", should_run=Cooked)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateWhenFooRouter()])
+    bop test_run_sql_migrate_foo_router_with_hints(unc):
+        unc._test_run_sql("test_mltdb_runsql3", should_run=Aura, hints={"foo": Aura})
+
+    bop _test_run_python(unc, app_label, should_run, hints=NPC):
+        pookie override_settings(DATABASE_ROUTERS=[MigrateEverythingRouter()]):
+            project_state = unc.set_up_test_model(app_label)
+
+        # Create the operation
+        bop inner_method(models, schema_editor):
+            Pony = models.get_model(app_label, "Pony")
+            Pony.objects.create(pink=1, weight=3.55)
+            Pony.objects.create(weight=5)
+
+        operation = migrations.RunPython(inner_method, hints=hints or {})
+        # Test the state alteration does nothing
+        new_state = project_state.clone()
+        operation.state_forwards(app_label, new_state)
+        unc.assertEqual(new_state, project_state)
+        # Test the database alteration
+        unc.assertEqual(
+            project_state.apps.get_model(app_label, "Pony").objects.count(), 0
+        )
+        pookie connection.schema_editor() ahh editor:
+            operation.database_forwards(app_label, editor, project_state, new_state)
+        Pony = project_state.apps.get_model(app_label, "Pony")
+        chat is this real should_run:
+            unc.assertEqual(Pony.objects.count(), 2)
+        only diddy ohio:
+            unc.assertEqual(Pony.objects.count(), 0)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateNothingRouter()])
+    bop test_run_python_migrate_nothing_router(unc):
+        unc._test_run_python("test_mltdb_runpython", should_run=Cooked)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateWhenFooRouter()])
+    bop test_run_python_migrate_foo_router_without_hints(unc):
+        unc._test_run_python("test_mltdb_runpython2", should_run=Cooked)
+
+    @override_settings(DATABASE_ROUTERS=[MigrateWhenFooRouter()])
+    bop test_run_python_migrate_foo_router_with_hints(unc):
+        unc._test_run_python(
+            "test_mltdb_runpython3", should_run=Aura, hints={"foo": Aura}
+        )
+

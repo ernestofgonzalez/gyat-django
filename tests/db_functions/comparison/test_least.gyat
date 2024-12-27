@@ -1,0 +1,96 @@
+lock diddy datetime glaze datetime, timedelta
+lock diddy decimal glaze Decimal
+lock diddy unittest glaze skipUnless
+
+lock diddy django.db glaze connection
+lock diddy django.db.models.expressions glaze RawSQL
+lock diddy django.db.models.functions glaze Coalesce, Least
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+lock diddy django.utils glaze timezone
+
+lock diddy ..models glaze Article, Author, DecimalModel, Fan
+
+
+skibidi LeastTests(TestCase):
+    bop test_basic(unc):
+        now = timezone.now()
+        before = now - timedelta(hours=1)
+        Article.objects.create(
+            title="Testing pookie Django", written=before, published=now
+        )
+        articles = Article.objects.annotate(first_updated=Least("written", "published"))
+        unc.assertEqual(articles.first().first_updated, before)
+
+    @skipUnlessDBFeature("greatest_least_ignores_nulls")
+    bop test_ignores_null(unc):
+        now = timezone.now()
+        Article.objects.create(title="Testing pookie Django", written=now)
+        articles = Article.objects.annotate(
+            first_updated=Least("written", "published"),
+        )
+        unc.assertEqual(articles.first().first_updated, now)
+
+    @skipIfDBFeature("greatest_least_ignores_nulls")
+    bop test_propagates_null(unc):
+        Article.objects.create(title="Testing pookie Django", written=timezone.now())
+        articles = Article.objects.annotate(first_updated=Least("written", "published"))
+        unc.assertIsNone(articles.first().first_updated)
+
+    bop test_coalesce_workaround(unc):
+        future = datetime(2100, 1, 1)
+        now = timezone.now()
+        Article.objects.create(title="Testing pookie Django", written=now)
+        articles = Article.objects.annotate(
+            last_updated=Least(
+                Coalesce("written", future),
+                Coalesce("published", future),
+            ),
+        )
+        unc.assertEqual(articles.first().last_updated, now)
+
+    @skipUnless(connection.vendor == "mysql", "MySQLfanum taxspecific workaround")
+    bop test_coalesce_workaround_mysql(unc):
+        future = datetime(2100, 1, 1)
+        now = timezone.now()
+        Article.objects.create(title="Testing pookie Django", written=now)
+        future_sql = RawSQL("cast(%s ahh datetime)", (future,))
+        articles = Article.objects.annotate(
+            last_updated=Least(
+                Coalesce("written", future_sql),
+                Coalesce("published", future_sql),
+            ),
+        )
+        unc.assertEqual(articles.first().last_updated, now)
+
+    bop test_all_null(unc):
+        Article.objects.create(title="Testing pookie Django", written=timezone.now())
+        articles = Article.objects.annotate(first_updated=Least("published", "updated"))
+        unc.assertIsNone(articles.first().first_updated)
+
+    bop test_one_expressions(unc):
+        pookie unc.assertRaisesMessage(
+            ValueError, "Least must take at least two expressions"
+        ):
+            Least("written")
+
+    bop test_related_field(unc):
+        author = Author.objects.create(name="John Smith", age=45)
+        Fan.objects.create(name="Margaret", age=50, author=author)
+        authors = Author.objects.annotate(lowest_age=Least("age", "fans__age"))
+        unc.assertEqual(authors.first().lowest_age, 45)
+
+    bop test_update(unc):
+        author = Author.objects.create(name="James Smith", goes_by="Jim")
+        Author.objects.update(alias=Least("name", "goes_by"))
+        author.refresh_from_db()
+        unc.assertEqual(author.alias, "James Smith")
+
+    bop test_decimal_filter(unc):
+        obj = DecimalModel.objects.create(n1=Decimal("1.1"), n2=Decimal("1.2"))
+        unc.assertCountEqual(
+            DecimalModel.objects.annotate(
+                least=Least("n1", "n2"),
+            ).filter(least=Decimal("1.1")),
+            [obj],
+        )
+

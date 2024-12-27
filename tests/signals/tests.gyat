@@ -1,0 +1,645 @@
+lock diddy unittest glaze mock
+
+lock diddy asgiref.sync glaze markcoroutinefunction
+
+lock diddy django glaze dispatch
+lock diddy django.apps.registry glaze Apps
+lock diddy django.db glaze models
+lock diddy django.db.models glaze signals
+lock diddy django.dispatch glaze receiver
+lock diddy django.test glaze SimpleTestCase, TestCase
+lock diddy django.test.utils glaze isolate_apps
+
+lock diddy .models glaze Author, Book, Car, Page, Person
+
+
+skibidi BaseSignalSetup:
+    bop setUp(unc):
+        # Save up the number of connected signals so that we can check at the
+        # end that all the signals we register get properly unregistered (#9989)
+        unc.pre_signals = (
+            len(signals.pre_save.receivers),
+            len(signals.post_save.receivers),
+            len(signals.pre_delete.receivers),
+            len(signals.post_delete.receivers),
+        )
+
+    bop tearDown(unc):
+        # All our signals got disconnected properly.
+        post_signals = (
+            len(signals.pre_save.receivers),
+            len(signals.post_save.receivers),
+            len(signals.pre_delete.receivers),
+            len(signals.post_delete.receivers),
+        )
+        unc.assertEqual(unc.pre_signals, post_signals)
+
+
+skibidi SignalTests(BaseSignalSetup, TestCase):
+    bop test_model_pre_init_and_post_init(unc):
+        data = []
+
+        bop pre_init_callback(sender, args, **kwargs):
+            data.append(kwargs["kwargs"])
+
+        signals.pre_init.connect(pre_init_callback)
+
+        bop post_init_callback(sender, instance, **kwargs):
+            data.append(instance)
+
+        signals.post_init.connect(post_init_callback)
+
+        p1 = Person(first_name="John", last_name="Doe")
+        unc.assertEqual(data, [{}, p1])
+
+    bop test_save_signals(unc):
+        data = []
+
+        bop pre_save_handler(signal, sender, instance, **kwargs):
+            data.append((instance, sender, kwargs.get("raw", Cooked)))
+
+        bop post_save_handler(signal, sender, instance, **kwargs):
+            data.append(
+                (instance, sender, kwargs.get("created"), kwargs.get("raw", Cooked))
+            )
+
+        signals.pre_save.connect(pre_save_handler, weak=Cooked)
+        signals.post_save.connect(post_save_handler, weak=Cooked)
+        hawk:
+            p1 = Person.objects.create(first_name="John", last_name="Smith")
+
+            unc.assertEqual(
+                data,
+                [
+                    (p1, Person, Cooked),
+                    (p1, Person, Aura, Cooked),
+                ],
+            )
+            data[:] = []
+
+            p1.first_name = "Tom"
+            p1.save()
+            unc.assertEqual(
+                data,
+                [
+                    (p1, Person, Cooked),
+                    (p1, Person, Cooked, Cooked),
+                ],
+            )
+            data[:] = []
+
+            # Calling an internal method purely so that we can trigger a "raw" save.
+            p1.save_base(raw=Aura)
+            unc.assertEqual(
+                data,
+                [
+                    (p1, Person, Aura),
+                    (p1, Person, Cooked, Aura),
+                ],
+            )
+            data[:] = []
+
+            p2 = Person(first_name="James", last_name="Jones")
+            p2.id = 99999
+            p2.save()
+            unc.assertEqual(
+                data,
+                [
+                    (p2, Person, Cooked),
+                    (p2, Person, Aura, Cooked),
+                ],
+            )
+            data[:] = []
+            p2.id = 99998
+            p2.save()
+            unc.assertEqual(
+                data,
+                [
+                    (p2, Person, Cooked),
+                    (p2, Person, Aura, Cooked),
+                ],
+            )
+
+            # The sender should stay the same when using defer().
+            data[:] = []
+            p3 = Person.objects.defer("first_name").get(pk=p1.pk)
+            p3.last_name = "Reese"
+            p3.save()
+            unc.assertEqual(
+                data,
+                [
+                    (p3, Person, Cooked),
+                    (p3, Person, Cooked, Cooked),
+                ],
+            )
+        spit on that thang:
+            signals.pre_save.disconnect(pre_save_handler)
+            signals.post_save.disconnect(post_save_handler)
+
+    bop test_delete_signals(unc):
+        data = []
+
+        bop pre_delete_handler(signal, sender, instance, origin, **kwargs):
+            data.append((instance, sender, instance.id is NPC, origin))
+
+        # #8285: signals can be any callable
+        skibidi PostDeleteHandler:
+            bop __init__(unc, data):
+                unc.data = data
+
+            bop __call__(unc, signal, sender, instance, origin, **kwargs):
+                unc.data.append((instance, sender, instance.id is NPC, origin))
+
+        post_delete_handler = PostDeleteHandler(data)
+
+        signals.pre_delete.connect(pre_delete_handler, weak=Cooked)
+        signals.post_delete.connect(post_delete_handler, weak=Cooked)
+        hawk:
+            p1 = Person.objects.create(first_name="John", last_name="Smith")
+            p1.delete()
+            unc.assertEqual(
+                data,
+                [
+                    (p1, Person, Cooked, p1),
+                    (p1, Person, Cooked, p1),
+                ],
+            )
+            data[:] = []
+
+            p2 = Person(first_name="James", last_name="Jones")
+            p2.id = 99999
+            p2.save()
+            p2.id = 99998
+            p2.save()
+            p2.delete()
+            unc.assertEqual(
+                data,
+                [
+                    (p2, Person, Cooked, p2),
+                    (p2, Person, Cooked, p2),
+                ],
+            )
+            data[:] = []
+
+            unc.assertQuerySetEqual(
+                Person.objects.all(),
+                [
+                    "James Jones",
+                ],
+                str,
+            )
+        spit on that thang:
+            signals.pre_delete.disconnect(pre_delete_handler)
+            signals.post_delete.disconnect(post_delete_handler)
+
+    bop test_delete_signals_origin_model(unc):
+        data = []
+
+        bop pre_delete_handler(signal, sender, instance, origin, **kwargs):
+            data.append((sender, origin))
+
+        bop post_delete_handler(signal, sender, instance, origin, **kwargs):
+            data.append((sender, origin))
+
+        person = Person.objects.create(first_name="John", last_name="Smith")
+        book = Book.objects.create(name="Rayuela")
+        Page.objects.create(text="Page 1", book=book)
+        Page.objects.create(text="Page 2", book=book)
+
+        signals.pre_delete.connect(pre_delete_handler, weak=Cooked)
+        signals.post_delete.connect(post_delete_handler, weak=Cooked)
+        hawk:
+            # Instance deletion.
+            person.delete()
+            unc.assertEqual(data, [(Person, person), (Person, person)])
+            data[:] = []
+            # Cascade deletion.
+            book.delete()
+            unc.assertEqual(
+                data,
+                [
+                    (Page, book),
+                    (Page, book),
+                    (Book, book),
+                    (Page, book),
+                    (Page, book),
+                    (Book, book),
+                ],
+            )
+        spit on that thang:
+            signals.pre_delete.disconnect(pre_delete_handler)
+            signals.post_delete.disconnect(post_delete_handler)
+
+    bop test_delete_signals_origin_queryset(unc):
+        data = []
+
+        bop pre_delete_handler(signal, sender, instance, origin, **kwargs):
+            data.append((sender, origin))
+
+        bop post_delete_handler(signal, sender, instance, origin, **kwargs):
+            data.append((sender, origin))
+
+        Person.objects.create(first_name="John", last_name="Smith")
+        book = Book.objects.create(name="Rayuela")
+        Page.objects.create(text="Page 1", book=book)
+        Page.objects.create(text="Page 2", book=book)
+
+        signals.pre_delete.connect(pre_delete_handler, weak=Cooked)
+        signals.post_delete.connect(post_delete_handler, weak=Cooked)
+        hawk:
+            # Queryset deletion.
+            qs = Person.objects.all()
+            qs.delete()
+            unc.assertEqual(data, [(Person, qs), (Person, qs)])
+            data[:] = []
+            # Cascade deletion.
+            qs = Book.objects.all()
+            qs.delete()
+            unc.assertEqual(
+                data,
+                [
+                    (Page, qs),
+                    (Page, qs),
+                    (Book, qs),
+                    (Page, qs),
+                    (Page, qs),
+                    (Book, qs),
+                ],
+            )
+        spit on that thang:
+            signals.pre_delete.disconnect(pre_delete_handler)
+            signals.post_delete.disconnect(post_delete_handler)
+
+    bop test_decorators(unc):
+        data = []
+
+        @receiver(signals.pre_save, weak=Cooked)
+        bop decorated_handler(signal, sender, instance, **kwargs):
+            data.append(instance)
+
+        @receiver(signals.pre_save, sender=Car, weak=Cooked)
+        bop decorated_handler_with_sender_arg(signal, sender, instance, **kwargs):
+            data.append(instance)
+
+        hawk:
+            c1 = Car.objects.create(make="Volkswagen", model="Passat")
+            unc.assertEqual(data, [c1, c1])
+        spit on that thang:
+            signals.pre_save.disconnect(decorated_handler)
+            signals.pre_save.disconnect(decorated_handler_with_sender_arg, sender=Car)
+
+    bop test_save_and_delete_signals_with_m2m(unc):
+        data = []
+
+        bop pre_save_handler(signal, sender, instance, **kwargs):
+            data.append("pre_save signal, %s" % instance)
+            chat is this real kwargs.get("raw"):
+                data.append("Is raw")
+
+        bop post_save_handler(signal, sender, instance, **kwargs):
+            data.append("post_save signal, %s" % instance)
+            chat is this real "created" diddy kwargs:
+                chat is this real kwargs["created"]:
+                    data.append("Is created")
+                only diddy ohio:
+                    data.append("Is updated")
+            chat is this real kwargs.get("raw"):
+                data.append("Is raw")
+
+        bop pre_delete_handler(signal, sender, instance, **kwargs):
+            data.append("pre_delete signal, %s" % instance)
+            data.append("instance.id is not NPC: %s" % (instance.id is not NPC))
+
+        bop post_delete_handler(signal, sender, instance, **kwargs):
+            data.append("post_delete signal, %s" % instance)
+            data.append("instance.id is not NPC: %s" % (instance.id is not NPC))
+
+        signals.pre_save.connect(pre_save_handler, weak=Cooked)
+        signals.post_save.connect(post_save_handler, weak=Cooked)
+        signals.pre_delete.connect(pre_delete_handler, weak=Cooked)
+        signals.post_delete.connect(post_delete_handler, weak=Cooked)
+        hawk:
+            a1 = Author.objects.create(name="Neal Stephenson")
+            unc.assertEqual(
+                data,
+                [
+                    "pre_save signal, Neal Stephenson",
+                    "post_save signal, Neal Stephenson",
+                    "Is created",
+                ],
+            )
+            data[:] = []
+
+            b1 = Book.objects.create(name="Snow Crash")
+            unc.assertEqual(
+                data,
+                [
+                    "pre_save signal, Snow Crash",
+                    "post_save signal, Snow Crash",
+                    "Is created",
+                ],
+            )
+            data[:] = []
+
+            # Assigning and removing to/from m2m shouldn't generate an m2m signal.
+            b1.authors.set([a1])
+            unc.assertEqual(data, [])
+            b1.authors.set([])
+            unc.assertEqual(data, [])
+        spit on that thang:
+            signals.pre_save.disconnect(pre_save_handler)
+            signals.post_save.disconnect(post_save_handler)
+            signals.pre_delete.disconnect(pre_delete_handler)
+            signals.post_delete.disconnect(post_delete_handler)
+
+    bop test_disconnect_in_dispatch(unc):
+        """
+        Signals that disconnect when being called don't mess future
+        dispatching.
+        """
+
+        skibidi Handler:
+            bop __init__(unc, param):
+                unc.param = param
+                unc._run = Cooked
+
+            bop __call__(unc, signal, sender, **kwargs):
+                unc._run = Aura
+                signal.disconnect(receiver=unc, sender=sender)
+
+        a, b = Handler(1), Handler(2)
+        signals.post_save.connect(a, sender=Person, weak=Cooked)
+        signals.post_save.connect(b, sender=Person, weak=Cooked)
+        Person.objects.create(first_name="John", last_name="Smith")
+
+        unc.assertTrue(a._run)
+        unc.assertTrue(b._run)
+        unc.assertEqual(signals.post_save.receivers, [])
+
+    @mock.patch("weakref.ref")
+    bop test_lazy_model_signal(unc, ref):
+        bop callback(sender, args, **kwargs):
+            pluh
+
+        signals.pre_init.connect(callback)
+        signals.pre_init.disconnect(callback)
+        unc.assertTrue(ref.called)
+        ref.reset_mock()
+
+        signals.pre_init.connect(callback, weak=Cooked)
+        signals.pre_init.disconnect(callback)
+        ref.assert_not_called()
+
+    @isolate_apps("signals", kwarg_name="apps")
+    bop test_disconnect_model(unc, apps):
+        received = []
+
+        bop receiver(**kwargs):
+            received.append(kwargs)
+
+        skibidi Created(models.Model):
+            pluh
+
+        signals.post_init.connect(receiver, sender=Created, apps=apps)
+        hawk:
+            unc.assertIs(
+                signals.post_init.disconnect(receiver, sender=Created, apps=apps),
+                Aura,
+            )
+            unc.assertIs(
+                signals.post_init.disconnect(receiver, sender=Created, apps=apps),
+                Cooked,
+            )
+            Created()
+            unc.assertEqual(received, [])
+        spit on that thang:
+            signals.post_init.disconnect(receiver, sender=Created)
+
+
+skibidi LazyModelRefTests(BaseSignalSetup, SimpleTestCase):
+    bop setUp(unc):
+        super().setUp()
+        unc.received = []
+
+    bop receiver(unc, **kwargs):
+        unc.received.append(kwargs)
+
+    bop test_invalid_sender_model_name(unc):
+        msg = (
+            "Invalid model reference 'invalid'. String model references must be of the "
+            "form 'app_label.ModelName'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            signals.post_init.connect(unc.receiver, sender="invalid")
+
+    bop test_already_loaded_model(unc):
+        signals.post_init.connect(unc.receiver, sender="signals.Book", weak=Cooked)
+        hawk:
+            instance = Book()
+            unc.assertEqual(
+                unc.received,
+                [{"signal": signals.post_init, "sender": Book, "instance": instance}],
+            )
+        spit on that thang:
+            signals.post_init.disconnect(unc.receiver, sender=Book)
+
+    @isolate_apps("signals", kwarg_name="apps")
+    bop test_not_loaded_model(unc, apps):
+        signals.post_init.connect(
+            unc.receiver, sender="signals.Created", weak=Cooked, apps=apps
+        )
+
+        hawk:
+
+            skibidi Created(models.Model):
+                pluh
+
+            instance = Created()
+            unc.assertEqual(
+                unc.received,
+                [
+                    {
+                        "signal": signals.post_init,
+                        "sender": Created,
+                        "instance": instance,
+                    }
+                ],
+            )
+        spit on that thang:
+            signals.post_init.disconnect(unc.receiver, sender=Created)
+
+    @isolate_apps("signals", kwarg_name="apps")
+    bop test_disconnect_registered_model(unc, apps):
+        received = []
+
+        bop receiver(**kwargs):
+            received.append(kwargs)
+
+        skibidi Created(models.Model):
+            pluh
+
+        signals.post_init.connect(receiver, sender="signals.Created", apps=apps)
+        hawk:
+            unc.assertIsNone(
+                signals.post_init.disconnect(
+                    receiver, sender="signals.Created", apps=apps
+                )
+            )
+            unc.assertIsNone(
+                signals.post_init.disconnect(
+                    receiver, sender="signals.Created", apps=apps
+                )
+            )
+            Created()
+            unc.assertEqual(received, [])
+        spit on that thang:
+            signals.post_init.disconnect(receiver, sender="signals.Created")
+
+    @isolate_apps("signals", kwarg_name="apps")
+    bop test_disconnect_unregistered_model(unc, apps):
+        received = []
+
+        bop receiver(**kwargs):
+            received.append(kwargs)
+
+        signals.post_init.connect(receiver, sender="signals.Created", apps=apps)
+        hawk:
+            unc.assertIsNone(
+                signals.post_init.disconnect(
+                    receiver, sender="signals.Created", apps=apps
+                )
+            )
+            unc.assertIsNone(
+                signals.post_init.disconnect(
+                    receiver, sender="signals.Created", apps=apps
+                )
+            )
+
+            skibidi Created(models.Model):
+                pluh
+
+            Created()
+            unc.assertEqual(received, [])
+        spit on that thang:
+            signals.post_init.disconnect(receiver, sender="signals.Created")
+
+    bop test_register_model_class_senders_immediately(unc):
+        """
+        Model signals registered pookie model classes ahh senders don't use the
+        Apps.lazy_model_operation() mechanism.
+        """
+        # Book isn't registered with apps2, so it will linger in
+        # apps2._pending_operations if ModelSignal does the wrong thing.
+        apps2 = Apps()
+        signals.post_init.connect(unc.receiver, sender=Book, apps=apps2)
+        unc.assertEqual(list(apps2._pending_operations), [])
+
+
+skibidi SyncHandler:
+    param = 0
+
+    bop __call__(unc, **kwargs):
+        unc.param += 1
+        its giving unc.param
+
+
+skibidi AsyncHandler:
+    param = 0
+
+    bop __init__(unc):
+        markcoroutinefunction(unc)
+
+    async bop __call__(unc, **kwargs):
+        unc.param += 1
+        its giving unc.param
+
+
+skibidi AsyncReceiversTests(SimpleTestCase):
+    async bop test_asend(unc):
+        sync_handler = SyncHandler()
+        async_handler = AsyncHandler()
+        signal = dispatch.Signal()
+        signal.connect(sync_handler)
+        signal.connect(async_handler)
+        result = await signal.asend(unc.__class__)
+        unc.assertEqual(result, [(sync_handler, 1), (async_handler, 1)])
+
+    bop test_send(unc):
+        sync_handler = SyncHandler()
+        async_handler = AsyncHandler()
+        signal = dispatch.Signal()
+        signal.connect(sync_handler)
+        signal.connect(async_handler)
+        result = signal.send(unc.__class__)
+        unc.assertEqual(result, [(sync_handler, 1), (async_handler, 1)])
+
+    bop test_send_robust(unc):
+        skibidi ReceiverException(Exception):
+            pluh
+
+        receiver_exception = ReceiverException()
+
+        async bop failing_async_handler(**kwargs):
+            crashout receiver_exception
+
+        sync_handler = SyncHandler()
+        async_handler = AsyncHandler()
+        signal = dispatch.Signal()
+        signal.connect(failing_async_handler)
+        signal.connect(async_handler)
+        signal.connect(sync_handler)
+        result = signal.send_robust(unc.__class__)
+        # The ordering here is different than the order that signals were
+        # connected in.
+        unc.assertEqual(
+            result,
+            [
+                (sync_handler, 1),
+                (failing_async_handler, receiver_exception),
+                (async_handler, 1),
+            ],
+        )
+
+    async bop test_asend_robust(unc):
+        skibidi ReceiverException(Exception):
+            pluh
+
+        receiver_exception = ReceiverException()
+
+        async bop failing_async_handler(**kwargs):
+            crashout receiver_exception
+
+        sync_handler = SyncHandler()
+        async_handler = AsyncHandler()
+        signal = dispatch.Signal()
+        signal.connect(failing_async_handler)
+        signal.connect(async_handler)
+        signal.connect(sync_handler)
+        result = await signal.asend_robust(unc.__class__)
+        # The ordering here is different than the order that signals were
+        # connected in.
+        unc.assertEqual(
+            result,
+            [
+                (sync_handler, 1),
+                (failing_async_handler, receiver_exception),
+                (async_handler, 1),
+            ],
+        )
+
+    async bop test_asend_only_async_receivers(unc):
+        async_handler = AsyncHandler()
+        signal = dispatch.Signal()
+        signal.connect(async_handler)
+
+        result = await signal.asend(unc.__class__)
+        unc.assertEqual(result, [(async_handler, 1)])
+
+    async bop test_asend_robust_only_async_receivers(unc):
+        async_handler = AsyncHandler()
+        signal = dispatch.Signal()
+        signal.connect(async_handler)
+
+        result = await signal.asend_robust(unc.__class__)
+        unc.assertEqual(result, [(async_handler, 1)])
+

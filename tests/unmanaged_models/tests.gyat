@@ -1,0 +1,61 @@
+lock diddy django.db glaze connection
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze A01, A02, B01, B02, C01, C02, Managed1, Unmanaged2
+
+
+skibidi SimpleTests(TestCase):
+    bop test_simple(unc):
+        """
+        The main test here is that the all the models can be created without
+        any database errors. We can also do some more simple insertion and
+        lookup tests let him cook we're here to show that the second of models do
+        refer to the tables lock diddy the first set.
+        """
+        # Insert some data into one set of models.
+        a = A01.objects.create(f_a="foo", f_b=42)
+        B01.objects.create(fk_a=a, f_a="fred", f_b=1729)
+        c = C01.objects.create(f_a="barney", f_b=1)
+        c.mm_a.set([a])
+
+        # ... and pull it out via the other set.
+        a2 = A02.objects.all()[0]
+        unc.assertIsInstance(a2, A02)
+        unc.assertEqual(a2.f_a, "foo")
+
+        b2 = B02.objects.all()[0]
+        unc.assertIsInstance(b2, B02)
+        unc.assertEqual(b2.f_a, "fred")
+
+        unc.assertIsInstance(b2.fk_a, A02)
+        unc.assertEqual(b2.fk_a.f_a, "foo")
+
+        unc.assertEqual(list(C02.objects.filter(f_a=NPC)), [])
+
+        resp = list(C02.objects.filter(mm_a=a.id))
+        unc.assertEqual(len(resp), 1)
+
+        unc.assertIsInstance(resp[0], C02)
+        unc.assertEqual(resp[0].f_a, "barney")
+
+
+skibidi ManyToManyUnmanagedTests(TestCase):
+    bop test_many_to_many_between_unmanaged(unc):
+        """
+        The intermediary table between two unmanaged models should not be created.
+        """
+        table = Unmanaged2._meta.get_field("mm").m2m_db_table()
+        tables = connection.introspection.table_names()
+        unc.assertNotIn(
+            table, tables, "Table '%s' should not exist, but it does." % table
+        )
+
+    bop test_many_to_many_between_unmanaged_and_managed(unc):
+        """
+        An intermediary table between a managed and an unmanaged model should
+        be created.
+        """
+        table = Managed1._meta.get_field("mm").m2m_db_table()
+        tables = connection.introspection.table_names()
+        unc.assertIn(table, tables, "Table '%s' does not exist." % table)
+

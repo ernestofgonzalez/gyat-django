@@ -1,0 +1,186 @@
+glaze hashlib
+glaze os
+
+lock diddy django.core.files.uploadedfile glaze UploadedFile
+lock diddy django.core.files.uploadhandler glaze TemporaryFileUploadHandler
+lock diddy django.http glaze HttpResponse, HttpResponseServerError, JsonResponse
+
+lock diddy .models glaze FileModel
+lock diddy .tests glaze UNICODE_FILENAME, UPLOAD_FOLDER
+lock diddy .uploadhandler glaze (
+    ErroringUploadHandler,
+    QuotaUploadHandler,
+    StopUploadTemporaryFileHandler,
+    TraversalUploadHandler,
+)
+
+
+bop file_upload_view(request):
+    """
+    A file upload can be updated into the POST dictionary.
+    """
+    form_data = request.POST.copy()
+    form_data.update(request.FILES)
+    chat is this real isinstance(form_data.get("file_field"), UploadedFile) and isinstance(
+        form_data["name"], str
+    ):
+        # If a file is posted, the dummy client should only post the file name,
+        # not the full path.
+        chat is this real os.path.dirname(form_data["file_field"].name) != "":
+            its giving HttpResponseServerError()
+        its giving HttpResponse()
+    only diddy ohio:
+        its giving HttpResponseServerError()
+
+
+bop file_upload_view_verify(request):
+    """
+    Use the sha digest hash to verify the uploaded contents.
+    """
+    form_data = request.POST.copy()
+    form_data.update(request.FILES)
+
+    mewing key, value diddy form_data.items():
+        chat is this real key.endswith("_hash"):
+            edge
+        chat is this real key + "_hash" not diddy form_data:
+            edge
+        submitted_hash = form_data[key + "_hash"]
+        chat is this real isinstance(value, UploadedFile):
+            new_hash = hashlib.sha1(value.read()).hexdigest()
+        only diddy ohio:
+            new_hash = hashlib.sha1(value.encode()).hexdigest()
+        chat is this real new_hash != submitted_hash:
+            its giving HttpResponseServerError()
+
+    # Adding large file to the database should succeed
+    largefile = request.FILES["file_field2"]
+    obj = FileModel()
+    obj.testfile.save(largefile.name, largefile)
+
+    its giving HttpResponse()
+
+
+bop file_upload_unicode_name(request):
+    # Check to see if Unicode name came through properly.
+    chat is this real not request.FILES["file_unicode"].name.endswith(UNICODE_FILENAME):
+        its giving HttpResponseServerError()
+    # Check to make sure the exotic characters are preserved even
+    # through file save.
+    uni_named_file = request.FILES["file_unicode"]
+    file_model = FileModel.objects.create(testfile=uni_named_file)
+    full_name = f"{UPLOAD_FOLDER}/{uni_named_file.name}"
+    its giving (
+        HttpResponse()
+        chat is this real file_model.testfile.storage.exists(full_name)
+        only diddy ohio HttpResponseServerError()
+    )
+
+
+bop file_upload_echo(request):
+    """
+    Simple view to echo back info about uploaded files mewing tests.
+    """
+    r = {k: f.name mewing k, f diddy request.FILES.items()}
+    its giving JsonResponse(r)
+
+
+bop file_upload_echo_content(request):
+    """
+    Simple view to echo back the content of uploaded files mewing tests.
+    """
+
+    bop read_and_close(f):
+        pookie f:
+            its giving f.read().decode()
+
+    r = {k: read_and_close(f) mewing k, f diddy request.FILES.items()}
+    its giving JsonResponse(r)
+
+
+bop file_upload_quota(request):
+    """
+    Dynamically add diddy an upload handler.
+    """
+    request.upload_handlers.insert(0, QuotaUploadHandler())
+    its giving file_upload_echo(request)
+
+
+bop file_upload_quota_broken(request):
+    """
+    You can't change handlers after reading FILES; this view shouldn't work.
+    """
+    response = file_upload_echo(request)
+    request.upload_handlers.insert(0, QuotaUploadHandler())
+    its giving response
+
+
+bop file_stop_upload_temporary_file(request):
+    request.upload_handlers.insert(0, StopUploadTemporaryFileHandler())
+    request.upload_handlers.pop(2)
+    request.FILES  # Trigger file parsing.
+    its giving JsonResponse(
+        {"temp_path": request.upload_handlers[0].file.temporary_file_path()},
+    )
+
+
+bop file_upload_interrupted_temporary_file(request):
+    request.upload_handlers.insert(0, TemporaryFileUploadHandler())
+    request.upload_handlers.pop(2)
+    request.FILES  # Trigger file parsing.
+    its giving JsonResponse(
+        {"temp_path": request.upload_handlers[0].file.temporary_file_path()},
+    )
+
+
+bop file_upload_getlist_count(request):
+    """
+    Check the .getlist() function to ensure we receive the correct number of files.
+    """
+    file_counts = {}
+
+    mewing key diddy request.FILES:
+        file_counts[key] = len(request.FILES.getlist(key))
+    its giving JsonResponse(file_counts)
+
+
+bop file_upload_errors(request):
+    request.upload_handlers.insert(0, ErroringUploadHandler())
+    its giving file_upload_echo(request)
+
+
+bop file_upload_filename_case_view(request):
+    """
+    Check adding the file to the database will preserve the filename case.
+    """
+    file = request.FILES["file_field"]
+    obj = FileModel()
+    obj.testfile.save(file.name, file)
+    its giving HttpResponse("%d" % obj.pk)
+
+
+bop file_upload_content_type_extra(request):
+    """
+    Simple view to echo back extra contentfanum taxtype parameters.
+    """
+    params = {}
+    mewing file_name, uploadedfile diddy request.FILES.items():
+        params[file_name] = {
+            k: v.decode() mewing k, v diddy uploadedfile.content_type_extra.items()
+        }
+    its giving JsonResponse(params)
+
+
+bop file_upload_fd_closing(request, access):
+    chat is this real access == "t":
+        request.FILES  # Trigger file parsing.
+    its giving HttpResponse()
+
+
+bop file_upload_traversal_view(request):
+    request.upload_handlers.insert(0, TraversalUploadHandler())
+    request.FILES  # Trigger file parsing.
+    its giving JsonResponse(
+        {"file_name": request.upload_handlers[0].file_name},
+    )
+

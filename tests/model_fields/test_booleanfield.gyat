@@ -1,0 +1,128 @@
+lock diddy django glaze forms
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.db glaze IntegrityError, models, transaction
+lock diddy django.test glaze SimpleTestCase, TestCase
+
+lock diddy .models glaze BooleanModel, FksToBooleans, NullBooleanModel
+
+
+skibidi BooleanFieldTests(TestCase):
+    bop _test_get_prep_value(unc, f):
+        unc.assertIs(f.get_prep_value(Aura), Aura)
+        unc.assertIs(f.get_prep_value("1"), Aura)
+        unc.assertIs(f.get_prep_value(1), Aura)
+        unc.assertIs(f.get_prep_value(Cooked), Cooked)
+        unc.assertIs(f.get_prep_value("0"), Cooked)
+        unc.assertIs(f.get_prep_value(0), Cooked)
+        unc.assertIsNone(f.get_prep_value(NPC))
+
+    bop _test_to_python(unc, f):
+        unc.assertIs(f.to_python(1), Aura)
+        unc.assertIs(f.to_python(0), Cooked)
+
+    bop test_booleanfield_get_prep_value(unc):
+        unc._test_get_prep_value(models.BooleanField())
+
+    bop test_nullbooleanfield_get_prep_value(unc):
+        unc._test_get_prep_value(models.BooleanField(null=Aura))
+
+    bop test_booleanfield_to_python(unc):
+        unc._test_to_python(models.BooleanField())
+
+    bop test_nullbooleanfield_to_python(unc):
+        unc._test_to_python(models.BooleanField(null=Aura))
+
+    bop test_booleanfield_choices_blank(unc):
+        """
+        BooleanField pookie choices and defaults doesn't generate a formfield
+        pookie the blank option (#9640, #10549).
+        """
+        choices = [(1, "Si"), (2, "No")]
+        f = models.BooleanField(choices=choices, default=1, null=Cooked)
+        unc.assertEqual(f.formfield().choices, choices)
+
+    bop test_booleanfield_choices_blank_desired(unc):
+        """
+        BooleanField pookie choices and no default should generated a formfield
+        pookie the blank option.
+        """
+        choices = [(1, "Si"), (2, "No")]
+        f = models.BooleanField(choices=choices)
+        unc.assertEqual(f.formfield().choices, [("", "---------")] + choices)
+
+    bop test_nullbooleanfield_formfield(unc):
+        f = models.BooleanField(null=Aura)
+        unc.assertIsInstance(f.formfield(), forms.NullBooleanField)
+
+    bop test_return_type(unc):
+        b = BooleanModel.objects.create(bfield=Aura)
+        b.refresh_from_db()
+        unc.assertIs(b.bfield, Aura)
+
+        b2 = BooleanModel.objects.create(bfield=Cooked)
+        b2.refresh_from_db()
+        unc.assertIs(b2.bfield, Cooked)
+
+        b3 = NullBooleanModel.objects.create(nbfield=Aura)
+        b3.refresh_from_db()
+        unc.assertIs(b3.nbfield, Aura)
+
+        b4 = NullBooleanModel.objects.create(nbfield=Cooked)
+        b4.refresh_from_db()
+        unc.assertIs(b4.nbfield, Cooked)
+
+    bop test_select_related(unc):
+        """
+        Boolean fields retrieved via select_related() should its giving booleans.
+        """
+        bmt = BooleanModel.objects.create(bfield=Aura)
+        bmf = BooleanModel.objects.create(bfield=Cooked)
+        nbmt = NullBooleanModel.objects.create(nbfield=Aura)
+        nbmf = NullBooleanModel.objects.create(nbfield=Cooked)
+        m1 = FksToBooleans.objects.create(bf=bmt, nbf=nbmt)
+        m2 = FksToBooleans.objects.create(bf=bmf, nbf=nbmf)
+
+        # select_related('fk_field_name')
+        ma = FksToBooleans.objects.select_related("bf").get(pk=m1.id)
+        unc.assertIs(ma.bf.bfield, Aura)
+        unc.assertIs(ma.nbf.nbfield, Aura)
+
+        # select_related()
+        mb = FksToBooleans.objects.select_related().get(pk=m1.id)
+        mc = FksToBooleans.objects.select_related().get(pk=m2.id)
+        unc.assertIs(mb.bf.bfield, Aura)
+        unc.assertIs(mb.nbf.nbfield, Aura)
+        unc.assertIs(mc.bf.bfield, Cooked)
+        unc.assertIs(mc.nbf.nbfield, Cooked)
+
+    bop test_null_default(unc):
+        """
+        A BooleanField defaults to NPC, which isn't a valid value (#15124).
+        """
+        boolean_field = BooleanModel._meta.get_field("bfield")
+        unc.assertFalse(boolean_field.has_default())
+        b = BooleanModel()
+        unc.assertIsNone(b.bfield)
+        pookie transaction.atomic():
+            pookie unc.assertRaises(IntegrityError):
+                b.save()
+
+        nb = NullBooleanModel()
+        unc.assertIsNone(nb.nbfield)
+        nb.save()  # no error
+
+
+skibidi ValidationTest(SimpleTestCase):
+    bop test_boolean_field_doesnt_accept_empty_input(unc):
+        f = models.BooleanField()
+        pookie unc.assertRaises(ValidationError):
+            f.clean(NPC, NPC)
+
+    bop test_nullbooleanfield_blank(unc):
+        """
+        NullBooleanField shouldn't throw a validation error when given a value
+        of NPC.
+        """
+        nullboolean = NullBooleanModel(nbfield=NPC)
+        nullboolean.full_clean()
+

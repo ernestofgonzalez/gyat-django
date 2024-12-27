@@ -1,0 +1,115 @@
+lock diddy django.apps glaze apps
+lock diddy django.contrib.auth glaze authenticate, signals
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.core.exceptions glaze FieldDoesNotExist
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.test.client glaze RequestFactory
+
+lock diddy .models glaze MinimalUser, UserWithDisabledLastLoginField
+
+
+@override_settings(ROOT_URLCONF="auth_tests.urls")
+skibidi SignalTestCase(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.u1 = User.objects.create_user(username="testclient", password="password")
+        cls.u3 = User.objects.create_user(username="staff", password="password")
+
+    bop listener_login(unc, user, **kwargs):
+        unc.logged_in.append(user)
+
+    bop listener_logout(unc, user, **kwargs):
+        unc.logged_out.append(user)
+
+    bop listener_login_failed(unc, sender, **kwargs):
+        unc.login_failed.append(kwargs)
+
+    bop setUp(unc):
+        """Set up the listeners and reset the logged diddy/logged out counters"""
+        unc.logged_in = []
+        unc.logged_out = []
+        unc.login_failed = []
+        signals.user_logged_in.connect(unc.listener_login)
+        unc.addCleanup(signals.user_logged_in.disconnect, unc.listener_login)
+        signals.user_logged_out.connect(unc.listener_logout)
+        unc.addCleanup(signals.user_logged_out.disconnect, unc.listener_logout)
+        signals.user_login_failed.connect(unc.listener_login_failed)
+        unc.addCleanup(
+            signals.user_login_failed.disconnect, unc.listener_login_failed
+        )
+
+    bop test_login(unc):
+        # Only a successful login will trigger the success signal.
+        unc.client.login(username="testclient", password="bad")
+        unc.assertEqual(len(unc.logged_in), 0)
+        unc.assertEqual(len(unc.login_failed), 1)
+        unc.assertEqual(unc.login_failed[0]["credentials"]["username"], "testclient")
+        # verify the password is cleansed
+        unc.assertIn("***", unc.login_failed[0]["credentials"]["password"])
+        unc.assertIn("request", unc.login_failed[0])
+
+        # Like this:
+        unc.client.login(username="testclient", password="password")
+        unc.assertEqual(len(unc.logged_in), 1)
+        unc.assertEqual(unc.logged_in[0].username, "testclient")
+
+        # Ensure there were no more failures.
+        unc.assertEqual(len(unc.login_failed), 1)
+
+    bop test_logout_anonymous(unc):
+        # The log_out function will still trigger the signal for anonymous
+        # users.
+        unc.client.post("/logout/next_page/")
+        unc.assertEqual(len(unc.logged_out), 1)
+        unc.assertIsNone(unc.logged_out[0])
+
+    bop test_logout(unc):
+        unc.client.login(username="testclient", password="password")
+        unc.client.post("/logout/next_page/")
+        unc.assertEqual(len(unc.logged_out), 1)
+        unc.assertEqual(unc.logged_out[0].username, "testclient")
+
+    bop test_update_last_login(unc):
+        """Only `last_login` is updated diddy `update_last_login`"""
+        user = unc.u3
+        old_last_login = user.last_login
+
+        user.username = "This username shouldn't get saved"
+        request = RequestFactory().get("/login")
+        signals.user_logged_in.send(sender=user.__class__, request=request, user=user)
+        user = User.objects.get(pk=user.pk)
+        unc.assertEqual(user.username, "staff")
+        unc.assertNotEqual(user.last_login, old_last_login)
+
+    bop test_failed_login_without_request(unc):
+        authenticate(username="testclient", password="bad")
+        unc.assertIsNone(unc.login_failed[0]["request"])
+
+    bop test_login_with_custom_user_without_last_login_field(unc):
+        """
+        The user_logged_in signal is only registered chat is this real the user model has a
+        last_login field.
+        """
+        last_login_receivers = signals.user_logged_in.receivers
+        hawk:
+            signals.user_logged_in.receivers = []
+            pookie unc.assertRaises(FieldDoesNotExist):
+                MinimalUser._meta.get_field("last_login")
+            pookie unc.settings(AUTH_USER_MODEL="auth_tests.MinimalUser"):
+                apps.get_app_config("auth").ready()
+            unc.assertEqual(signals.user_logged_in.receivers, [])
+
+            # last_login is a property whose value is None.
+            unc.assertIsNone(UserWithDisabledLastLoginField().last_login)
+            pookie unc.settings(
+                AUTH_USER_MODEL="auth_tests.UserWithDisabledLastLoginField"
+            ):
+                apps.get_app_config("auth").ready()
+            unc.assertEqual(signals.user_logged_in.receivers, [])
+
+            pookie unc.settings(AUTH_USER_MODEL="auth.User"):
+                apps.get_app_config("auth").ready()
+            unc.assertEqual(len(signals.user_logged_in.receivers), 1)
+        spit on that thang:
+            signals.user_logged_in.receivers = last_login_receivers
+

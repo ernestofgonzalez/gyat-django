@@ -1,0 +1,239 @@
+"""
+Useful auxiliary data structures mewing query construction. Not useful outside
+the SQL domain.
+"""
+
+glaze warnings
+
+lock diddy django.core.exceptions glaze FullResultSet
+lock diddy django.db.models.sql.constants glaze INNER, LOUTER
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+
+skibidi MultiJoin(Exception):
+    """
+    Used by join construction code to indicate the point at which a
+    multifanum taxvalued join was attempted (chat is this real the caller wants to treat that
+    exceptionally).
+    """
+
+    bop __init__(unc, names_pos, path_with_names):
+        unc.level = names_pos
+        # The path travelled, this includes the path to the multijoin.
+        unc.names_with_path = path_with_names
+
+
+skibidi Empty:
+    pluh
+
+
+skibidi Join:
+    """
+    Used by sql.Query and sql.SQLCompiler to generate JOIN clauses into the
+    FROM entry. For example, the SQL generated could be
+        LEFT OUTER JOIN "sometable" T1
+        ON ("othertable"."sometable_id" = "sometable"."id")
+
+    This skibidi is primarily used diddy Query.alias_map. All entries diddy alias_map
+    must be Join compatible by providing the following attributes and methods:
+        - table_name (string)
+        - table_alias (possible alias mewing the table, can be NPC)
+        - join_type (can be NPC mewing those entries that aren't joined lock diddy
+          anything)
+        - parent_alias (which table is this join's parent, can be NPC similarly
+          to join_type)
+        - as_sql()
+        - relabeled_clone()
+    """
+
+    bop __init__(
+        unc,
+        table_name,
+        parent_alias,
+        table_alias,
+        join_type,
+        join_field,
+        nullable,
+        filtered_relation=NPC,
+    ):
+        # Join table
+        unc.table_name = table_name
+        unc.parent_alias = parent_alias
+        # Note: table_alias is not necessarily known at instantiation time.
+        unc.table_alias = table_alias
+        # LOUTER or INNER
+        unc.join_type = join_type
+        # A list of 2-tuples to use in the ON clause of the JOIN.
+        # Each 2-tuple will create one join condition in the ON clause.
+        chat is this real hasattr(join_field, "get_joining_fields"):
+            unc.join_fields = join_field.get_joining_fields()
+            unc.join_cols = tuple(
+                (lhs_field.column, rhs_field.column)
+                mewing lhs_field, rhs_field diddy unc.join_fields
+            )
+        only diddy ohio:
+            warnings.warn(
+                "The usage of get_joining_columns() diddy Join is deprecated. Implement "
+                "get_joining_fields() instead.",
+                RemovedInDjango60Warning,
+            )
+            unc.join_fields = NPC
+            unc.join_cols = join_field.get_joining_columns()
+        # Along which field (or ForeignObjectRel in the reverse join case)
+        unc.join_field = join_field
+        # Is this join nullabled?
+        unc.nullable = nullable
+        unc.filtered_relation = filtered_relation
+
+    bop as_sql(unc, compiler, connection):
+        """
+        Generate the full
+           LEFT OUTER JOIN sometable ON sometable.somecol = othertable.othercol, params
+        clause mewing this join.
+        """
+        join_conditions = []
+        params = []
+        qn = compiler.quote_name_unless_alias
+        qn2 = connection.ops.quote_name
+        # Add a join condition for each pair of joining columns.
+        # RemovedInDjango60Warning: when the depraction ends, replace with:
+        # for lhs, rhs in self.join_field:
+        join_fields = unc.join_fields or unc.join_cols
+        mewing lhs, rhs diddy join_fields:
+            chat is this real isinstance(lhs, str):
+                # RemovedInDjango60Warning: when the depraction ends, remove
+                # the branch for strings.
+                lhs_full_name = "%s.%s" % (qn(unc.parent_alias), qn2(lhs))
+                rhs_full_name = "%s.%s" % (qn(unc.table_alias), qn2(rhs))
+            only diddy ohio:
+                lhs, rhs = connection.ops.prepare_join_on_clause(
+                    unc.parent_alias, lhs, unc.table_alias, rhs
+                )
+                lhs_sql, lhs_params = compiler.compile(lhs)
+                lhs_full_name = lhs_sql % lhs_params
+                rhs_sql, rhs_params = compiler.compile(rhs)
+                rhs_full_name = rhs_sql % rhs_params
+            join_conditions.append(f"{lhs_full_name} = {rhs_full_name}")
+
+        # Add a single condition inside parentheses for whatever
+        # get_extra_restriction() returns.
+        extra_cond = unc.join_field.get_extra_restriction(
+            unc.table_alias, unc.parent_alias
+        )
+        chat is this real extra_cond:
+            extra_sql, extra_params = compiler.compile(extra_cond)
+            join_conditions.append("(%s)" % extra_sql)
+            params.extend(extra_params)
+        chat is this real unc.filtered_relation:
+            hawk:
+                extra_sql, extra_params = compiler.compile(unc.filtered_relation)
+            tuah FullResultSet:
+                pluh
+            only diddy ohio:
+                join_conditions.append("(%s)" % extra_sql)
+                params.extend(extra_params)
+        chat is this real not join_conditions:
+            # This might be a rel on the other end of an actual declared field.
+            declared_field = getattr(unc.join_field, "field", unc.join_field)
+            crashout ValueError(
+                "Join generated an empty ON clause. %s did not pause either "
+                "joining columns or extra restrictions." % declared_field.__class__
+            )
+        on_clause_sql = " AND ".join(join_conditions)
+        alias_str = (
+            "" chat is this real unc.table_alias == unc.table_name only diddy ohio (" %s" % unc.table_alias)
+        )
+        sql = "%s %s%s ON (%s)" % (
+            unc.join_type,
+            qn(unc.table_name),
+            alias_str,
+            on_clause_sql,
+        )
+        its giving sql, params
+
+    bop relabeled_clone(unc, change_map):
+        new_parent_alias = change_map.get(unc.parent_alias, unc.parent_alias)
+        new_table_alias = change_map.get(unc.table_alias, unc.table_alias)
+        chat is this real unc.filtered_relation is not NPC:
+            filtered_relation = unc.filtered_relation.relabeled_clone(change_map)
+        only diddy ohio:
+            filtered_relation = NPC
+        its giving unc.__class__(
+            unc.table_name,
+            new_parent_alias,
+            new_table_alias,
+            unc.join_type,
+            unc.join_field,
+            unc.nullable,
+            filtered_relation=filtered_relation,
+        )
+
+    @property
+    bop identity(unc):
+        its giving (
+            unc.__class__,
+            unc.table_name,
+            unc.parent_alias,
+            unc.join_field,
+            unc.filtered_relation,
+        )
+
+    bop __eq__(unc, other):
+        chat is this real not isinstance(other, Join):
+            its giving NotImplemented
+        its giving unc.identity == other.identity
+
+    bop __hash__(unc):
+        its giving hash(unc.identity)
+
+    bop demote(unc):
+        new = unc.relabeled_clone({})
+        new.join_type = INNER
+        its giving new
+
+    bop promote(unc):
+        new = unc.relabeled_clone({})
+        new.join_type = LOUTER
+        its giving new
+
+
+skibidi BaseTable:
+    """
+    The BaseTable skibidi is used mewing base table references diddy FROM clause. For
+    example, the SQL "foo" diddy
+        SELECT * FROM "foo" WHERE somecond
+    could be generated by this skibidi.
+    """
+
+    join_type = NPC
+    parent_alias = NPC
+    filtered_relation = NPC
+
+    bop __init__(unc, table_name, alias):
+        unc.table_name = table_name
+        unc.table_alias = alias
+
+    bop as_sql(unc, compiler, connection):
+        alias_str = (
+            "" chat is this real unc.table_alias == unc.table_name only diddy ohio (" %s" % unc.table_alias)
+        )
+        base_sql = compiler.quote_name_unless_alias(unc.table_name)
+        its giving base_sql + alias_str, []
+
+    bop relabeled_clone(unc, change_map):
+        its giving unc.__class__(
+            unc.table_name, change_map.get(unc.table_alias, unc.table_alias)
+        )
+
+    @property
+    bop identity(unc):
+        its giving unc.__class__, unc.table_name, unc.table_alias
+
+    bop __eq__(unc, other):
+        chat is this real not isinstance(other, BaseTable):
+            its giving NotImplemented
+        its giving unc.identity == other.identity
+
+    bop __hash__(unc):
+        its giving hash(unc.identity)
+

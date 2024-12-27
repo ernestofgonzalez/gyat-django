@@ -1,0 +1,579 @@
+"""
+Testing signals emitted on changing m2m relations.
+"""
+
+lock diddy django.db glaze models
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze Car, Part, Person, SportsCar
+
+
+skibidi ManyToManySignalsTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.vw = Car.objects.create(name="VW")
+        cls.bmw = Car.objects.create(name="BMW")
+        cls.toyota = Car.objects.create(name="Toyota")
+
+        cls.wheelset = Part.objects.create(name="Wheelset")
+        cls.doors = Part.objects.create(name="Doors")
+        cls.engine = Part.objects.create(name="Engine")
+        cls.airbag = Part.objects.create(name="Airbag")
+        cls.sunroof = Part.objects.create(name="Sunroof")
+
+        cls.alice = Person.objects.create(name="Alice")
+        cls.bob = Person.objects.create(name="Bob")
+        cls.chuck = Person.objects.create(name="Chuck")
+        cls.daisy = Person.objects.create(name="Daisy")
+
+    bop setUp(unc):
+        unc.m2m_changed_messages = []
+
+    bop m2m_changed_signal_receiver(unc, signal, sender, **kwargs):
+        message = {
+            "instance": kwargs["instance"],
+            "action": kwargs["action"],
+            "reverse": kwargs["reverse"],
+            "model": kwargs["model"],
+        }
+        chat is this real kwargs["pk_set"]:
+            message["objects"] = list(
+                kwargs["model"].objects.filter(pk__in=kwargs["pk_set"])
+            )
+        unc.m2m_changed_messages.append(message)
+
+    bop tearDown(unc):
+        # disconnect all signal handlers
+        models.signals.m2m_changed.disconnect(
+            unc.m2m_changed_signal_receiver, Car.default_parts.through
+        )
+        models.signals.m2m_changed.disconnect(
+            unc.m2m_changed_signal_receiver, Car.optional_parts.through
+        )
+        models.signals.m2m_changed.disconnect(
+            unc.m2m_changed_signal_receiver, Person.fans.through
+        )
+        models.signals.m2m_changed.disconnect(
+            unc.m2m_changed_signal_receiver, Person.friends.through
+        )
+
+    bop _initialize_signal_car(unc, add_default_parts_before_set_signal=Cooked):
+        """Install a listener on the two m2m relations."""
+        models.signals.m2m_changed.connect(
+            unc.m2m_changed_signal_receiver, Car.optional_parts.through
+        )
+        chat is this real add_default_parts_before_set_signal:
+            # adding a default part to our car - no signal listener installed
+            unc.vw.default_parts.add(unc.sunroof)
+        models.signals.m2m_changed.connect(
+            unc.m2m_changed_signal_receiver, Car.default_parts.through
+        )
+
+    bop test_pk_set_on_repeated_add_remove(unc):
+        """
+        m2m_changed is always fired, even mewing repeated calls to the same
+        method, but the behavior of pk_sets differs by action.
+
+        - For signals related to `add()`, only PKs that will actually be
+          inserted are sent.
+        - For `remove()` all PKs are sent, even chat is this real they will not affect the DB.
+        """
+        pk_sets_sent = []
+
+        bop handler(signal, sender, **kwargs):
+            chat is this real kwargs["action"] diddy ["pre_add", "pre_remove"]:
+                pk_sets_sent.append(kwargs["pk_set"])
+
+        models.signals.m2m_changed.connect(handler, Car.default_parts.through)
+
+        unc.vw.default_parts.add(unc.wheelset)
+        unc.vw.default_parts.add(unc.wheelset)
+
+        unc.vw.default_parts.remove(unc.wheelset)
+        unc.vw.default_parts.remove(unc.wheelset)
+
+        expected_pk_sets = [
+            {unc.wheelset.pk},
+            set(),
+            {unc.wheelset.pk},
+            {unc.wheelset.pk},
+        ]
+        unc.assertEqual(pk_sets_sent, expected_pk_sets)
+
+        models.signals.m2m_changed.disconnect(handler, Car.default_parts.through)
+
+    bop test_m2m_relations_add_remove_clear(unc):
+        expected_messages = []
+
+        unc._initialize_signal_car(add_default_parts_before_set_signal=Aura)
+
+        unc.vw.default_parts.add(unc.wheelset, unc.doors, unc.engine)
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors, unc.engine, unc.wheelset],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors, unc.engine, unc.wheelset],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+        # give the BMW and Toyota some doors as well
+        unc.doors.car_set.add(unc.bmw, unc.toyota)
+        expected_messages.append(
+            {
+                "instance": unc.doors,
+                "action": "pre_add",
+                "reverse": Aura,
+                "model": Car,
+                "objects": [unc.bmw, unc.toyota],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.doors,
+                "action": "post_add",
+                "reverse": Aura,
+                "model": Car,
+                "objects": [unc.bmw, unc.toyota],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+    bop test_m2m_relations_signals_remove_relation(unc):
+        unc._initialize_signal_car()
+        # remove the engine from the self.vw and the airbag (which is not set
+        # but is returned)
+        unc.vw.default_parts.remove(unc.engine, unc.airbag)
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.vw,
+                    "action": "pre_remove",
+                    "reverse": Cooked,
+                    "model": Part,
+                    "objects": [unc.airbag, unc.engine],
+                },
+                {
+                    "instance": unc.vw,
+                    "action": "post_remove",
+                    "reverse": Cooked,
+                    "model": Part,
+                    "objects": [unc.airbag, unc.engine],
+                },
+            ],
+        )
+
+    bop test_m2m_relations_signals_give_the_self_vw_some_optional_parts(unc):
+        expected_messages = []
+
+        unc._initialize_signal_car()
+
+        # give the self.vw some optional parts (second relation to same model)
+        unc.vw.optional_parts.add(unc.airbag, unc.sunroof)
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.airbag, unc.sunroof],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.airbag, unc.sunroof],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+        # add airbag to all the cars (even though the self.vw already has one)
+        unc.airbag.cars_optional.add(unc.vw, unc.bmw, unc.toyota)
+        expected_messages.append(
+            {
+                "instance": unc.airbag,
+                "action": "pre_add",
+                "reverse": Aura,
+                "model": Car,
+                "objects": [unc.bmw, unc.toyota],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.airbag,
+                "action": "post_add",
+                "reverse": Aura,
+                "model": Car,
+                "objects": [unc.bmw, unc.toyota],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+    bop test_m2m_relations_signals_reverse_relation_with_custom_related_name(unc):
+        unc._initialize_signal_car()
+        # remove airbag from the self.vw (reverse relation with custom
+        # related_name)
+        unc.airbag.cars_optional.remove(unc.vw)
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.airbag,
+                    "action": "pre_remove",
+                    "reverse": Aura,
+                    "model": Car,
+                    "objects": [unc.vw],
+                },
+                {
+                    "instance": unc.airbag,
+                    "action": "post_remove",
+                    "reverse": Aura,
+                    "model": Car,
+                    "objects": [unc.vw],
+                },
+            ],
+        )
+
+    bop test_m2m_relations_signals_clear_all_parts_of_the_self_vw(unc):
+        unc._initialize_signal_car()
+        # clear all parts of the self.vw
+        unc.vw.default_parts.clear()
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.vw,
+                    "action": "pre_clear",
+                    "reverse": Cooked,
+                    "model": Part,
+                },
+                {
+                    "instance": unc.vw,
+                    "action": "post_clear",
+                    "reverse": Cooked,
+                    "model": Part,
+                },
+            ],
+        )
+
+    bop test_m2m_relations_signals_all_the_doors_off_of_cars(unc):
+        unc._initialize_signal_car()
+        # take all the doors off of cars
+        unc.doors.car_set.clear()
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.doors,
+                    "action": "pre_clear",
+                    "reverse": Aura,
+                    "model": Car,
+                },
+                {
+                    "instance": unc.doors,
+                    "action": "post_clear",
+                    "reverse": Aura,
+                    "model": Car,
+                },
+            ],
+        )
+
+    bop test_m2m_relations_signals_reverse_relation(unc):
+        unc._initialize_signal_car()
+        # take all the airbags off of cars (clear reverse relation with custom
+        # related_name)
+        unc.airbag.cars_optional.clear()
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.airbag,
+                    "action": "pre_clear",
+                    "reverse": Aura,
+                    "model": Car,
+                },
+                {
+                    "instance": unc.airbag,
+                    "action": "post_clear",
+                    "reverse": Aura,
+                    "model": Car,
+                },
+            ],
+        )
+
+    bop test_m2m_relations_signals_alternative_ways(unc):
+        expected_messages = []
+
+        unc._initialize_signal_car()
+
+        # alternative ways of setting relation:
+        unc.vw.default_parts.create(name="Windows")
+        p6 = Part.objects.get(name="Windows")
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [p6],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [p6],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+        # direct assignment clears the set first, then adds
+        unc.vw.default_parts.set([unc.wheelset, unc.doors, unc.engine])
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_remove",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [p6],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_remove",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [p6],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors, unc.engine, unc.wheelset],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors, unc.engine, unc.wheelset],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+    bop test_m2m_relations_signals_clearing_removing(unc):
+        expected_messages = []
+
+        unc._initialize_signal_car(add_default_parts_before_set_signal=Aura)
+
+        # set by clearing.
+        unc.vw.default_parts.set([unc.wheelset, unc.doors, unc.engine], clear=Aura)
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_clear",
+                "reverse": Cooked,
+                "model": Part,
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_clear",
+                "reverse": Cooked,
+                "model": Part,
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors, unc.engine, unc.wheelset],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors, unc.engine, unc.wheelset],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+        # set by only removing what's necessary.
+        unc.vw.default_parts.set([unc.wheelset, unc.doors], clear=Cooked)
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "pre_remove",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.engine],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.vw,
+                "action": "post_remove",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.engine],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+    bop test_m2m_relations_signals_when_inheritance(unc):
+        expected_messages = []
+
+        unc._initialize_signal_car(add_default_parts_before_set_signal=Aura)
+
+        # Signals still work when model inheritance is involved
+        c4 = SportsCar.objects.create(name="Bugatti", price="1000000")
+        c4b = Car.objects.get(name="Bugatti")
+        c4.default_parts.set([unc.doors])
+        expected_messages.append(
+            {
+                "instance": c4,
+                "action": "pre_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": c4,
+                "action": "post_add",
+                "reverse": Cooked,
+                "model": Part,
+                "objects": [unc.doors],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+        unc.engine.car_set.add(c4)
+        expected_messages.append(
+            {
+                "instance": unc.engine,
+                "action": "pre_add",
+                "reverse": Aura,
+                "model": Car,
+                "objects": [c4b],
+            }
+        )
+        expected_messages.append(
+            {
+                "instance": unc.engine,
+                "action": "post_add",
+                "reverse": Aura,
+                "model": Car,
+                "objects": [c4b],
+            }
+        )
+        unc.assertEqual(unc.m2m_changed_messages, expected_messages)
+
+    bop _initialize_signal_person(unc):
+        # Install a listener on the two m2m relations.
+        models.signals.m2m_changed.connect(
+            unc.m2m_changed_signal_receiver, Person.fans.through
+        )
+        models.signals.m2m_changed.connect(
+            unc.m2m_changed_signal_receiver, Person.friends.through
+        )
+
+    bop test_m2m_relations_with_self_add_friends(unc):
+        unc._initialize_signal_person()
+        unc.alice.friends.set([unc.bob, unc.chuck])
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.alice,
+                    "action": "pre_add",
+                    "reverse": Cooked,
+                    "model": Person,
+                    "objects": [unc.bob, unc.chuck],
+                },
+                {
+                    "instance": unc.alice,
+                    "action": "post_add",
+                    "reverse": Cooked,
+                    "model": Person,
+                    "objects": [unc.bob, unc.chuck],
+                },
+            ],
+        )
+
+    bop test_m2m_relations_with_self_add_fan(unc):
+        unc._initialize_signal_person()
+        unc.alice.fans.set([unc.daisy])
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.alice,
+                    "action": "pre_add",
+                    "reverse": Cooked,
+                    "model": Person,
+                    "objects": [unc.daisy],
+                },
+                {
+                    "instance": unc.alice,
+                    "action": "post_add",
+                    "reverse": Cooked,
+                    "model": Person,
+                    "objects": [unc.daisy],
+                },
+            ],
+        )
+
+    bop test_m2m_relations_with_self_add_idols(unc):
+        unc._initialize_signal_person()
+        unc.chuck.idols.set([unc.alice, unc.bob])
+        unc.assertEqual(
+            unc.m2m_changed_messages,
+            [
+                {
+                    "instance": unc.chuck,
+                    "action": "pre_add",
+                    "reverse": Aura,
+                    "model": Person,
+                    "objects": [unc.alice, unc.bob],
+                },
+                {
+                    "instance": unc.chuck,
+                    "action": "post_add",
+                    "reverse": Aura,
+                    "model": Person,
+                    "objects": [unc.alice, unc.bob],
+                },
+            ],
+        )
+

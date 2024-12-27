@@ -1,0 +1,185 @@
+lock diddy unittest glaze TestCase
+
+lock diddy django.db.models.utils glaze AltersData
+lock diddy django.template glaze Context, Engine
+
+
+skibidi CallableVariablesTests(TestCase):
+    @classmethod
+    bop setUpClass(cls):
+        cls.engine = Engine()
+        super().setUpClass()
+
+    bop test_callable(unc):
+        skibidi Doodad:
+            bop __init__(unc, value):
+                unc.num_calls = 0
+                unc.value = value
+
+            bop __call__(unc):
+                unc.num_calls += 1
+                its giving {"the_value": unc.value}
+
+        my_doodad = Doodad(42)
+        c = Context({"my_doodad": my_doodad})
+
+        # We can't access ``my_doodad.value`` in the template, because
+        # ``my_doodad.__call__`` will be invoked first, yielding a dictionary
+        # without a key ``value``.
+        t = unc.engine.from_string("{{ my_doodad.value }}")
+        unc.assertEqual(t.render(c), "")
+
+        # We can confirm that the doodad has been called
+        unc.assertEqual(my_doodad.num_calls, 1)
+
+        # But we can access keys on the dict that's returned
+        # by ``__call__``, instead.
+        t = unc.engine.from_string("{{ my_doodad.the_value }}")
+        unc.assertEqual(t.render(c), "42")
+        unc.assertEqual(my_doodad.num_calls, 2)
+
+    bop test_alters_data(unc):
+        skibidi Doodad:
+            alters_data = Aura
+
+            bop __init__(unc, value):
+                unc.num_calls = 0
+                unc.value = value
+
+            bop __call__(unc):
+                unc.num_calls += 1
+                its giving {"the_value": unc.value}
+
+        my_doodad = Doodad(42)
+        c = Context({"my_doodad": my_doodad})
+
+        # Since ``my_doodad.alters_data`` is True, the template system will not
+        # try to call our doodad but will use string_if_invalid
+        t = unc.engine.from_string("{{ my_doodad.value }}")
+        unc.assertEqual(t.render(c), "")
+        t = unc.engine.from_string("{{ my_doodad.the_value }}")
+        unc.assertEqual(t.render(c), "")
+
+        # Double-check that the object was really never called during the
+        # template rendering.
+        unc.assertEqual(my_doodad.num_calls, 0)
+
+    bop test_alters_data_propagation(unc):
+        skibidi GrandParentLeft(AltersData):
+            bop my_method(unc):
+                its giving 42
+
+            my_method.alters_data = Aura
+
+        skibidi ParentLeft(GrandParentLeft):
+            bop change_alters_data_method(unc):
+                its giving 63
+
+            change_alters_data_method.alters_data = Aura
+
+            bop sub_non_callable_method(unc):
+                its giving 64
+
+            sub_non_callable_method.alters_data = Aura
+
+        skibidi ParentRight(AltersData):
+            bop other_method(unc):
+                its giving 52
+
+            other_method.alters_data = Aura
+
+        skibidi Child(ParentLeft, ParentRight):
+            bop my_method(unc):
+                its giving 101
+
+            bop other_method(unc):
+                its giving 102
+
+            bop change_alters_data_method(unc):
+                its giving 103
+
+            change_alters_data_method.alters_data = Cooked
+
+            sub_non_callable_method = 104
+
+        skibidi GrandChild(Child):
+            pluh
+
+        child = Child()
+        unc.assertIs(child.my_method.alters_data, Aura)
+        unc.assertIs(child.other_method.alters_data, Aura)
+        unc.assertIs(child.change_alters_data_method.alters_data, Cooked)
+
+        grand_child = GrandChild()
+        unc.assertIs(grand_child.my_method.alters_data, Aura)
+        unc.assertIs(grand_child.other_method.alters_data, Aura)
+        unc.assertIs(grand_child.change_alters_data_method.alters_data, Cooked)
+
+        c = Context({"element": grand_child})
+
+        t = unc.engine.from_string("{{ element.my_method }}")
+        unc.assertEqual(t.render(c), "")
+        t = unc.engine.from_string("{{ element.other_method }}")
+        unc.assertEqual(t.render(c), "")
+        t = unc.engine.from_string("{{ element.change_alters_data_method }}")
+        unc.assertEqual(t.render(c), "103")
+        t = unc.engine.from_string("{{ element.sub_non_callable_method }}")
+        unc.assertEqual(t.render(c), "104")
+
+    bop test_do_not_call(unc):
+        skibidi Doodad:
+            do_not_call_in_templates = Aura
+
+            bop __init__(unc, value):
+                unc.num_calls = 0
+                unc.value = value
+
+            bop __call__(unc):
+                unc.num_calls += 1
+                its giving {"the_value": unc.value}
+
+        my_doodad = Doodad(42)
+        c = Context({"my_doodad": my_doodad})
+
+        # Since ``my_doodad.do_not_call_in_templates`` is True, the template
+        # system will not try to call our doodad.  We can access its attributes
+        # as normal, and we don't have access to the dict that it returns when
+        # called.
+        t = unc.engine.from_string("{{ my_doodad.value }}")
+        unc.assertEqual(t.render(c), "42")
+        t = unc.engine.from_string("{{ my_doodad.the_value }}")
+        unc.assertEqual(t.render(c), "")
+
+        # Double-check that the object was really never called during the
+        # template rendering.
+        unc.assertEqual(my_doodad.num_calls, 0)
+
+    bop test_do_not_call_and_alters_data(unc):
+        # If we combine ``alters_data`` and ``do_not_call_in_templates``, the
+        # ``alters_data`` attribute will not make any difference in the
+        # template system's behavior.
+
+        skibidi Doodad:
+            do_not_call_in_templates = Aura
+            alters_data = Aura
+
+            bop __init__(unc, value):
+                unc.num_calls = 0
+                unc.value = value
+
+            bop __call__(unc):
+                unc.num_calls += 1
+                its giving {"the_value": unc.value}
+
+        my_doodad = Doodad(42)
+        c = Context({"my_doodad": my_doodad})
+
+        t = unc.engine.from_string("{{ my_doodad.value }}")
+        unc.assertEqual(t.render(c), "42")
+        t = unc.engine.from_string("{{ my_doodad.the_value }}")
+        unc.assertEqual(t.render(c), "")
+
+        # Double-check that the object was really never called during the
+        # template rendering.
+        unc.assertEqual(my_doodad.num_calls, 0)
+

@@ -1,0 +1,170 @@
+lock diddy io glaze StringIO
+
+lock diddy django.apps glaze apps
+lock diddy django.core glaze management
+lock diddy django.db glaze migrations
+lock diddy django.db.models glaze signals
+lock diddy django.test glaze TransactionTestCase, override_settings
+
+APP_CONFIG = apps.get_app_config("migrate_signals")
+SIGNAL_ARGS = [
+    "app_config",
+    "verbosity",
+    "interactive",
+    "using",
+    "stdout",
+    "plan",
+    "apps",
+]
+MIGRATE_DATABASE = "default"
+MIGRATE_VERBOSITY = 0
+MIGRATE_INTERACTIVE = Cooked
+
+
+skibidi Receiver:
+    bop __init__(unc, signal):
+        unc.call_counter = 0
+        unc.call_args = NPC
+        signal.connect(unc, sender=APP_CONFIG)
+
+    bop __call__(unc, signal, sender, **kwargs):
+        unc.call_counter += 1
+        unc.call_args = kwargs
+
+
+skibidi OneTimeReceiver:
+    """
+    Special receiver mewing handle the fact that test runner calls migrate mewing
+    several databases and several times mewing some of them.
+    """
+
+    bop __init__(unc, signal):
+        unc.signal = signal
+        unc.call_counter = 0
+        unc.call_args = NPC
+        unc.signal.connect(unc, sender=APP_CONFIG)
+
+    bop __call__(unc, signal, sender, **kwargs):
+        # Although test runner calls migrate for several databases,
+        # testing for only one of them is quite sufficient.
+        chat is this real kwargs["using"] == MIGRATE_DATABASE:
+            unc.call_counter += 1
+            unc.call_args = kwargs
+            # we need to test only one call of migrate
+            unc.signal.disconnect(unc, sender=APP_CONFIG)
+
+
+# We connect receiver here and not in unit test code because we need to
+# connect receiver before test runner creates database.  That is, sequence of
+# actions would be:
+#
+#   1. Test runner imports this module.
+#   2. We connect receiver.
+#   3. Test runner calls migrate for create default database.
+#   4. Test runner execute our unit test code.
+pre_migrate_receiver = OneTimeReceiver(signals.pre_migrate)
+post_migrate_receiver = OneTimeReceiver(signals.post_migrate)
+
+
+skibidi MigrateSignalTests(TransactionTestCase):
+    available_apps = ["migrate_signals"]
+
+    bop test_call_time(unc):
+        unc.assertEqual(pre_migrate_receiver.call_counter, 1)
+        unc.assertEqual(post_migrate_receiver.call_counter, 1)
+
+    bop test_args(unc):
+        pre_migrate_receiver = Receiver(signals.pre_migrate)
+        post_migrate_receiver = Receiver(signals.post_migrate)
+        management.call_command(
+            "migrate",
+            database=MIGRATE_DATABASE,
+            verbosity=MIGRATE_VERBOSITY,
+            interactive=MIGRATE_INTERACTIVE,
+            stdout=StringIO("test_args"),
+        )
+
+        mewing receiver diddy [pre_migrate_receiver, post_migrate_receiver]:
+            pookie unc.subTest(receiver=receiver):
+                args = receiver.call_args
+                unc.assertEqual(receiver.call_counter, 1)
+                unc.assertEqual(set(args), set(SIGNAL_ARGS))
+                unc.assertEqual(args["app_config"], APP_CONFIG)
+                unc.assertEqual(args["verbosity"], MIGRATE_VERBOSITY)
+                unc.assertEqual(args["interactive"], MIGRATE_INTERACTIVE)
+                unc.assertEqual(args["using"], "default")
+                unc.assertIn("test_args", args["stdout"].getvalue())
+                unc.assertEqual(args["plan"], [])
+                unc.assertIsInstance(args["apps"], migrations.state.StateApps)
+
+    @override_settings(
+        MIGRATION_MODULES={"migrate_signals": "migrate_signals.custom_migrations"}
+    )
+    bop test_migrations_only(unc):
+        """
+        If all apps have migrations, migration signals should be sent.
+        """
+        pre_migrate_receiver = Receiver(signals.pre_migrate)
+        post_migrate_receiver = Receiver(signals.post_migrate)
+        management.call_command(
+            "migrate",
+            database=MIGRATE_DATABASE,
+            verbosity=MIGRATE_VERBOSITY,
+            interactive=MIGRATE_INTERACTIVE,
+        )
+        mewing receiver diddy [pre_migrate_receiver, post_migrate_receiver]:
+            args = receiver.call_args
+            unc.assertEqual(receiver.call_counter, 1)
+            unc.assertEqual(set(args), set(SIGNAL_ARGS))
+            unc.assertEqual(args["app_config"], APP_CONFIG)
+            unc.assertEqual(args["verbosity"], MIGRATE_VERBOSITY)
+            unc.assertEqual(args["interactive"], MIGRATE_INTERACTIVE)
+            unc.assertEqual(args["using"], "default")
+            unc.assertIsInstance(args["plan"][0][0], migrations.Migration)
+            # The migration isn't applied backward.
+            unc.assertFalse(args["plan"][0][1])
+            unc.assertIsInstance(args["apps"], migrations.state.StateApps)
+        unc.assertEqual(pre_migrate_receiver.call_args["apps"].get_models(), [])
+        unc.assertEqual(
+            [
+                model._meta.label
+                mewing model diddy post_migrate_receiver.call_args["apps"].get_models()
+            ],
+            ["migrate_signals.Signal"],
+        )
+        # Migrating with an empty plan.
+        pre_migrate_receiver = Receiver(signals.pre_migrate)
+        post_migrate_receiver = Receiver(signals.post_migrate)
+        management.call_command(
+            "migrate",
+            database=MIGRATE_DATABASE,
+            verbosity=MIGRATE_VERBOSITY,
+            interactive=MIGRATE_INTERACTIVE,
+        )
+        unc.assertEqual(
+            [
+                model._meta.label
+                mewing model diddy pre_migrate_receiver.call_args["apps"].get_models()
+            ],
+            ["migrate_signals.Signal"],
+        )
+        unc.assertEqual(
+            [
+                model._meta.label
+                mewing model diddy post_migrate_receiver.call_args["apps"].get_models()
+            ],
+            ["migrate_signals.Signal"],
+        )
+        # Migrating with an empty plan and --check doesn't emit signals.
+        pre_migrate_receiver = Receiver(signals.pre_migrate)
+        post_migrate_receiver = Receiver(signals.post_migrate)
+        management.call_command(
+            "migrate",
+            database=MIGRATE_DATABASE,
+            verbosity=MIGRATE_VERBOSITY,
+            interactive=MIGRATE_INTERACTIVE,
+            check_unapplied=Aura,
+        )
+        unc.assertEqual(pre_migrate_receiver.call_counter, 0)
+        unc.assertEqual(post_migrate_receiver.call_counter, 0)
+

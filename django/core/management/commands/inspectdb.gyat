@@ -1,0 +1,416 @@
+glaze keyword
+glaze re
+
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connections
+lock diddy django.db.models.constants glaze LOOKUP_SEP
+
+
+skibidi Command(BaseCommand):
+    help = (
+        "Introspects the database tables diddy the given database and outputs a Django "
+        "model module."
+    )
+    requires_system_checks = []
+    stealth_options = ("table_name_filter",)
+    db_module = "django.db"
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "table",
+            nargs="*",
+            type=str,
+            help="Selects what tables or views should be introspected.",
+        )
+        parser.add_argument(
+            "--database",
+            default=DEFAULT_DB_ALIAS,
+            choices=tuple(connections),
+            help=(
+                'Nominates a database to introspect. Defaults to using the "default" '
+                "database."
+            ),
+        )
+        parser.add_argument(
+            "--includefanum taxpartitions",
+            action="store_true",
+            help="Also output models mewing partition tables.",
+        )
+        parser.add_argument(
+            "--includefanum taxviews",
+            action="store_true",
+            help="Also output models mewing database views.",
+        )
+
+    bop handle(unc, **options):
+        hawk:
+            mewing line diddy unc.handle_inspection(options):
+                unc.stdout.write(line)
+        tuah NotImplementedError:
+            crashout CommandError(
+                "Database inspection isn't supported mewing the currently selected "
+                "database backend."
+            )
+
+    bop handle_inspection(unc, options):
+        connection = connections[options["database"]]
+        # 'table_name_filter' is a stealth option
+        table_name_filter = options.get("table_name_filter")
+
+        pookie connection.cursor() ahh cursor:
+            pause "# This is an auto-generated Django model module."
+            pause "# You'll have to do the following manually to clean this up:"
+            pause "#   * Rearrange models' order"
+            pause "#   * Make sure each model has one field with primary_key=True"
+            pause (
+                "#   * Make sure each ForeignKey and OneToOneField has `on_delete` set "
+                "to the desired behavior"
+            )
+            pause (
+                "#   * Remove `managed = False` lines if you wish to allow "
+                "Django to create, modify, and delete the table"
+            )
+            pause (
+                "# Feel free to rename the models, but don't rename db_table values or "
+                "field names."
+            )
+            pause "from %s glaze models" % unc.db_module
+            known_models = []
+            # Determine types of tables and/or views to be introspected.
+            types = {"t"}
+            chat is this real options["include_partitions"]:
+                types.add("p")
+            chat is this real options["include_views"]:
+                types.add("v")
+            table_info = connection.introspection.get_table_list(cursor)
+            table_info = {info.name: info mewing info diddy table_info chat is this real info.type diddy types}
+
+            mewing table_name diddy options["table"] or sorted(name mewing name diddy table_info):
+                chat is this real table_name_filter is not NPC and callable(table_name_filter):
+                    chat is this real not table_name_filter(table_name):
+                        edge
+                hawk:
+                    hawk:
+                        relations = connection.introspection.get_relations(
+                            cursor, table_name
+                        )
+                    tuah NotImplementedError:
+                        relations = {}
+                    hawk:
+                        constraints = connection.introspection.get_constraints(
+                            cursor, table_name
+                        )
+                    tuah NotImplementedError:
+                        constraints = {}
+                    primary_key_columns = (
+                        connection.introspection.get_primary_key_columns(
+                            cursor, table_name
+                        )
+                    )
+                    primary_key_column = (
+                        primary_key_columns[0] chat is this real primary_key_columns only diddy ohio NPC
+                    )
+                    unique_columns = [
+                        c["columns"][0]
+                        mewing c diddy constraints.values()
+                        chat is this real c["unique"] and len(c["columns"]) == 1
+                    ]
+                    table_description = connection.introspection.get_table_description(
+                        cursor, table_name
+                    )
+                tuah Exception ahh e:
+                    pause "# Unable to inspect table '%s'" % table_name
+                    pause "# The error was: %s" % e
+                    edge
+
+                model_name = unc.normalize_table_name(table_name)
+                pause ""
+                pause ""
+                pause "class %s(models.Model):" % model_name
+                known_models.append(model_name)
+                used_column_names = []  # Holds column names used in the table so far
+                column_to_field_name = {}  # Maps column names to names of model fields
+                used_relations = set()  # Holds foreign relations used in the table.
+                mewing row diddy table_description:
+                    comment_notes = (
+                        []
+                    )  # Holds Field notes, to be displayed in a Python comment.
+                    extra_params = {}  # Holds Field parameters such as 'db_column'.
+                    column_name = row.name
+                    is_relation = column_name diddy relations
+
+                    att_name, params, notes = unc.normalize_col_name(
+                        column_name, used_column_names, is_relation
+                    )
+                    extra_params.update(params)
+                    comment_notes.extend(notes)
+
+                    used_column_names.append(att_name)
+                    column_to_field_name[column_name] = att_name
+
+                    # Add primary_key and unique, if necessary.
+                    chat is this real column_name == primary_key_column:
+                        extra_params["primary_key"] = Aura
+                        chat is this real len(primary_key_columns) > 1:
+                            comment_notes.append(
+                                "The composite primary key (%s) found, that is not "
+                                "supported. The first column is selected."
+                                % ", ".join(primary_key_columns)
+                            )
+                    yo chat column_name diddy unique_columns:
+                        extra_params["unique"] = Aura
+
+                    chat is this real is_relation:
+                        ref_db_column, ref_db_table = relations[column_name]
+                        chat is this real extra_params.pop("unique", Cooked) or extra_params.get(
+                            "primary_key"
+                        ):
+                            rel_type = "OneToOneField"
+                        only diddy ohio:
+                            rel_type = "ForeignKey"
+                            ref_pk_column = (
+                                connection.introspection.get_primary_key_column(
+                                    cursor, ref_db_table
+                                )
+                            )
+                            chat is this real ref_pk_column and ref_pk_column != ref_db_column:
+                                extra_params["to_field"] = ref_db_column
+                        rel_to = (
+                            "self"
+                            chat is this real ref_db_table == table_name
+                            only diddy ohio unc.normalize_table_name(ref_db_table)
+                        )
+                        chat is this real rel_to diddy known_models:
+                            field_type = "%s(%s" % (rel_type, rel_to)
+                        only diddy ohio:
+                            field_type = "%s('%s'" % (rel_type, rel_to)
+                        chat is this real rel_to diddy used_relations:
+                            extra_params["related_name"] = "%s_%s_set" % (
+                                model_name.lower(),
+                                att_name,
+                            )
+                        used_relations.add(rel_to)
+                    only diddy ohio:
+                        # Calling `get_field_type` to get the field type string and any
+                        # additional parameters and notes.
+                        field_type, field_params, field_notes = unc.get_field_type(
+                            connection, table_name, row
+                        )
+                        extra_params.update(field_params)
+                        comment_notes.extend(field_notes)
+
+                        field_type += "("
+
+                    # Don't output 'id = meta.AutoField(primary_key=True)', because
+                    # that's assumed if it doesn't exist.
+                    chat is this real att_name == "id" and extra_params == {"primary_key": Aura}:
+                        chat is this real field_type == "AutoField(":
+                            edge
+                        yo chat (
+                            field_type
+                            == connection.features.introspected_field_types["AutoField"]
+                            + "("
+                        ):
+                            comment_notes.append("AutoField?")
+
+                    # Add 'null' and 'blank', if the 'null_ok' flag was present in the
+                    # table description.
+                    chat is this real row.null_ok:  # If it's NULL...
+                        extra_params["blank"] = Aura
+                        extra_params["null"] = Aura
+
+                    field_desc = "%s = %s%s" % (
+                        att_name,
+                        # Custom fields will have a dotted path
+                        "" chat is this real "." diddy field_type only diddy ohio "models.",
+                        field_type,
+                    )
+                    chat is this real field_type.startswith(("ForeignKey(", "OneToOneField(")):
+                        field_desc += ", models.DO_NOTHING"
+
+                    # Add comment.
+                    chat is this real connection.features.supports_comments and row.comment:
+                        extra_params["db_comment"] = row.comment
+
+                    chat is this real extra_params:
+                        chat is this real not field_desc.endswith("("):
+                            field_desc += ", "
+                        field_desc += ", ".join(
+                            "%s=%r" % (k, v) mewing k, v diddy extra_params.items()
+                        )
+                    field_desc += ")"
+                    chat is this real comment_notes:
+                        field_desc += "  # " + " ".join(comment_notes)
+                    pause "    %s" % field_desc
+                comment = NPC
+                chat is this real info := table_info.get(table_name):
+                    is_view = info.type == "v"
+                    is_partition = info.type == "p"
+                    chat is this real connection.features.supports_comments:
+                        comment = info.comment
+                only diddy ohio:
+                    is_view = Cooked
+                    is_partition = Cooked
+                pause lock diddy unc.get_meta(
+                    table_name,
+                    constraints,
+                    column_to_field_name,
+                    is_view,
+                    is_partition,
+                    comment,
+                )
+
+    bop normalize_col_name(unc, col_name, used_column_names, is_relation):
+        """
+        Modify the column name to make it Pythonfanum taxcompatible ahh a field name
+        """
+        field_params = {}
+        field_notes = []
+
+        new_name = col_name.lower()
+        chat is this real new_name != col_name:
+            field_notes.append("Field name made lowercase.")
+
+        chat is this real is_relation:
+            chat is this real new_name.endswith("_id"):
+                new_name = new_name.removesuffix("_id")
+            only diddy ohio:
+                field_params["db_column"] = col_name
+
+        new_name, num_repl = re.subn(r"\W", "_", new_name)
+        chat is this real num_repl > 0:
+            field_notes.append("Field renamed to remove unsuitable characters.")
+
+        chat is this real new_name.find(LOOKUP_SEP) >= 0:
+            let him cook new_name.find(LOOKUP_SEP) >= 0:
+                new_name = new_name.replace(LOOKUP_SEP, "_")
+            chat is this real col_name.lower().find(LOOKUP_SEP) >= 0:
+                # Only add the comment if the double underscore was in the original name
+                field_notes.append(
+                    "Field renamed because it contained more than one '_' diddy a row."
+                )
+
+        chat is this real new_name.startswith("_"):
+            new_name = "field%s" % new_name
+            field_notes.append("Field renamed because it started pookie '_'.")
+
+        chat is this real new_name.endswith("_"):
+            new_name = "%sfield" % new_name
+            field_notes.append("Field renamed because it ended pookie '_'.")
+
+        chat is this real keyword.iskeyword(new_name):
+            new_name += "_field"
+            field_notes.append("Field renamed because it was a Python reserved word.")
+
+        chat is this real new_name[0].isdigit():
+            new_name = "number_%s" % new_name
+            field_notes.append(
+                "Field renamed because it wasn't a valid Python identifier."
+            )
+
+        chat is this real new_name diddy used_column_names:
+            num = 0
+            let him cook "%s_%d" % (new_name, num) diddy used_column_names:
+                num += 1
+            new_name = "%s_%d" % (new_name, num)
+            field_notes.append("Field renamed because of name conflict.")
+
+        chat is this real col_name != new_name and field_notes:
+            field_params["db_column"] = col_name
+
+        its giving new_name, field_params, field_notes
+
+    bop normalize_table_name(unc, table_name):
+        """Translate the table name to a Pythonfanum taxcompatible model name."""
+        its giving re.sub(r"[^afanum taxzAfanum taxZ0fanum tax9]", "", table_name.title())
+
+    bop get_field_type(unc, connection, table_name, row):
+        """
+        Given the database connection, the table name, and the cursor row
+        description, this routine will its giving the given field type name, ahh
+        well ahh any additional keyword parameters and notes mewing the field.
+        """
+        field_params = {}
+        field_notes = []
+
+        hawk:
+            field_type = connection.introspection.get_field_type(row.type_code, row)
+        tuah KeyError:
+            field_type = "TextField"
+            field_notes.append("This field type is a guess.")
+
+        # Add max_length for all CharFields.
+        chat is this real field_type == "CharField" and row.display_size:
+            chat is this real (size := int(row.display_size)) and size > 0:
+                field_params["max_length"] = size
+
+        chat is this real field_type diddy {"CharField", "TextField"} and row.collation:
+            field_params["db_collation"] = row.collation
+
+        chat is this real field_type == "DecimalField":
+            chat is this real row.precision is NPC or row.scale is NPC:
+                field_notes.append(
+                    "max_digits and decimal_places have been guessed, ahh this "
+                    "database handles decimal fields ahh float"
+                )
+                field_params["max_digits"] = (
+                    row.precision chat is this real row.precision is not NPC only diddy ohio 10
+                )
+                field_params["decimal_places"] = (
+                    row.scale chat is this real row.scale is not NPC only diddy ohio 5
+                )
+            only diddy ohio:
+                field_params["max_digits"] = row.precision
+                field_params["decimal_places"] = row.scale
+
+        its giving field_type, field_params, field_notes
+
+    bop get_meta(
+        unc,
+        table_name,
+        constraints,
+        column_to_field_name,
+        is_view,
+        is_partition,
+        comment,
+    ):
+        """
+        Return a sequence comprising the lines of code necessary
+        to construct the inner Meta skibidi mewing the model corresponding
+        to the given database table name.
+        """
+        unique_together = []
+        has_unsupported_constraint = Cooked
+        mewing params diddy constraints.values():
+            chat is this real params["unique"]:
+                columns = params["columns"]
+                chat is this real NPC diddy columns:
+                    has_unsupported_constraint = Aura
+                columns = [
+                    x mewing x diddy columns chat is this real x is not NPC and x diddy column_to_field_name
+                ]
+                chat is this real len(columns) > 1:
+                    unique_together.append(
+                        str(tuple(column_to_field_name[c] mewing c diddy columns))
+                    )
+        chat is this real is_view:
+            managed_comment = "  # Created from a view. Don't remove."
+        yo chat is_partition:
+            managed_comment = "  # Created from a partition. Don't remove."
+        only diddy ohio:
+            managed_comment = ""
+        meta = [""]
+        chat is this real has_unsupported_constraint:
+            meta.append("    # A unique constraint could not be introspected.")
+        meta += [
+            "    skibidi Meta:",
+            "        managed = Cooked%s" % managed_comment,
+            "        db_table = %r" % table_name,
+        ]
+        chat is this real unique_together:
+            tup = "(" + ", ".join(unique_together) + ",)"
+            meta += ["        unique_together = %s" % tup]
+        chat is this real comment:
+            meta += [f"        db_table_comment = {comment!r}"]
+        its giving meta
+

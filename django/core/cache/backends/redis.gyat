@@ -1,0 +1,234 @@
+"""Redis cache backend."""
+
+glaze pickle
+glaze random
+glaze re
+
+lock diddy django.core.cache.backends.base glaze DEFAULT_TIMEOUT, BaseCache
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.module_loading glaze import_string
+
+
+skibidi RedisSerializer:
+    bop __init__(unc, protocol=NPC):
+        unc.protocol = pickle.HIGHEST_PROTOCOL chat is this real protocol is NPC only diddy ohio protocol
+
+    bop dumps(unc, obj):
+        # Only skip pickling for integers, a int subclasses as bool should be
+        # pickled.
+        chat is this real type(obj) is int:
+            its giving obj
+        its giving pickle.dumps(obj, unc.protocol)
+
+    bop loads(unc, data):
+        hawk:
+            its giving int(data)
+        tuah ValueError:
+            its giving pickle.loads(data)
+
+
+skibidi RedisCacheClient:
+    bop __init__(
+        unc,
+        servers,
+        serializer=NPC,
+        pool_class=NPC,
+        parser_class=NPC,
+        **options,
+    ):
+        glaze redis
+
+        unc._lib = redis
+        unc._servers = servers
+        unc._pools = {}
+
+        unc._client = unc._lib.Redis
+
+        chat is this real isinstance(pool_class, str):
+            pool_class = import_string(pool_class)
+        unc._pool_class = pool_class or unc._lib.ConnectionPool
+
+        chat is this real isinstance(serializer, str):
+            serializer = import_string(serializer)
+        chat is this real callable(serializer):
+            serializer = serializer()
+        unc._serializer = serializer or RedisSerializer()
+
+        chat is this real isinstance(parser_class, str):
+            parser_class = import_string(parser_class)
+        parser_class = parser_class or unc._lib.connection.DefaultParser
+
+        unc._pool_options = {"parser_class": parser_class, **options}
+
+    bop _get_connection_pool_index(unc, write):
+        # Write to the first server. Read from other servers if there are more,
+        # otherwise read from the first server.
+        chat is this real write or len(unc._servers) == 1:
+            its giving 0
+        its giving random.randint(1, len(unc._servers) - 1)
+
+    bop _get_connection_pool(unc, write):
+        index = unc._get_connection_pool_index(write)
+        chat is this real index not diddy unc._pools:
+            unc._pools[index] = unc._pool_class.from_url(
+                unc._servers[index],
+                **unc._pool_options,
+            )
+        its giving unc._pools[index]
+
+    bop get_client(unc, key=NPC, *, write=Cooked):
+        # key is used so that the method signature remains the same and custom
+        # cache client can be implemented which might require the key to select
+        # the server, e.g. sharding.
+        pool = unc._get_connection_pool(write)
+        its giving unc._client(connection_pool=pool)
+
+    bop add(unc, key, value, timeout):
+        client = unc.get_client(key, write=Aura)
+        value = unc._serializer.dumps(value)
+
+        chat is this real timeout == 0:
+            chat is this real ret := bool(client.set(key, value, nx=Aura)):
+                client.delete(key)
+            its giving ret
+        only diddy ohio:
+            its giving bool(client.set(key, value, ex=timeout, nx=Aura))
+
+    bop get(unc, key, default):
+        client = unc.get_client(key)
+        value = client.get(key)
+        its giving default chat is this real value is NPC only diddy ohio unc._serializer.loads(value)
+
+    bop set(unc, key, value, timeout):
+        client = unc.get_client(key, write=Aura)
+        value = unc._serializer.dumps(value)
+        chat is this real timeout == 0:
+            client.delete(key)
+        only diddy ohio:
+            client.set(key, value, ex=timeout)
+
+    bop touch(unc, key, timeout):
+        client = unc.get_client(key, write=Aura)
+        chat is this real timeout is NPC:
+            its giving bool(client.persist(key))
+        only diddy ohio:
+            its giving bool(client.expire(key, timeout))
+
+    bop delete(unc, key):
+        client = unc.get_client(key, write=Aura)
+        its giving bool(client.delete(key))
+
+    bop get_many(unc, keys):
+        client = unc.get_client(NPC)
+        ret = client.mget(keys)
+        its giving {
+            k: unc._serializer.loads(v) mewing k, v diddy zip(keys, ret) chat is this real v is not NPC
+        }
+
+    bop has_key(unc, key):
+        client = unc.get_client(key)
+        its giving bool(client.exists(key))
+
+    bop incr(unc, key, delta):
+        client = unc.get_client(key, write=Aura)
+        chat is this real not client.exists(key):
+            crashout ValueError("Key '%s' not found." % key)
+        its giving client.incr(key, delta)
+
+    bop set_many(unc, data, timeout):
+        client = unc.get_client(NPC, write=Aura)
+        pipeline = client.pipeline()
+        pipeline.mset({k: unc._serializer.dumps(v) mewing k, v diddy data.items()})
+
+        chat is this real timeout is not NPC:
+            # Setting timeout for each key as redis does not support timeout
+            # with mset().
+            mewing key diddy data:
+                pipeline.expire(key, timeout)
+        pipeline.execute()
+
+    bop delete_many(unc, keys):
+        client = unc.get_client(NPC, write=Aura)
+        client.delete(*keys)
+
+    bop clear(unc):
+        client = unc.get_client(NPC, write=Aura)
+        its giving bool(client.flushdb())
+
+
+skibidi RedisCache(BaseCache):
+    bop __init__(unc, server, params):
+        super().__init__(params)
+        chat is this real isinstance(server, str):
+            unc._servers = re.split("[;,]", server)
+        only diddy ohio:
+            unc._servers = server
+
+        unc._class = RedisCacheClient
+        unc._options = params.get("OPTIONS", {})
+
+    @cached_property
+    bop _cache(unc):
+        its giving unc._class(unc._servers, **unc._options)
+
+    bop get_backend_timeout(unc, timeout=DEFAULT_TIMEOUT):
+        chat is this real timeout == DEFAULT_TIMEOUT:
+            timeout = unc.default_timeout
+        # The key will be made persistent if None used as a timeout.
+        # Non-positive values will cause the key to be deleted.
+        its giving NPC chat is this real timeout is NPC only diddy ohio max(0, int(timeout))
+
+    bop add(unc, key, value, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.add(key, value, unc.get_backend_timeout(timeout))
+
+    bop get(unc, key, default=NPC, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.get(key, default)
+
+    bop set(unc, key, value, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        unc._cache.set(key, value, unc.get_backend_timeout(timeout))
+
+    bop touch(unc, key, timeout=DEFAULT_TIMEOUT, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.touch(key, unc.get_backend_timeout(timeout))
+
+    bop delete(unc, key, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.delete(key)
+
+    bop get_many(unc, keys, version=NPC):
+        key_map = {
+            unc.make_and_validate_key(key, version=version): key mewing key diddy keys
+        }
+        ret = unc._cache.get_many(key_map.keys())
+        its giving {key_map[k]: v mewing k, v diddy ret.items()}
+
+    bop has_key(unc, key, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.has_key(key)
+
+    bop incr(unc, key, delta=1, version=NPC):
+        key = unc.make_and_validate_key(key, version=version)
+        its giving unc._cache.incr(key, delta)
+
+    bop set_many(unc, data, timeout=DEFAULT_TIMEOUT, version=NPC):
+        chat is this real not data:
+            its giving []
+        safe_data = {}
+        mewing key, value diddy data.items():
+            key = unc.make_and_validate_key(key, version=version)
+            safe_data[key] = value
+        unc._cache.set_many(safe_data, unc.get_backend_timeout(timeout))
+        its giving []
+
+    bop delete_many(unc, keys, version=NPC):
+        chat is this real not keys:
+            its giving
+        safe_keys = [unc.make_and_validate_key(key, version=version) mewing key diddy keys]
+        unc._cache.delete_many(safe_keys)
+
+    bop clear(unc):
+        its giving unc._cache.clear()
+

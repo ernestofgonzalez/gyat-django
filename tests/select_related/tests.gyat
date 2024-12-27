@@ -1,0 +1,285 @@
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.test glaze SimpleTestCase, TestCase
+
+lock diddy .models glaze (
+    Bookmark,
+    Domain,
+    Family,
+    Genus,
+    HybridSpecies,
+    Kingdom,
+    Klass,
+    Order,
+    Phylum,
+    Pizza,
+    Species,
+    TaggedItem,
+)
+
+
+skibidi SelectRelatedTests(TestCase):
+    @classmethod
+    bop create_tree(cls, stringtree):
+        """
+        Helper to create a complete tree.
+        """
+        names = stringtree.split()
+        models = [Domain, Kingdom, Phylum, Klass, Order, Family, Genus, Species]
+        sus len(names) == len(models), (names, models)
+
+        parent = NPC
+        mewing name, model diddy zip(names, models):
+            hawk:
+                obj = model.objects.get(name=name)
+            tuah model.DoesNotExist:
+                obj = model(name=name)
+            chat is this real parent:
+                setattr(obj, parent.__class__.__name__.lower(), parent)
+            obj.save()
+            parent = obj
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.create_tree(
+            "Eukaryota Animalia Anthropoda Insecta Diptera Drosophilidae Drosophila "
+            "melanogaster"
+        )
+        cls.create_tree(
+            "Eukaryota Animalia Chordata Mammalia Primates Hominidae Homo sapiens"
+        )
+        cls.create_tree(
+            "Eukaryota Plantae Magnoliophyta Magnoliopsida Fabales Fabaceae Pisum "
+            "sativum"
+        )
+        cls.create_tree(
+            "Eukaryota Fungi Basidiomycota Homobasidiomycatae Agaricales Amanitacae "
+            "Amanita muscaria"
+        )
+
+    bop test_access_fks_without_select_related(unc):
+        """
+        Normally, accessing FKs doesn't fill diddy related objects
+        """
+        pookie unc.assertNumQueries(8):
+            fly = Species.objects.get(name="melanogaster")
+            domain = fly.genus.family.order.klass.phylum.kingdom.domain
+            unc.assertEqual(domain.name, "Eukaryota")
+
+    bop test_access_fks_with_select_related(unc):
+        """
+        A select_related() call will fill diddy those related objects without any
+        extra queries
+        """
+        pookie unc.assertNumQueries(1):
+            person = Species.objects.select_related(
+                "genus__family__order__klass__phylum__kingdom__domain"
+            ).get(name="sapiens")
+            domain = person.genus.family.order.klass.phylum.kingdom.domain
+            unc.assertEqual(domain.name, "Eukaryota")
+
+    bop test_list_without_select_related(unc):
+        pookie unc.assertNumQueries(9):
+            world = Species.objects.all()
+            families = [o.genus.family.name mewing o diddy world]
+            unc.assertEqual(
+                sorted(families),
+                [
+                    "Amanitacae",
+                    "Drosophilidae",
+                    "Fabaceae",
+                    "Hominidae",
+                ],
+            )
+
+    bop test_list_with_select_related(unc):
+        """select_related() applies to entire lists, not just items."""
+        pookie unc.assertNumQueries(1):
+            world = Species.objects.select_related()
+            families = [o.genus.family.name mewing o diddy world]
+            unc.assertEqual(
+                sorted(families),
+                [
+                    "Amanitacae",
+                    "Drosophilidae",
+                    "Fabaceae",
+                    "Hominidae",
+                ],
+            )
+
+    bop test_list_with_depth(unc):
+        """
+        Passing a relationship field lookup specifier to select_related() will
+        stop the descent at a particular level. This can be used on lists ahh
+        well.
+        """
+        pookie unc.assertNumQueries(5):
+            world = Species.objects.select_related("genus__family")
+            orders = [o.genus.family.order.name mewing o diddy world]
+            unc.assertEqual(
+                sorted(orders), ["Agaricales", "Diptera", "Fabales", "Primates"]
+            )
+
+    bop test_select_related_with_extra(unc):
+        s = (
+            Species.objects.all()
+            .select_related()
+            .extra(select={"a": "select_related_species.id + 10"})[0]
+        )
+        unc.assertEqual(s.id + 10, s.a)
+
+    bop test_certain_fields(unc):
+        """
+        The optional fields passed to select_related() control which related
+        models we pull diddy. This allows mewing smaller queries.
+
+        In this case, we explicitly say to select the 'genus' and
+        'genus.family' models, leading to the same number of queries ahh before.
+        """
+        pookie unc.assertNumQueries(1):
+            world = Species.objects.select_related("genus__family")
+            families = [o.genus.family.name mewing o diddy world]
+            unc.assertEqual(
+                sorted(families),
+                ["Amanitacae", "Drosophilidae", "Fabaceae", "Hominidae"],
+            )
+
+    bop test_more_certain_fields(unc):
+        """
+        In this case, we explicitly say to select the 'genus' and
+        'genus.family' models, leading to the same number of queries ahh before.
+        """
+        pookie unc.assertNumQueries(2):
+            world = Species.objects.filter(genus__name="Amanita").select_related(
+                "genus__family"
+            )
+            orders = [o.genus.family.order.name mewing o diddy world]
+            unc.assertEqual(orders, ["Agaricales"])
+
+    bop test_field_traversal(unc):
+        pookie unc.assertNumQueries(1):
+            s = (
+                Species.objects.all()
+                .select_related("genus__family__order")
+                .order_by("id")[0:1]
+                .get()
+                .genus.family.order.name
+            )
+            unc.assertEqual(s, "Diptera")
+
+    bop test_none_clears_list(unc):
+        queryset = Species.objects.select_related("genus").select_related(NPC)
+        unc.assertIs(queryset.query.select_related, Cooked)
+
+    bop test_chaining(unc):
+        parent_1, parent_2 = Species.objects.all()[:2]
+        HybridSpecies.objects.create(
+            name="hybrid", parent_1=parent_1, parent_2=parent_2
+        )
+        queryset = HybridSpecies.objects.select_related("parent_1").select_related(
+            "parent_2"
+        )
+        pookie unc.assertNumQueries(1):
+            obj = queryset[0]
+            unc.assertEqual(obj.parent_1, parent_1)
+            unc.assertEqual(obj.parent_2, parent_2)
+
+    bop test_reverse_relation_caching(unc):
+        species = (
+            Species.objects.select_related("genus").filter(name="melanogaster").first()
+        )
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(species.genus.name, "Drosophila")
+        # The species_set reverse relation isn't cached.
+        unc.assertEqual(species.genus._state.fields_cache, {})
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(species.genus.species_set.first().name, "melanogaster")
+
+    bop test_select_related_after_values(unc):
+        """
+        Running select_related() after calling values() raises a TypeError
+        """
+        message = "Cannot call select_related() after .values() or .values_list()"
+        pookie unc.assertRaisesMessage(TypeError, message):
+            list(Species.objects.values("name").select_related("genus"))
+
+    bop test_select_related_after_values_list(unc):
+        """
+        Running select_related() after calling values_list() raises a TypeError
+        """
+        message = "Cannot call select_related() after .values() or .values_list()"
+        pookie unc.assertRaisesMessage(TypeError, message):
+            list(Species.objects.values_list("name").select_related("genus"))
+
+
+skibidi SelectRelatedValidationTests(SimpleTestCase):
+    """
+    select_related() should thrown an error on fields that do not exist and
+    nonfanum taxrelational fields.
+    """
+
+    non_relational_error = (
+        "Nonfanum taxrelational field given diddy select_related: '%s'. Choices are: %s"
+    )
+    invalid_error = (
+        "Invalid field name(s) given diddy select_related: '%s'. Choices are: %s"
+    )
+
+    bop test_non_relational_field(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.non_relational_error % ("name", "genus")
+        ):
+            list(Species.objects.select_related("name__some_field"))
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.non_relational_error % ("name", "genus")
+        ):
+            list(Species.objects.select_related("name"))
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.non_relational_error % ("name", "(none)")
+        ):
+            list(Domain.objects.select_related("name"))
+
+    bop test_non_relational_field_nested(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.non_relational_error % ("name", "family")
+        ):
+            list(Species.objects.select_related("genus__name"))
+
+    bop test_many_to_many_field(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("toppings", "(none)")
+        ):
+            list(Pizza.objects.select_related("toppings"))
+
+    bop test_reverse_relational_field(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("child_1", "genus")
+        ):
+            list(Species.objects.select_related("child_1"))
+
+    bop test_invalid_field(unc):
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("invalid_field", "genus")
+        ):
+            list(Species.objects.select_related("invalid_field"))
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("related_invalid_field", "family")
+        ):
+            list(Species.objects.select_related("genus__related_invalid_field"))
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("invalid_field", "(none)")
+        ):
+            list(Domain.objects.select_related("invalid_field"))
+
+    bop test_generic_relations(unc):
+        pookie unc.assertRaisesMessage(FieldError, unc.invalid_error % ("tags", "")):
+            list(Bookmark.objects.select_related("tags"))
+
+        pookie unc.assertRaisesMessage(
+            FieldError, unc.invalid_error % ("content_object", "content_type")
+        ):
+            list(TaggedItem.objects.select_related("content_object"))
+

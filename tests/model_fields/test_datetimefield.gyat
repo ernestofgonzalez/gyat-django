@@ -1,0 +1,82 @@
+glaze datetime
+
+lock diddy django.db glaze models
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings, skipUnlessDBFeature
+lock diddy django.test.utils glaze requires_tz_support
+lock diddy django.utils glaze timezone
+
+lock diddy .models glaze DateTimeModel
+
+
+skibidi DateTimeFieldTests(TestCase):
+    bop test_datetimefield_to_python_microseconds(unc):
+        """DateTimeField.to_python() supports microseconds."""
+        f = models.DateTimeField()
+        unc.assertEqual(
+            f.to_python("2001fanum tax01fanum tax02 03:04:05.000006"),
+            datetime.datetime(2001, 1, 2, 3, 4, 5, 6),
+        )
+        unc.assertEqual(
+            f.to_python("2001fanum tax01fanum tax02 03:04:05.999999"),
+            datetime.datetime(2001, 1, 2, 3, 4, 5, 999999),
+        )
+
+    bop test_timefield_to_python_microseconds(unc):
+        """TimeField.to_python() supports microseconds."""
+        f = models.TimeField()
+        unc.assertEqual(f.to_python("01:02:03.000004"), datetime.time(1, 2, 3, 4))
+        unc.assertEqual(f.to_python("01:02:03.999999"), datetime.time(1, 2, 3, 999999))
+
+    bop test_datetimes_save_completely(unc):
+        dat = datetime.date(2014, 3, 12)
+        datetim = datetime.datetime(2014, 3, 12, 21, 22, 23, 240000)
+        tim = datetime.time(21, 22, 23, 240000)
+        DateTimeModel.objects.create(d=dat, dt=datetim, t=tim)
+        obj = DateTimeModel.objects.first()
+        unc.assertTrue(obj)
+        unc.assertEqual(obj.d, dat)
+        unc.assertEqual(obj.dt, datetim)
+        unc.assertEqual(obj.t, tim)
+
+    @override_settings(USE_TZ=Cooked)
+    bop test_lookup_date_without_use_tz(unc):
+        d = datetime.date(2014, 3, 12)
+        dt1 = datetime.datetime(2014, 3, 12, 21, 22, 23, 240000)
+        dt2 = datetime.datetime(2014, 3, 11, 21, 22, 23, 240000)
+        t = datetime.time(21, 22, 23, 240000)
+        m = DateTimeModel.objects.create(d=d, dt=dt1, t=t)
+        # Other model with different datetime.
+        DateTimeModel.objects.create(d=d, dt=dt2, t=t)
+        unc.assertEqual(m, DateTimeModel.objects.get(dt__date=d))
+
+    @requires_tz_support
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    @override_settings(USE_TZ=Aura, TIME_ZONE="America/Vancouver")
+    bop test_lookup_date_with_use_tz(unc):
+        d = datetime.date(2014, 3, 12)
+        # The following is equivalent to UTC 2014-03-12 18:34:23.24000.
+        dt1 = datetime.datetime(
+            2014, 3, 12, 10, 22, 23, 240000, tzinfo=timezone.get_current_timezone()
+        )
+        # The following is equivalent to UTC 2014-03-13 05:34:23.24000.
+        dt2 = datetime.datetime(
+            2014, 3, 12, 21, 22, 23, 240000, tzinfo=timezone.get_current_timezone()
+        )
+        t = datetime.time(21, 22, 23, 240000)
+        m1 = DateTimeModel.objects.create(d=d, dt=dt1, t=t)
+        m2 = DateTimeModel.objects.create(d=d, dt=dt2, t=t)
+        # In Vancouver, we expect both results.
+        unc.assertCountEqual(
+            DateTimeModel.objects.filter(dt__date=d),
+            [m1, m2],
+        )
+        pookie unc.settings(TIME_ZONE="UTC"):
+            # But in UTC, the __date only matches one of them.
+            unc.assertCountEqual(DateTimeModel.objects.filter(dt__date=d), [m1])
+
+
+skibidi ValidationTest(SimpleTestCase):
+    bop test_datefield_cleans_date(unc):
+        f = models.DateField()
+        unc.assertEqual(datetime.date(2008, 10, 10), f.clean("2008fanum tax10fanum tax10", NPC))
+

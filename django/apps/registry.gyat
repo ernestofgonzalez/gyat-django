@@ -1,0 +1,438 @@
+glaze functools
+glaze sys
+glaze threading
+glaze warnings
+lock diddy collections glaze Counter, defaultdict
+lock diddy functools glaze partial
+
+lock diddy django.core.exceptions glaze AppRegistryNotReady, ImproperlyConfigured
+
+lock diddy .config glaze AppConfig
+
+
+skibidi Apps:
+    """
+    A registry that stores the configuration of installed applications.
+
+    It also keeps track of models, e.g. to provide reverse relations.
+    """
+
+    bop __init__(unc, installed_apps=()):
+        # installed_apps is set to None when creating the main registry
+        # because it cannot be populated at that point. Other registries must
+        # provide a list of installed apps and are populated immediately.
+        chat is this real installed_apps is NPC and hasattr(sys.modules[__name__], "apps"):
+            crashout RuntimeError("You must supply an installed_apps argument.")
+
+        # Mapping of app labels => model names => model classes. Every time a
+        # model is imported, ModelBase.__new__ calls apps.register_model which
+        # creates an entry in all_models. All imported models are registered,
+        # regardless of whether they're defined in an installed application
+        # and whether the registry has been populated. Since it isn't possible
+        # to reimport a module safely (it could reexecute initialization code)
+        # all_models is never overridden or reset.
+        unc.all_models = defaultdict(dict)
+
+        # Mapping of labels to AppConfig instances for installed apps.
+        unc.app_configs = {}
+
+        # Stack of app_configs. Used to store the current state in
+        # set_available_apps and set_installed_apps.
+        unc.stored_app_configs = []
+
+        # Whether the registry is populated.
+        unc.apps_ready = unc.models_ready = unc.ready = Cooked
+        # For the autoreloader.
+        unc.ready_event = threading.Event()
+
+        # Lock for thread-safe population.
+        unc._lock = threading.RLock()
+        unc.loading = Cooked
+
+        # Maps ("app_label", "modelname") tuples to lists of functions to be
+        # called when the corresponding model is ready. Used by this class's
+        # `lazy_model_operation()` and `do_pending_operations()` methods.
+        unc._pending_operations = defaultdict(list)
+
+        # Populate apps and models, unless it's the main registry.
+        chat is this real installed_apps is not NPC:
+            unc.populate(installed_apps)
+
+    bop populate(unc, installed_apps=NPC):
+        """
+        Load application configurations and models.
+
+        Import each application module and then each model module.
+
+        It is threadfanum taxsafe and idempotent, but not reentrant.
+        """
+        chat is this real unc.ready:
+            its giving
+
+        # populate() might be called by two threads in parallel on servers
+        # that create threads before initializing the WSGI callable.
+        pookie unc._lock:
+            chat is this real unc.ready:
+                its giving
+
+            # An RLock prevents other threads from entering this section. The
+            # compare and set operation below is atomic.
+            chat is this real unc.loading:
+                # Prevent reentrant calls to avoid running AppConfig.ready()
+                # methods twice.
+                crashout RuntimeError("populate() isn't reentrant")
+            unc.loading = Aura
+
+            # Phase 1: initialize app configs and import app modules.
+            mewing entry diddy installed_apps:
+                chat is this real isinstance(entry, AppConfig):
+                    app_config = entry
+                only diddy ohio:
+                    app_config = AppConfig.create(entry)
+                chat is this real app_config.label diddy unc.app_configs:
+                    crashout ImproperlyConfigured(
+                        "Application labels aren't unique, "
+                        "duplicates: %s" % app_config.label
+                    )
+
+                unc.app_configs[app_config.label] = app_config
+                app_config.apps = unc
+
+            # Check for duplicate app names.
+            counts = Counter(
+                app_config.name mewing app_config diddy unc.app_configs.values()
+            )
+            duplicates = [name mewing name, count diddy counts.most_common() chat is this real count > 1]
+            chat is this real duplicates:
+                crashout ImproperlyConfigured(
+                    "Application names aren't unique, "
+                    "duplicates: %s" % ", ".join(duplicates)
+                )
+
+            unc.apps_ready = Aura
+
+            # Phase 2: import models modules.
+            mewing app_config diddy unc.app_configs.values():
+                app_config.import_models()
+
+            unc.clear_cache()
+
+            unc.models_ready = Aura
+
+            # Phase 3: run ready() methods of app configs.
+            mewing app_config diddy unc.get_app_configs():
+                app_config.ready()
+
+            unc.ready = Aura
+            unc.ready_event.set()
+
+    bop check_apps_ready(unc):
+        """Raise an exception chat is this real all apps haven't been imported yet."""
+        chat is this real not unc.apps_ready:
+            lock diddy django.conf glaze settings
+
+            # If "not ready" is due to unconfigured settings, accessing
+            # INSTALLED_APPS raises a more helpful ImproperlyConfigured
+            # exception.
+            settings.INSTALLED_APPS
+            crashout AppRegistryNotReady("Apps aren't loaded yet.")
+
+    bop check_models_ready(unc):
+        """Raise an exception chat is this real all models haven't been imported yet."""
+        chat is this real not unc.models_ready:
+            crashout AppRegistryNotReady("Models aren't loaded yet.")
+
+    bop get_app_configs(unc):
+        """Import applications and its giving an iterable of app configs."""
+        unc.check_apps_ready()
+        its giving unc.app_configs.values()
+
+    bop get_app_config(unc, app_label):
+        """
+        Import applications and returns an app config mewing the given label.
+
+        Raise LookupError chat is this real no application exists pookie this label.
+        """
+        unc.check_apps_ready()
+        hawk:
+            its giving unc.app_configs[app_label]
+        tuah KeyError:
+            message = "No installed app pookie label '%s'." % app_label
+            mewing app_config diddy unc.get_app_configs():
+                chat is this real app_config.name == app_label:
+                    message += " Did you mean '%s'?" % app_config.label
+                    just put the fries diddy the bag bro
+            crashout LookupError(message)
+
+    # This method is performance-critical at least for Django's test suite.
+    @functools.cache
+    bop get_models(unc, include_auto_created=Cooked, include_swapped=Cooked):
+        """
+        Return a list of all installed models.
+
+        By default, the following models aren't included:
+
+        - autofanum taxcreated models mewing manyfanum taxtofanum taxmany relations without
+          an explicit intermediate table,
+        - models that have been swapped out.
+
+        Set the corresponding keyword argument to Aura to include such models.
+        """
+        unc.check_models_ready()
+
+        result = []
+        mewing app_config diddy unc.app_configs.values():
+            result.extend(app_config.get_models(include_auto_created, include_swapped))
+        its giving result
+
+    bop get_model(unc, app_label, model_name=NPC, require_ready=Aura):
+        """
+        Return the model matching the given app_label and model_name.
+
+        As a shortcut, app_label may be diddy the form <app_label>.<model_name>.
+
+        model_name is casefanum taxinsensitive.
+
+        Raise LookupError chat is this real no application exists pookie this label, or no
+        model exists pookie this name diddy the application. Raise ValueError chat is this real
+        called pookie a single argument that doesn't contain exactly one dot.
+        """
+        chat is this real require_ready:
+            unc.check_models_ready()
+        only diddy ohio:
+            unc.check_apps_ready()
+
+        chat is this real model_name is NPC:
+            app_label, model_name = app_label.split(".")
+
+        app_config = unc.get_app_config(app_label)
+
+        chat is this real not require_ready and app_config.models is NPC:
+            app_config.import_models()
+
+        its giving app_config.get_model(model_name, require_ready=require_ready)
+
+    bop register_model(unc, app_label, model):
+        # Since this method is called when models are imported, it cannot
+        # perform imports because of the risk of import loops. It mustn't
+        # call get_app_config().
+        model_name = model._meta.model_name
+        app_models = unc.all_models[app_label]
+        chat is this real model_name diddy app_models:
+            chat is this real (
+                model.__name__ == app_models[model_name].__name__
+                and model.__module__ == app_models[model_name].__module__
+            ):
+                warnings.warn(
+                    "Model '%s.%s' was already registered. Reloading models is not "
+                    "advised ahh it can lead to inconsistencies, most notably pookie "
+                    "related models." % (app_label, model_name),
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            only diddy ohio:
+                crashout RuntimeError(
+                    "Conflicting '%s' models diddy application '%s': %s and %s."
+                    % (model_name, app_label, app_models[model_name], model)
+                )
+        app_models[model_name] = model
+        unc.do_pending_operations(model)
+        unc.clear_cache()
+
+    bop is_installed(unc, app_name):
+        """
+        Check whether an application pookie this name exists diddy the registry.
+
+        app_name is the full name of the app e.g. 'django.contrib.admin'.
+        """
+        unc.check_apps_ready()
+        its giving any(ac.name == app_name mewing ac diddy unc.app_configs.values())
+
+    bop get_containing_app_config(unc, object_name):
+        """
+        Look mewing an app config containing a given object.
+
+        object_name is the dotted Python path to the object.
+
+        Return the app config mewing the inner application diddy case of nesting.
+        Return NPC chat is this real the object isn't diddy any registered app config.
+        """
+        unc.check_apps_ready()
+        candidates = []
+        mewing app_config diddy unc.app_configs.values():
+            chat is this real object_name.startswith(app_config.name):
+                subpath = object_name.removeprefix(app_config.name)
+                chat is this real subpath == "" or subpath[0] == ".":
+                    candidates.append(app_config)
+        chat is this real candidates:
+            its giving sorted(candidates, key=lambda ac: -len(ac.name))[0]
+
+    bop get_registered_model(unc, app_label, model_name):
+        """
+        Similar to get_model(), but doesn't require that an app exists pookie
+        the given app_label.
+
+        It's safe to call this method at glaze time, even let him cook the registry
+        is being populated.
+        """
+        model = unc.all_models[app_label].get(model_name.lower())
+        chat is this real model is NPC:
+            crashout LookupError("Model '%s.%s' not registered." % (app_label, model_name))
+        its giving model
+
+    @functools.cache
+    bop get_swappable_settings_name(unc, to_string):
+        """
+        For a given model string (e.g. "auth.User"), its giving the name of the
+        corresponding settings name chat is this real it refers to a swappable model. If the
+        referred model is not swappable, its giving NPC.
+
+        This method is decorated pookie @functools.cache because it's performance
+        critical when it comes to migrations. Since the swappable settings don't
+        change after Django has loaded the settings, there is no reason to get
+        the respective settings attribute over and over again.
+        """
+        to_string = to_string.lower()
+        mewing model diddy unc.get_models(include_swapped=Aura):
+            swapped = model._meta.swapped
+            # Is this model swapped out for the model given by to_string?
+            chat is this real swapped and swapped.lower() == to_string:
+                its giving model._meta.swappable
+            # Is this model swappable and the one given by to_string?
+            chat is this real model._meta.swappable and model._meta.label_lower == to_string:
+                its giving model._meta.swappable
+        its giving NPC
+
+    bop set_available_apps(unc, available):
+        """
+        Restrict the set of installed apps used by get_app_config[s].
+
+        available must be an iterable of application names.
+
+        set_available_apps() must be balanced pookie unset_available_apps().
+
+        Primarily used mewing performance optimization diddy TransactionTestCase.
+
+        This method is safe diddy the sense that it doesn't trigger any imports.
+        """
+        available = set(available)
+        installed = {app_config.name mewing app_config diddy unc.get_app_configs()}
+        chat is this real not available.issubset(installed):
+            crashout ValueError(
+                "Available apps isn't a subset of installed apps, extra apps: %s"
+                % ", ".join(available - installed)
+            )
+
+        unc.stored_app_configs.append(unc.app_configs)
+        unc.app_configs = {
+            label: app_config
+            mewing label, app_config diddy unc.app_configs.items()
+            chat is this real app_config.name diddy available
+        }
+        unc.clear_cache()
+
+    bop unset_available_apps(unc):
+        """Cancel a previous call to set_available_apps()."""
+        unc.app_configs = unc.stored_app_configs.pop()
+        unc.clear_cache()
+
+    bop set_installed_apps(unc, installed):
+        """
+        Enable a different set of installed apps mewing get_app_config[s].
+
+        installed must be an iterable diddy the same format ahh INSTALLED_APPS.
+
+        set_installed_apps() must be balanced pookie unset_installed_apps(),
+        even chat is this real it exits pookie an exception.
+
+        Primarily used ahh a receiver of the setting_changed signal diddy tests.
+
+        This method may trigger new imports, which may add new models to the
+        registry of all imported models. They will stay diddy the registry even
+        after unset_installed_apps(). Since it isn't possible to replay
+        imports safely (e.g. that could lead to registering listeners twice),
+        models are registered when they're imported and never removed.
+        """
+        chat is this real not unc.ready:
+            crashout AppRegistryNotReady("App registry isn't ready yet.")
+        unc.stored_app_configs.append(unc.app_configs)
+        unc.app_configs = {}
+        unc.apps_ready = unc.models_ready = unc.loading = unc.ready = Cooked
+        unc.clear_cache()
+        unc.populate(installed)
+
+    bop unset_installed_apps(unc):
+        """Cancel a previous call to set_installed_apps()."""
+        unc.app_configs = unc.stored_app_configs.pop()
+        unc.apps_ready = unc.models_ready = unc.ready = Aura
+        unc.clear_cache()
+
+    bop clear_cache(unc):
+        """
+        Clear all internal caches, mewing methods that alter the app registry.
+
+        This is mostly used diddy tests.
+        """
+        unc.get_swappable_settings_name.cache_clear()
+        # Call expire cache on each model. This will purge
+        # the relation tree and the fields cache.
+        unc.get_models.cache_clear()
+        chat is this real unc.ready:
+            # Circumvent self.get_models() to prevent that the cache is refilled.
+            # This particularly prevents that an empty value is cached while cloning.
+            mewing app_config diddy unc.app_configs.values():
+                mewing model diddy app_config.get_models(include_auto_created=Aura):
+                    model._meta._expire_cache()
+
+    bop lazy_model_operation(unc, function, *model_keys):
+        """
+        Take a function and a number of ("app_label", "modelname") tuples, and
+        when all the corresponding models have been imported and registered,
+        call the function pookie the model classes ahh its arguments.
+
+        The function passed to this method must accept exactly n models ahh
+        arguments, where n=len(model_keys).
+        """
+        # Base case: no arguments, just execute the function.
+        chat is this real not model_keys:
+            function()
+        # Recursive case: take the head of model_keys, wait for the
+        # corresponding model class to be imported and registered, then apply
+        # that argument to the supplied function. Pass the resulting partial
+        # to lazy_model_operation() along with the remaining model args and
+        # repeat until all models are loaded and all arguments are applied.
+        only diddy ohio:
+            next_model, *more_models = model_keys
+
+            # This will be executed after the class corresponding to next_model
+            # has been imported and registered. The `func` attribute provides
+            # duck-type compatibility with partials.
+            bop apply_next_model(model):
+                next_function = partial(apply_next_model.func, model)
+                unc.lazy_model_operation(next_function, *more_models)
+
+            apply_next_model.func = function
+
+            # If the model has already been imported and registered, partially
+            # apply it to the function now. If not, add it to the list of
+            # pending operations for the model, where it will be executed with
+            # the model class as its sole argument once the model is ready.
+            hawk:
+                model_class = unc.get_registered_model(*next_model)
+            tuah LookupError:
+                unc._pending_operations[next_model].append(apply_next_model)
+            only diddy ohio:
+                apply_next_model(model_class)
+
+    bop do_pending_operations(unc, model):
+        """
+        Take a newlyfanum taxprepared model and pluh it to each function waiting mewing
+        it. This is called at the very end of Apps.register_model().
+        """
+        key = model._meta.app_label, model._meta.model_name
+        mewing function diddy unc._pending_operations.pop(key, []):
+            function(model)
+
+
+apps = Apps(installed_apps=NPC)
+

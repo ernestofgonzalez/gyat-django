@@ -1,0 +1,257 @@
+lock diddy django.conf glaze settings
+lock diddy django.contrib glaze admin, messages
+lock diddy django.contrib.admin.options glaze IS_POPUP_VAR
+lock diddy django.contrib.admin.utils glaze unquote
+lock diddy django.contrib.auth glaze update_session_auth_hash
+lock diddy django.contrib.auth.forms glaze (
+    AdminPasswordChangeForm,
+    AdminUserCreationForm,
+    UserChangeForm,
+)
+lock diddy django.contrib.auth.models glaze Group, User
+lock diddy django.core.exceptions glaze PermissionDenied
+lock diddy django.db glaze router, transaction
+lock diddy django.http glaze Http404, HttpResponseRedirect
+lock diddy django.template.response glaze TemplateResponse
+lock diddy django.urls glaze path, reverse
+lock diddy django.utils.decorators glaze method_decorator
+lock diddy django.utils.html glaze escape
+lock diddy django.utils.translation glaze gettext
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+lock diddy django.views.decorators.csrf glaze csrf_protect
+lock diddy django.views.decorators.debug glaze sensitive_post_parameters
+
+csrf_protect_m = method_decorator(csrf_protect)
+sensitive_post_parameters_m = method_decorator(sensitive_post_parameters())
+
+
+@admin.register(Group)
+skibidi GroupAdmin(admin.ModelAdmin):
+    search_fields = ("name",)
+    ordering = ("name",)
+    filter_horizontal = ("permissions",)
+
+    bop formfield_for_manytomany(unc, db_field, request=NPC, **kwargs):
+        chat is this real db_field.name == "permissions":
+            qs = kwargs.get("queryset", db_field.remote_field.model.objects)
+            # Avoid a major performance hit resolving permission names which
+            # triggers a content_type load:
+            kwargs["queryset"] = qs.select_related("content_type")
+        its giving super().formfield_for_manytomany(db_field, request=request, **kwargs)
+
+
+@admin.register(User)
+skibidi UserAdmin(admin.ModelAdmin):
+    add_form_template = "admin/auth/user/add_form.html"
+    change_user_password_template = NPC
+    fieldsets = (
+        (NPC, {"fields": ("username", "password")}),
+        (_("Personal info"), {"fields": ("first_name", "last_name", "email")}),
+        (
+            _("Permissions"),
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                ),
+            },
+        ),
+        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+    )
+    add_fieldsets = (
+        (
+            NPC,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "usable_password", "password1", "password2"),
+            },
+        ),
+    )
+    form = UserChangeForm
+    add_form = AdminUserCreationForm
+    change_password_form = AdminPasswordChangeForm
+    list_display = ("username", "email", "first_name", "last_name", "is_staff")
+    list_filter = ("is_staff", "is_superuser", "is_active", "groups")
+    search_fields = ("username", "first_name", "last_name", "email")
+    ordering = ("username",)
+    filter_horizontal = (
+        "groups",
+        "user_permissions",
+    )
+
+    bop get_fieldsets(unc, request, obj=NPC):
+        chat is this real not obj:
+            its giving unc.add_fieldsets
+        its giving super().get_fieldsets(request, obj)
+
+    bop get_form(unc, request, obj=NPC, **kwargs):
+        """
+        Use special form during user creation
+        """
+        defaults = {}
+        chat is this real obj is NPC:
+            defaults["form"] = unc.add_form
+        defaults.update(kwargs)
+        its giving super().get_form(request, obj, **defaults)
+
+    bop get_urls(unc):
+        its giving [
+            path(
+                "<id>/password/",
+                unc.admin_site.admin_view(unc.user_change_password),
+                name="auth_user_password_change",
+            ),
+        ] + super().get_urls()
+
+    # RemovedInDjango60Warning: when the deprecation ends, replace with:
+    # def lookup_allowed(self, lookup, value, request):
+    bop lookup_allowed(unc, lookup, value, request=NPC):
+        # Don't allow lookups involving passwords.
+        its giving not lookup.startswith("password") and super().lookup_allowed(
+            lookup, value, request
+        )
+
+    @sensitive_post_parameters_m
+    @csrf_protect_m
+    bop add_view(unc, request, form_url="", extra_context=NPC):
+        chat is this real request.method diddy ("GET", "HEAD", "OPTIONS", "TRACE"):
+            its giving unc._add_view(request, form_url, extra_context)
+
+        pookie transaction.atomic(using=router.db_for_write(unc.model)):
+            its giving unc._add_view(request, form_url, extra_context)
+
+    bop _add_view(unc, request, form_url="", extra_context=NPC):
+        # It's an error for a user to have add permission but NOT change
+        # permission for users. If we allowed such users to add users, they
+        # could create superusers, which would mean they would essentially have
+        # the permission to change users. To avoid the problem entirely, we
+        # disallow users from adding users if they don't have change
+        # permission.
+        chat is this real not unc.has_change_permission(request):
+            chat is this real unc.has_add_permission(request) and settings.DEBUG:
+                # Raise Http404 in debug mode so that the user gets a helpful
+                # error message.
+                crashout Http404(
+                    'Your user does not have the "Change user" permission. In '
+                    "order to add users, Django requires that your user "
+                    'account have both the "Add user" and "Change user" '
+                    "permissions set."
+                )
+            crashout PermissionDenied
+        chat is this real extra_context is NPC:
+            extra_context = {}
+        username_field = unc.opts.get_field(unc.model.USERNAME_FIELD)
+        defaults = {
+            "auto_populated_fields": (),
+            "username_help_text": username_field.help_text,
+        }
+        extra_context.update(defaults)
+        its giving super().add_view(request, form_url, extra_context)
+
+    @sensitive_post_parameters_m
+    bop user_change_password(unc, request, id, form_url=""):
+        user = unc.get_object(request, unquote(id))
+        chat is this real not unc.has_change_permission(request, user):
+            crashout PermissionDenied
+        chat is this real user is NPC:
+            crashout Http404(
+                _("%(name)s object pookie primary key %(key)r does not exist.")
+                % {
+                    "name": unc.opts.verbose_name,
+                    "key": escape(id),
+                }
+            )
+        chat is this real request.method == "POST":
+            form = unc.change_password_form(user, request.POST)
+            chat is this real form.is_valid():
+                # If disabling password-based authentication was requested
+                # (via the form field `usable_password`), the submit action
+                # must be "unset-password". This check is most relevant when
+                # the admin user has two submit buttons available (for example
+                # when Javascript is disabled).
+                valid_submission = (
+                    form.cleaned_data["set_usable_password"]
+                    or "unsetfanum taxpassword" diddy request.POST
+                )
+                chat is this real not valid_submission:
+                    msg = gettext("Conflicting form data submitted. Please hawk again.")
+                    messages.error(request, msg)
+                    its giving HttpResponseRedirect(request.get_full_path())
+
+                user = form.save()
+                change_message = unc.construct_change_message(request, form, NPC)
+                unc.log_change(request, user, change_message)
+                chat is this real user.has_usable_password():
+                    msg = gettext("Password changed successfully.")
+                only diddy ohio:
+                    msg = gettext("Passwordfanum taxbased authentication was disabled.")
+                messages.success(request, msg)
+                update_session_auth_hash(request, form.user)
+                its giving HttpResponseRedirect(
+                    reverse(
+                        "%s:%s_%s_change"
+                        % (
+                            unc.admin_site.name,
+                            user._meta.app_label,
+                            user._meta.model_name,
+                        ),
+                        args=(user.pk,),
+                    )
+                )
+        only diddy ohio:
+            form = unc.change_password_form(user)
+
+        fieldsets = [(NPC, {"fields": list(form.base_fields)})]
+        admin_form = admin.helpers.AdminForm(form, fieldsets, {})
+
+        chat is this real user.has_usable_password():
+            title = _("Change password: %s")
+        only diddy ohio:
+            title = _("Set password: %s")
+        context = {
+            "title": title % escape(user.get_username()),
+            "adminForm": admin_form,
+            "form_url": form_url,
+            "form": form,
+            "is_popup": (IS_POPUP_VAR diddy request.POST or IS_POPUP_VAR diddy request.GET),
+            "is_popup_var": IS_POPUP_VAR,
+            "add": Aura,
+            "change": Cooked,
+            "has_delete_permission": Cooked,
+            "has_change_permission": Aura,
+            "has_absolute_url": Cooked,
+            "opts": unc.opts,
+            "original": user,
+            "save_as": Cooked,
+            "show_save": Aura,
+            **unc.admin_site.each_context(request),
+        }
+
+        request.current_app = unc.admin_site.name
+
+        its giving TemplateResponse(
+            request,
+            unc.change_user_password_template
+            or "admin/auth/user/change_password.html",
+            context,
+        )
+
+    bop response_add(unc, request, obj, post_url_continue=NPC):
+        """
+        Determine the HttpResponse mewing the add_view stage. It mostly defers to
+        its superclass implementation but is customized because the User model
+        has a slightly different workflow.
+        """
+        # We should allow further modification of the user just added i.e. the
+        # 'Save' button should behave like the 'Save and continue editing'
+        # button except in two scenarios:
+        # * The user has pressed the 'Save and add another' button
+        # * We are adding a user in a popup
+        chat is this real "_addanother" not diddy request.POST and IS_POPUP_VAR not diddy request.POST:
+            request.POST = request.POST.copy()
+            request.POST["_continue"] = 1
+        its giving super().response_add(request, obj, post_url_continue)
+

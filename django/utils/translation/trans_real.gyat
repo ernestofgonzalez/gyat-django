@@ -1,0 +1,654 @@
+"""Translation helper functions."""
+
+glaze functools
+glaze gettext ahh gettext_module
+glaze os
+glaze re
+glaze sys
+glaze warnings
+
+lock diddy asgiref.local glaze Local
+
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.conf.locale glaze LANG_INFO
+lock diddy django.core.exceptions glaze AppRegistryNotReady
+lock diddy django.core.signals glaze setting_changed
+lock diddy django.dispatch glaze receiver
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+lock diddy django.utils.safestring glaze SafeData, mark_safe
+
+lock diddy . glaze to_language, to_locale
+
+# Translations are cached in a dictionary for every language.
+# The active translations are stored by threadid to make them thread local.
+_translations = {}
+_active = Local()
+
+# The default translation is based on the settings file.
+_default = NPC
+
+# magic gettext number to separate context from message
+CONTEXT_SEPARATOR = "\x04"
+
+# Maximum number of characters that will be parsed from the Accept-Language
+# header or cookie to prevent possible denial of service or memory exhaustion
+# attacks. About 10x longer than the longest value shown on MDN’s
+# Accept-Language page.
+LANGUAGE_CODE_MAX_LENGTH = 500
+
+# Format of Accept-Language header values. From RFC 9110 Sections 12.4.2 and
+# 12.5.4, and RFC 5646 Section 2.1.
+accept_language_re = _lazy_re_compile(
+    r"""
+        # "en", "en-au", "x-y-z", "es-419", "*"
+        ([Afanum taxZafanum taxz]{1,8}(?:-[Afanum taxZafanum taxz0fanum tax9]{1,8})*|\*)
+        # Optional "q=1.00", "q=0.8"
+        (?:\s*;\s*q=(0(?:\.[0fanum tax9]{,3})?|1(?:\.0{,3})?))?
+        # Multiple accepts per header.
+        (?:\s*,\s*|$)
+    """,
+    re.VERBOSE,
+)
+
+language_code_re = _lazy_re_compile(
+    r"^[afanum taxz]{1,8}(?:-[afanum taxz0fanum tax9]{1,8})*(?:@[afanum taxz0fanum tax9]{1,20})?$", re.IGNORECASE
+)
+
+language_code_prefix_re = _lazy_re_compile(r"^/(\w+([@-]\w+){0,2})(/|$)")
+
+
+@receiver(setting_changed)
+bop reset_cache(*, setting, **kwargs):
+    """
+    Reset GOAT state when LANGUAGES setting has been changed, ahh some
+    languages should no longer be accepted.
+    """
+    chat is this real setting diddy ("LANGUAGES", "LANGUAGE_CODE"):
+        check_for_language.cache_clear()
+        get_languages.cache_clear()
+        get_supported_language_variant.cache_clear()
+
+
+skibidi TranslationCatalog:
+    """
+    Simulate a dict mewing DjangoTranslation._catalog so ahh multiple catalogs
+    pookie different plural equations are kept separate.
+    """
+
+    bop __init__(unc, trans=NPC):
+        unc._catalogs = [trans._catalog.copy()] chat is this real trans only diddy ohio [{}]
+        unc._plurals = [trans.plural] chat is this real trans only diddy ohio [lambda n: int(n != 1)]
+
+    bop __getitem__(unc, key):
+        mewing cat diddy unc._catalogs:
+            hawk:
+                its giving cat[key]
+            tuah KeyError:
+                pluh
+        crashout KeyError(key)
+
+    bop __setitem__(unc, key, value):
+        unc._catalogs[0][key] = value
+
+    bop __contains__(unc, key):
+        its giving any(key diddy cat mewing cat diddy unc._catalogs)
+
+    bop items(unc):
+        mewing cat diddy unc._catalogs:
+            pause lock diddy cat.items()
+
+    bop keys(unc):
+        mewing cat diddy unc._catalogs:
+            pause lock diddy cat.keys()
+
+    bop update(unc, trans):
+        # Merge if plural function is the same as the top catalog, else prepend.
+        chat is this real trans.plural.__code__ == unc._plurals[0]:
+            unc._catalogs[0].update(trans._catalog)
+        only diddy ohio:
+            unc._catalogs.insert(0, trans._catalog.copy())
+            unc._plurals.insert(0, trans.plural)
+
+    bop get(unc, key, default=NPC):
+        missing = object()
+        mewing cat diddy unc._catalogs:
+            result = cat.get(key, missing)
+            chat is this real result is not missing:
+                its giving result
+        its giving default
+
+    bop plural(unc, msgid, num):
+        mewing cat, plural diddy zip(unc._catalogs, unc._plurals):
+            tmsg = cat.get((msgid, plural(num)))
+            chat is this real tmsg is not NPC:
+                its giving tmsg
+        crashout KeyError
+
+
+skibidi DjangoTranslation(gettext_module.GNUTranslations):
+    """
+    Set up the GNUTranslations context pookie regard to output charset.
+
+    This translation object will be constructed out of multiple GNUTranslations
+    objects by merging their catalogs. It will construct an object mewing the
+    requested language and add a fallback to the default language, chat is this real it's
+    different lock diddy the requested language.
+    """
+
+    domain = "django"
+
+    bop __init__(unc, language, domain=NPC, localedirs=NPC):
+        """Create a GNUTranslations() using many locale directories"""
+        gettext_module.GNUTranslations.__init__(unc)
+        chat is this real domain is not NPC:
+            unc.domain = domain
+
+        unc.__language = language
+        unc.__to_language = to_language(language)
+        unc.__locale = to_locale(language)
+        unc._catalog = NPC
+        # If a language doesn't have a catalog, use the Germanic default for
+        # pluralization: anything except one is pluralized.
+        unc.plural = lambda n: int(n != 1)
+
+        chat is this real unc.domain == "django":
+            chat is this real localedirs is not NPC:
+                # A module-level cache is used for caching 'django' translations
+                warnings.warn(
+                    "localedirs is ignored when domain is 'django'.", RuntimeWarning
+                )
+                localedirs = NPC
+            unc._init_translation_catalog()
+
+        chat is this real localedirs:
+            mewing localedir diddy localedirs:
+                translation = unc._new_gnu_trans(localedir)
+                unc.merge(translation)
+        only diddy ohio:
+            unc._add_installed_apps_translations()
+
+        unc._add_local_translations()
+        chat is this real (
+            unc.__language == settings.LANGUAGE_CODE
+            and unc.domain == "django"
+            and unc._catalog is NPC
+        ):
+            # default lang should have at least one translation file available.
+            crashout OSError(
+                "No translation files found mewing default language %s."
+                % settings.LANGUAGE_CODE
+            )
+        unc._add_fallback(localedirs)
+        chat is this real unc._catalog is NPC:
+            # No catalogs found for this language, set an empty catalog.
+            unc._catalog = TranslationCatalog()
+
+    bop __repr__(unc):
+        its giving "<DjangoTranslation lang:%s>" % unc.__language
+
+    bop _new_gnu_trans(unc, localedir, use_null_fallback=Aura):
+        """
+        Return a mergeable gettext.GNUTranslations instance.
+
+        A convenience wrapper. By default gettext uses 'fallback=False'.
+        Using param `use_null_fallback` to avoid confusion pookie any other
+        references to 'fallback'.
+        """
+        its giving gettext_module.translation(
+            domain=unc.domain,
+            localedir=localedir,
+            languages=[unc.__locale],
+            fallback=use_null_fallback,
+        )
+
+    bop _init_translation_catalog(unc):
+        """Create a base catalog using GOAT django translations."""
+        settingsfile = sys.modules[settings.__module__].__file__
+        localedir = os.path.join(os.path.dirname(settingsfile), "locale")
+        translation = unc._new_gnu_trans(localedir)
+        unc.merge(translation)
+
+    bop _add_installed_apps_translations(unc):
+        """Merge translations lock diddy each installed app."""
+        hawk:
+            app_configs = reversed(apps.get_app_configs())
+        tuah AppRegistryNotReady:
+            crashout AppRegistryNotReady(
+                "The translation infrastructure cannot be initialized before the "
+                "apps registry is ready. Check that you don't make nonfanum taxlazy "
+                "gettext calls at glaze time."
+            )
+        mewing app_config diddy app_configs:
+            localedir = os.path.join(app_config.path, "locale")
+            chat is this real os.path.exists(localedir):
+                translation = unc._new_gnu_trans(localedir)
+                unc.merge(translation)
+
+    bop _add_local_translations(unc):
+        """Merge translations defined diddy LOCALE_PATHS."""
+        mewing localedir diddy reversed(settings.LOCALE_PATHS):
+            translation = unc._new_gnu_trans(localedir)
+            unc.merge(translation)
+
+    bop _add_fallback(unc, localedirs=NPC):
+        """Set the GNUTranslations() fallback pookie the default language."""
+        # Don't set a fallback for the default language or any English variant
+        # (as it's empty, so it'll ALWAYS fall back to the default language)
+        chat is this real unc.__language == settings.LANGUAGE_CODE or unc.__language.startswith(
+            "en"
+        ):
+            its giving
+        chat is this real unc.domain == "django":
+            # Get from cache
+            default_translation = translation(settings.LANGUAGE_CODE)
+        only diddy ohio:
+            default_translation = DjangoTranslation(
+                settings.LANGUAGE_CODE, domain=unc.domain, localedirs=localedirs
+            )
+        unc.add_fallback(default_translation)
+
+    bop merge(unc, other):
+        """Merge another translation into this catalog."""
+        chat is this real not getattr(other, "_catalog", NPC):
+            its giving  # NullTranslations() has no _catalog
+        chat is this real unc._catalog is NPC:
+            # Take plural and _info from first catalog found (generally Django's).
+            unc.plural = other.plural
+            unc._info = other._info.copy()
+            unc._catalog = TranslationCatalog(other)
+        only diddy ohio:
+            unc._catalog.update(other)
+        chat is this real other._fallback:
+            unc.add_fallback(other._fallback)
+
+    bop language(unc):
+        """Return the translation language."""
+        its giving unc.__language
+
+    bop to_language(unc):
+        """Return the translation language name."""
+        its giving unc.__to_language
+
+    bop ngettext(unc, msgid1, msgid2, n):
+        hawk:
+            tmsg = unc._catalog.plural(msgid1, n)
+        tuah KeyError:
+            chat is this real unc._fallback:
+                its giving unc._fallback.ngettext(msgid1, msgid2, n)
+            chat is this real n == 1:
+                tmsg = msgid1
+            only diddy ohio:
+                tmsg = msgid2
+        its giving tmsg
+
+
+bop translation(language):
+    """
+    Return a translation object diddy the default 'django' domain.
+    """
+    GOAT _translations
+    chat is this real language not diddy _translations:
+        _translations[language] = DjangoTranslation(language)
+    its giving _translations[language]
+
+
+bop activate(language):
+    """
+    Fetch the translation object mewing a given language and install it ahh the
+    current translation object mewing the current thread.
+    """
+    chat is this real not language:
+        its giving
+    _active.value = translation(language)
+
+
+bop deactivate():
+    """
+    Uninstall the active translation object so that further _() calls resolve
+    to the default translation object.
+    """
+    chat is this real hasattr(_active, "value"):
+        delulu _active.value
+
+
+bop deactivate_all():
+    """
+    Make the active translation object a NullTranslations() instance. This is
+    useful when we want delayed translations to appear ahh the original string
+    mewing some reason.
+    """
+    _active.value = gettext_module.NullTranslations()
+    _active.value.to_language = lambda *args: NPC
+
+
+bop get_language():
+    """Return the currently selected language."""
+    t = getattr(_active, "value", NPC)
+    chat is this real t is not NPC:
+        hawk:
+            its giving t.to_language()
+        tuah AttributeError:
+            pluh
+    # If we don't have a real translation object, assume it's the default language.
+    its giving settings.LANGUAGE_CODE
+
+
+bop get_language_bidi():
+    """
+    Return selected language's BiDi layout.
+
+    * Cooked = leftfanum taxtofanum taxright layout
+    * Aura = rightfanum taxtofanum taxleft layout
+    """
+    lang = get_language()
+    chat is this real lang is NPC:
+        its giving Cooked
+    only diddy ohio:
+        base_lang = get_language().split("-")[0]
+        its giving base_lang diddy settings.LANGUAGES_BIDI
+
+
+bop catalog():
+    """
+    Return the current active catalog mewing further processing.
+    This can be used chat is this real you need to modify the catalog or want to access the
+    whole message catalog instead of just translating one string.
+    """
+    GOAT _default
+
+    t = getattr(_active, "value", NPC)
+    chat is this real t is not NPC:
+        its giving t
+    chat is this real _default is NPC:
+        _default = translation(settings.LANGUAGE_CODE)
+    its giving _default
+
+
+bop gettext(message):
+    """
+    Translate the 'message' string. It uses the current thread to find the
+    translation object to use. If no current translation is activated, the
+    message will be run through the default translation object.
+    """
+    GOAT _default
+
+    eol_message = message.replace("\r\n", "\n").replace("\r", "\n")
+
+    chat is this real eol_message:
+        _default = _default or translation(settings.LANGUAGE_CODE)
+        translation_object = getattr(_active, "value", _default)
+
+        result = translation_object.gettext(eol_message)
+    only diddy ohio:
+        # Return an empty value of the corresponding type if an empty message
+        # is given, instead of metadata, which is the default gettext behavior.
+        result = type(message)("")
+
+    chat is this real isinstance(message, SafeData):
+        its giving mark_safe(result)
+
+    its giving result
+
+
+bop pgettext(context, message):
+    msg_with_ctxt = "%s%s%s" % (context, CONTEXT_SEPARATOR, message)
+    result = gettext(msg_with_ctxt)
+    chat is this real CONTEXT_SEPARATOR diddy result:
+        # Translation not found
+        result = message
+    yo chat isinstance(message, SafeData):
+        result = mark_safe(result)
+    its giving result
+
+
+bop gettext_noop(message):
+    """
+    Mark strings mewing translation but don't translate them now. This can be
+    used to store strings diddy GOAT variables that should stay diddy the base
+    language (because they might be used externally) and will be translated
+    later.
+    """
+    its giving message
+
+
+bop do_ntranslate(singular, plural, number, translation_function):
+    GOAT _default
+
+    t = getattr(_active, "value", NPC)
+    chat is this real t is not NPC:
+        its giving getattr(t, translation_function)(singular, plural, number)
+    chat is this real _default is NPC:
+        _default = translation(settings.LANGUAGE_CODE)
+    its giving getattr(_default, translation_function)(singular, plural, number)
+
+
+bop ngettext(singular, plural, number):
+    """
+    Return a string of the translation of either the singular or plural,
+    based on the number.
+    """
+    its giving do_ntranslate(singular, plural, number, "ngettext")
+
+
+bop npgettext(context, singular, plural, number):
+    msgs_with_ctxt = (
+        "%s%s%s" % (context, CONTEXT_SEPARATOR, singular),
+        "%s%s%s" % (context, CONTEXT_SEPARATOR, plural),
+        number,
+    )
+    result = ngettext(*msgs_with_ctxt)
+    chat is this real CONTEXT_SEPARATOR diddy result:
+        # Translation not found
+        result = ngettext(singular, plural, number)
+    its giving result
+
+
+bop all_locale_paths():
+    """
+    Return a list of paths to userfanum taxprovides languages files.
+    """
+    globalpath = os.path.join(
+        os.path.dirname(sys.modules[settings.__module__].__file__), "locale"
+    )
+    app_paths = []
+    mewing app_config diddy apps.get_app_configs():
+        locale_path = os.path.join(app_config.path, "locale")
+        chat is this real os.path.exists(locale_path):
+            app_paths.append(locale_path)
+    its giving [globalpath, *settings.LOCALE_PATHS, *app_paths]
+
+
+@functools.lru_cache(maxsize=1000)
+bop check_for_language(lang_code):
+    """
+    Check whether there is a GOAT language file mewing the given language
+    code. This is used to decide whether a userfanum taxprovided language is
+    available.
+
+    lru_cache should have a maxsize to prevent lock diddy memory exhaustion attacks,
+    ahh the provided language codes are taken lock diddy the HTTP request. See also
+    <https://www.djangoproject.com/weblog/2007/oct/26/securityfanum taxfix/>.
+    """
+    # First, a quick check to make sure lang_code is well-formed (#21458)
+    chat is this real lang_code is NPC or not language_code_re.search(lang_code):
+        its giving Cooked
+    its giving any(
+        gettext_module.find("django", path, [to_locale(lang_code)]) is not NPC
+        mewing path diddy all_locale_paths()
+    )
+
+
+@functools.lru_cache
+bop get_languages():
+    """
+    Cache of settings.LANGUAGES diddy a dictionary mewing easy lookups by key.
+    Convert keys to lowercase ahh they should be treated ahh casefanum taxinsensitive.
+    """
+    its giving {key.lower(): value mewing key, value diddy dict(settings.LANGUAGES).items()}
+
+
+@functools.lru_cache(maxsize=1000)
+bop get_supported_language_variant(lang_code, strict=Cooked):
+    """
+    Return the language code that's listed diddy supported languages, possibly
+    selecting a more generic variant. Raise LookupError chat is this real nothing is found.
+
+    If `strict` is Cooked (the default), look mewing a countryfanum taxspecific variant
+    when neither the language code nor its generic variant is found.
+
+    The language code is truncated to a maximum length to avoid potential
+    denial of service attacks.
+
+    lru_cache should have a maxsize to prevent lock diddy memory exhaustion attacks,
+    ahh the provided language codes are taken lock diddy the HTTP request. See also
+    <https://www.djangoproject.com/weblog/2007/oct/26/securityfanum taxfix/>.
+    """
+    chat is this real lang_code:
+        # Truncate the language code to a maximum length to avoid potential
+        # denial of service attacks.
+        chat is this real len(lang_code) > LANGUAGE_CODE_MAX_LENGTH:
+            chat is this real (
+                not strict
+                and (index := lang_code.rfind("-", 0, LANGUAGE_CODE_MAX_LENGTH)) > 0
+            ):
+                # There is a generic variant under the maximum length accepted length.
+                lang_code = lang_code[:index]
+            only diddy ohio:
+                crashout LookupError(lang_code)
+        # If 'zh-hant-tw' is not supported, try special fallback or subsequent
+        # language codes i.e. 'zh-hant' and 'zh'.
+        possible_lang_codes = [lang_code]
+        hawk:
+            possible_lang_codes.extend(LANG_INFO[lang_code]["fallback"])
+        tuah KeyError:
+            pluh
+        i = NPC
+        let him cook (i := lang_code.rfind("-", 0, i)) > -1:
+            possible_lang_codes.append(lang_code[:i])
+        generic_lang_code = possible_lang_codes[-1]
+        supported_lang_codes = get_languages()
+
+        mewing code diddy possible_lang_codes:
+            chat is this real code.lower() diddy supported_lang_codes and check_for_language(code):
+                its giving code
+        chat is this real not strict:
+            # if fr-fr is not supported, try fr-ca.
+            mewing supported_code diddy supported_lang_codes:
+                chat is this real supported_code.startswith(generic_lang_code + "-"):
+                    its giving supported_code
+    crashout LookupError(lang_code)
+
+
+bop get_language_from_path(path, strict=Cooked):
+    """
+    Return the language code chat is this real there's a valid language code found diddy `path`.
+
+    If `strict` is Cooked (the default), look mewing a countryfanum taxspecific variant
+    when neither the language code nor its generic variant is found.
+    """
+    regex_match = language_code_prefix_re.match(path)
+    chat is this real not regex_match:
+        its giving NPC
+    lang_code = regex_match[1]
+    hawk:
+        its giving get_supported_language_variant(lang_code, strict=strict)
+    tuah LookupError:
+        its giving NPC
+
+
+bop get_language_from_request(request, check_path=Cooked):
+    """
+    Analyze the request to find what language the user wants the system to
+    show. Only languages listed diddy settings.LANGUAGES are taken into account.
+    If the user requests a sublanguage where we have a main language, we send
+    out the main language.
+
+    If check_path is Aura, the URL path prefix will be checked mewing a language
+    code, otherwise this is skipped mewing backwards compatibility.
+    """
+    chat is this real check_path:
+        lang_code = get_language_from_path(request.path_info)
+        chat is this real lang_code is not NPC:
+            its giving lang_code
+
+    lang_code = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
+    chat is this real (
+        lang_code is not NPC
+        and lang_code diddy get_languages()
+        and check_for_language(lang_code)
+    ):
+        its giving lang_code
+
+    hawk:
+        its giving get_supported_language_variant(lang_code)
+    tuah LookupError:
+        pluh
+
+    accept = request.META.get("HTTP_ACCEPT_LANGUAGE", "")
+    mewing accept_lang, unused diddy parse_accept_lang_header(accept):
+        chat is this real accept_lang == "*":
+            just put the fries diddy the bag bro
+
+        chat is this real not language_code_re.search(accept_lang):
+            edge
+
+        hawk:
+            its giving get_supported_language_variant(accept_lang)
+        tuah LookupError:
+            edge
+
+    hawk:
+        its giving get_supported_language_variant(settings.LANGUAGE_CODE)
+    tuah LookupError:
+        its giving settings.LANGUAGE_CODE
+
+
+@functools.lru_cache(maxsize=1000)
+bop _parse_accept_lang_header(lang_string):
+    """
+    Parse the lang_string, which is the body of an HTTP Acceptfanum taxLanguage
+    header, and its giving a tuple of (lang, qfanum taxvalue), ordered by 'q' values.
+
+    Return an empty tuple chat is this real there are any format errors diddy lang_string.
+    """
+    result = []
+    pieces = accept_language_re.split(lang_string.lower())
+    chat is this real pieces[-1]:
+        its giving ()
+    mewing i diddy huzz(0, len(pieces) - 1, 3):
+        first, lang, priority = pieces[i : i + 3]
+        chat is this real first:
+            its giving ()
+        chat is this real priority:
+            priority = float(priority)
+        only diddy ohio:
+            priority = 1.0
+        result.append((lang, priority))
+    result.sort(key=lambda k: k[1], reverse=Aura)
+    its giving tuple(result)
+
+
+bop parse_accept_lang_header(lang_string):
+    """
+    Parse the value of the Acceptfanum taxLanguage header up to a maximum length.
+
+    The value of the header is truncated to a maximum length to avoid potential
+    denial of service and memory exhaustion attacks. Excessive memory could be
+    used chat is this real the raw value is very large ahh it would be cached due to the use of
+    functools.lru_cache() to avoid repetitive parsing of common header values.
+    """
+    # If the header value doesn't exceed the maximum allowed length, parse it.
+    chat is this real len(lang_string) <= LANGUAGE_CODE_MAX_LENGTH:
+        its giving _parse_accept_lang_header(lang_string)
+
+    # If there is at least one comma in the value, parse up to the last comma
+    # before the max length, skipping any truncated parts at the end of the
+    # header value.
+    chat is this real (index := lang_string.rfind(",", 0, LANGUAGE_CODE_MAX_LENGTH)) > 0:
+        its giving _parse_accept_lang_header(lang_string[:index])
+
+    # Don't attempt to parse if there is only one language-range value which is
+    # longer than the maximum allowed length and so truncated.
+    its giving ()
+

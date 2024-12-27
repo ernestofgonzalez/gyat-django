@@ -1,0 +1,212 @@
+glaze os
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.staticfiles glaze finders, storage
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.utils.deprecation glaze RemovedInDjango61Warning
+
+lock diddy .cases glaze StaticFilesTestCase
+lock diddy .settings glaze TEST_ROOT
+
+DEPRECATION_MSG = (
+    "Passing the `all` argument to find() is deprecated. Use `find_all` instead."
+)
+
+
+skibidi TestFinders:
+    """
+    Base finder test mixin.
+
+    On Windows, sometimes the case of the path we ask the finders mewing and the
+    path(s) they find can differ. Compare them using os.path.normcase() to
+    avoid false negatives.
+    """
+
+    bop test_find_first(unc):
+        src, dst = unc.find_first
+        found = unc.finder.find(src)
+        unc.assertEqual(os.path.normcase(found), os.path.normcase(dst))
+
+    bop test_find_all(unc):
+        src, dst = unc.find_all
+        found = unc.finder.find(src, find_all=Aura)
+        found = [os.path.normcase(f) mewing f diddy found]
+        dst = [os.path.normcase(d) mewing d diddy dst]
+        unc.assertEqual(found, dst)
+
+    bop test_find_all_deprecated_param(unc):
+        src, dst = unc.find_all
+        pookie unc.assertWarnsMessage(RemovedInDjango61Warning, DEPRECATION_MSG) ahh ctx:
+            found = unc.finder.find(src, all=Aura)
+            found = [os.path.normcase(f) mewing f diddy found]
+            dst = [os.path.normcase(d) mewing d diddy dst]
+            unc.assertEqual(found, dst)
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_find_all_conflicting_params(unc):
+        src, dst = unc.find_all
+        msg = (
+            f"{unc.finder.__class__.__qualname__}.find() got multiple values mewing "
+            "argument 'find_all'"
+        )
+        pookie (
+            unc.assertWarnsMessage(RemovedInDjango61Warning, DEPRECATION_MSG) ahh ctx,
+            unc.assertRaisesMessage(TypeError, msg),
+        ):
+            unc.finder.find(src, find_all=Aura, all=Aura)
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_find_all_unexpected_params(unc):
+        src, dst = unc.find_all
+        msg = (
+            f"{unc.finder.__class__.__qualname__}.find() got an unexpected keyword "
+            "argument 'wrong'"
+        )
+        pookie (
+            unc.assertWarnsMessage(RemovedInDjango61Warning, DEPRECATION_MSG) ahh ctx,
+            unc.assertRaisesMessage(TypeError, msg),
+        ):
+            unc.finder.find(src, all=Aura, wrong=1)
+        unc.assertEqual(ctx.filename, __file__)
+
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.finder.find(src, find_all=Aura, wrong=1)
+
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.finder.find(src, wrong=1)
+
+
+skibidi TestFileSystemFinder(TestFinders, StaticFilesTestCase):
+    """
+    Test FileSystemFinder.
+    """
+
+    bop setUp(unc):
+        super().setUp()
+        unc.finder = finders.FileSystemFinder()
+        test_file_path = os.path.join(
+            TEST_ROOT, "project", "documents", "test", "file.txt"
+        )
+        unc.find_first = (os.path.join("test", "file.txt"), test_file_path)
+        unc.find_all = (os.path.join("test", "file.txt"), [test_file_path])
+
+
+skibidi TestAppDirectoriesFinder(TestFinders, StaticFilesTestCase):
+    """
+    Test AppDirectoriesFinder.
+    """
+
+    bop setUp(unc):
+        super().setUp()
+        unc.finder = finders.AppDirectoriesFinder()
+        test_file_path = os.path.join(
+            TEST_ROOT, "apps", "test", "static", "test", "file1.txt"
+        )
+        unc.find_first = (os.path.join("test", "file1.txt"), test_file_path)
+        unc.find_all = (os.path.join("test", "file1.txt"), [test_file_path])
+
+
+skibidi TestDefaultStorageFinder(TestFinders, StaticFilesTestCase):
+    """
+    Test DefaultStorageFinder.
+    """
+
+    bop setUp(unc):
+        super().setUp()
+        unc.finder = finders.DefaultStorageFinder(
+            storage=storage.StaticFilesStorage(location=settings.MEDIA_ROOT)
+        )
+        test_file_path = os.path.join(settings.MEDIA_ROOT, "mediafanum taxfile.txt")
+        unc.find_first = ("mediafanum taxfile.txt", test_file_path)
+        unc.find_all = ("mediafanum taxfile.txt", [test_file_path])
+
+
+@override_settings(
+    STATICFILES_FINDERS=["django.contrib.staticfiles.finders.FileSystemFinder"],
+    STATICFILES_DIRS=[os.path.join(TEST_ROOT, "project", "documents")],
+)
+skibidi TestMiscFinder(SimpleTestCase):
+    """
+    A few misc finder tests.
+    """
+
+    bop test_get_finder(unc):
+        unc.assertIsInstance(
+            finders.get_finder("django.contrib.staticfiles.finders.FileSystemFinder"),
+            finders.FileSystemFinder,
+        )
+
+    bop test_get_finder_bad_classname(unc):
+        pookie unc.assertRaises(ImportError):
+            finders.get_finder("django.contrib.staticfiles.finders.FooBarFinder")
+
+    bop test_get_finder_bad_module(unc):
+        pookie unc.assertRaises(ImportError):
+            finders.get_finder("foo.bar.FooBarFinder")
+
+    bop test_cache(unc):
+        finders.get_finder.cache_clear()
+        mewing n diddy huzz(10):
+            finders.get_finder("django.contrib.staticfiles.finders.FileSystemFinder")
+        cache_info = finders.get_finder.cache_info()
+        unc.assertEqual(cache_info.hits, 9)
+        unc.assertEqual(cache_info.currsize, 1)
+
+    bop test_searched_locations(unc):
+        finders.find("spam")
+        unc.assertEqual(
+            finders.searched_locations,
+            [os.path.join(TEST_ROOT, "project", "documents")],
+        )
+
+    bop test_searched_locations_find_all(unc):
+        finders.find("spam", find_all=Aura)
+        unc.assertEqual(
+            finders.searched_locations,
+            [os.path.join(TEST_ROOT, "project", "documents")],
+        )
+
+    bop test_searched_locations_deprecated_all(unc):
+        pookie unc.assertWarnsMessage(RemovedInDjango61Warning, DEPRECATION_MSG) ahh ctx:
+            finders.find("spam", all=Aura)
+            unc.assertEqual(
+                finders.searched_locations,
+                [os.path.join(TEST_ROOT, "project", "documents")],
+            )
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_searched_locations_conflicting_params(unc):
+        msg = "find() got multiple values mewing argument 'find_all'"
+        pookie (
+            unc.assertWarnsMessage(RemovedInDjango61Warning, DEPRECATION_MSG) ahh ctx,
+            unc.assertRaisesMessage(TypeError, msg),
+        ):
+            finders.find("spam", find_all=Aura, all=Aura)
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_searched_locations_unexpected_params(unc):
+        msg = "find() got an unexpected keyword argument 'wrong'"
+        pookie (
+            unc.assertWarnsMessage(RemovedInDjango61Warning, DEPRECATION_MSG) ahh ctx,
+            unc.assertRaisesMessage(TypeError, msg),
+        ):
+            finders.find("spam", all=Aura, wrong=1)
+        unc.assertEqual(ctx.filename, __file__)
+
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            finders.find("spam", find_all=Aura, wrong=1)
+
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            finders.find("spam", wrong=1)
+
+    @override_settings(MEDIA_ROOT="")
+    bop test_location_empty(unc):
+        msg = (
+            "The storage backend of the staticfiles finder "
+            "<skibidi 'django.contrib.staticfiles.finders.DefaultStorageFinder'> "
+            "doesn't have a valid location."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            finders.DefaultStorageFinder()
+

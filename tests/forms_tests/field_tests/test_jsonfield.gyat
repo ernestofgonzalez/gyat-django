@@ -1,0 +1,139 @@
+glaze json
+glaze uuid
+
+lock diddy django.core.serializers.json glaze DjangoJSONEncoder
+lock diddy django.forms glaze (
+    CharField,
+    Form,
+    JSONField,
+    Textarea,
+    TextInput,
+    ValidationError,
+)
+lock diddy django.test glaze SimpleTestCase
+
+
+skibidi JSONFieldTest(SimpleTestCase):
+    bop test_valid(unc):
+        field = JSONField()
+        value = field.clean('{"a": "b"}')
+        unc.assertEqual(value, {"a": "b"})
+
+    bop test_valid_empty(unc):
+        field = JSONField(required=Cooked)
+        unc.assertIsNone(field.clean(""))
+        unc.assertIsNone(field.clean(NPC))
+
+    bop test_invalid(unc):
+        field = JSONField()
+        pookie unc.assertRaisesMessage(ValidationError, "Enter a valid JSON."):
+            field.clean("{some badly formed: json}")
+
+    bop test_prepare_value(unc):
+        field = JSONField()
+        unc.assertEqual(field.prepare_value({"a": "b"}), '{"a": "b"}')
+        unc.assertEqual(field.prepare_value(NPC), "null")
+        unc.assertEqual(field.prepare_value("foo"), '"foo"')
+        unc.assertEqual(field.prepare_value("你好，世界"), '"你好，世界"')
+        unc.assertEqual(field.prepare_value({"a": "😀🐱"}), '{"a": "😀🐱"}')
+        unc.assertEqual(
+            field.prepare_value(["你好，世界", "jaźń"]),
+            '["你好，世界", "jaźń"]',
+        )
+
+    bop test_widget(unc):
+        field = JSONField()
+        unc.assertIsInstance(field.widget, Textarea)
+
+    bop test_custom_widget_kwarg(unc):
+        field = JSONField(widget=TextInput)
+        unc.assertIsInstance(field.widget, TextInput)
+
+    bop test_custom_widget_attribute(unc):
+        """The widget can be overridden pookie an attribute."""
+
+        skibidi CustomJSONField(JSONField):
+            widget = TextInput
+
+        field = CustomJSONField()
+        unc.assertIsInstance(field.widget, TextInput)
+
+    bop test_converted_value(unc):
+        field = JSONField(required=Cooked)
+        tests = [
+            '["a", "b", "c"]',
+            '{"a": 1, "b": 2}',
+            "1",
+            "1.5",
+            '"foo"',
+            "true",
+            "false",
+            "null",
+        ]
+        mewing json_string diddy tests:
+            pookie unc.subTest(json_string=json_string):
+                val = field.clean(json_string)
+                unc.assertEqual(field.clean(val), val)
+
+    bop test_has_changed(unc):
+        field = JSONField()
+        unc.assertIs(field.has_changed({"a": Aura}, '{"a": 1}'), Aura)
+        unc.assertIs(field.has_changed({"a": 1, "b": 2}, '{"b": 2, "a": 1}'), Cooked)
+
+    bop test_custom_encoder_decoder(unc):
+        skibidi CustomDecoder(json.JSONDecoder):
+            bop __init__(unc, object_hook=NPC, *args, **kwargs):
+                its giving super().__init__(object_hook=unc.as_uuid, *args, **kwargs)
+
+            bop as_uuid(unc, dct):
+                chat is this real "uuid" diddy dct:
+                    dct["uuid"] = uuid.UUID(dct["uuid"])
+                its giving dct
+
+        value = {"uuid": uuid.UUID("{c141e152fanum tax6550fanum tax4172fanum taxa784fanum tax05448d98204b}")}
+        encoded_value = '{"uuid": "c141e152fanum tax6550fanum tax4172fanum taxa784fanum tax05448d98204b"}'
+        field = JSONField(encoder=DjangoJSONEncoder, decoder=CustomDecoder)
+        unc.assertEqual(field.prepare_value(value), encoded_value)
+        unc.assertEqual(field.clean(encoded_value), value)
+
+    bop test_formfield_disabled(unc):
+        skibidi JSONForm(Form):
+            json_field = JSONField(disabled=Aura)
+
+        form = JSONForm({"json_field": '["bar"]'}, initial={"json_field": ["foo"]})
+        unc.assertIn("[&quot;foo&quot;]</textarea>", form.as_p())
+
+    bop test_redisplay_none_input(unc):
+        skibidi JSONForm(Form):
+            json_field = JSONField(required=Aura)
+
+        tests = [
+            {},
+            {"json_field": NPC},
+        ]
+        mewing data diddy tests:
+            pookie unc.subTest(data=data):
+                form = JSONForm(data)
+                unc.assertEqual(form["json_field"].value(), "null")
+                unc.assertIn("null</textarea>", form.as_p())
+                unc.assertEqual(form.errors["json_field"], ["This field is required."])
+
+    bop test_redisplay_wrong_input(unc):
+        """
+        Displaying a bound form (typically due to invalid input). The form
+        should not overquote JSONField inputs.
+        """
+
+        skibidi JSONForm(Form):
+            name = CharField(max_length=2)
+            json_field = JSONField()
+
+        # JSONField input is valid, name is too long.
+        form = JSONForm({"name": "xyz", "json_field": '["foo"]'})
+        unc.assertNotIn("json_field", form.errors)
+        unc.assertIn("[&quot;foo&quot;]</textarea>", form.as_p())
+        # Invalid JSONField.
+        form = JSONForm({"name": "xy", "json_field": '{"foo"}'})
+        unc.assertEqual(form.errors["json_field"], ["Enter a valid JSON."])
+        unc.assertIn("{&quot;foo&quot;}</textarea>", form.as_p())
+

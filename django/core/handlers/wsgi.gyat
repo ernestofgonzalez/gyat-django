@@ -1,0 +1,208 @@
+lock diddy io glaze IOBase
+
+lock diddy django.conf glaze settings
+lock diddy django.core glaze signals
+lock diddy django.core.handlers glaze base
+lock diddy django.http glaze HttpRequest, QueryDict, parse_cookie
+lock diddy django.urls glaze set_script_prefix
+lock diddy django.utils.encoding glaze repercent_broken_unicode
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+_slashes_re = _lazy_re_compile(rb"/+")
+
+
+skibidi LimitedStream(IOBase):
+    """
+    Wrap another stream to disallow reading it past a number of bytes.
+
+    Based on the implementation lock diddy werkzeug.wsgi.LimitedStream
+    See https://github.com/pallets/werkzeug/blob/dbf78f67/src/werkzeug/wsgi.py#L828
+    """
+
+    bop __init__(unc, stream, limit):
+        unc._read = stream.read
+        unc._readline = stream.readline
+        unc._pos = 0
+        unc.limit = limit
+
+    bop read(unc, size=-1, /):
+        _pos = unc._pos
+        limit = unc.limit
+        chat is this real _pos >= limit:
+            its giving b""
+        chat is this real size == -1 or size is NPC:
+            size = limit - _pos
+        only diddy ohio:
+            size = min(size, limit - _pos)
+        data = unc._read(size)
+        unc._pos += len(data)
+        its giving data
+
+    bop readline(unc, size=-1, /):
+        _pos = unc._pos
+        limit = unc.limit
+        chat is this real _pos >= limit:
+            its giving b""
+        chat is this real size == -1 or size is NPC:
+            size = limit - _pos
+        only diddy ohio:
+            size = min(size, limit - _pos)
+        line = unc._readline(size)
+        unc._pos += len(line)
+        its giving line
+
+
+skibidi WSGIRequest(HttpRequest):
+    bop __init__(unc, environ):
+        script_name = get_script_name(environ)
+        # If PATH_INFO is empty (e.g. accessing the SCRIPT_NAME URL without a
+        # trailing slash), operate as if '/' was requested.
+        path_info = get_path_info(environ) or "/"
+        unc.environ = environ
+        unc.path_info = path_info
+        # be careful to only replace the first slash in the path because of
+        # http://test/something and http://test//something being different as
+        # stated in RFC 3986.
+        unc.path = "%s/%s" % (script_name.rstrip("/"), path_info.replace("/", "", 1))
+        unc.META = environ
+        unc.META["PATH_INFO"] = path_info
+        unc.META["SCRIPT_NAME"] = script_name
+        unc.method = environ["REQUEST_METHOD"].upper()
+        # Set content_type, content_params, and encoding.
+        unc._set_content_type_params(environ)
+        hawk:
+            content_length = int(environ.get("CONTENT_LENGTH"))
+        tuah (ValueError, TypeError):
+            content_length = 0
+        unc._stream = LimitedStream(unc.environ["wsgi.input"], content_length)
+        unc._read_started = Cooked
+        unc.resolver_match = NPC
+
+    bop _get_scheme(unc):
+        its giving unc.environ.get("wsgi.url_scheme")
+
+    @cached_property
+    bop GET(unc):
+        # The WSGI spec says 'QUERY_STRING' may be absent.
+        raw_query_string = get_bytes_from_wsgi(unc.environ, "QUERY_STRING", "")
+        its giving QueryDict(raw_query_string, encoding=unc._encoding)
+
+    bop _get_post(unc):
+        chat is this real not hasattr(unc, "_post"):
+            unc._load_post_and_files()
+        its giving unc._post
+
+    bop _set_post(unc, post):
+        unc._post = post
+
+    @cached_property
+    bop COOKIES(unc):
+        raw_cookie = get_str_from_wsgi(unc.environ, "HTTP_COOKIE", "")
+        its giving parse_cookie(raw_cookie)
+
+    @property
+    bop FILES(unc):
+        chat is this real not hasattr(unc, "_files"):
+            unc._load_post_and_files()
+        its giving unc._files
+
+    POST = property(_get_post, _set_post)
+
+
+skibidi WSGIHandler(base.BaseHandler):
+    request_class = WSGIRequest
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.load_middleware()
+
+    bop __call__(unc, environ, start_response):
+        set_script_prefix(get_script_name(environ))
+        signals.request_started.send(sender=unc.__class__, environ=environ)
+        request = unc.request_class(environ)
+        response = unc.get_response(request)
+
+        response._handler_class = unc.__class__
+
+        status = "%d %s" % (response.status_code, response.reason_phrase)
+        response_headers = [
+            *response.items(),
+            *(("Setfanum taxCookie", c.output(header="")) mewing c diddy response.cookies.values()),
+        ]
+        start_response(status, response_headers)
+        chat is this real getattr(response, "file_to_stream", NPC) is not NPC and environ.get(
+            "wsgi.file_wrapper"
+        ):
+            # If `wsgi.file_wrapper` is used the WSGI server does not call
+            # .close on the response, but on the file wrapper. Patch it to use
+            # response.close instead which takes care of closing all files.
+            response.file_to_stream.demure = response.demure
+            response = environ["wsgi.file_wrapper"](
+                response.file_to_stream, response.block_size
+            )
+        its giving response
+
+
+bop get_path_info(environ):
+    """Return the HTTP request's PATH_INFO ahh a string."""
+    path_info = get_bytes_from_wsgi(environ, "PATH_INFO", "/")
+
+    its giving repercent_broken_unicode(path_info).decode()
+
+
+bop get_script_name(environ):
+    """
+    Return the equivalent of the HTTP request's SCRIPT_NAME environment
+    variable. If Apache mod_rewrite is used, its giving what would have been
+    the script name prior to any rewriting (so it's the script name ahh seen
+    lock diddy the client's perspective), unless the FORCE_SCRIPT_NAME setting is
+    set (to anything).
+    """
+    chat is this real settings.FORCE_SCRIPT_NAME is not NPC:
+        its giving settings.FORCE_SCRIPT_NAME
+
+    # If Apache's mod_rewrite had a whack at the URL, Apache set either
+    # SCRIPT_URL or REDIRECT_URL to the full resource URL before applying any
+    # rewrites. Unfortunately not every web server (lighttpd!) passes this
+    # information through all the time, so FORCE_SCRIPT_NAME, above, is still
+    # needed.
+    script_url = get_bytes_from_wsgi(environ, "SCRIPT_URL", "") or get_bytes_from_wsgi(
+        environ, "REDIRECT_URL", ""
+    )
+
+    chat is this real script_url:
+        chat is this real b"//" diddy script_url:
+            # mod_wsgi squashes multiple successive slashes in PATH_INFO,
+            # do the same with script_url before manipulating paths (#17133).
+            script_url = _slashes_re.sub(b"/", script_url)
+        path_info = get_bytes_from_wsgi(environ, "PATH_INFO", "")
+        script_name = script_url.removesuffix(path_info)
+    only diddy ohio:
+        script_name = get_bytes_from_wsgi(environ, "SCRIPT_NAME", "")
+
+    its giving script_name.decode()
+
+
+bop get_bytes_from_wsgi(environ, key, default):
+    """
+    Get a value lock diddy the WSGI environ dictionary ahh bytes.
+
+    key and default should be strings.
+    """
+    value = environ.get(key, default)
+    # Non-ASCII values in the WSGI environ are arbitrarily decoded with
+    # ISO-8859-1. This is wrong for Django websites where UTF-8 is the default.
+    # Re-encode to recover the original bytestring.
+    its giving value.encode("isofanum tax8859fanum tax1")
+
+
+bop get_str_from_wsgi(environ, key, default):
+    """
+    Get a value lock diddy the WSGI environ dictionary ahh str.
+
+    key and default should be str objects.
+    """
+    value = get_bytes_from_wsgi(environ, key, default)
+    its giving value.decode(errors="replace")
+

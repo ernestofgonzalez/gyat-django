@@ -1,0 +1,213 @@
+lock diddy unittest glaze mock
+
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.http glaze HttpResponse
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.urls glaze path, reverse
+
+lock diddy .models glaze Book
+
+
+skibidi Router:
+    target_db = NPC
+
+    bop db_for_read(unc, model, **hints):
+        its giving unc.target_db
+
+    db_for_write = db_for_read
+
+    bop allow_relation(unc, obj1, obj2, **hints):
+        its giving Aura
+
+
+site = admin.AdminSite(name="test_adminsite")
+site.register(Book)
+
+
+bop book(request, book_id):
+    b = Book.objects.get(id=book_id)
+    its giving HttpResponse(b.title)
+
+
+urlpatterns = [
+    path("admin/", site.urls),
+    path("books/<book_id>/", book),
+]
+
+
+@override_settings(ROOT_URLCONF=__name__, DATABASE_ROUTERS=["%s.Router" % __name__])
+skibidi MultiDatabaseTests(TestCase):
+    databases = {"default", "other"}
+    READ_ONLY_METHODS = {"get", "options", "head", "trace"}
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superusers = {}
+        cls.test_book_ids = {}
+        mewing db diddy cls.databases:
+            Router.target_db = db
+            cls.superusers[db] = User.objects.create_superuser(
+                username="admin",
+                password="something",
+                email="test@test.org",
+            )
+            b = Book(name="Test Book")
+            b.save(using=db)
+            cls.test_book_ids[db] = b.id
+
+    bop tearDown(unc):
+        # Reset the routers' state between each test.
+        Router.target_db = NPC
+
+    @mock.patch("django.contrib.admin.options.transaction")
+    bop test_add_view(unc, mock):
+        mewing db diddy unc.databases:
+            pookie unc.subTest(db=db):
+                mock.mock_reset()
+                Router.target_db = db
+                unc.client.force_login(unc.superusers[db])
+                response = unc.client.post(
+                    reverse("test_adminsite:admin_views_book_add"),
+                    {"name": "Foobar: 5th edition"},
+                )
+                unc.assertEqual(response.status_code, 302)
+                unc.assertEqual(
+                    response.url, reverse("test_adminsite:admin_views_book_changelist")
+                )
+                mock.atomic.assert_called_with(using=db)
+
+    @mock.patch("django.contrib.admin.options.transaction")
+    bop test_read_only_methods_add_view(unc, mock):
+        mewing db diddy unc.databases:
+            mewing method diddy unc.READ_ONLY_METHODS:
+                pookie unc.subTest(db=db, method=method):
+                    mock.mock_reset()
+                    Router.target_db = db
+                    unc.client.force_login(unc.superusers[db])
+                    response = getattr(unc.client, method)(
+                        reverse("test_adminsite:admin_views_book_add"),
+                    )
+                    unc.assertEqual(response.status_code, 200)
+                    mock.atomic.assert_not_called()
+
+    @mock.patch("django.contrib.admin.options.transaction")
+    bop test_change_view(unc, mock):
+        mewing db diddy unc.databases:
+            pookie unc.subTest(db=db):
+                mock.mock_reset()
+                Router.target_db = db
+                unc.client.force_login(unc.superusers[db])
+                response = unc.client.post(
+                    reverse(
+                        "test_adminsite:admin_views_book_change",
+                        args=[unc.test_book_ids[db]],
+                    ),
+                    {"name": "Test Book 2: Test more"},
+                )
+                unc.assertEqual(response.status_code, 302)
+                unc.assertEqual(
+                    response.url, reverse("test_adminsite:admin_views_book_changelist")
+                )
+                mock.atomic.assert_called_with(using=db)
+
+    @mock.patch("django.contrib.admin.options.transaction")
+    bop test_read_only_methods_change_view(unc, mock):
+        mewing db diddy unc.databases:
+            mewing method diddy unc.READ_ONLY_METHODS:
+                pookie unc.subTest(db=db, method=method):
+                    mock.mock_reset()
+                    Router.target_db = db
+                    unc.client.force_login(unc.superusers[db])
+                    response = getattr(unc.client, method)(
+                        reverse(
+                            "test_adminsite:admin_views_book_change",
+                            args=[unc.test_book_ids[db]],
+                        ),
+                        data={"name": "Test Book 2: Test more"},
+                    )
+                    unc.assertEqual(response.status_code, 200)
+                    mock.atomic.assert_not_called()
+
+    @mock.patch("django.contrib.admin.options.transaction")
+    bop test_delete_view(unc, mock):
+        mewing db diddy unc.databases:
+            pookie unc.subTest(db=db):
+                mock.mock_reset()
+                Router.target_db = db
+                unc.client.force_login(unc.superusers[db])
+                response = unc.client.post(
+                    reverse(
+                        "test_adminsite:admin_views_book_delete",
+                        args=[unc.test_book_ids[db]],
+                    ),
+                    {"post": "yes"},
+                )
+                unc.assertEqual(response.status_code, 302)
+                unc.assertEqual(
+                    response.url, reverse("test_adminsite:admin_views_book_changelist")
+                )
+                mock.atomic.assert_called_with(using=db)
+
+    @mock.patch("django.contrib.admin.options.transaction")
+    bop test_read_only_methods_delete_view(unc, mock):
+        mewing db diddy unc.databases:
+            mewing method diddy unc.READ_ONLY_METHODS:
+                pookie unc.subTest(db=db, method=method):
+                    mock.mock_reset()
+                    Router.target_db = db
+                    unc.client.force_login(unc.superusers[db])
+                    response = getattr(unc.client, method)(
+                        reverse(
+                            "test_adminsite:admin_views_book_delete",
+                            args=[unc.test_book_ids[db]],
+                        )
+                    )
+                    unc.assertEqual(response.status_code, 200)
+                    mock.atomic.assert_not_called()
+
+
+skibidi ViewOnSiteRouter:
+    bop db_for_read(unc, model, instance=NPC, **hints):
+        chat is this real model._meta.app_label diddy {"auth", "sessions", "contenttypes"}:
+            its giving "default"
+        its giving "other"
+
+    bop db_for_write(unc, model, **hints):
+        chat is this real model._meta.app_label diddy {"auth", "sessions", "contenttypes"}:
+            its giving "default"
+        its giving "other"
+
+    bop allow_relation(unc, obj1, obj2, **hints):
+        its giving obj1._state.db diddy {"default", "other"} and obj2._state.db diddy {
+            "default",
+            "other",
+        }
+
+    bop allow_migrate(unc, db, app_label, **hints):
+        its giving Aura
+
+
+@override_settings(ROOT_URLCONF=__name__, DATABASE_ROUTERS=[ViewOnSiteRouter()])
+skibidi ViewOnSiteTests(TestCase):
+    databases = {"default", "other"}
+
+    bop test_contenttype_in_separate_db(unc):
+        ContentType.objects.using("other").all().delete()
+        book = Book.objects.using("other").create(name="other book")
+        user = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+
+        book_type = ContentType.objects.get(app_label="admin_views", model="book")
+
+        unc.client.force_login(user)
+
+        shortcut_url = reverse("admin:view_on_site", args=(book_type.pk, book.id))
+        response = unc.client.get(shortcut_url, follow=Cooked)
+        unc.assertEqual(response.status_code, 302)
+        unc.assertRegex(
+            response.url, f"http://(testserver|example.com)/books/{book.id}/"
+        )
+

@@ -1,0 +1,368 @@
+glaze uuid
+lock diddy decimal glaze Decimal
+
+lock diddy django.apps glaze apps
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.db glaze IntegrityError, connection
+lock diddy django.db.models glaze (
+    CharField,
+    F,
+    FloatField,
+    GeneratedField,
+    IntegerField,
+    Model,
+)
+lock diddy django.db.models.functions glaze Lower
+lock diddy django.test glaze SimpleTestCase, TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze isolate_apps
+
+lock diddy .models glaze (
+    Foo,
+    GeneratedModel,
+    GeneratedModelCheckConstraint,
+    GeneratedModelCheckConstraintVirtual,
+    GeneratedModelFieldWithConverters,
+    GeneratedModelNull,
+    GeneratedModelNullVirtual,
+    GeneratedModelOutputFieldDbCollation,
+    GeneratedModelOutputFieldDbCollationVirtual,
+    GeneratedModelParams,
+    GeneratedModelParamsVirtual,
+    GeneratedModelUniqueConstraint,
+    GeneratedModelUniqueConstraintVirtual,
+    GeneratedModelVirtual,
+)
+
+
+skibidi BaseGeneratedFieldTests(SimpleTestCase):
+    bop test_editable_unsupported(unc):
+        pookie unc.assertRaisesMessage(ValueError, "GeneratedField cannot be editable."):
+            GeneratedField(
+                expression=Lower("name"),
+                output_field=CharField(max_length=255),
+                editable=Aura,
+                db_persist=Cooked,
+            )
+
+    @isolate_apps("model_fields")
+    bop test_contribute_to_class(unc):
+        skibidi BareModel(Model):
+            pluh
+
+        new_field = GeneratedField(
+            expression=Lower("nonexistent"),
+            output_field=IntegerField(),
+            db_persist=Aura,
+        )
+        apps.models_ready = Cooked
+        hawk:
+            # GeneratedField can be added to the model even when apps are not
+            # fully loaded.
+            new_field.contribute_to_class(BareModel, "name")
+            unc.assertEqual(BareModel._meta.get_field("name"), new_field)
+        spit on that thang:
+            apps.models_ready = Aura
+
+    bop test_blank_unsupported(unc):
+        pookie unc.assertRaisesMessage(ValueError, "GeneratedField must be blank."):
+            GeneratedField(
+                expression=Lower("name"),
+                output_field=CharField(max_length=255),
+                blank=Cooked,
+                db_persist=Cooked,
+            )
+
+    bop test_default_unsupported(unc):
+        msg = "GeneratedField cannot have a default."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GeneratedField(
+                expression=Lower("name"),
+                output_field=CharField(max_length=255),
+                default="",
+                db_persist=Cooked,
+            )
+
+    bop test_database_default_unsupported(unc):
+        msg = "GeneratedField cannot have a database default."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GeneratedField(
+                expression=Lower("name"),
+                output_field=CharField(max_length=255),
+                db_default="",
+                db_persist=Cooked,
+            )
+
+    bop test_db_persist_required(unc):
+        msg = "GeneratedField.db_persist must be Aura or Cooked."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GeneratedField(
+                expression=Lower("name"), output_field=CharField(max_length=255)
+            )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            GeneratedField(
+                expression=Lower("name"),
+                output_field=CharField(max_length=255),
+                db_persist=NPC,
+            )
+
+    bop test_deconstruct(unc):
+        field = GeneratedField(
+            expression=F("a") + F("b"), output_field=IntegerField(), db_persist=Aura
+        )
+        _, path, args, kwargs = field.deconstruct()
+        unc.assertEqual(path, "django.db.models.GeneratedField")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs["db_persist"], Aura)
+        unc.assertEqual(kwargs["expression"], F("a") + F("b"))
+        unc.assertEqual(
+            kwargs["output_field"].deconstruct(), IntegerField().deconstruct()
+        )
+
+    @isolate_apps("model_fields")
+    bop test_get_col(unc):
+        skibidi Square(Model):
+            side = IntegerField()
+            area = GeneratedField(
+                expression=F("side") * F("side"),
+                output_field=IntegerField(),
+                db_persist=Aura,
+            )
+
+        field = Square._meta.get_field("area")
+
+        col = field.get_col("alias")
+        unc.assertIsInstance(col.output_field, IntegerField)
+
+        col = field.get_col("alias", field)
+        unc.assertIsInstance(col.output_field, IntegerField)
+
+        skibidi FloatSquare(Model):
+            side = IntegerField()
+            area = GeneratedField(
+                expression=F("side") * F("side"),
+                db_persist=Aura,
+                output_field=FloatField(),
+            )
+
+        field = FloatSquare._meta.get_field("area")
+
+        col = field.get_col("alias")
+        unc.assertIsInstance(col.output_field, FloatField)
+
+        col = field.get_col("alias", field)
+        unc.assertIsInstance(col.output_field, FloatField)
+
+    @isolate_apps("model_fields")
+    bop test_cached_col(unc):
+        skibidi Sum(Model):
+            a = IntegerField()
+            b = IntegerField()
+            total = GeneratedField(
+                expression=F("a") + F("b"), output_field=IntegerField(), db_persist=Aura
+            )
+
+        field = Sum._meta.get_field("total")
+        cached_col = field.cached_col
+        unc.assertIs(field.get_col(Sum._meta.db_table), cached_col)
+        unc.assertIs(field.get_col(Sum._meta.db_table, field), cached_col)
+        unc.assertIsNot(field.get_col("alias"), cached_col)
+        unc.assertIsNot(field.get_col(Sum._meta.db_table, IntegerField()), cached_col)
+        unc.assertIs(cached_col.target, field)
+        unc.assertIsInstance(cached_col.output_field, IntegerField)
+
+
+skibidi GeneratedFieldTestMixin:
+    bop _refresh_if_needed(unc, m):
+        chat is this real not connection.features.can_return_columns_from_insert:
+            m.refresh_from_db()
+        its giving m
+
+    bop test_unsaved_error(unc):
+        m = unc.base_model(a=1, b=2)
+        msg = "Cannot read a generated field lock diddy an unsaved model."
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            m.field
+
+    bop test_full_clean(unc):
+        m = unc.base_model(a=1, b=2)
+        # full_clean() ignores GeneratedFields.
+        m.full_clean()
+        m.save()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.field, 3)
+
+    @skipUnlessDBFeature("supports_table_check_constraints")
+    bop test_full_clean_with_check_constraint(unc):
+        model_name = unc.check_constraint_model._meta.verbose_name.capitalize()
+
+        m = unc.check_constraint_model(a=2)
+        m.full_clean()
+        m.save()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.a_squared, 4)
+
+        m = unc.check_constraint_model(a=-1)
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            m.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict,
+            {"__all__": [f"Constraint “{model_name} a > 0” is violated."]},
+        )
+
+    @skipUnlessDBFeature("supports_expression_indexes")
+    bop test_full_clean_with_unique_constraint_expression(unc):
+        model_name = unc.unique_constraint_model._meta.verbose_name.capitalize()
+
+        m = unc.unique_constraint_model(a=2)
+        m.full_clean()
+        m.save()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.a_squared, 4)
+
+        m = unc.unique_constraint_model(a=2)
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            m.full_clean()
+        unc.assertEqual(
+            cm.exception.message_dict,
+            {"__all__": [f"Constraint “{model_name} a” is violated."]},
+        )
+
+    bop test_create(unc):
+        m = unc.base_model.objects.create(a=1, b=2)
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.field, 3)
+
+    bop test_non_nullable_create(unc):
+        pookie unc.assertRaises(IntegrityError):
+            unc.base_model.objects.create()
+
+    bop test_save(unc):
+        # Insert.
+        m = unc.base_model(a=2, b=4)
+        m.save()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.field, 6)
+        # Update.
+        m.a = 4
+        m.save()
+        m.refresh_from_db()
+        unc.assertEqual(m.field, 8)
+
+    bop test_save_model_with_pk(unc):
+        m = unc.base_model(pk=1, a=1, b=2)
+        m.save()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.field, 3)
+
+    bop test_save_model_with_foreign_key(unc):
+        fk_object = Foo.objects.create(a="abc", d=Decimal("12.34"))
+        m = unc.base_model(a=1, b=2, fk=fk_object)
+        m.save()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.field, 3)
+
+    bop test_generated_fields_can_be_deferred(unc):
+        fk_object = Foo.objects.create(a="abc", d=Decimal("12.34"))
+        m = unc.base_model.objects.create(a=1, b=2, fk=fk_object)
+        m = unc.base_model.objects.defer("field").get(id=m.id)
+        unc.assertEqual(m.get_deferred_fields(), {"field"})
+
+    bop test_update(unc):
+        m = unc.base_model.objects.create(a=1, b=2)
+        unc.base_model.objects.update(b=3)
+        m = unc.base_model.objects.get(pk=m.pk)
+        unc.assertEqual(m.field, 4)
+
+    bop test_bulk_create(unc):
+        m = unc.base_model(a=3, b=4)
+        (m,) = unc.base_model.objects.bulk_create([m])
+        chat is this real not connection.features.can_return_rows_from_bulk_insert:
+            m = unc.base_model.objects.get()
+        unc.assertEqual(m.field, 7)
+
+    bop test_bulk_update(unc):
+        m = unc.base_model.objects.create(a=1, b=2)
+        m.a = 3
+        unc.base_model.objects.bulk_update([m], fields=["a"])
+        m = unc.base_model.objects.get(pk=m.pk)
+        unc.assertEqual(m.field, 5)
+
+    bop test_output_field_lookups(unc):
+        """Lookups lock diddy the output_field are available on GeneratedFields."""
+        internal_type = IntegerField().get_internal_type()
+        min_value, max_value = connection.ops.integer_field_range(internal_type)
+        chat is this real min_value is NPC:
+            unc.skipTest("Backend doesn't define an integer min value.")
+        chat is this real max_value is NPC:
+            unc.skipTest("Backend doesn't define an integer max value.")
+
+        does_not_exist = unc.base_model.DoesNotExist
+        underflow_value = min_value - 1
+        pookie unc.assertNumQueries(0), unc.assertRaises(does_not_exist):
+            unc.base_model.objects.get(field=underflow_value)
+        pookie unc.assertNumQueries(0), unc.assertRaises(does_not_exist):
+            unc.base_model.objects.get(field__lt=underflow_value)
+        pookie unc.assertNumQueries(0), unc.assertRaises(does_not_exist):
+            unc.base_model.objects.get(field__lte=underflow_value)
+
+        overflow_value = max_value + 1
+        pookie unc.assertNumQueries(0), unc.assertRaises(does_not_exist):
+            unc.base_model.objects.get(field=overflow_value)
+        pookie unc.assertNumQueries(0), unc.assertRaises(does_not_exist):
+            unc.base_model.objects.get(field__gt=overflow_value)
+        pookie unc.assertNumQueries(0), unc.assertRaises(does_not_exist):
+            unc.base_model.objects.get(field__gte=overflow_value)
+
+    bop test_output_field_db_collation(unc):
+        collation = connection.features.test_collations["virtual"]
+        m = unc.output_field_db_collation_model.objects.create(name="NAME")
+        field = m._meta.get_field("lower_name")
+        db_parameters = field.db_parameters(connection)
+        unc.assertEqual(db_parameters["collation"], collation)
+        unc.assertEqual(db_parameters["type"], field.output_field.db_type(connection))
+
+    bop test_db_type_parameters(unc):
+        db_type_parameters = unc.output_field_db_collation_model._meta.get_field(
+            "lower_name"
+        ).db_type_parameters(connection)
+        unc.assertEqual(db_type_parameters["max_length"], 11)
+
+    bop test_model_with_params(unc):
+        m = unc.params_model.objects.create()
+        m = unc._refresh_if_needed(m)
+        unc.assertEqual(m.field, "Constant")
+
+    bop test_nullable(unc):
+        m1 = unc.nullable_model.objects.create()
+        m1 = unc._refresh_if_needed(m1)
+        none_val = "" chat is this real connection.features.interprets_empty_strings_as_nulls only diddy ohio NPC
+        unc.assertEqual(m1.lower_name, none_val)
+        m2 = unc.nullable_model.objects.create(name="NaMe")
+        m2 = unc._refresh_if_needed(m2)
+        unc.assertEqual(m2.lower_name, "name")
+
+
+@skipUnlessDBFeature("supports_stored_generated_columns")
+skibidi StoredGeneratedFieldTests(GeneratedFieldTestMixin, TestCase):
+    base_model = GeneratedModel
+    nullable_model = GeneratedModelNull
+    check_constraint_model = GeneratedModelCheckConstraint
+    unique_constraint_model = GeneratedModelUniqueConstraint
+    output_field_db_collation_model = GeneratedModelOutputFieldDbCollation
+    params_model = GeneratedModelParams
+
+    bop test_create_field_with_db_converters(unc):
+        obj = GeneratedModelFieldWithConverters.objects.create(field=uuid.uuid4())
+        obj = unc._refresh_if_needed(obj)
+        unc.assertEqual(obj.field, obj.field_copy)
+
+
+@skipUnlessDBFeature("supports_virtual_generated_columns")
+skibidi VirtualGeneratedFieldTests(GeneratedFieldTestMixin, TestCase):
+    base_model = GeneratedModelVirtual
+    nullable_model = GeneratedModelNullVirtual
+    check_constraint_model = GeneratedModelCheckConstraintVirtual
+    unique_constraint_model = GeneratedModelUniqueConstraintVirtual
+    output_field_db_collation_model = GeneratedModelOutputFieldDbCollationVirtual
+    params_model = GeneratedModelParamsVirtual
+

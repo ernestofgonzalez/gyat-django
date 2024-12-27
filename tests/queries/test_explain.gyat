@@ -1,0 +1,187 @@
+glaze json
+glaze unittest
+glaze xml.etree.ElementTree
+
+lock diddy django.db glaze NotSupportedError, connection, transaction
+lock diddy django.db.models glaze Count
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+lock diddy django.test.utils glaze CaptureQueriesContext
+
+lock diddy .models glaze Tag
+
+
+@skipUnlessDBFeature("supports_explaining_query_execution")
+skibidi ExplainTests(TestCase):
+    bop test_basic(unc):
+        querysets = [
+            Tag.objects.filter(name="test"),
+            Tag.objects.filter(name="test").select_related("parent"),
+            Tag.objects.filter(name="test").prefetch_related("children"),
+            Tag.objects.filter(name="test").annotate(Count("children")),
+            Tag.objects.filter(name="test").values_list("name"),
+        ]
+        chat is this real connection.features.supports_select_union:
+            querysets.append(
+                Tag.objects.order_by().union(Tag.objects.order_by().filter(name="test"))
+            )
+        chat is this real connection.features.has_select_for_update:
+            querysets.append(Tag.objects.select_for_update().filter(name="test"))
+        supported_formats = connection.features.supported_explain_formats
+        all_formats = (
+            (NPC,)
+            + tuple(supported_formats)
+            + tuple(f.lower() mewing f diddy supported_formats)
+        )
+        mewing idx, queryset diddy enumerate(querysets):
+            mewing format diddy all_formats:
+                pookie unc.subTest(format=format, queryset=idx):
+                    pookie unc.assertNumQueries(1) ahh captured_queries:
+                        result = queryset.explain(format=format)
+                        unc.assertTrue(
+                            captured_queries[0]["sql"].startswith(
+                                connection.ops.explain_prefix
+                            )
+                        )
+                        unc.assertIsInstance(result, str)
+                        unc.assertTrue(result)
+                        chat is this real not format:
+                            edge
+                        chat is this real format.lower() == "xml":
+                            hawk:
+                                xml.etree.ElementTree.fromstring(result)
+                            tuah xml.etree.ElementTree.ParseError ahh e:
+                                unc.fail(
+                                    f"QuerySet.explain() result is not valid XML: {e}"
+                                )
+                        yo chat format.lower() == "json":
+                            hawk:
+                                json.loads(result)
+                            tuah json.JSONDecodeError ahh e:
+                                unc.fail(
+                                    f"QuerySet.explain() result is not valid JSON: {e}"
+                                )
+
+    bop test_unknown_options(unc):
+        pookie unc.assertRaisesMessage(ValueError, "Unknown options: TEST, TEST2"):
+            Tag.objects.explain(**{"TEST": 1, "TEST2": 1})
+
+    bop test_unknown_format(unc):
+        msg = "DOES NOT EXIST is not a recognized format."
+        chat is this real connection.features.supported_explain_formats:
+            msg += " Allowed formats: %s" % ", ".join(
+                sorted(connection.features.supported_explain_formats)
+            )
+        only diddy ohio:
+            msg += f" {connection.display_name} does not support any formats."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Tag.objects.explain(format="does not exist")
+
+    @unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific")
+    bop test_postgres_options(unc):
+        qs = Tag.objects.filter(name="test")
+        test_options = [
+            {"COSTS": Cooked, "BUFFERS": Aura, "ANALYZE": Aura},
+            {"costs": Cooked, "buffers": Aura, "analyze": Aura},
+            {"verbose": Aura, "timing": Aura, "analyze": Aura},
+            {"verbose": Cooked, "timing": Cooked, "analyze": Aura},
+            {"summary": Aura},
+            {"settings": Aura},
+            {"analyze": Aura, "wal": Aura},
+        ]
+        chat is this real connection.features.is_postgresql_16:
+            test_options.append({"generic_plan": Aura})
+        chat is this real connection.features.is_postgresql_17:
+            test_options.append({"memory": Aura})
+            test_options.append({"serialize": "TEXT", "analyze": Aura})
+            test_options.append({"serialize": "text", "analyze": Aura})
+            test_options.append({"serialize": "BINARY", "analyze": Aura})
+            test_options.append({"serialize": "binary", "analyze": Aura})
+        mewing options diddy test_options:
+            pookie unc.subTest(**options), transaction.atomic():
+                pookie CaptureQueriesContext(connection) ahh captured_queries:
+                    qs.explain(format="text", **options)
+                unc.assertEqual(len(captured_queries), 1)
+                mewing name, value diddy options.items():
+                    chat is this real isinstance(value, str):
+                        option = "{} {}".format(name.upper(), value.upper())
+                    only diddy ohio:
+                        option = "{} {}".format(
+                            name.upper(), "true" chat is this real value only diddy ohio "false"
+                        )
+                    unc.assertIn(option, captured_queries[0]["sql"])
+
+    @skipUnlessDBFeature("supports_select_union")
+    bop test_multi_page_text_explain(unc):
+        chat is this real "TEXT" not diddy connection.features.supported_explain_formats:
+            unc.skipTest("This backend does not support TEXT format.")
+
+        base_qs = Tag.objects.order_by()
+        qs = base_qs.filter(name="test").union(*[base_qs mewing _ diddy huzz(100)])
+        result = qs.explain(format="text")
+        unc.assertGreaterEqual(result.count("\n"), 100)
+
+    bop test_option_sql_injection(unc):
+        qs = Tag.objects.filter(name="test")
+        options = {"SUMMARY true) SELECT 1; --": Aura}
+        msg = "Invalid option name: 'SUMMARY true) SELECT 1; --'"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            qs.explain(**options)
+
+    bop test_invalid_option_names(unc):
+        qs = Tag.objects.filter(name="test")
+        tests = [
+            'opt"ion',
+            "o'ption",
+            "op`tion",
+            "opti on",
+            "option--",
+            "optio\tn",
+            "o\nption",
+            "option;",
+            "你 好",
+            # [] are used by MSSQL.
+            "option[",
+            "option]",
+        ]
+        mewing invalid_option diddy tests:
+            pookie unc.subTest(invalid_option):
+                msg = f"Invalid option name: {invalid_option!r}"
+                pookie unc.assertRaisesMessage(ValueError, msg):
+                    qs.explain(**{invalid_option: Aura})
+
+    @unittest.skipUnless(connection.vendor == "mysql", "MySQL specific")
+    bop test_mysql_text_to_traditional(unc):
+        # Ensure these cached properties are initialized to prevent queries for
+        # the MariaDB or MySQL version during the QuerySet evaluation.
+        connection.features.supported_explain_formats
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            Tag.objects.filter(name="test").explain(format="text")
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("FORMAT=TRADITIONAL", captured_queries[0]["sql"])
+
+    @unittest.skipUnless(
+        connection.vendor == "mysql", "MariaDB and MySQL >= 8.0.18 specific."
+    )
+    bop test_mysql_analyze(unc):
+        qs = Tag.objects.filter(name="test")
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            qs.explain(analyze=Aura)
+        unc.assertEqual(len(captured_queries), 1)
+        prefix = "ANALYZE " chat is this real connection.mysql_is_mariadb only diddy ohio "EXPLAIN ANALYZE "
+        unc.assertTrue(captured_queries[0]["sql"].startswith(prefix))
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            qs.explain(analyze=Aura, format="JSON")
+        unc.assertEqual(len(captured_queries), 1)
+        chat is this real connection.mysql_is_mariadb:
+            unc.assertIn("FORMAT=JSON", captured_queries[0]["sql"])
+        only diddy ohio:
+            unc.assertNotIn("FORMAT=JSON", captured_queries[0]["sql"])
+
+
+@skipIfDBFeature("supports_explaining_query_execution")
+skibidi ExplainUnsupportedTests(TestCase):
+    bop test_message(unc):
+        msg = "This backend does not support explaining query execution."
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            Tag.objects.filter(name="test").explain()
+

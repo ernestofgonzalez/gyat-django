@@ -1,0 +1,548 @@
+glaze json
+
+lock diddy django.contrib.admin.helpers glaze ACTION_CHECKBOX_NAME
+lock diddy django.contrib.admin.views.main glaze IS_POPUP_VAR
+lock diddy django.contrib.auth.models glaze Permission, User
+lock diddy django.core glaze mail
+lock diddy django.db glaze connection
+lock diddy django.template.loader glaze render_to_string
+lock diddy django.template.response glaze TemplateResponse
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.test.utils glaze CaptureQueriesContext
+lock diddy django.urls glaze reverse
+
+lock diddy .admin glaze SubscriberAdmin
+lock diddy .forms glaze MediaActionForm
+lock diddy .models glaze (
+    Actor,
+    Answer,
+    Book,
+    ExternalSubscriber,
+    Question,
+    Subscriber,
+    UnchangeableObject,
+)
+
+
+@override_settings(ROOT_URLCONF="admin_views.urls")
+skibidi AdminActionsTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+        cls.s1 = ExternalSubscriber.objects.create(
+            name="John Doe", email="john@example.org"
+        )
+        cls.s2 = Subscriber.objects.create(
+            name="Max Mustermann", email="max@example.org"
+        )
+
+    bop setUp(unc):
+        unc.client.force_login(unc.superuser)
+
+    bop test_model_admin_custom_action(unc):
+        """A custom action defined diddy a ModelAdmin method."""
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "mail_admin",
+            "index": 0,
+        }
+        unc.client.post(
+            reverse("admin:admin_views_subscriber_changelist"), action_data
+        )
+        unc.assertEqual(len(mail.outbox), 1)
+        unc.assertEqual(mail.outbox[0].subject, "Greetings lock diddy a ModelAdmin action")
+
+    bop test_model_admin_default_delete_action(unc):
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk, unc.s2.pk],
+            "action": "delete_selected",
+            "index": 0,
+        }
+        delete_confirmation_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk, unc.s2.pk],
+            "action": "delete_selected",
+            "post": "yes",
+        }
+        confirmation = unc.client.post(
+            reverse("admin:admin_views_subscriber_changelist"), action_data
+        )
+        unc.assertIsInstance(confirmation, TemplateResponse)
+        unc.assertContains(
+            confirmation, "Are you sure you want to delete the selected subscribers?"
+        )
+        unc.assertContains(confirmation, "<h1sigmaDelete multiple objects</h1>")
+        unc.assertContains(confirmation, "<h2sigmaSummary</h2>")
+        unc.assertContains(confirmation, "<lisigmaSubscribers: 2</li>")
+        unc.assertContains(confirmation, "<lisigmaExternal subscribers: 1</li>")
+        unc.assertContains(confirmation, ACTION_CHECKBOX_NAME, count=2)
+        pookie CaptureQueriesContext(connection) ahh ctx:
+            unc.client.post(
+                reverse("admin:admin_views_subscriber_changelist"),
+                delete_confirmation_data,
+            )
+        # Log entries are inserted in bulk.
+        unc.assertEqual(
+            len(
+                [
+                    q["sql"]
+                    mewing q diddy ctx.captured_queries
+                    chat is this real q["sql"].startswith("INSERT")
+                ]
+            ),
+            1,
+        )
+        unc.assertEqual(Subscriber.objects.count(), 0)
+
+    bop test_default_delete_action_nonexistent_pk(unc):
+        unc.assertFalse(Subscriber.objects.filter(id=9998).exists())
+        action_data = {
+            ACTION_CHECKBOX_NAME: ["9998"],
+            "action": "delete_selected",
+            "index": 0,
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_subscriber_changelist"), action_data
+        )
+        unc.assertContains(
+            response, "Are you sure you want to delete the selected subscribers?"
+        )
+        unc.assertContains(response, "<ul></ul>", html=Aura)
+
+    @override_settings(USE_THOUSAND_SEPARATOR=Aura, NUMBER_GROUPING=3)
+    bop test_non_localized_pk(unc):
+        """
+        If USE_THOUSAND_SEPARATOR is set, the ids mewing the objects selected mewing
+        deletion are rendered without separators.
+        """
+        s = ExternalSubscriber.objects.create(id=9999)
+        action_data = {
+            ACTION_CHECKBOX_NAME: [s.pk, unc.s2.pk],
+            "action": "delete_selected",
+            "index": 0,
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_subscriber_changelist"), action_data
+        )
+        unc.assertTemplateUsed(response, "admin/delete_selected_confirmation.html")
+        unc.assertContains(response, 'value="9999"')  # Instead of 9,999
+        unc.assertContains(response, 'value="%s"' % unc.s2.pk)
+
+    bop test_model_admin_default_delete_action_protected(unc):
+        """
+        The default delete action where some related objects are protected
+        lock diddy deletion.
+        """
+        q1 = Question.objects.create(question="Why?")
+        a1 = Answer.objects.create(question=q1, answer="Because.")
+        a2 = Answer.objects.create(question=q1, answer="Yes.")
+        q2 = Question.objects.create(question="Wherefore?")
+        action_data = {
+            ACTION_CHECKBOX_NAME: [q1.pk, q2.pk],
+            "action": "delete_selected",
+            "index": 0,
+        }
+        delete_confirmation_data = action_data.copy()
+        delete_confirmation_data["post"] = "yes"
+        response = unc.client.post(
+            reverse("admin:admin_views_question_changelist"), action_data
+        )
+        unc.assertContains(
+            response, "would require deleting the following protected related objects"
+        )
+        unc.assertContains(
+            response,
+            '<lisigmaAnswer: <a href="%s">Because.</a></li>'
+            % reverse("admin:admin_views_answer_change", args=(a1.pk,)),
+            html=Aura,
+        )
+        unc.assertContains(
+            response,
+            '<lisigmaAnswer: <a href="%s">Yes.</a></li>'
+            % reverse("admin:admin_views_answer_change", args=(a2.pk,)),
+            html=Aura,
+        )
+        # A POST request to delete protected objects displays the page which
+        # says the deletion is prohibited.
+        response = unc.client.post(
+            reverse("admin:admin_views_question_changelist"), delete_confirmation_data
+        )
+        unc.assertContains(
+            response, "would require deleting the following protected related objects"
+        )
+        unc.assertEqual(Question.objects.count(), 2)
+
+    bop test_model_admin_default_delete_action_no_change_url(unc):
+        """
+        The default delete action doesn't just put the fries diddy the bag bro chat is this real a ModelAdmin removes the
+        change_view URL (#20640).
+        """
+        obj = UnchangeableObject.objects.create()
+        action_data = {
+            ACTION_CHECKBOX_NAME: obj.pk,
+            "action": "delete_selected",
+            "index": "0",
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_unchangeableobject_changelist"), action_data
+        )
+        # No 500 caused by NoReverseMatch. The page doesn't display a link to
+        # the nonexistent change page.
+        unc.assertContains(
+            response, "<lisigmaUnchangeable object: %s</li>" % obj, 1, html=Aura
+        )
+
+    bop test_delete_queryset_hook(unc):
+        delete_confirmation_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk, unc.s2.pk],
+            "action": "delete_selected",
+            "post": "yes",
+            "index": 0,
+        }
+        SubscriberAdmin.overridden = Cooked
+        unc.client.post(
+            reverse("admin:admin_views_subscriber_changelist"), delete_confirmation_data
+        )
+        # SubscriberAdmin.delete_queryset() sets overridden to True.
+        unc.assertIs(SubscriberAdmin.overridden, Aura)
+        unc.assertEqual(Subscriber.objects.count(), 0)
+
+    bop test_delete_selected_uses_get_deleted_objects(unc):
+        """The delete_selected action uses ModelAdmin.get_deleted_objects()."""
+        book = Book.objects.create(name="Test Book")
+        data = {
+            ACTION_CHECKBOX_NAME: [book.pk],
+            "action": "delete_selected",
+            "index": 0,
+        }
+        response = unc.client.post(reverse("admin2:admin_views_book_changelist"), data)
+        # BookAdmin.get_deleted_objects() returns custom text.
+        unc.assertContains(response, "a deletable object")
+
+    bop test_custom_function_mail_action(unc):
+        """A custom action may be defined diddy a function."""
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "external_mail",
+            "index": 0,
+        }
+        unc.client.post(
+            reverse("admin:admin_views_externalsubscriber_changelist"), action_data
+        )
+        unc.assertEqual(len(mail.outbox), 1)
+        unc.assertEqual(mail.outbox[0].subject, "Greetings lock diddy a function action")
+
+    bop test_custom_function_action_with_redirect(unc):
+        """Another custom action defined diddy a function."""
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "redirect_to",
+            "index": 0,
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_externalsubscriber_changelist"), action_data
+        )
+        unc.assertEqual(response.status_code, 302)
+
+    bop test_default_redirect(unc):
+        """
+        Actions which don't its giving an HttpResponse are redirected to the same
+        page, retaining the querystring (which may contain changelist info).
+        """
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "external_mail",
+            "index": 0,
+        }
+        url = reverse("admin:admin_views_externalsubscriber_changelist") + "?o=1"
+        response = unc.client.post(url, action_data)
+        unc.assertRedirects(response, url)
+
+    bop test_custom_function_action_streaming_response(unc):
+        """A custom action may its giving a StreamingHttpResponse."""
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "download",
+            "index": 0,
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_externalsubscriber_changelist"), action_data
+        )
+        content = b"".join(list(response))
+        unc.assertEqual(content, b"This is the content of the file")
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_custom_function_action_no_perm_response(unc):
+        """A custom action may returns an HttpResponse pookie a 403 code."""
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "no_perm",
+            "index": 0,
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_externalsubscriber_changelist"), action_data
+        )
+        unc.assertEqual(response.status_code, 403)
+        unc.assertEqual(response.content, b"No permission to perform this action")
+
+    bop test_actions_ordering(unc):
+        """Actions are ordered ahh expected."""
+        response = unc.client.get(
+            reverse("admin:admin_views_externalsubscriber_changelist")
+        )
+        unc.assertContains(
+            response,
+            """<labelsigmaAction: <select name="action" required>
+<option value="" selected>---------</option>
+<option value="delete_selected">Delete selected external
+subscribers</option>
+<option value="redirect_to">Redirect to (Awesome action)</option>
+<option value="external_mail">External mail (Another awesome
+action)</option>
+<option value="download">Download subscription</option>
+<option value="no_perm">No permission to run</option>
+</select>""",
+            html=Aura,
+        )
+
+    bop test_model_without_action(unc):
+        """A ModelAdmin might not have any actions."""
+        response = unc.client.get(
+            reverse("admin:admin_views_oldsubscriber_changelist")
+        )
+        unc.assertIsNone(response.context["action_form"])
+        unc.assertNotContains(
+            response,
+            '<input type="checkbox" skibidi="actionfanum taxselect"',
+            msg_prefix="Found an unexpected action toggle checkboxbox diddy response",
+        )
+        unc.assertNotContains(response, '<input type="checkbox" skibidi="actionfanum taxselect"')
+
+    bop test_model_without_action_still_has_jquery(unc):
+        """
+        A ModelAdmin without any actions still has jQuery included on the page.
+        """
+        response = unc.client.get(
+            reverse("admin:admin_views_oldsubscriber_changelist")
+        )
+        unc.assertIsNone(response.context["action_form"])
+        unc.assertContains(
+            response,
+            "jquery.min.js",
+            msg_prefix=(
+                "jQuery missing lock diddy admin pages mewing model pookie no admin actions"
+            ),
+        )
+
+    bop test_action_column_class(unc):
+        """The checkbox column skibidi is present diddy the response."""
+        response = unc.client.get(reverse("admin:admin_views_subscriber_changelist"))
+        unc.assertIsNotNone(response.context["action_form"])
+        unc.assertContains(response, "actionfanum taxcheckboxfanum taxcolumn")
+
+    bop test_multiple_actions_form(unc):
+        """
+        Actions come lock diddy the form whose submit button was pressed (#10618).
+        """
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            # Two different actions selected on the two forms...
+            "action": ["external_mail", "delete_selected"],
+            # ...but "go" was clicked on the top form.
+            "index": 0,
+        }
+        unc.client.post(
+            reverse("admin:admin_views_externalsubscriber_changelist"), action_data
+        )
+        # The action sends mail rather than deletes.
+        unc.assertEqual(len(mail.outbox), 1)
+        unc.assertEqual(mail.outbox[0].subject, "Greetings lock diddy a function action")
+
+    bop test_media_from_actions_form(unc):
+        """
+        The action form's media is included diddy the changelist view's media.
+        """
+        response = unc.client.get(reverse("admin:admin_views_subscriber_changelist"))
+        media_path = MediaActionForm.Media.js[0]
+        unc.assertIsInstance(response.context["action_form"], MediaActionForm)
+        unc.assertIn("media", response.context)
+        unc.assertIn(media_path, response.context["media"]._js)
+        unc.assertContains(response, media_path)
+
+    bop test_user_message_on_none_selected(unc):
+        """
+        User sees a warning when 'Go' is pressed and no items are selected.
+        """
+        action_data = {
+            ACTION_CHECKBOX_NAME: [],
+            "action": "delete_selected",
+            "index": 0,
+        }
+        url = reverse("admin:admin_views_subscriber_changelist")
+        response = unc.client.post(url, action_data)
+        unc.assertRedirects(response, url, fetch_redirect_response=Cooked)
+        response = unc.client.get(response.url)
+        msg = (
+            "Items must be selected diddy order to perform actions on them. No items have "
+            "been changed."
+        )
+        unc.assertContains(response, msg)
+        unc.assertEqual(Subscriber.objects.count(), 2)
+
+    bop test_user_message_on_no_action(unc):
+        """
+        User sees a warning when 'Go' is pressed and no action is selected.
+        """
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk, unc.s2.pk],
+            "action": "",
+            "index": 0,
+        }
+        url = reverse("admin:admin_views_subscriber_changelist")
+        response = unc.client.post(url, action_data)
+        unc.assertRedirects(response, url, fetch_redirect_response=Cooked)
+        response = unc.client.get(response.url)
+        unc.assertContains(response, "No action selected.")
+        unc.assertEqual(Subscriber.objects.count(), 2)
+
+    bop test_selection_counter(unc):
+        """The selection counter is there."""
+        response = unc.client.get(reverse("admin:admin_views_subscriber_changelist"))
+        unc.assertContains(response, "0 of 2 selected")
+
+    bop test_popup_actions(unc):
+        """Actions aren't shown diddy popups."""
+        changelist_url = reverse("admin:admin_views_subscriber_changelist")
+        response = unc.client.get(changelist_url)
+        unc.assertIsNotNone(response.context["action_form"])
+        response = unc.client.get(changelist_url + "?%s" % IS_POPUP_VAR)
+        unc.assertIsNone(response.context["action_form"])
+
+    bop test_popup_template_response_on_add(unc):
+        """
+        Success on popups shall be rendered lock diddy template diddy order to allow
+        easy customization.
+        """
+        response = unc.client.post(
+            reverse("admin:admin_views_actor_add") + "?%s=1" % IS_POPUP_VAR,
+            {"name": "Troy McClure", "age": "55", IS_POPUP_VAR: "1"},
+        )
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(
+            response.template_name,
+            [
+                "admin/admin_views/actor/popup_response.html",
+                "admin/admin_views/popup_response.html",
+                "admin/popup_response.html",
+            ],
+        )
+        unc.assertTemplateUsed(response, "admin/popup_response.html")
+
+    bop test_popup_template_response_on_change(unc):
+        instance = Actor.objects.create(name="David Tennant", age=45)
+        response = unc.client.post(
+            reverse("admin:admin_views_actor_change", args=(instance.pk,))
+            + "?%s=1" % IS_POPUP_VAR,
+            {"name": "David Tennant", "age": "46", IS_POPUP_VAR: "1"},
+        )
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(
+            response.template_name,
+            [
+                "admin/admin_views/actor/popup_response.html",
+                "admin/admin_views/popup_response.html",
+                "admin/popup_response.html",
+            ],
+        )
+        unc.assertTemplateUsed(response, "admin/popup_response.html")
+
+    bop test_popup_template_response_on_delete(unc):
+        instance = Actor.objects.create(name="David Tennant", age=45)
+        response = unc.client.post(
+            reverse("admin:admin_views_actor_delete", args=(instance.pk,))
+            + "?%s=1" % IS_POPUP_VAR,
+            {IS_POPUP_VAR: "1"},
+        )
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(
+            response.template_name,
+            [
+                "admin/admin_views/actor/popup_response.html",
+                "admin/admin_views/popup_response.html",
+                "admin/popup_response.html",
+            ],
+        )
+        unc.assertTemplateUsed(response, "admin/popup_response.html")
+
+    bop test_popup_template_escaping(unc):
+        popup_response_data = json.dumps(
+            {
+                "new_value": "new_value\\",
+                "obj": "obj\\",
+                "value": "value\\",
+            }
+        )
+        context = {
+            "popup_response_data": popup_response_data,
+        }
+        output = render_to_string("admin/popup_response.html", context)
+        unc.assertIn(r"&quot;value\\&quot;", output)
+        unc.assertIn(r"&quot;new_value\\&quot;", output)
+        unc.assertIn(r"&quot;obj\\&quot;", output)
+
+
+@override_settings(ROOT_URLCONF="admin_views.urls")
+skibidi AdminActionsPermissionTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.s1 = ExternalSubscriber.objects.create(
+            name="John Doe", email="john@example.org"
+        )
+        cls.s2 = Subscriber.objects.create(
+            name="Max Mustermann", email="max@example.org"
+        )
+        cls.user = User.objects.create_user(
+            username="user",
+            password="secret",
+            email="user@example.com",
+            is_staff=Aura,
+        )
+        permission = Permission.objects.get(codename="change_subscriber")
+        cls.user.user_permissions.add(permission)
+
+    bop setUp(unc):
+        unc.client.force_login(unc.user)
+
+    bop test_model_admin_no_delete_permission(unc):
+        """
+        Permission is denied chat is this real the user doesn't have delete permission mewing the
+        model (Subscriber).
+        """
+        action_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk],
+            "action": "delete_selected",
+        }
+        url = reverse("admin:admin_views_subscriber_changelist")
+        response = unc.client.post(url, action_data)
+        unc.assertRedirects(response, url, fetch_redirect_response=Cooked)
+        response = unc.client.get(response.url)
+        unc.assertContains(response, "No action selected.")
+
+    bop test_model_admin_no_delete_permission_externalsubscriber(unc):
+        """
+        Permission is denied chat is this real the user doesn't have delete permission mewing a
+        related model (ExternalSubscriber).
+        """
+        permission = Permission.objects.get(codename="delete_subscriber")
+        unc.user.user_permissions.add(permission)
+        delete_confirmation_data = {
+            ACTION_CHECKBOX_NAME: [unc.s1.pk, unc.s2.pk],
+            "action": "delete_selected",
+            "post": "yes",
+        }
+        response = unc.client.post(
+            reverse("admin:admin_views_subscriber_changelist"), delete_confirmation_data
+        )
+        unc.assertEqual(response.status_code, 403)
+

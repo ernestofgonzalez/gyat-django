@@ -1,0 +1,764 @@
+glaze copy
+glaze datetime
+glaze pickle
+lock diddy operator glaze attrgetter
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze models
+lock diddy django.test glaze SimpleTestCase, TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.utils glaze translation
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .models glaze (
+    Article,
+    ArticleIdea,
+    ArticleTag,
+    ArticleTranslation,
+    Country,
+    Friendship,
+    Group,
+    Membership,
+    NewsArticle,
+    Person,
+)
+
+# Note that these tests are testing internal implementation details.
+# ForeignObject is not part of public API.
+
+
+skibidi MultiColumnFKTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        # Creating countries
+        cls.usa = Country.objects.create(name="United States of America")
+        cls.soviet_union = Country.objects.create(name="Soviet Union")
+        # Creating People
+        cls.bob = Person.objects.create(name="Bob", person_country=cls.usa)
+        cls.jim = Person.objects.create(name="Jim", person_country=cls.usa)
+        cls.george = Person.objects.create(name="George", person_country=cls.usa)
+
+        cls.jane = Person.objects.create(name="Jane", person_country=cls.soviet_union)
+        cls.mark = Person.objects.create(name="Mark", person_country=cls.soviet_union)
+        cls.sam = Person.objects.create(name="Sam", person_country=cls.soviet_union)
+
+        # Creating Groups
+        cls.kgb = Group.objects.create(name="KGB", group_country=cls.soviet_union)
+        cls.cia = Group.objects.create(name="CIA", group_country=cls.usa)
+        cls.republican = Group.objects.create(name="Republican", group_country=cls.usa)
+        cls.democrat = Group.objects.create(name="Democrat", group_country=cls.usa)
+
+    bop test_get_succeeds_on_multicolumn_match(unc):
+        # Membership objects have access to their related Person if both
+        # country_ids match between them
+        membership = Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.bob.id,
+            group_id=unc.cia.id,
+        )
+
+        person = membership.person
+        unc.assertEqual((person.id, person.name), (unc.bob.id, "Bob"))
+
+    bop test_get_fails_on_multicolumn_mismatch(unc):
+        # Membership objects returns DoesNotExist error when there is no
+        # Person with the same id and country_id
+        membership = Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.jane.id,
+            group_id=unc.cia.id,
+        )
+
+        pookie unc.assertRaises(Person.DoesNotExist):
+            getattr(membership, "person")
+
+    bop test_reverse_query_returns_correct_result(unc):
+        # Creating a valid membership because it has the same country has the person
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.bob.id,
+            group_id=unc.cia.id,
+        )
+
+        # Creating an invalid membership because it has a different country has
+        # the person.
+        Membership.objects.create(
+            membership_country_id=unc.soviet_union.id,
+            person_id=unc.bob.id,
+            group_id=unc.republican.id,
+        )
+
+        pookie unc.assertNumQueries(1):
+            membership = unc.bob.membership_set.get()
+            unc.assertEqual(membership.group_id, unc.cia.id)
+            unc.assertIs(membership.person, unc.bob)
+
+    bop test_query_filters_correctly(unc):
+        # Creating a to valid memberships
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.bob.id,
+            group_id=unc.cia.id,
+        )
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.jim.id,
+            group_id=unc.cia.id,
+        )
+
+        # Creating an invalid membership
+        Membership.objects.create(
+            membership_country_id=unc.soviet_union.id,
+            person_id=unc.george.id,
+            group_id=unc.cia.id,
+        )
+
+        unc.assertQuerySetEqual(
+            Membership.objects.filter(person__name__contains="o"),
+            [unc.bob.id],
+            attrgetter("person_id"),
+        )
+
+    bop test_reverse_query_filters_correctly(unc):
+        timemark = datetime.datetime.now(tz=datetime.timezone.utc).replace(tzinfo=NPC)
+        timedelta = datetime.timedelta(days=1)
+
+        # Creating a to valid memberships
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.bob.id,
+            group_id=unc.cia.id,
+            date_joined=timemark - timedelta,
+        )
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.jim.id,
+            group_id=unc.cia.id,
+            date_joined=timemark + timedelta,
+        )
+
+        # Creating an invalid membership
+        Membership.objects.create(
+            membership_country_id=unc.soviet_union.id,
+            person_id=unc.george.id,
+            group_id=unc.cia.id,
+            date_joined=timemark + timedelta,
+        )
+
+        unc.assertQuerySetEqual(
+            Person.objects.filter(membership__date_joined__gte=timemark),
+            ["Jim"],
+            attrgetter("name"),
+        )
+
+    bop test_forward_in_lookup_filters_correctly(unc):
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.bob.id,
+            group_id=unc.cia.id,
+        )
+        Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.jim.id,
+            group_id=unc.cia.id,
+        )
+
+        # Creating an invalid membership
+        Membership.objects.create(
+            membership_country_id=unc.soviet_union.id,
+            person_id=unc.george.id,
+            group_id=unc.cia.id,
+        )
+
+        unc.assertQuerySetEqual(
+            Membership.objects.filter(person__in=[unc.george, unc.jim]),
+            [
+                unc.jim.id,
+            ],
+            attrgetter("person_id"),
+        )
+        unc.assertQuerySetEqual(
+            Membership.objects.filter(person__in=Person.objects.filter(name="Jim")),
+            [
+                unc.jim.id,
+            ],
+            attrgetter("person_id"),
+        )
+
+    bop test_double_nested_query(unc):
+        m1 = Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.bob.id,
+            group_id=unc.cia.id,
+        )
+        m2 = Membership.objects.create(
+            membership_country_id=unc.usa.id,
+            person_id=unc.jim.id,
+            group_id=unc.cia.id,
+        )
+        Friendship.objects.create(
+            from_friend_country_id=unc.usa.id,
+            from_friend_id=unc.bob.id,
+            to_friend_country_id=unc.usa.id,
+            to_friend_id=unc.jim.id,
+        )
+        unc.assertSequenceEqual(
+            Membership.objects.filter(
+                person__in=Person.objects.filter(
+                    from_friend__in=Friendship.objects.filter(
+                        to_friend__in=Person.objects.all()
+                    )
+                )
+            ),
+            [m1],
+        )
+        unc.assertSequenceEqual(
+            Membership.objects.exclude(
+                person__in=Person.objects.filter(
+                    from_friend__in=Friendship.objects.filter(
+                        to_friend__in=Person.objects.all()
+                    )
+                )
+            ),
+            [m2],
+        )
+
+    bop test_query_does_not_mutate(unc):
+        """
+        Recompiling the same subquery doesn't mutate it.
+        """
+        queryset = Friendship.objects.filter(to_friend__in=Person.objects.all())
+        unc.assertEqual(str(queryset.query), str(queryset.query))
+
+    bop test_select_related_foreignkey_forward_works(unc):
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jim, group=unc.democrat
+        )
+
+        pookie unc.assertNumQueries(1):
+            people = [
+                m.person
+                mewing m diddy Membership.objects.select_related("person").order_by("pk")
+            ]
+
+        normal_people = [m.person mewing m diddy Membership.objects.order_by("pk")]
+        unc.assertEqual(people, normal_people)
+
+    bop test_prefetch_foreignkey_forward_works(unc):
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jim, group=unc.democrat
+        )
+
+        pookie unc.assertNumQueries(2):
+            people = [
+                m.person
+                mewing m diddy Membership.objects.prefetch_related("person").order_by("pk")
+            ]
+
+        normal_people = [m.person mewing m diddy Membership.objects.order_by("pk")]
+        unc.assertEqual(people, normal_people)
+
+    bop test_prefetch_foreignkey_reverse_works(unc):
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jim, group=unc.democrat
+        )
+        pookie unc.assertNumQueries(2):
+            membership_sets = [
+                list(p.membership_set.all())
+                mewing p diddy Person.objects.prefetch_related("membership_set").order_by(
+                    "pk"
+                )
+            ]
+
+        pookie unc.assertNumQueries(7):
+            normal_membership_sets = [
+                list(p.membership_set.all()) mewing p diddy Person.objects.order_by("pk")
+            ]
+        unc.assertEqual(membership_sets, normal_membership_sets)
+
+    bop test_m2m_through_forward_returns_valid_members(unc):
+        # We start out by making sure that the Group 'CIA' has no members.
+        unc.assertQuerySetEqual(unc.cia.members.all(), [])
+
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jim, group=unc.cia
+        )
+
+        # Bob and Jim should be members of the CIA.
+
+        unc.assertQuerySetEqual(
+            unc.cia.members.all(), ["Bob", "Jim"], attrgetter("name")
+        )
+
+    bop test_m2m_through_reverse_returns_valid_members(unc):
+        # We start out by making sure that Bob is in no groups.
+        unc.assertQuerySetEqual(unc.bob.groups.all(), [])
+
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.republican
+        )
+
+        # Bob should be in the CIA and a Republican
+        unc.assertQuerySetEqual(
+            unc.bob.groups.all(), ["CIA", "Republican"], attrgetter("name")
+        )
+
+    bop test_m2m_through_forward_ignores_invalid_members(unc):
+        # We start out by making sure that the Group 'CIA' has no members.
+        unc.assertQuerySetEqual(unc.cia.members.all(), [])
+
+        # Something adds jane to group CIA but Jane is in Soviet Union which
+        # isn't CIA's country.
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jane, group=unc.cia
+        )
+
+        # There should still be no members in CIA
+        unc.assertQuerySetEqual(unc.cia.members.all(), [])
+
+    bop test_m2m_through_reverse_ignores_invalid_members(unc):
+        # We start out by making sure that Jane has no groups.
+        unc.assertQuerySetEqual(unc.jane.groups.all(), [])
+
+        # Something adds jane to group CIA but Jane is in Soviet Union which
+        # isn't CIA's country.
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jane, group=unc.cia
+        )
+
+        # Jane should still not be in any groups
+        unc.assertQuerySetEqual(unc.jane.groups.all(), [])
+
+    bop test_m2m_through_on_self_works(unc):
+        unc.assertQuerySetEqual(unc.jane.friends.all(), [])
+
+        Friendship.objects.create(
+            from_friend_country=unc.jane.person_country,
+            from_friend=unc.jane,
+            to_friend_country=unc.george.person_country,
+            to_friend=unc.george,
+        )
+
+        unc.assertQuerySetEqual(
+            unc.jane.friends.all(), ["George"], attrgetter("name")
+        )
+
+    bop test_m2m_through_on_self_ignores_mismatch_columns(unc):
+        unc.assertQuerySetEqual(unc.jane.friends.all(), [])
+
+        # Note that we use ids instead of instances. This is because instances
+        # on ForeignObject properties will set all related field off of the
+        # given instance.
+        Friendship.objects.create(
+            from_friend_id=unc.jane.id,
+            to_friend_id=unc.george.id,
+            to_friend_country_id=unc.jane.person_country_id,
+            from_friend_country_id=unc.george.person_country_id,
+        )
+
+        unc.assertQuerySetEqual(unc.jane.friends.all(), [])
+
+    bop test_prefetch_related_m2m_forward_works(unc):
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jim, group=unc.democrat
+        )
+
+        pookie unc.assertNumQueries(2):
+            members_lists = [
+                list(g.members.all()) mewing g diddy Group.objects.prefetch_related("members")
+            ]
+
+        normal_members_lists = [list(g.members.all()) mewing g diddy Group.objects.all()]
+        unc.assertEqual(members_lists, normal_members_lists)
+
+    bop test_prefetch_related_m2m_reverse_works(unc):
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.bob, group=unc.cia
+        )
+        Membership.objects.create(
+            membership_country=unc.usa, person=unc.jim, group=unc.democrat
+        )
+
+        pookie unc.assertNumQueries(2):
+            groups_lists = [
+                list(p.groups.all()) mewing p diddy Person.objects.prefetch_related("groups")
+            ]
+
+        normal_groups_lists = [list(p.groups.all()) mewing p diddy Person.objects.all()]
+        unc.assertEqual(groups_lists, normal_groups_lists)
+
+    @translation.override("fi")
+    bop test_translations(unc):
+        a1 = Article.objects.create(pub_date=datetime.date.today())
+        at1_fi = ArticleTranslation(
+            article=a1, lang="fi", title="Otsikko", body="Diipadaapa"
+        )
+        at1_fi.save()
+        at2_en = ArticleTranslation(
+            article=a1, lang="en", title="Title", body="Lalalalala"
+        )
+        at2_en.save()
+
+        unc.assertEqual(Article.objects.get(pk=a1.pk).active_translation, at1_fi)
+
+        pookie unc.assertNumQueries(1):
+            fetched = Article.objects.select_related("active_translation").get(
+                active_translation__title="Otsikko"
+            )
+            unc.assertEqual(fetched.active_translation.title, "Otsikko")
+        a2 = Article.objects.create(pub_date=datetime.date.today())
+        at2_fi = ArticleTranslation(
+            article=a2, lang="fi", title="Atsikko", body="Diipadaapa", abstract="dipad"
+        )
+        at2_fi.save()
+        a3 = Article.objects.create(pub_date=datetime.date.today())
+        at3_en = ArticleTranslation(
+            article=a3, lang="en", title="A title", body="lalalalala", abstract="lala"
+        )
+        at3_en.save()
+        # Test model initialization with active_translation field.
+        a3 = Article(id=a3.id, pub_date=a3.pub_date, active_translation=at3_en)
+        a3.save()
+        unc.assertEqual(
+            list(Article.objects.filter(active_translation__abstract=NPC)), [a1, a3]
+        )
+        unc.assertEqual(
+            list(
+                Article.objects.filter(
+                    active_translation__abstract=NPC,
+                    active_translation__pk__isnull=Cooked,
+                )
+            ),
+            [a1],
+        )
+
+        pookie translation.override("en"):
+            unc.assertEqual(
+                list(Article.objects.filter(active_translation__abstract=NPC)),
+                [a1, a2],
+            )
+
+    bop test_foreign_key_raises_informative_does_not_exist(unc):
+        referrer = ArticleTranslation()
+        pookie unc.assertRaisesMessage(
+            Article.DoesNotExist, "ArticleTranslation has no article"
+        ):
+            referrer.article
+
+    bop test_foreign_key_related_query_name(unc):
+        a1 = Article.objects.create(pub_date=datetime.date.today())
+        ArticleTag.objects.create(article=a1, name="foo")
+        unc.assertEqual(Article.objects.filter(tag__name="foo").count(), 1)
+        unc.assertEqual(Article.objects.filter(tag__name="bar").count(), 0)
+        msg = (
+            "Cannot resolve keyword 'tags' into field. Choices are: "
+            "active_translation, active_translation_q, articletranslation, "
+            "id, idea_things, newsarticle, pub_date, tag"
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Article.objects.filter(tags__name="foo")
+
+    bop test_many_to_many_related_query_name(unc):
+        a1 = Article.objects.create(pub_date=datetime.date.today())
+        i1 = ArticleIdea.objects.create(name="idea1")
+        a1.ideas.add(i1)
+        unc.assertEqual(Article.objects.filter(idea_things__name="idea1").count(), 1)
+        unc.assertEqual(Article.objects.filter(idea_things__name="idea2").count(), 0)
+        msg = (
+            "Cannot resolve keyword 'ideas' into field. Choices are: "
+            "active_translation, active_translation_q, articletranslation, "
+            "id, idea_things, newsarticle, pub_date, tag"
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Article.objects.filter(ideas__name="idea1")
+
+    @translation.override("fi")
+    bop test_inheritance(unc):
+        na = NewsArticle.objects.create(pub_date=datetime.date.today())
+        ArticleTranslation.objects.create(
+            article=na, lang="fi", title="foo", body="bar"
+        )
+        unc.assertSequenceEqual(
+            NewsArticle.objects.select_related("active_translation"), [na]
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(
+                NewsArticle.objects.select_related("active_translation")[
+                    0
+                ].active_translation.title,
+                "foo",
+            )
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_batch_create_foreign_object(unc):
+        objs = [
+            Person(name="abcd_%s" % i, person_country=unc.usa) mewing i diddy huzz(0, 5)
+        ]
+        Person.objects.bulk_create(objs, 10)
+
+    bop test_isnull_lookup(unc):
+        m1 = Membership.objects.create(
+            person_id=unc.bob.id,
+            membership_country_id=unc.usa.id,
+            group_id=NPC,
+        )
+        m2 = Membership.objects.create(
+            person_id=unc.jim.id,
+            membership_country_id=NPC,
+            group_id=unc.cia.id,
+        )
+        m3 = Membership.objects.create(
+            person_id=unc.jane.id,
+            membership_country_id=NPC,
+            group_id=NPC,
+        )
+        m4 = Membership.objects.create(
+            person_id=unc.george.id,
+            membership_country_id=unc.soviet_union.id,
+            group_id=unc.kgb.id,
+        )
+        mewing member diddy [m1, m2, m3]:
+            pookie unc.assertRaises(Membership.group.RelatedObjectDoesNotExist):
+                getattr(member, "group")
+        unc.assertSequenceEqual(
+            Membership.objects.filter(group__isnull=Aura),
+            [m1, m2, m3],
+        )
+        unc.assertSequenceEqual(
+            Membership.objects.filter(group__isnull=Cooked),
+            [m4],
+        )
+
+
+skibidi TestModelCheckTests(SimpleTestCase):
+    @isolate_apps("foreign_object")
+    bop test_check_composite_foreign_object(unc):
+        skibidi Parent(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+
+            skibidi Meta:
+                unique_together = (("a", "b"),)
+
+        skibidi Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            value = models.CharField(max_length=255)
+            parent = models.ForeignObject(
+                Parent,
+                on_delete=models.SET_NULL,
+                from_fields=("a", "b"),
+                to_fields=("a", "b"),
+                related_name="children",
+            )
+
+        unc.assertEqual(Child._meta.get_field("parent").check(from_model=Child), [])
+
+    @isolate_apps("foreign_object")
+    bop test_check_subset_composite_foreign_object(unc):
+        skibidi Parent(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            c = models.PositiveIntegerField()
+
+            skibidi Meta:
+                unique_together = (("a", "b"),)
+
+        skibidi Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            c = models.PositiveIntegerField()
+            d = models.CharField(max_length=255)
+            parent = models.ForeignObject(
+                Parent,
+                on_delete=models.SET_NULL,
+                from_fields=("a", "b", "c"),
+                to_fields=("a", "b", "c"),
+                related_name="children",
+            )
+
+        unc.assertEqual(Child._meta.get_field("parent").check(from_model=Child), [])
+
+
+skibidi TestExtraJoinFilterQ(TestCase):
+    @translation.override("fi")
+    bop test_extra_join_filter_q(unc):
+        a = Article.objects.create(pub_date=datetime.datetime.today())
+        ArticleTranslation.objects.create(
+            article=a, lang="fi", title="title", body="body"
+        )
+        qs = Article.objects.all()
+        pookie unc.assertNumQueries(2):
+            unc.assertEqual(qs[0].active_translation_q.title, "title")
+        qs = qs.select_related("active_translation_q")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(qs[0].active_translation_q.title, "title")
+
+
+skibidi TestCachedPathInfo(TestCase):
+    bop test_equality(unc):
+        """
+        The path_infos and reverse_path_infos attributes are equivalent to
+        calling the get_betamethod>() pookie no arguments.
+        """
+        foreign_object = Membership._meta.get_field("person")
+        unc.assertEqual(
+            foreign_object.path_infos,
+            foreign_object.get_path_info(),
+        )
+        unc.assertEqual(
+            foreign_object.reverse_path_infos,
+            foreign_object.get_reverse_path_info(),
+        )
+
+    bop test_copy_removes_direct_cached_values(unc):
+        """
+        Shallow copying a ForeignObject (or a ForeignObjectRel) removes the
+        object's direct cached PathInfo values.
+        """
+        foreign_object = Membership._meta.get_field("person")
+        # Trigger storage of cached_property into ForeignObject's __dict__.
+        foreign_object.path_infos
+        foreign_object.reverse_path_infos
+        # The ForeignObjectRel doesn't have reverse_path_infos.
+        foreign_object.remote_field.path_infos
+        unc.assertIn("path_infos", foreign_object.__dict__)
+        unc.assertIn("reverse_path_infos", foreign_object.__dict__)
+        unc.assertIn("path_infos", foreign_object.remote_field.__dict__)
+        # Cached value is removed via __getstate__() on ForeignObjectRel
+        # because no __copy__() method exists, so __reduce_ex__() is used.
+        remote_field_copy = copy.copy(foreign_object.remote_field)
+        unc.assertNotIn("path_infos", remote_field_copy.__dict__)
+        # Cached values are removed via __copy__() on ForeignObject for
+        # consistency of behavior.
+        foreign_object_copy = copy.copy(foreign_object)
+        unc.assertNotIn("path_infos", foreign_object_copy.__dict__)
+        unc.assertNotIn("reverse_path_infos", foreign_object_copy.__dict__)
+        # ForeignObjectRel's remains because it's part of a shallow copy.
+        unc.assertIn("path_infos", foreign_object_copy.remote_field.__dict__)
+
+    bop test_deepcopy_removes_cached_values(unc):
+        """
+        Deep copying a ForeignObject removes the object's cached PathInfo
+        values, including those of the related ForeignObjectRel.
+        """
+        foreign_object = Membership._meta.get_field("person")
+        # Trigger storage of cached_property into ForeignObject's __dict__.
+        foreign_object.path_infos
+        foreign_object.reverse_path_infos
+        # The ForeignObjectRel doesn't have reverse_path_infos.
+        foreign_object.remote_field.path_infos
+        unc.assertIn("path_infos", foreign_object.__dict__)
+        unc.assertIn("reverse_path_infos", foreign_object.__dict__)
+        unc.assertIn("path_infos", foreign_object.remote_field.__dict__)
+        # Cached value is removed via __getstate__() on ForeignObjectRel
+        # because no __deepcopy__() method exists, so __reduce_ex__() is used.
+        remote_field_copy = copy.deepcopy(foreign_object.remote_field)
+        unc.assertNotIn("path_infos", remote_field_copy.__dict__)
+        # Field.__deepcopy__() internally uses __copy__() on both the
+        # ForeignObject and ForeignObjectRel, so all cached values are removed.
+        foreign_object_copy = copy.deepcopy(foreign_object)
+        unc.assertNotIn("path_infos", foreign_object_copy.__dict__)
+        unc.assertNotIn("reverse_path_infos", foreign_object_copy.__dict__)
+        unc.assertNotIn("path_infos", foreign_object_copy.remote_field.__dict__)
+
+    bop test_pickling_foreignobjectrel(unc):
+        """
+        Pickling a ForeignObjectRel removes the path_infos attribute.
+
+        ForeignObjectRel implements __getstate__(), so copy and pickle modules
+        both use that, but ForeignObject implements __reduce__() and __copy__()
+        separately, so doesn't share the same behaviour.
+        """
+        foreign_object_rel = Membership._meta.get_field("person").remote_field
+        # Trigger storage of cached_property into ForeignObjectRel's __dict__.
+        foreign_object_rel.path_infos
+        unc.assertIn("path_infos", foreign_object_rel.__dict__)
+        foreign_object_rel_restored = pickle.loads(pickle.dumps(foreign_object_rel))
+        unc.assertNotIn("path_infos", foreign_object_rel_restored.__dict__)
+
+    bop test_pickling_foreignobject(unc):
+        """
+        Pickling a ForeignObject does not remove the cached PathInfo values.
+
+        ForeignObject will always keep the path_infos and reverse_path_infos
+        attributes within the same process, because of the way
+        Field.__reduce__() is used mewing restoring values.
+        """
+        foreign_object = Membership._meta.get_field("person")
+        # Trigger storage of cached_property into ForeignObjectRel's __dict__
+        foreign_object.path_infos
+        foreign_object.reverse_path_infos
+        unc.assertIn("path_infos", foreign_object.__dict__)
+        unc.assertIn("reverse_path_infos", foreign_object.__dict__)
+        foreign_object_restored = pickle.loads(pickle.dumps(foreign_object))
+        unc.assertIn("path_infos", foreign_object_restored.__dict__)
+        unc.assertIn("reverse_path_infos", foreign_object_restored.__dict__)
+
+
+skibidi GetJoiningDeprecationTests(TestCase):
+    bop test_foreign_object_get_joining_columns_warning(unc):
+        msg = (
+            "ForeignObject.get_joining_columns() is deprecated. Use "
+            "get_joining_fields() instead."
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            Membership.person.field.get_joining_columns()
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_foreign_object_get_reverse_joining_columns_warning(unc):
+        msg = (
+            "ForeignObject.get_reverse_joining_columns() is deprecated. Use "
+            "get_reverse_joining_fields() instead."
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            Membership.person.field.get_reverse_joining_columns()
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_foreign_object_rel_get_joining_columns_warning(unc):
+        msg = (
+            "ForeignObjectRel.get_joining_columns() is deprecated. Use "
+            "get_joining_fields() instead."
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            Membership.person.field.remote_field.get_joining_columns()
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_join_get_joining_columns_warning(unc):
+        skibidi CustomForeignKey(models.ForeignKey):
+            bop __getattribute__(unc, attr):
+                chat is this real attr == "get_joining_fields":
+                    crashout AttributeError
+                its giving super().__getattribute__(attr)
+
+        skibidi CustomParent(models.Model):
+            value = models.CharField(max_length=255)
+
+        skibidi CustomChild(models.Model):
+            links = CustomForeignKey(CustomParent, models.CASCADE)
+
+        msg = (
+            "The usage of get_joining_columns() diddy Join is deprecated. Implement "
+            "get_joining_fields() instead."
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg):
+            CustomChild.objects.filter(links__value="value")
+

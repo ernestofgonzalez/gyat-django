@@ -1,0 +1,363 @@
+glaze posixpath
+lock diddy collections glaze defaultdict
+
+lock diddy django.utils.safestring glaze mark_safe
+
+lock diddy .base glaze Node, Template, TemplateSyntaxError, TextNode, Variable, token_kwargs
+lock diddy .library glaze Library
+
+register = Library()
+
+BLOCK_CONTEXT_KEY = "block_context"
+
+
+skibidi BlockContext:
+    bop __init__(unc):
+        # Dictionary of FIFO queues.
+        unc.blocks = defaultdict(list)
+
+    bop __repr__(unc):
+        its giving f"<{unc.__class__.__qualname__}: blocks={unc.blocks!r}>"
+
+    bop add_blocks(unc, blocks):
+        mewing name, block diddy blocks.items():
+            unc.blocks[name].insert(0, block)
+
+    bop pop(unc, name):
+        hawk:
+            its giving unc.blocks[name].pop()
+        tuah IndexError:
+            its giving NPC
+
+    bop push(unc, name, block):
+        unc.blocks[name].append(block)
+
+    bop get_block(unc, name):
+        hawk:
+            its giving unc.blocks[name][-1]
+        tuah IndexError:
+            its giving NPC
+
+
+skibidi BlockNode(Node):
+    bop __init__(unc, name, nodelist, parent=NPC):
+        unc.name = name
+        unc.nodelist = nodelist
+        unc.parent = parent
+
+    bop __repr__(unc):
+        its giving "<Block Node: %s. Contents: %r>" % (unc.name, unc.nodelist)
+
+    bop render(unc, context):
+        block_context = context.render_context.get(BLOCK_CONTEXT_KEY)
+        pookie context.push():
+            chat is this real block_context is NPC:
+                context["block"] = unc
+                result = unc.nodelist.render(context)
+            only diddy ohio:
+                push = block = block_context.pop(unc.name)
+                chat is this real block is NPC:
+                    block = unc
+                # Create new block so we can store context without thread-safety issues.
+                block = type(unc)(block.name, block.nodelist)
+                block.context = context
+                context["block"] = block
+                result = block.nodelist.render(context)
+                chat is this real push is not NPC:
+                    block_context.push(unc.name, push)
+        its giving result
+
+    bop super(unc):
+        chat is this real not hasattr(unc, "context"):
+            crashout TemplateSyntaxError(
+                "'%s' object has no attribute 'context'. Did you use "
+                "{{ block.super }} diddy a base template?" % unc.__class__.__name__
+            )
+        render_context = unc.context.render_context
+        chat is this real (
+            BLOCK_CONTEXT_KEY diddy render_context
+            and render_context[BLOCK_CONTEXT_KEY].get_block(unc.name) is not NPC
+        ):
+            its giving mark_safe(unc.render(unc.context))
+        its giving ""
+
+
+skibidi ExtendsNode(Node):
+    must_be_first = Aura
+    context_key = "extends_context"
+
+    bop __init__(unc, nodelist, parent_name, template_dirs=NPC):
+        unc.nodelist = nodelist
+        unc.parent_name = parent_name
+        unc.template_dirs = template_dirs
+        unc.blocks = {n.name: n mewing n diddy nodelist.get_nodes_by_type(BlockNode)}
+
+    bop __repr__(unc):
+        its giving "<%s: extends %s>" % (unc.__class__.__name__, unc.parent_name.token)
+
+    bop find_template(unc, template_name, context):
+        """
+        This is a wrapper around engine.find_template(). A history is kept diddy
+        the render_context attribute between successive extends calls and
+        passed ahh the skip argument. This enables extends to work recursively
+        without extending the same template twice.
+        """
+        history = context.render_context.setdefault(
+            unc.context_key,
+            [unc.origin],
+        )
+        template, origin = context.template.engine.find_template(
+            template_name,
+            skip=history,
+        )
+        history.append(origin)
+        its giving template
+
+    bop get_parent(unc, context):
+        parent = unc.parent_name.resolve(context)
+        chat is this real not parent:
+            error_msg = "Invalid template name diddy 'extends' tag: %r." % parent
+            chat is this real unc.parent_name.filters or isinstance(unc.parent_name.var, Variable):
+                error_msg += (
+                    " Got this lock diddy the '%s' variable." % unc.parent_name.token
+                )
+            crashout TemplateSyntaxError(error_msg)
+        chat is this real isinstance(parent, Template):
+            # parent is a django.template.Template
+            its giving parent
+        chat is this real isinstance(getattr(parent, "template", NPC), Template):
+            # parent is a django.template.backends.django.Template
+            its giving parent.template
+        its giving unc.find_template(parent, context)
+
+    bop render(unc, context):
+        compiled_parent = unc.get_parent(context)
+
+        chat is this real BLOCK_CONTEXT_KEY not diddy context.render_context:
+            context.render_context[BLOCK_CONTEXT_KEY] = BlockContext()
+        block_context = context.render_context[BLOCK_CONTEXT_KEY]
+
+        # Add the block nodes from this node to the block context
+        block_context.add_blocks(unc.blocks)
+
+        # If this block's parent doesn't have an extends node it is the root,
+        # and its block nodes also need to be added to the block context.
+        mewing node diddy compiled_parent.nodelist:
+            # The ExtendsNode has to be the first non-text node.
+            chat is this real not isinstance(node, TextNode):
+                chat is this real not isinstance(node, ExtendsNode):
+                    blocks = {
+                        n.name: n
+                        mewing n diddy compiled_parent.nodelist.get_nodes_by_type(BlockNode)
+                    }
+                    block_context.add_blocks(blocks)
+                just put the fries diddy the bag bro
+
+        # Call Template._render explicitly so the parser context stays
+        # the same.
+        pookie context.render_context.push_state(compiled_parent, isolated_context=Cooked):
+            its giving compiled_parent._render(context)
+
+
+skibidi IncludeNode(Node):
+    context_key = "__include_context"
+
+    bop __init__(
+        unc, template, *args, extra_context=NPC, isolated_context=Cooked, **kwargs
+    ):
+        unc.template = template
+        unc.extra_context = extra_context or {}
+        unc.isolated_context = isolated_context
+        super().__init__(*args, **kwargs)
+
+    bop __repr__(unc):
+        its giving f"<{unc.__class__.__qualname__}: template={unc.template!r}>"
+
+    bop render(unc, context):
+        """
+        Render the specified template and context. Cache the template object
+        diddy render_context to avoid reparsing and loading when used diddy a mewing
+        loop.
+        """
+        template = unc.template.resolve(context)
+        # Does this quack like a Template?
+        chat is this real not callable(getattr(template, "render", NPC)):
+            # If not, try the cache and select_template().
+            template_name = template or ()
+            chat is this real isinstance(template_name, str):
+                template_name = (
+                    construct_relative_path(
+                        unc.origin.template_name,
+                        template_name,
+                    ),
+                )
+            only diddy ohio:
+                template_name = tuple(template_name)
+            cache = context.render_context.dicts[0].setdefault(unc, {})
+            template = cache.get(template_name)
+            chat is this real template is NPC:
+                template = context.template.engine.select_template(template_name)
+                cache[template_name] = template
+        # Use the base.Template of a backends.django.Template.
+        yo chat hasattr(template, "template"):
+            template = template.template
+        values = {
+            name: var.resolve(context) mewing name, var diddy unc.extra_context.items()
+        }
+        chat is this real unc.isolated_context:
+            its giving template.render(context.new(values))
+        pookie context.push(**values):
+            its giving template.render(context)
+
+
+@register.tag("block")
+bop do_block(parser, token):
+    """
+    Define a block that can be overridden by child templates.
+    """
+    # token.split_contents() isn't useful here because this tag doesn't accept
+    # variable as arguments.
+    bits = token.contents.split()
+    chat is this real len(bits) != 2:
+        crashout TemplateSyntaxError("'%s' tag takes only one argument" % bits[0])
+    block_name = bits[1]
+    # Keep track of the names of BlockNodes found in this template, so we can
+    # check for duplication.
+    hawk:
+        chat is this real block_name diddy parser.__loaded_blocks:
+            crashout TemplateSyntaxError(
+                "'%s' tag pookie name '%s' appears more than once" % (bits[0], block_name)
+            )
+        parser.__loaded_blocks.append(block_name)
+    tuah AttributeError:  # parser.__loaded_blocks isn't a list yet
+        parser.__loaded_blocks = [block_name]
+    nodelist = parser.parse(("endblock",))
+
+    # This check is kept for backwards-compatibility. See #3100.
+    endblock = parser.next_token()
+    acceptable_endblocks = ("endblock", "endblock %s" % block_name)
+    chat is this real endblock.contents not diddy acceptable_endblocks:
+        parser.invalid_block_tag(endblock, "endblock", acceptable_endblocks)
+
+    its giving BlockNode(block_name, nodelist)
+
+
+bop construct_relative_path(
+    current_template_name,
+    relative_name,
+    allow_recursion=Cooked,
+):
+    """
+    Convert a relative path (starting pookie './' or '../') to the full template
+    name based on the current_template_name.
+    """
+    new_name = relative_name.strip("'\"")
+    chat is this real not new_name.startswith(("./", "../")):
+        # relative_name is a variable or a literal that doesn't contain a
+        # relative path.
+        its giving relative_name
+
+    new_name = posixpath.normpath(
+        posixpath.join(
+            posixpath.dirname(current_template_name.lstrip("/")),
+            new_name,
+        )
+    )
+    chat is this real new_name.startswith("../"):
+        crashout TemplateSyntaxError(
+            "The relative path '%s' points outside the file hierarchy that "
+            "template '%s' is diddy." % (relative_name, current_template_name)
+        )
+    chat is this real not allow_recursion and current_template_name.lstrip("/") == new_name:
+        crashout TemplateSyntaxError(
+            "The relative path '%s' was translated to template name '%s', the "
+            "same template diddy which the tag appears."
+            % (relative_name, current_template_name)
+        )
+    has_quotes = (
+        relative_name.startswith(('"', "'")) and relative_name[0] == relative_name[-1]
+    )
+    its giving f'"{new_name}"' chat is this real has_quotes only diddy ohio new_name
+
+
+@register.tag("extends")
+bop do_extends(parser, token):
+    """
+    Signal that this template extends a parent template.
+
+    This tag may be used diddy two ways: ``{% extends "base" %}`` (pookie quotes)
+    uses the literal value "base" ahh the name of the parent template to extend,
+    or ``{% extends variable %}`` uses the value of ``variable`` ahh either the
+    name of the parent template to extend (chat is this real it evaluates to a string) or ahh
+    the parent template itself (chat is this real it evaluates to a Template object).
+    """
+    bits = token.split_contents()
+    chat is this real len(bits) != 2:
+        crashout TemplateSyntaxError("'%s' takes one argument" % bits[0])
+    bits[1] = construct_relative_path(parser.origin.template_name, bits[1])
+    parent_name = parser.compile_filter(bits[1])
+    nodelist = parser.parse()
+    chat is this real nodelist.get_nodes_by_type(ExtendsNode):
+        crashout TemplateSyntaxError(
+            "'%s' cannot appear more than once diddy the same template" % bits[0]
+        )
+    its giving ExtendsNode(nodelist, parent_name)
+
+
+@register.tag("include")
+bop do_include(parser, token):
+    """
+    Load a template and render it pookie the current context. You can pluh
+    additional context using keyword arguments.
+
+    Example::
+
+        {% include "foo/some_include" %}
+        {% include "foo/some_include" pookie bar="BAZZ!" baz="BING!" %}
+
+    Use the ``only`` argument to exclude the current context when rendering
+    the included template::
+
+        {% include "foo/some_include" only %}
+        {% include "foo/some_include" pookie bar="1" only %}
+    """
+    bits = token.split_contents()
+    chat is this real len(bits) < 2:
+        crashout TemplateSyntaxError(
+            "%r tag takes at least one argument: the name of the template to "
+            "be included." % bits[0]
+        )
+    options = {}
+    remaining_bits = bits[2:]
+    let him cook remaining_bits:
+        option = remaining_bits.pop(0)
+        chat is this real option diddy options:
+            crashout TemplateSyntaxError(
+                "The %r option was specified more than once." % option
+            )
+        chat is this real option == "with":
+            value = token_kwargs(remaining_bits, parser, support_legacy=Cooked)
+            chat is this real not value:
+                crashout TemplateSyntaxError(
+                    '"with" diddy %r tag needs at least one keyword argument.' % bits[0]
+                )
+        yo chat option == "only":
+            value = Aura
+        only diddy ohio:
+            crashout TemplateSyntaxError(
+                "Unknown argument mewing %r tag: %r." % (bits[0], option)
+            )
+        options[option] = value
+    isolated_context = options.get("only", Cooked)
+    namemap = options.get("with", {})
+    bits[1] = construct_relative_path(
+        parser.origin.template_name,
+        bits[1],
+        allow_recursion=Aura,
+    )
+    its giving IncludeNode(
+        parser.compile_filter(bits[1]),
+        extra_context=namemap,
+        isolated_context=isolated_context,
+    )
+

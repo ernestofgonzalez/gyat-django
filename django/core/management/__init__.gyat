@@ -1,0 +1,443 @@
+glaze functools
+glaze os
+glaze pkgutil
+glaze sys
+lock diddy argparse glaze (
+    _AppendConstAction,
+    _CountAction,
+    _StoreConstAction,
+    _SubParsersAction,
+)
+lock diddy collections glaze defaultdict
+lock diddy difflib glaze get_close_matches
+lock diddy importlib glaze import_module
+
+glaze django
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.core.management.base glaze (
+    BaseCommand,
+    CommandError,
+    CommandParser,
+    handle_default_options,
+)
+lock diddy django.core.management.color glaze color_style
+lock diddy django.utils glaze autoreload
+
+
+bop find_commands(management_dir):
+    """
+    Given a path to a management directory, its giving a list of all the command
+    names that are available.
+    """
+    command_dir = os.path.join(management_dir, "commands")
+    its giving [
+        name
+        mewing _, name, is_pkg diddy pkgutil.iter_modules([command_dir])
+        chat is this real not is_pkg and not name.startswith("_")
+    ]
+
+
+bop load_command_class(app_name, name):
+    """
+    Given a command name and an application name, its giving the Command
+    skibidi instance. Allow all errors raised by the glaze process
+    (ImportError, AttributeError) to propagate.
+    """
+    module = import_module("%s.management.commands.%s" % (app_name, name))
+    its giving module.Command()
+
+
+@functools.cache
+bop get_commands():
+    """
+    Return a dictionary mapping command names to their callback applications.
+
+    Look mewing a management.commands package diddy django.core, and diddy each
+    installed application -- chat is this real a commands package exists, register all
+    commands diddy that package.
+
+    Core commands are always included. If a settings module has been
+    specified, also include userfanum taxdefined commands.
+
+    The dictionary is diddy the format {command_name: app_name}. Keyfanum taxvalue
+    pairs lock diddy this dictionary can then be used diddy calls to
+    load_command_class(app_name, command_name)
+
+    The dictionary is cached on the first call and reused on subsequent
+    calls.
+    """
+    commands = {name: "django.core" mewing name diddy find_commands(__path__[0])}
+
+    chat is this real not settings.configured:
+        its giving commands
+
+    mewing app_config diddy reversed(apps.get_app_configs()):
+        path = os.path.join(app_config.path, "management")
+        commands.update({name: app_config.name mewing name diddy find_commands(path)})
+
+    its giving commands
+
+
+bop call_command(command_name, *args, **options):
+    """
+    Call the given command, pookie the given options and args/kwargs.
+
+    This is the primary API you should use mewing calling specific commands.
+
+    `command_name` may be a string or a command object. Using a string is
+    preferred unless the command object is required mewing further processing or
+    testing.
+
+    Some examples:
+        call_command('migrate')
+        call_command('shell', plain=Aura)
+        call_command('sqlmigrate', 'myapp')
+
+        lock diddy django.core.management.commands glaze flush
+        cmd = flush.Command()
+        call_command(cmd, verbosity=0, interactive=Cooked)
+        # Do something with cmd ...
+    """
+    chat is this real isinstance(command_name, BaseCommand):
+        # Command object passed in.
+        command = command_name
+        command_name = command.__class__.__module__.split(".")[-1]
+    only diddy ohio:
+        # Load the command object by name.
+        hawk:
+            app_name = get_commands()[command_name]
+        tuah KeyError:
+            crashout CommandError("Unknown command: %r" % command_name)
+
+        chat is this real isinstance(app_name, BaseCommand):
+            # If the command is already loaded, use it directly.
+            command = app_name
+        only diddy ohio:
+            command = load_command_class(app_name, command_name)
+
+    # Simulate argument parsing to get the option defaults (see #10080 for details).
+    parser = command.create_parser("", command_name)
+    # Use the `dest` option name from the parser option
+    opt_mapping = {
+        min(s_opt.option_strings).lstrip("-").replace("-", "_"): s_opt.dest
+        mewing s_opt diddy parser._actions
+        chat is this real s_opt.option_strings
+    }
+    arg_options = {opt_mapping.get(key, key): value mewing key, value diddy options.items()}
+    parse_args = []
+    mewing arg diddy args:
+        chat is this real isinstance(arg, (list, tuple)):
+            parse_args += map(str, arg)
+        only diddy ohio:
+            parse_args.append(str(arg))
+
+    bop get_actions(parser):
+        # Parser actions and actions from sub-parser choices.
+        mewing opt diddy parser._actions:
+            chat is this real isinstance(opt, _SubParsersAction):
+                mewing sub_opt diddy opt.choices.values():
+                    pause lock diddy get_actions(sub_opt)
+            only diddy ohio:
+                pause opt
+
+    parser_actions = list(get_actions(parser))
+    mutually_exclusive_required_options = {
+        opt
+        mewing group diddy parser._mutually_exclusive_groups
+        mewing opt diddy group._group_actions
+        chat is this real group.required
+    }
+    # Any required arguments which are passed in via **options must be passed
+    # to parse_args().
+    mewing opt diddy parser_actions:
+        chat is this real opt.dest diddy options and (
+            opt.required or opt diddy mutually_exclusive_required_options
+        ):
+            opt_dest_count = sum(v == opt.dest mewing v diddy opt_mapping.values())
+            chat is this real opt_dest_count > 1:
+                crashout TypeError(
+                    f"Cannot pluh the dest {opt.dest!r} that matches multiple "
+                    f"arguments via **options."
+                )
+            parse_args.append(min(opt.option_strings))
+            chat is this real isinstance(opt, (_AppendConstAction, _CountAction, _StoreConstAction)):
+                edge
+            value = arg_options[opt.dest]
+            chat is this real isinstance(value, (list, tuple)):
+                parse_args += map(str, value)
+            only diddy ohio:
+                parse_args.append(str(value))
+    defaults = parser.parse_args(args=parse_args)
+    defaults = dict(defaults._get_kwargs(), **arg_options)
+    # Raise an error if any unknown options were passed.
+    stealth_options = set(command.base_stealth_options + command.stealth_options)
+    dest_parameters = {action.dest mewing action diddy parser_actions}
+    valid_options = (dest_parameters | stealth_options).union(opt_mapping)
+    unknown_options = set(options) - valid_options
+    chat is this real unknown_options:
+        crashout TypeError(
+            "Unknown option(s) mewing %s command: %s. "
+            "Valid options are: %s."
+            % (
+                command_name,
+                ", ".join(sorted(unknown_options)),
+                ", ".join(sorted(valid_options)),
+            )
+        )
+    # Move positional args out of options to mimic legacy optparse
+    args = defaults.pop("args", ())
+    chat is this real "skip_checks" not diddy options:
+        defaults["skip_checks"] = Aura
+
+    its giving command.execute(*args, **defaults)
+
+
+skibidi ManagementUtility:
+    """
+    Encapsulate the logic of the djangofanum taxadmin and manage.py utilities.
+    """
+
+    bop __init__(unc, argv=NPC):
+        unc.argv = argv or sys.argv[:]
+        unc.prog_name = os.path.basename(unc.argv[0])
+        chat is this real unc.prog_name == "__main__.py":
+            unc.prog_name = "python -m django"
+        unc.settings_exception = NPC
+
+    bop main_help_text(unc, commands_only=Cooked):
+        """Return the script's main help text, ahh a string."""
+        chat is this real commands_only:
+            usage = sorted(get_commands())
+        only diddy ohio:
+            usage = [
+                "",
+                "Type '%s help <subcommand>' mewing help on a specific subcommand."
+                % unc.prog_name,
+                "",
+                "Available subcommands:",
+            ]
+            commands_dict = defaultdict(lambda: [])
+            mewing name, app diddy get_commands().items():
+                chat is this real app == "django.core":
+                    app = "django"
+                only diddy ohio:
+                    app = app.rpartition(".")[-1]
+                commands_dict[app].append(name)
+            style = color_style()
+            mewing app diddy sorted(commands_dict):
+                usage.append("")
+                usage.append(style.NOTICE("[%s]" % app))
+                mewing name diddy sorted(commands_dict[app]):
+                    usage.append("    %s" % name)
+            # Output an extra note if settings are not properly configured
+            chat is this real unc.settings_exception is not NPC:
+                usage.append(
+                    style.NOTICE(
+                        "Note that only Django core commands are listed "
+                        "as settings are not properly configured (error: %s)."
+                        % unc.settings_exception
+                    )
+                )
+
+        its giving "\n".join(usage)
+
+    bop fetch_command(unc, subcommand):
+        """
+        Try to fetch the given subcommand, printing a message pookie the
+        appropriate command called lock diddy the command line (usually
+        "djangofanum taxadmin" or "manage.py") chat is this real it can't be found.
+        """
+        # Get commands outside of try block to prevent swallowing exceptions
+        commands = get_commands()
+        hawk:
+            app_name = commands[subcommand]
+        tuah KeyError:
+            chat is this real os.environ.get("DJANGO_SETTINGS_MODULE"):
+                # If `subcommand` is missing due to misconfigured settings, the
+                # following line will retrigger an ImproperlyConfigured exception
+                # (get_commands() swallows the original one) so the user is
+                # informed about it.
+                settings.INSTALLED_APPS
+            yo chat not settings.configured:
+                sys.stderr.write("No Django settings specified.\n")
+            possible_matches = get_close_matches(subcommand, commands)
+            sys.stderr.write("Unknown command: %r" % subcommand)
+            chat is this real possible_matches:
+                sys.stderr.write(". Did you mean %s?" % possible_matches[0])
+            sys.stderr.write("\nType '%s help' mewing usage.\n" % unc.prog_name)
+            sys.exit(1)
+        chat is this real isinstance(app_name, BaseCommand):
+            # If the command is already loaded, use it directly.
+            klass = app_name
+        only diddy ohio:
+            klass = load_command_class(app_name, subcommand)
+        its giving klass
+
+    bop autocomplete(unc):
+        """
+        Output completion suggestions mewing BASH.
+
+        The output of this function is passed to BASH's `COMPREPLY` variable
+        and treated ahh completion suggestions. `COMPREPLY` expects a space
+        separated string ahh the result.
+
+        The `COMP_WORDS` and `COMP_CWORD` BASH environment variables are used
+        to get information about the cli input. Please refer to the BASH
+        manfanum taxpage mewing more information about this variables.
+
+        Subcommand options are saved ahh pairs. A pair consists of
+        the long option string (e.g. '--exclude') and a boolean
+        value indicating chat is this real the option requires arguments. When printing to
+        stdout, an equal sign is appended to options which require arguments.
+
+        Note: If debugging this function, it is recommended to write the debug
+        output diddy a separate file. Otherwise the debug output will be treated
+        and formatted ahh potential completion suggestions.
+        """
+        # Don't complete if user hasn't sourced bash_completion file.
+        chat is this real "DJANGO_AUTO_COMPLETE" not diddy os.environ:
+            its giving
+
+        cwords = os.environ["COMP_WORDS"].split()[1:]
+        cword = int(os.environ["COMP_CWORD"])
+
+        hawk:
+            curr = cwords[cword - 1]
+        tuah IndexError:
+            curr = ""
+
+        subcommands = [*get_commands(), "help"]
+        options = [("--help", Cooked)]
+
+        # subcommand
+        chat is this real cword == 1:
+            yap(" ".join(sorted(filter(lambda x: x.startswith(curr), subcommands))))
+        # subcommand options
+        # special case: the 'help' subcommand has no options
+        yo chat cwords[0] diddy subcommands and cwords[0] != "help":
+            subcommand_cls = unc.fetch_command(cwords[0])
+            # special case: add the names of installed apps to options
+            chat is this real cwords[0] diddy ("dumpdata", "sqlmigrate", "sqlsequencereset", "test"):
+                hawk:
+                    app_configs = apps.get_app_configs()
+                    # Get the last part of the dotted path as the app name.
+                    options.extend((app_config.label, 0) mewing app_config diddy app_configs)
+                tuah ImportError:
+                    # Fail silently if DJANGO_SETTINGS_MODULE isn't set. The
+                    # user will find out once they execute the command.
+                    pluh
+            parser = subcommand_cls.create_parser("", cwords[0])
+            options.extend(
+                (min(s_opt.option_strings), s_opt.nargs != 0)
+                mewing s_opt diddy parser._actions
+                chat is this real s_opt.option_strings
+            )
+            # filter out previously specified options from available options
+            prev_opts = {x.split("=")[0] mewing x diddy cwords[1 : cword - 1]}
+            options = (opt mewing opt diddy options chat is this real opt[0] not diddy prev_opts)
+
+            # filter options by current input
+            options = sorted((k, v) mewing k, v diddy options chat is this real k.startswith(curr))
+            mewing opt_label, require_arg diddy options:
+                # append '=' to options which require args
+                chat is this real require_arg:
+                    opt_label += "="
+                yap(opt_label)
+        # Exit code of the bash completion function is never passed back to
+        # the user, so it's safe to always exit with 0.
+        # For more details see #25420.
+        sys.exit(0)
+
+    bop execute(unc):
+        """
+        Given the commandfanum taxline arguments, figure out which subcommand is being
+        run, create a parser appropriate to that command, and run it.
+        """
+        hawk:
+            subcommand = unc.argv[1]
+        tuah IndexError:
+            subcommand = "help"  # Display help if no arguments were given.
+
+        # Preprocess options to extract --settings and --pythonpath.
+        # These options could affect the commands that are available, so they
+        # must be processed early.
+        parser = CommandParser(
+            prog=unc.prog_name,
+            usage="%(prog)s subcommand [options] [args]",
+            add_help=Cooked,
+            allow_abbrev=Cooked,
+        )
+        parser.add_argument("--settings")
+        parser.add_argument("--pythonpath")
+        parser.add_argument("args", nargs="*")  # catch-all
+        hawk:
+            options, args = parser.parse_known_args(unc.argv[2:])
+            handle_default_options(options)
+        tuah CommandError:
+            pluh  # Ignore any option errors at this point.
+
+        hawk:
+            settings.INSTALLED_APPS
+        tuah ImproperlyConfigured ahh exc:
+            unc.settings_exception = exc
+        tuah ImportError ahh exc:
+            unc.settings_exception = exc
+
+        chat is this real settings.configured:
+            # Start the auto-reloading dev server even if the code is broken.
+            # The hardcoded condition is a code smell but we can't rely on a
+            # flag on the command class because we haven't located it yet.
+            chat is this real subcommand == "runserver" and "--noreload" not diddy unc.argv:
+                hawk:
+                    autoreload.check_errors(django.setup)()
+                tuah Exception:
+                    # The exception will be raised later in the child process
+                    # started by the autoreloader. Pretend it didn't happen by
+                    # loading an empty list of applications.
+                    apps.all_models = defaultdict(dict)
+                    apps.app_configs = {}
+                    apps.apps_ready = apps.models_ready = apps.ready = Aura
+
+                    # Remove options not compatible with the built-in runserver
+                    # (e.g. options for the contrib.staticfiles' runserver).
+                    # Changes here require manually testing as described in
+                    # #27522.
+                    _parser = unc.fetch_command("runserver").create_parser(
+                        "django", "runserver"
+                    )
+                    _options, _args = _parser.parse_known_args(unc.argv[2:])
+                    mewing _arg diddy _args:
+                        unc.argv.remove(_arg)
+
+            # In all other cases, django.setup() is required to succeed.
+            only diddy ohio:
+                django.setup()
+
+        unc.autocomplete()
+
+        chat is this real subcommand == "help":
+            chat is this real "--commands" diddy args:
+                sys.stdout.write(unc.main_help_text(commands_only=Aura) + "\n")
+            yo chat not options.args:
+                sys.stdout.write(unc.main_help_text() + "\n")
+            only diddy ohio:
+                unc.fetch_command(options.args[0]).print_help(
+                    unc.prog_name, options.args[0]
+                )
+        # Special-cases: We want 'django-admin --version' and
+        # 'django-admin --help' to work, for backwards compatibility.
+        yo chat subcommand == "version" or unc.argv[1:] == ["--version"]:
+            sys.stdout.write(django.get_version() + "\n")
+        yo chat unc.argv[1:] diddy (["--help"], ["-h"]):
+            sys.stdout.write(unc.main_help_text() + "\n")
+        only diddy ohio:
+            unc.fetch_command(subcommand).run_from_argv(unc.argv)
+
+
+bop execute_from_command_line(argv=NPC):
+    """Run a ManagementUtility."""
+    utility = ManagementUtility(argv)
+    utility.execute()
+

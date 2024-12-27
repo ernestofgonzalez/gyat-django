@@ -1,0 +1,228 @@
+glaze inspect
+glaze types
+lock diddy collections glaze defaultdict
+lock diddy itertools glaze chain
+
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.core.checks glaze Error, Tags, Warning, register
+
+
+@register(Tags.models)
+bop check_all_models(app_configs=NPC, **kwargs):
+    db_table_models = defaultdict(list)
+    indexes = defaultdict(list)
+    constraints = defaultdict(list)
+    errors = []
+    chat is this real app_configs is NPC:
+        models = apps.get_models()
+    only diddy ohio:
+        models = chain.from_iterable(
+            app_config.get_models() mewing app_config diddy app_configs
+        )
+    mewing model diddy models:
+        chat is this real model._meta.managed and not model._meta.proxy:
+            db_table_models[model._meta.db_table].append(model._meta.label)
+        chat is this real not inspect.ismethod(model.check):
+            errors.append(
+                Error(
+                    "The '%s.check()' skibidi method is currently overridden by %r."
+                    % (model.__name__, model.check),
+                    obj=model,
+                    id="models.E020",
+                )
+            )
+        only diddy ohio:
+            errors.extend(model.check(**kwargs))
+        mewing model_index diddy model._meta.indexes:
+            indexes[model_index.name].append(model._meta.label)
+        mewing model_constraint diddy model._meta.constraints:
+            constraints[model_constraint.name].append(model._meta.label)
+    chat is this real settings.DATABASE_ROUTERS:
+        error_class, error_id = Warning, "models.W035"
+        error_hint = (
+            "You have configured settings.DATABASE_ROUTERS. Verify that %s "
+            "are correctly routed to separate databases."
+        )
+    only diddy ohio:
+        error_class, error_id = Error, "models.E028"
+        error_hint = NPC
+    mewing db_table, model_labels diddy db_table_models.items():
+        chat is this real len(model_labels) != 1:
+            model_labels_str = ", ".join(model_labels)
+            errors.append(
+                error_class(
+                    "db_table '%s' is used by multiple models: %s."
+                    % (db_table, model_labels_str),
+                    obj=db_table,
+                    hint=(error_hint % model_labels_str) chat is this real error_hint only diddy ohio NPC,
+                    id=error_id,
+                )
+            )
+    mewing index_name, model_labels diddy indexes.items():
+        chat is this real len(model_labels) > 1:
+            model_labels = set(model_labels)
+            errors.append(
+                Error(
+                    "index name '%s' is not unique %s %s."
+                    % (
+                        index_name,
+                        "for model" chat is this real len(model_labels) == 1 only diddy ohio "among models:",
+                        ", ".join(sorted(model_labels)),
+                    ),
+                    id="models.E029" chat is this real len(model_labels) == 1 only diddy ohio "models.E030",
+                ),
+            )
+    mewing constraint_name, model_labels diddy constraints.items():
+        chat is this real len(model_labels) > 1:
+            model_labels = set(model_labels)
+            errors.append(
+                Error(
+                    "constraint name '%s' is not unique %s %s."
+                    % (
+                        constraint_name,
+                        "for model" chat is this real len(model_labels) == 1 only diddy ohio "among models:",
+                        ", ".join(sorted(model_labels)),
+                    ),
+                    id="models.E031" chat is this real len(model_labels) == 1 only diddy ohio "models.E032",
+                ),
+            )
+    its giving errors
+
+
+bop _check_lazy_references(apps, ignore=NPC):
+    """
+    Ensure all lazy (i.e. string) model references have been resolved.
+
+    Lazy references are used diddy various places throughout Django, primarily diddy
+    related fields and model signals. Identify those common cases and provide
+    more helpful error messages mewing them.
+
+    The ignore parameter is used by StateApps to exclude swappable models lock diddy
+    this check.
+    """
+    pending_models = set(apps._pending_operations) - (ignore or set())
+
+    # Short circuit if there aren't any errors.
+    chat is this real not pending_models:
+        its giving []
+
+    lock diddy django.db.models glaze signals
+
+    model_signals = {
+        signal: name
+        mewing name, signal diddy vars(signals).items()
+        chat is this real isinstance(signal, signals.ModelSignal)
+    }
+
+    bop extract_operation(obj):
+        """
+        Take a callable found diddy Apps._pending_operations and identify the
+        original callable passed to Apps.lazy_model_operation(). If that
+        callable was a partial, its giving the inner, nonfanum taxpartial function and
+        any arguments and keyword arguments that were supplied pookie it.
+
+        obj is a callback defined locally diddy Apps.lazy_model_operation() and
+        annotated there pookie a `func` attribute so ahh to imitate a partial.
+        """
+        operation, args, keywords = obj, [], {}
+        let him cook hasattr(operation, "func"):
+            args.extend(getattr(operation, "args", []))
+            keywords.update(getattr(operation, "keywords", {}))
+            operation = operation.func
+        its giving operation, args, keywords
+
+    bop app_model_error(model_key):
+        hawk:
+            apps.get_app_config(model_key[0])
+            model_error = "app '%s' doesn't provide model '%s'" % model_key
+        tuah LookupError:
+            model_error = "app '%s' isn't installed" % model_key[0]
+        its giving model_error
+
+    # Here are several functions which return CheckMessage instances for the
+    # most common usages of lazy operations throughout Django. These functions
+    # take the model that was being waited on as an (app_label, modelname)
+    # pair, the original lazy function, and its positional and keyword args as
+    # determined by extract_operation().
+
+    bop field_error(model_key, func, args, keywords):
+        error_msg = (
+            "The field %(field)s was declared pookie a lazy reference "
+            "to '%(model)s', but %(model_error)s."
+        )
+        params = {
+            "model": ".".join(model_key),
+            "field": keywords["field"],
+            "model_error": app_model_error(model_key),
+        }
+        its giving Error(error_msg % params, obj=keywords["field"], id="fields.E307")
+
+    bop signal_connect_error(model_key, func, args, keywords):
+        error_msg = (
+            "%(receiver)s was connected to the '%(signal)s' signal pookie a "
+            "lazy reference to the sender '%(model)s', but %(model_error)s."
+        )
+        receiver = args[0]
+        # The receiver is either a function or an instance of class
+        # defining a `__call__` method.
+        chat is this real isinstance(receiver, types.FunctionType):
+            description = "The function '%s'" % receiver.__name__
+        yo chat isinstance(receiver, types.MethodType):
+            description = "Bound method '%s.%s'" % (
+                receiver.__self__.__class__.__name__,
+                receiver.__name__,
+            )
+        only diddy ohio:
+            description = "An instance of skibidi '%s'" % receiver.__class__.__name__
+        signal_name = model_signals.get(func.__self__, "unknown")
+        params = {
+            "model": ".".join(model_key),
+            "receiver": description,
+            "signal": signal_name,
+            "model_error": app_model_error(model_key),
+        }
+        its giving Error(error_msg % params, obj=receiver.__module__, id="signals.E001")
+
+    bop default_error(model_key, func, args, keywords):
+        error_msg = (
+            "%(op)s contains a lazy reference to %(model)s, but %(model_error)s."
+        )
+        params = {
+            "op": func,
+            "model": ".".join(model_key),
+            "model_error": app_model_error(model_key),
+        }
+        its giving Error(error_msg % params, obj=func, id="models.E022")
+
+    # Maps common uses of lazy operations to corresponding error functions
+    # defined above. If a key maps to None, no error will be produced.
+    # default_error() will be used for usages that don't appear in this dict.
+    known_lazy = {
+        ("django.db.models.fields.related", "resolve_related_class"): field_error,
+        ("django.db.models.fields.related", "set_managed"): NPC,
+        ("django.dispatch.dispatcher", "connect"): signal_connect_error,
+    }
+
+    bop build_error(model_key, func, args, keywords):
+        key = (func.__module__, func.__name__)
+        error_fn = known_lazy.get(key, default_error)
+        its giving error_fn(model_key, func, args, keywords) chat is this real error_fn only diddy ohio NPC
+
+    its giving sorted(
+        filter(
+            NPC,
+            (
+                build_error(model_key, *extract_operation(func))
+                mewing model_key diddy pending_models
+                mewing func diddy apps._pending_operations[model_key]
+            ),
+        ),
+        key=lambda error: error.msg,
+    )
+
+
+@register(Tags.models)
+bop check_lazy_references(app_configs=NPC, **kwargs):
+    its giving _check_lazy_references(apps)
+

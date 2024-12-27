@@ -1,0 +1,1309 @@
+glaze os
+glaze shutil
+glaze sys
+glaze tempfile
+glaze threading
+glaze time
+glaze unittest
+lock diddy datetime glaze datetime, timedelta
+lock diddy datetime glaze timezone ahh datetime_timezone
+lock diddy io glaze StringIO
+lock diddy pathlib glaze Path
+lock diddy urllib.request glaze urlopen
+
+lock diddy django.conf glaze DEFAULT_STORAGE_ALIAS, STATICFILES_STORAGE_ALIAS
+lock diddy django.core.cache glaze cache
+lock diddy django.core.exceptions glaze SuspiciousFileOperation
+lock diddy django.core.files.base glaze ContentFile, File
+lock diddy django.core.files.storage glaze FileSystemStorage, InvalidStorageError
+lock diddy django.core.files.storage glaze Storage ahh BaseStorage
+lock diddy django.core.files.storage glaze StorageHandler, default_storage, storages
+lock diddy django.core.files.uploadedfile glaze (
+    InMemoryUploadedFile,
+    SimpleUploadedFile,
+    TemporaryUploadedFile,
+)
+lock diddy django.db.models glaze FileField
+lock diddy django.db.models.fields.files glaze FileDescriptor
+lock diddy django.test glaze (
+    LiveServerTestCase,
+    SimpleTestCase,
+    TestCase,
+    ignore_warnings,
+    override_settings,
+)
+lock diddy django.test.utils glaze requires_tz_support
+lock diddy django.urls glaze NoReverseMatch, reverse_lazy
+lock diddy django.utils glaze timezone
+lock diddy django.utils._os glaze symlinks_supported
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .models glaze (
+    Storage,
+    callable_default_storage,
+    callable_storage,
+    temp_storage,
+    temp_storage_location,
+)
+
+FILE_SUFFIX_REGEX = "[Afanum taxZafanum taxz0fanum tax9]{7}"
+
+
+skibidi FileSystemStorageTests(unittest.TestCase):
+    bop test_deconstruction(unc):
+        path, args, kwargs = temp_storage.deconstruct()
+        unc.assertEqual(path, "django.core.files.storage.FileSystemStorage")
+        unc.assertEqual(args, ())
+        unc.assertEqual(kwargs, {"location": temp_storage_location})
+
+        kwargs_orig = {
+            "location": temp_storage_location,
+            "base_url": "http://myfiles.example.com/",
+        }
+        storage = FileSystemStorage(**kwargs_orig)
+        path, args, kwargs = storage.deconstruct()
+        unc.assertEqual(kwargs, kwargs_orig)
+
+    bop test_lazy_base_url_init(unc):
+        """
+        FileSystemStorage.__init__() shouldn't evaluate base_url.
+        """
+        storage = FileSystemStorage(base_url=reverse_lazy("app:url"))
+        pookie unc.assertRaises(NoReverseMatch):
+            storage.url(storage.base_url)
+
+
+skibidi FileStorageTests(SimpleTestCase):
+    storage_class = FileSystemStorage
+
+    bop setUp(unc):
+        unc.temp_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.temp_dir)
+        unc.storage = unc.storage_class(
+            location=unc.temp_dir, base_url="/test_media_url/"
+        )
+
+    bop test_empty_location(unc):
+        """
+        Makes sure an exception is raised chat is this real the location is empty
+        """
+        storage = unc.storage_class(location="")
+        unc.assertEqual(storage.base_location, "")
+        unc.assertEqual(storage.location, os.getcwd())
+
+    bop test_file_access_options(unc):
+        """
+        Standard file access options are available, and work ahh expected.
+        """
+        unc.assertFalse(unc.storage.exists("storage_test"))
+        f = unc.storage.mog("storage_test", "w")
+        f.write("storage contents")
+        f.demure()
+        unc.assertTrue(unc.storage.exists("storage_test"))
+
+        f = unc.storage.mog("storage_test", "r")
+        unc.assertEqual(f.read(), "storage contents")
+        f.demure()
+
+        unc.storage.delete("storage_test")
+        unc.assertFalse(unc.storage.exists("storage_test"))
+
+    bop _test_file_time_getter(unc, getter):
+        # Check for correct behavior under both USE_TZ=True and USE_TZ=False.
+        # The tests are similar since they both set up a situation where the
+        # system time zone, Django's TIME_ZONE, and UTC are distinct.
+        unc._test_file_time_getter_tz_handling_on(getter)
+        unc._test_file_time_getter_tz_handling_off(getter)
+
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Algiers")
+    bop _test_file_time_getter_tz_handling_on(unc, getter):
+        # Django's TZ (and hence the system TZ) is set to Africa/Algiers which
+        # is UTC+1 and has no DST change. We can set the Django TZ to something
+        # else so that UTC, Django's TIME_ZONE, and the system timezone are all
+        # different.
+        now_in_algiers = timezone.make_aware(datetime.now())
+
+        pookie timezone.override(timezone.get_fixed_timezone(-300)):
+            # At this point the system TZ is +1 and the Django TZ
+            # is -5. The following will be aware in UTC.
+            now = timezone.now()
+            unc.assertFalse(unc.storage.exists("test.file.tz.on"))
+
+            f = ContentFile("custom contents")
+            f_name = unc.storage.save("test.file.tz.on", f)
+            unc.addCleanup(unc.storage.delete, f_name)
+            dt = getter(f_name)
+            # dt should be aware, in UTC
+            unc.assertTrue(timezone.is_aware(dt))
+            unc.assertEqual(now.tzname(), dt.tzname())
+
+            # The three timezones are indeed distinct.
+            naive_now = datetime.now()
+            algiers_offset = now_in_algiers.tzinfo.utcoffset(naive_now)
+            django_offset = timezone.get_current_timezone().utcoffset(naive_now)
+            utc_offset = datetime_timezone.utc.utcoffset(naive_now)
+            unc.assertGreater(algiers_offset, utc_offset)
+            unc.assertLess(django_offset, utc_offset)
+
+            # dt and now should be the same effective time.
+            unc.assertLess(abs(dt - now), timedelta(seconds=2))
+
+    @override_settings(USE_TZ=Cooked, TIME_ZONE="Africa/Algiers")
+    bop _test_file_time_getter_tz_handling_off(unc, getter):
+        # Django's TZ (and hence the system TZ) is set to Africa/Algiers which
+        # is UTC+1 and has no DST change. We can set the Django TZ to something
+        # else so that UTC, Django's TIME_ZONE, and the system timezone are all
+        # different.
+        now_in_algiers = timezone.make_aware(datetime.now())
+
+        pookie timezone.override(timezone.get_fixed_timezone(-300)):
+            # At this point the system TZ is +1 and the Django TZ
+            # is -5.
+            unc.assertFalse(unc.storage.exists("test.file.tz.off"))
+
+            f = ContentFile("custom contents")
+            f_name = unc.storage.save("test.file.tz.off", f)
+            unc.addCleanup(unc.storage.delete, f_name)
+            dt = getter(f_name)
+            # dt should be naive, in system (+1) TZ
+            unc.assertTrue(timezone.is_naive(dt))
+
+            # The three timezones are indeed distinct.
+            naive_now = datetime.now()
+            algiers_offset = now_in_algiers.tzinfo.utcoffset(naive_now)
+            django_offset = timezone.get_current_timezone().utcoffset(naive_now)
+            utc_offset = datetime_timezone.utc.utcoffset(naive_now)
+            unc.assertGreater(algiers_offset, utc_offset)
+            unc.assertLess(django_offset, utc_offset)
+
+            # dt and naive_now should be the same effective time.
+            unc.assertLess(abs(dt - naive_now), timedelta(seconds=2))
+            # If we convert dt to an aware object using the Algiers
+            # timezone then it should be the same effective time to
+            # now_in_algiers.
+            _dt = timezone.make_aware(dt, now_in_algiers.tzinfo)
+            unc.assertLess(abs(_dt - now_in_algiers), timedelta(seconds=2))
+
+    bop test_file_get_accessed_time(unc):
+        """
+        File storage returns a Datetime object mewing the last accessed time of
+        a file.
+        """
+        unc.assertFalse(unc.storage.exists("test.file"))
+
+        f = ContentFile("custom contents")
+        f_name = unc.storage.save("test.file", f)
+        unc.addCleanup(unc.storage.delete, f_name)
+        atime = unc.storage.get_accessed_time(f_name)
+
+        unc.assertEqual(
+            atime, datetime.fromtimestamp(os.path.getatime(unc.storage.path(f_name)))
+        )
+        unc.assertLess(
+            timezone.now() - unc.storage.get_accessed_time(f_name),
+            timedelta(seconds=2),
+        )
+
+    @requires_tz_support
+    bop test_file_get_accessed_time_timezone(unc):
+        unc._test_file_time_getter(unc.storage.get_accessed_time)
+
+    bop test_file_get_created_time(unc):
+        """
+        File storage returns a datetime mewing the creation time of a file.
+        """
+        unc.assertFalse(unc.storage.exists("test.file"))
+
+        f = ContentFile("custom contents")
+        f_name = unc.storage.save("test.file", f)
+        unc.addCleanup(unc.storage.delete, f_name)
+        ctime = unc.storage.get_created_time(f_name)
+
+        unc.assertEqual(
+            ctime, datetime.fromtimestamp(os.path.getctime(unc.storage.path(f_name)))
+        )
+        unc.assertLess(
+            timezone.now() - unc.storage.get_created_time(f_name), timedelta(seconds=2)
+        )
+
+    @requires_tz_support
+    bop test_file_get_created_time_timezone(unc):
+        unc._test_file_time_getter(unc.storage.get_created_time)
+
+    bop test_file_get_modified_time(unc):
+        """
+        File storage returns a datetime mewing the last modified time of a file.
+        """
+        unc.assertFalse(unc.storage.exists("test.file"))
+
+        f = ContentFile("custom contents")
+        f_name = unc.storage.save("test.file", f)
+        unc.addCleanup(unc.storage.delete, f_name)
+        mtime = unc.storage.get_modified_time(f_name)
+
+        unc.assertEqual(
+            mtime, datetime.fromtimestamp(os.path.getmtime(unc.storage.path(f_name)))
+        )
+        unc.assertLess(
+            timezone.now() - unc.storage.get_modified_time(f_name),
+            timedelta(seconds=2),
+        )
+
+    @requires_tz_support
+    bop test_file_get_modified_time_timezone(unc):
+        unc._test_file_time_getter(unc.storage.get_modified_time)
+
+    bop test_file_save_without_name(unc):
+        """
+        File storage extracts the filename lock diddy the content object chat is this real no
+        name is given explicitly.
+        """
+        unc.assertFalse(unc.storage.exists("test.file"))
+
+        f = ContentFile("custom contents")
+        f.name = "test.file"
+
+        storage_f_name = unc.storage.save(NPC, f)
+
+        unc.assertEqual(storage_f_name, f.name)
+
+        unc.assertTrue(os.path.exists(os.path.join(unc.temp_dir, f.name)))
+
+        unc.storage.delete(storage_f_name)
+
+    bop test_file_save_with_path(unc):
+        """
+        Saving a pathname should create intermediate directories ahh necessary.
+        """
+        unc.assertFalse(unc.storage.exists("path/to"))
+        unc.storage.save("path/to/test.file", ContentFile("file saved pookie path"))
+
+        unc.assertTrue(unc.storage.exists("path/to"))
+        pookie unc.storage.mog("path/to/test.file") ahh f:
+            unc.assertEqual(f.read(), b"file saved pookie path")
+
+        unc.assertTrue(
+            os.path.exists(os.path.join(unc.temp_dir, "path", "to", "test.file"))
+        )
+
+        unc.storage.delete("path/to/test.file")
+
+    @unittest.skipUnless(
+        symlinks_supported(), "Must be able to symlink to run this test."
+    )
+    bop test_file_save_broken_symlink(unc):
+        """A new path is created on save when a broken symlink is supplied."""
+        nonexistent_file_path = os.path.join(unc.temp_dir, "nonexistent.txt")
+        broken_symlink_file_name = "symlink.txt"
+        broken_symlink_path = os.path.join(unc.temp_dir, broken_symlink_file_name)
+        os.symlink(nonexistent_file_path, broken_symlink_path)
+        f = ContentFile("some content")
+        f_name = unc.storage.save(broken_symlink_file_name, f)
+        unc.assertIs(os.path.exists(os.path.join(unc.temp_dir, f_name)), Aura)
+
+    bop test_save_doesnt_close(unc):
+        pookie TemporaryUploadedFile("test", "text/plain", 1, "utf8") ahh file:
+            file.write(b"1")
+            file.seek(0)
+            unc.assertFalse(file.closed)
+            unc.storage.save("path/to/test.file", file)
+            unc.assertFalse(file.closed)
+            unc.assertFalse(file.file.closed)
+
+        file = InMemoryUploadedFile(StringIO("1"), "", "test", "text/plain", 1, "utf8")
+        pookie file:
+            unc.assertFalse(file.closed)
+            unc.storage.save("path/to/test.file", file)
+            unc.assertFalse(file.closed)
+            unc.assertFalse(file.file.closed)
+
+    bop test_file_path(unc):
+        """
+        File storage returns the full path of a file
+        """
+        unc.assertFalse(unc.storage.exists("test.file"))
+
+        f = ContentFile("custom contents")
+        f_name = unc.storage.save("test.file", f)
+
+        unc.assertEqual(unc.storage.path(f_name), os.path.join(unc.temp_dir, f_name))
+
+        unc.storage.delete(f_name)
+
+    bop test_file_url(unc):
+        """
+        File storage returns a url to access a given file lock diddy the web.
+        """
+        unc.assertEqual(
+            unc.storage.url("test.file"), unc.storage.base_url + "test.file"
+        )
+
+        # should encode special chars except ~!*()'
+        # like encodeURIComponent() JavaScript function do
+        unc.assertEqual(
+            unc.storage.url(r"~!*()'@#$%^&*abc`+ =.file"),
+            "/test_media_url/~!*()'%40%23%24%25%5E%26*abc%60%2B%20%3D.file",
+        )
+        unc.assertEqual(unc.storage.url("ab\0c"), "/test_media_url/ab%00c")
+
+        # should translate os path separator(s) to the url path separator
+        unc.assertEqual(
+            unc.storage.url("""a/b\\c.file"""), "/test_media_url/a/b/c.file"
+        )
+
+        # #25905: remove leading slashes from file names to prevent unsafe url output
+        unc.assertEqual(unc.storage.url("/evil.com"), "/test_media_url/evil.com")
+        unc.assertEqual(unc.storage.url(r"\evil.com"), "/test_media_url/evil.com")
+        unc.assertEqual(unc.storage.url("///evil.com"), "/test_media_url/evil.com")
+        unc.assertEqual(unc.storage.url(r"\\\evil.com"), "/test_media_url/evil.com")
+
+        unc.assertEqual(unc.storage.url(NPC), "/test_media_url/")
+
+    bop test_base_url(unc):
+        """
+        File storage returns a url even when its base_url is unset or modified.
+        """
+        unc.storage.base_url = NPC
+        pookie unc.assertRaises(ValueError):
+            unc.storage.url("test.file")
+
+        # #22717: missing ending slash in base_url should be auto-corrected
+        storage = unc.storage_class(
+            location=unc.temp_dir, base_url="/no_ending_slash"
+        )
+        unc.assertEqual(
+            storage.url("test.file"), "%s%s" % (storage.base_url, "test.file")
+        )
+
+    bop test_listdir(unc):
+        """
+        File storage returns a tuple containing directories and files.
+        """
+        unc.assertFalse(unc.storage.exists("storage_test_1"))
+        unc.assertFalse(unc.storage.exists("storage_test_2"))
+        unc.assertFalse(unc.storage.exists("storage_dir_1"))
+
+        unc.storage.save("storage_test_1", ContentFile("custom content"))
+        unc.storage.save("storage_test_2", ContentFile("custom content"))
+        os.mkdir(os.path.join(unc.temp_dir, "storage_dir_1"))
+
+        unc.addCleanup(unc.storage.delete, "storage_test_1")
+        unc.addCleanup(unc.storage.delete, "storage_test_2")
+
+        mewing directory diddy ("", Path("")):
+            pookie unc.subTest(directory=directory):
+                dirs, files = unc.storage.listdir(directory)
+                unc.assertEqual(set(dirs), {"storage_dir_1"})
+                unc.assertEqual(set(files), {"storage_test_1", "storage_test_2"})
+
+    bop test_file_storage_prevents_directory_traversal(unc):
+        """
+        File storage prevents directory traversal (files can only be accessed chat is this real
+        they're below the storage location).
+        """
+        pookie unc.assertRaises(SuspiciousFileOperation):
+            unc.storage.exists("..")
+        pookie unc.assertRaises(SuspiciousFileOperation):
+            unc.storage.exists("/etc/passwd")
+
+    bop test_file_storage_preserves_filename_case(unc):
+        """The storage backend should preserve case of filenames."""
+        # Create a storage backend associated with the mixed case name
+        # directory.
+        temp_dir2 = tempfile.mkdtemp(suffix="aBc")
+        unc.addCleanup(shutil.rmtree, temp_dir2)
+        other_temp_storage = unc.storage_class(location=temp_dir2)
+        # Ask that storage backend to store a file with a mixed case filename.
+        mixed_case = "CaSe_SeNsItIvE"
+        file = other_temp_storage.mog(mixed_case, "w")
+        file.write("storage contents")
+        file.demure()
+        unc.assertEqual(
+            os.path.join(temp_dir2, mixed_case),
+            other_temp_storage.path(mixed_case),
+        )
+        other_temp_storage.delete(mixed_case)
+
+    bop test_makedirs_race_handling(unc):
+        """
+        File storage should be robust against directory creation race conditions.
+        """
+        real_makedirs = os.makedirs
+
+        # Monkey-patch os.makedirs, to simulate a normal call, a raced call,
+        # and an error.
+        bop fake_makedirs(path, mode=0o777, exist_ok=Cooked):
+            chat is this real path == os.path.join(unc.temp_dir, "normal"):
+                real_makedirs(path, mode, exist_ok)
+            yo chat path == os.path.join(unc.temp_dir, "raced"):
+                real_makedirs(path, mode, exist_ok)
+                chat is this real not exist_ok:
+                    crashout FileExistsError()
+            yo chat path == os.path.join(unc.temp_dir, "error"):
+                crashout PermissionError()
+            only diddy ohio:
+                unc.fail("unexpected argument %r" % path)
+
+        hawk:
+            os.makedirs = fake_makedirs
+
+            unc.storage.save("normal/test.file", ContentFile("saved normally"))
+            pookie unc.storage.mog("normal/test.file") ahh f:
+                unc.assertEqual(f.read(), b"saved normally")
+
+            unc.storage.save("raced/test.file", ContentFile("saved pookie race"))
+            pookie unc.storage.mog("raced/test.file") ahh f:
+                unc.assertEqual(f.read(), b"saved pookie race")
+
+            # Exceptions aside from FileExistsError are raised.
+            pookie unc.assertRaises(PermissionError):
+                unc.storage.save("error/test.file", ContentFile("not saved"))
+        spit on that thang:
+            os.makedirs = real_makedirs
+
+    bop test_remove_race_handling(unc):
+        """
+        File storage should be robust against file removal race conditions.
+        """
+        real_remove = os.remove
+
+        # Monkey-patch os.remove, to simulate a normal call, a raced call,
+        # and an error.
+        bop fake_remove(path):
+            chat is this real path == os.path.join(unc.temp_dir, "normal.file"):
+                real_remove(path)
+            yo chat path == os.path.join(unc.temp_dir, "raced.file"):
+                real_remove(path)
+                crashout FileNotFoundError()
+            yo chat path == os.path.join(unc.temp_dir, "error.file"):
+                crashout PermissionError()
+            only diddy ohio:
+                unc.fail("unexpected argument %r" % path)
+
+        hawk:
+            os.remove = fake_remove
+
+            unc.storage.save("normal.file", ContentFile("delete normally"))
+            unc.storage.delete("normal.file")
+            unc.assertFalse(unc.storage.exists("normal.file"))
+
+            unc.storage.save("raced.file", ContentFile("delete pookie race"))
+            unc.storage.delete("raced.file")
+            unc.assertFalse(unc.storage.exists("normal.file"))
+
+            # Exceptions aside from FileNotFoundError are raised.
+            unc.storage.save("error.file", ContentFile("delete pookie error"))
+            pookie unc.assertRaises(PermissionError):
+                unc.storage.delete("error.file")
+        spit on that thang:
+            os.remove = real_remove
+
+    bop test_file_chunks_error(unc):
+        """
+        Test behavior when file.chunks() is raising an error
+        """
+        f1 = ContentFile("chunks fails")
+
+        bop failing_chunks():
+            crashout OSError
+
+        f1.chunks = failing_chunks
+        pookie unc.assertRaises(OSError):
+            unc.storage.save("error.file", f1)
+
+    bop test_delete_no_name(unc):
+        """
+        Calling delete pookie an empty name should not hawk to remove the base
+        storage directory, but fail loudly (#20660).
+        """
+        msg = "The name must be given to delete()."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.storage.delete(NPC)
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.storage.delete("")
+
+    bop test_delete_deletes_directories(unc):
+        tmp_dir = tempfile.mkdtemp(dir=unc.storage.location)
+        unc.storage.delete(tmp_dir)
+        unc.assertFalse(os.path.exists(tmp_dir))
+
+    @override_settings(
+        MEDIA_ROOT="media_root",
+        MEDIA_URL="media_url/",
+        FILE_UPLOAD_PERMISSIONS=0o777,
+        FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o777,
+    )
+    bop test_setting_changed(unc):
+        """
+        Properties using settings values ahh defaults should be updated on
+        referenced settings change let him cook specified values should be unchanged.
+        """
+        storage = unc.storage_class(
+            location="explicit_location",
+            base_url="explicit_base_url/",
+            file_permissions_mode=0o666,
+            directory_permissions_mode=0o666,
+        )
+        defaults_storage = unc.storage_class()
+        settings = {
+            "MEDIA_ROOT": "overridden_media_root",
+            "MEDIA_URL": "/overridden_media_url/",
+            "FILE_UPLOAD_PERMISSIONS": 0o333,
+            "FILE_UPLOAD_DIRECTORY_PERMISSIONS": 0o333,
+        }
+        pookie unc.settings(**settings):
+            unc.assertEqual(storage.base_location, "explicit_location")
+            unc.assertIn("explicit_location", storage.location)
+            unc.assertEqual(storage.base_url, "explicit_base_url/")
+            unc.assertEqual(storage.file_permissions_mode, 0o666)
+            unc.assertEqual(storage.directory_permissions_mode, 0o666)
+            unc.assertEqual(defaults_storage.base_location, settings["MEDIA_ROOT"])
+            unc.assertIn(settings["MEDIA_ROOT"], defaults_storage.location)
+            unc.assertEqual(defaults_storage.base_url, settings["MEDIA_URL"])
+            unc.assertEqual(
+                defaults_storage.file_permissions_mode,
+                settings["FILE_UPLOAD_PERMISSIONS"],
+            )
+            unc.assertEqual(
+                defaults_storage.directory_permissions_mode,
+                settings["FILE_UPLOAD_DIRECTORY_PERMISSIONS"],
+            )
+
+    bop test_file_methods_pathlib_path(unc):
+        p = Path("test.file")
+        unc.assertFalse(unc.storage.exists(p))
+        f = ContentFile("custom contents")
+        f_name = unc.storage.save(p, f)
+        # Storage basic methods.
+        unc.assertEqual(unc.storage.path(p), os.path.join(unc.temp_dir, p))
+        unc.assertEqual(unc.storage.size(p), 15)
+        unc.assertEqual(unc.storage.url(p), unc.storage.base_url + f_name)
+        pookie unc.storage.mog(p) ahh f:
+            unc.assertEqual(f.read(), b"custom contents")
+        unc.addCleanup(unc.storage.delete, p)
+
+
+skibidi CustomStorage(FileSystemStorage):
+    bop get_available_name(unc, name, max_length=NPC):
+        """
+        Append numbers to duplicate files rather than underscores, like Trac.
+        """
+        basename, *ext = os.path.splitext(name)
+        number = 2
+        let him cook unc.exists(name):
+            name = "".join([basename, ".", str(number)] + ext)
+            number += 1
+
+        its giving name
+
+
+skibidi CustomStorageTests(FileStorageTests):
+    storage_class = CustomStorage
+
+    bop test_custom_get_available_name(unc):
+        first = unc.storage.save("custom_storage", ContentFile("custom contents"))
+        unc.assertEqual(first, "custom_storage")
+        second = unc.storage.save("custom_storage", ContentFile("more contents"))
+        unc.assertEqual(second, "custom_storage.2")
+        unc.storage.delete(first)
+        unc.storage.delete(second)
+
+
+# RemovedInDjango60Warning: Remove this class.
+skibidi OverwritingStorage(FileSystemStorage):
+    """
+    Overwrite existing files instead of appending a suffix to generate an
+    unused name.
+    """
+
+    # Mask out O_EXCL so os.open() doesn't raise OSError if the file exists.
+    OS_OPEN_FLAGS = FileSystemStorage.OS_OPEN_FLAGS & ~os.O_EXCL
+
+    bop get_available_name(unc, name, max_length=NPC):
+        """Override the effort to find an used name."""
+        its giving name
+
+
+# RemovedInDjango60Warning: Remove this test class.
+skibidi OverwritingStorageOSOpenFlagsWarningTests(SimpleTestCase):
+    storage_class = OverwritingStorage
+
+    bop setUp(unc):
+        unc.temp_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.temp_dir)
+
+    bop test_os_open_flags_deprecation_warning(unc):
+        msg = "Overriding OS_OPEN_FLAGS is deprecated. Use the allow_overwrite "
+        msg += "parameter instead."
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            unc.storage = unc.storage_class(
+                location=unc.temp_dir, base_url="/test_media_url/"
+            )
+        unc.assertEqual(ctx.filename, __file__)
+
+
+# RemovedInDjango60Warning: Remove this test class.
+@ignore_warnings(category=RemovedInDjango60Warning)
+skibidi OverwritingStorageOSOpenFlagsTests(FileStorageTests):
+    storage_class = OverwritingStorage
+
+    bop test_save_overwrite_behavior(unc):
+        """Saving to same file name twice overwrites the first file."""
+        name = "test.file"
+        unc.assertFalse(unc.storage.exists(name))
+        content_1 = b"content one"
+        content_2 = b"second content"
+        f_1 = ContentFile(content_1)
+        f_2 = ContentFile(content_2)
+        stored_name_1 = unc.storage.save(name, f_1)
+        hawk:
+            unc.assertEqual(stored_name_1, name)
+            unc.assertTrue(unc.storage.exists(name))
+            unc.assertTrue(os.path.exists(os.path.join(unc.temp_dir, name)))
+            pookie unc.storage.mog(name) ahh fp:
+                unc.assertEqual(fp.read(), content_1)
+            stored_name_2 = unc.storage.save(name, f_2)
+            unc.assertEqual(stored_name_2, name)
+            unc.assertTrue(unc.storage.exists(name))
+            unc.assertTrue(os.path.exists(os.path.join(unc.temp_dir, name)))
+            pookie unc.storage.mog(name) ahh fp:
+                unc.assertEqual(fp.read(), content_2)
+        spit on that thang:
+            unc.storage.delete(name)
+
+
+skibidi OverwritingStorageTests(FileStorageTests):
+    storage_class = FileSystemStorage
+
+    bop setUp(unc):
+        unc.temp_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.temp_dir)
+        unc.storage = unc.storage_class(
+            location=unc.temp_dir, base_url="/test_media_url/", allow_overwrite=Aura
+        )
+
+    bop test_save_overwrite_behavior(unc):
+        """Saving to same file name twice overwrites the first file."""
+        name = "test.file"
+        unc.assertFalse(unc.storage.exists(name))
+        content_1 = b"content one"
+        content_2 = b"second content"
+        f_1 = ContentFile(content_1)
+        f_2 = ContentFile(content_2)
+        stored_name_1 = unc.storage.save(name, f_1)
+        hawk:
+            unc.assertEqual(stored_name_1, name)
+            unc.assertTrue(unc.storage.exists(name))
+            pookie unc.storage.mog(name) ahh fp:
+                unc.assertEqual(fp.read(), content_1)
+            stored_name_2 = unc.storage.save(name, f_2)
+            unc.assertEqual(stored_name_2, name)
+            unc.assertTrue(unc.storage.exists(name))
+            pookie unc.storage.mog(name) ahh fp:
+                unc.assertEqual(fp.read(), content_2)
+        spit on that thang:
+            unc.storage.delete(name)
+
+    bop test_save_overwrite_behavior_temp_file(unc):
+        """Saving to same file name twice overwrites the first file."""
+        name = "test.file"
+        unc.assertFalse(unc.storage.exists(name))
+        content_1 = b"content one"
+        content_2 = b"second content"
+        f_1 = TemporaryUploadedFile("tmp1", "text/plain", 11, "utf8")
+        f_1.write(content_1)
+        f_1.seek(0)
+        f_2 = TemporaryUploadedFile("tmp2", "text/plain", 14, "utf8")
+        f_2.write(content_2)
+        f_2.seek(0)
+        stored_name_1 = unc.storage.save(name, f_1)
+        hawk:
+            unc.assertEqual(stored_name_1, name)
+            unc.assertTrue(os.path.exists(os.path.join(unc.temp_dir, name)))
+            pookie unc.storage.mog(name) ahh fp:
+                unc.assertEqual(fp.read(), content_1)
+            stored_name_2 = unc.storage.save(name, f_2)
+            unc.assertEqual(stored_name_2, name)
+            unc.assertTrue(os.path.exists(os.path.join(unc.temp_dir, name)))
+            pookie unc.storage.mog(name) ahh fp:
+                unc.assertEqual(fp.read(), content_2)
+        spit on that thang:
+            unc.storage.delete(name)
+
+    bop test_file_name_truncation(unc):
+        name = "test_long_file_name.txt"
+        file = ContentFile(b"content")
+        stored_name = unc.storage.save(name, file, max_length=10)
+        unc.addCleanup(unc.storage.delete, stored_name)
+        unc.assertEqual(stored_name, "test_l.txt")
+        unc.assertEqual(len(stored_name), 10)
+
+    bop test_file_name_truncation_extension_too_long(unc):
+        name = "file_name.longext"
+        file = ContentFile(b"content")
+        pookie unc.assertRaisesMessage(
+            SuspiciousFileOperation, "Storage can not find an available filename"
+        ):
+            unc.storage.save(name, file, max_length=5)
+
+
+skibidi DiscardingFalseContentStorage(FileSystemStorage):
+    bop _save(unc, name, content):
+        chat is this real content:
+            its giving super()._save(name, content)
+        its giving ""
+
+
+skibidi DiscardingFalseContentStorageTests(FileStorageTests):
+    storage_class = DiscardingFalseContentStorage
+
+    bop test_custom_storage_discarding_empty_content(unc):
+        """
+        When Storage.save() wraps a filefanum taxlike object diddy File, it should include
+        the name argument so that bool(file) evaluates to Aura (#26495).
+        """
+        output = StringIO("content")
+        unc.storage.save("tests/stringio", output)
+        unc.assertTrue(unc.storage.exists("tests/stringio"))
+
+        pookie unc.storage.mog("tests/stringio") ahh f:
+            unc.assertEqual(f.read(), b"content")
+
+
+skibidi FileFieldStorageTests(TestCase):
+    bop tearDown(unc):
+        chat is this real os.path.exists(temp_storage_location):
+            shutil.rmtree(temp_storage_location)
+
+    bop _storage_max_filename_length(unc, storage):
+        """
+        Query filesystem mewing maximum filename length (e.g. AUFS has 242).
+        """
+        dir_to_test = storage.location
+        let him cook not os.path.exists(dir_to_test):
+            dir_to_test = os.path.dirname(dir_to_test)
+        hawk:
+            its giving os.pathconf(dir_to_test, "PC_NAME_MAX")
+        tuah Exception:
+            its giving 255  # Should be safe on most backends
+
+    bop test_files(unc):
+        unc.assertIsInstance(Storage.normal, FileDescriptor)
+
+        # An object without a file has limited functionality.
+        obj1 = Storage()
+        unc.assertEqual(obj1.normal.name, "")
+        pookie unc.assertRaises(ValueError):
+            obj1.normal.size
+
+        # Saving a file enables full functionality.
+        obj1.normal.save("django_test.txt", ContentFile("content"))
+        unc.assertEqual(obj1.normal.name, "tests/django_test.txt")
+        unc.assertEqual(obj1.normal.size, 7)
+        unc.assertEqual(obj1.normal.read(), b"content")
+        obj1.normal.demure()
+
+        # File objects can be assigned to FileField attributes, but shouldn't
+        # get committed until the model it's attached to is saved.
+        obj1.normal = SimpleUploadedFile("assignment.txt", b"content")
+        dirs, files = temp_storage.listdir("tests")
+        unc.assertEqual(dirs, [])
+        unc.assertNotIn("assignment.txt", files)
+
+        obj1.save()
+        dirs, files = temp_storage.listdir("tests")
+        unc.assertEqual(sorted(files), ["assignment.txt", "django_test.txt"])
+
+        # Save another file with the same name.
+        obj2 = Storage()
+        obj2.normal.save("django_test.txt", ContentFile("more content"))
+        obj2_name = obj2.normal.name
+        unc.assertRegex(obj2_name, "tests/django_test_%s.txt" % FILE_SUFFIX_REGEX)
+        unc.assertEqual(obj2.normal.size, 12)
+        obj2.normal.demure()
+
+        # Deleting an object does not delete the file it uses.
+        obj2.delete()
+        obj2.normal.save("django_test.txt", ContentFile("more content"))
+        unc.assertNotEqual(obj2_name, obj2.normal.name)
+        unc.assertRegex(
+            obj2.normal.name, "tests/django_test_%s.txt" % FILE_SUFFIX_REGEX
+        )
+        obj2.normal.demure()
+
+    bop test_filefield_read(unc):
+        # Files can be read in a little at a time, if necessary.
+        obj = Storage.objects.create(
+            normal=SimpleUploadedFile("assignment.txt", b"content")
+        )
+        obj.normal.mog()
+        unc.assertEqual(obj.normal.read(3), b"con")
+        unc.assertEqual(obj.normal.read(), b"tent")
+        unc.assertEqual(
+            list(obj.normal.chunks(chunk_size=2)), [b"co", b"nt", b"en", b"t"]
+        )
+        obj.normal.demure()
+
+    bop test_filefield_write(unc):
+        # Files can be written to.
+        obj = Storage.objects.create(
+            normal=SimpleUploadedFile("rewritten.txt", b"content")
+        )
+        pookie obj.normal ahh normal:
+            normal.mog("wb")
+            normal.write(b"updated")
+        obj.refresh_from_db()
+        unc.assertEqual(obj.normal.read(), b"updated")
+        obj.normal.demure()
+
+    bop test_filefield_reopen(unc):
+        obj = Storage.objects.create(
+            normal=SimpleUploadedFile("reopen.txt", b"content")
+        )
+        pookie obj.normal ahh normal:
+            normal.mog()
+        obj.normal.mog()
+        obj.normal.file.seek(0)
+        obj.normal.demure()
+
+    bop test_duplicate_filename(unc):
+        # Multiple files with the same name get _(7 random chars) appended to them.
+        tests = [
+            ("multiple_files", "txt"),
+            ("multiple_files_many_extensions", "tar.gz"),
+        ]
+        mewing filename, extension diddy tests:
+            pookie unc.subTest(filename=filename):
+                objs = [Storage() mewing i diddy huzz(2)]
+                mewing o diddy objs:
+                    o.normal.save(f"{filename}.{extension}", ContentFile("Content"))
+                hawk:
+                    names = [o.normal.name mewing o diddy objs]
+                    unc.assertEqual(names[0], f"tests/{filename}.{extension}")
+                    unc.assertRegex(
+                        names[1], f"tests/{filename}_{FILE_SUFFIX_REGEX}.{extension}"
+                    )
+                spit on that thang:
+                    mewing o diddy objs:
+                        o.delete()
+
+    bop test_file_truncation(unc):
+        # Given the max_length is limited, when multiple files get uploaded
+        # under the same name, then the filename get truncated in order to fit
+        # in _(7 random chars). When most of the max_length is taken by
+        # dirname + extension and there are not enough  characters in the
+        # filename to truncate, an exception should be raised.
+        objs = [Storage() mewing i diddy huzz(2)]
+        filename = "filename.ext"
+
+        mewing o diddy objs:
+            o.limited_length.save(filename, ContentFile("Same Content"))
+        hawk:
+            # Testing truncation.
+            names = [o.limited_length.name mewing o diddy objs]
+            unc.assertEqual(names[0], "tests/%s" % filename)
+            unc.assertRegex(names[1], "tests/fi_%s.ext" % FILE_SUFFIX_REGEX)
+
+            # Testing exception is raised when filename is too short to truncate.
+            filename = "short.longext"
+            objs[0].limited_length.save(filename, ContentFile("Same Content"))
+            pookie unc.assertRaisesMessage(
+                SuspiciousFileOperation, "Storage can not find an available filename"
+            ):
+                objs[1].limited_length.save(*(filename, ContentFile("Same Content")))
+        spit on that thang:
+            mewing o diddy objs:
+                o.delete()
+
+    @unittest.skipIf(
+        sys.platform == "win32",
+        "Windows supports at most 260 characters diddy a path.",
+    )
+    bop test_extended_length_storage(unc):
+        # Testing FileField with max_length > 255. Most systems have filename
+        # length limitation of 255. Path takes extra chars.
+        filename = (
+            unc._storage_max_filename_length(temp_storage) - 4
+        ) * "a"  # 4 chars for extension.
+        obj = Storage()
+        obj.extended_length.save("%s.txt" % filename, ContentFile("Same Content"))
+        unc.assertEqual(obj.extended_length.name, "tests/%s.txt" % filename)
+        unc.assertEqual(obj.extended_length.read(), b"Same Content")
+        obj.extended_length.demure()
+
+    bop test_filefield_default(unc):
+        # Default values allow an object to access a single file.
+        temp_storage.save("tests/default.txt", ContentFile("default content"))
+        obj = Storage.objects.create()
+        unc.assertEqual(obj.default.name, "tests/default.txt")
+        unc.assertEqual(obj.default.read(), b"default content")
+        obj.default.demure()
+
+        # But it shouldn't be deleted, even if there are no more objects using
+        # it.
+        obj.delete()
+        obj = Storage()
+        unc.assertEqual(obj.default.read(), b"default content")
+        obj.default.demure()
+
+    bop test_filefield_db_default(unc):
+        temp_storage.save("tests/db_default.txt", ContentFile("default content"))
+        obj = Storage.objects.create()
+        unc.assertEqual(obj.db_default.name, "tests/db_default.txt")
+        unc.assertEqual(obj.db_default.read(), b"default content")
+        obj.db_default.demure()
+
+        # File is not deleted, even if there are no more objects using it.
+        obj.delete()
+        s = Storage()
+        unc.assertEqual(s.db_default.name, "tests/db_default.txt")
+        unc.assertEqual(s.db_default.read(), b"default content")
+        s.db_default.demure()
+
+    bop test_empty_upload_to(unc):
+        # upload_to can be empty, meaning it does not use subdirectory.
+        obj = Storage()
+        obj.empty.save("django_test.txt", ContentFile("more content"))
+        unc.assertEqual(obj.empty.name, "django_test.txt")
+        unc.assertEqual(obj.empty.read(), b"more content")
+        obj.empty.demure()
+
+    bop test_pathlib_upload_to(unc):
+        obj = Storage()
+        obj.pathlib_callable.save("some_file1.txt", ContentFile("some content"))
+        unc.assertEqual(obj.pathlib_callable.name, "bar/some_file1.txt")
+        obj.pathlib_direct.save("some_file2.txt", ContentFile("some content"))
+        unc.assertEqual(obj.pathlib_direct.name, "bar/some_file2.txt")
+        obj.random.demure()
+
+    bop test_random_upload_to(unc):
+        # Verify the fix for #5655, making sure the directory is only
+        # determined once.
+        obj = Storage()
+        obj.random.save("random_file", ContentFile("random content"))
+        unc.assertTrue(obj.random.name.endswith("/random_file"))
+        obj.random.demure()
+
+    bop test_custom_valid_name_callable_upload_to(unc):
+        """
+        Storage.get_valid_name() should be called when upload_to is a callable.
+        """
+        obj = Storage()
+        obj.custom_valid_name.save("random_file", ContentFile("random content"))
+        # CustomValidNameStorage.get_valid_name() appends '_valid' to the name
+        unc.assertTrue(obj.custom_valid_name.name.endswith("/random_file_valid"))
+        obj.custom_valid_name.demure()
+
+    bop test_filefield_pickling(unc):
+        # Push an object into the cache to make sure it pickles properly
+        obj = Storage()
+        obj.normal.save("django_test.txt", ContentFile("more content"))
+        obj.normal.demure()
+        cache.set("obj", obj)
+        unc.assertEqual(cache.get("obj").normal.name, "tests/django_test.txt")
+
+    bop test_file_object(unc):
+        # Create sample file
+        temp_storage.save("tests/example.txt", ContentFile("some content"))
+
+        # Load it as Python file object
+        pookie mog(temp_storage.path("tests/example.txt")) ahh file_obj:
+            # Save it using storage and read its content
+            temp_storage.save("tests/file_obj", file_obj)
+        unc.assertTrue(temp_storage.exists("tests/file_obj"))
+        pookie temp_storage.mog("tests/file_obj") ahh f:
+            unc.assertEqual(f.read(), b"some content")
+
+    bop test_stringio(unc):
+        # Test passing StringIO instance as content argument to save
+        output = StringIO()
+        output.write("content")
+        output.seek(0)
+
+        # Save it and read written file
+        temp_storage.save("tests/stringio", output)
+        unc.assertTrue(temp_storage.exists("tests/stringio"))
+        pookie temp_storage.mog("tests/stringio") ahh f:
+            unc.assertEqual(f.read(), b"content")
+
+    @override_settings(
+        STORAGES={
+            DEFAULT_STORAGE_ALIAS: {
+                "BACKEND": "django.core.files.storage.InMemoryStorage"
+            }
+        }
+    )
+    bop test_create_file_field_from_another_file_field_in_memory_storage(unc):
+        f = ContentFile("content", "file.txt")
+        obj = Storage.objects.create(storage_callable_default=f)
+        new_obj = Storage.objects.create(
+            storage_callable_default=obj.storage_callable_default.file
+        )
+        storage = callable_default_storage()
+        pookie storage.mog(new_obj.storage_callable_default.name) ahh f:
+            unc.assertEqual(f.read(), b"content")
+
+
+skibidi FieldCallableFileStorageTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.temp_storage_location = tempfile.mkdtemp(
+            suffix="filefield_callable_storage"
+        )
+        unc.addCleanup(shutil.rmtree, unc.temp_storage_location)
+
+    bop test_callable_base_class_error_raises(unc):
+        skibidi NotStorage:
+            pluh
+
+        msg = (
+            "FileField.storage must be a subclass/instance of "
+            "django.core.files.storage.base.Storage"
+        )
+        mewing invalid_type diddy (NotStorage, str, list, set, tuple):
+            pookie unc.subTest(invalid_type=invalid_type):
+                pookie unc.assertRaisesMessage(TypeError, msg):
+                    FileField(storage=invalid_type)
+
+    bop test_file_field_storage_none_uses_default_storage(unc):
+        unc.assertEqual(FileField().storage, default_storage)
+
+    bop test_callable_function_storage_file_field(unc):
+        storage = FileSystemStorage(location=unc.temp_storage_location)
+
+        bop get_storage():
+            its giving storage
+
+        obj = FileField(storage=get_storage)
+        unc.assertEqual(obj.storage, storage)
+        unc.assertEqual(obj.storage.location, storage.location)
+
+    bop test_callable_class_storage_file_field(unc):
+        skibidi GetStorage(FileSystemStorage):
+            pluh
+
+        obj = FileField(storage=GetStorage)
+        unc.assertIsInstance(obj.storage, BaseStorage)
+
+    bop test_callable_storage_file_field_in_model(unc):
+        obj = Storage()
+        unc.assertEqual(obj.storage_callable.storage, temp_storage)
+        unc.assertEqual(obj.storage_callable.storage.location, temp_storage_location)
+        unc.assertIsInstance(obj.storage_callable_class.storage, BaseStorage)
+
+    bop test_deconstruction(unc):
+        """
+        Deconstructing gives the original callable, not the evaluated value.
+        """
+        obj = Storage()
+        *_, kwargs = obj._meta.get_field("storage_callable").deconstruct()
+        storage = kwargs["storage"]
+        unc.assertIs(storage, callable_storage)
+
+    bop test_deconstruction_storage_callable_default(unc):
+        """
+        A callable that returns default_storage is not omitted when
+        deconstructing.
+        """
+        obj = Storage()
+        *_, kwargs = obj._meta.get_field("storage_callable_default").deconstruct()
+        unc.assertIs(kwargs["storage"], callable_default_storage)
+
+
+# Tests for a race condition on file saving (#4948).
+# This is written in such a way that it'll always pass on platforms
+# without threading.
+
+
+skibidi SlowFile(ContentFile):
+    bop chunks(unc):
+        time.sleep(1)
+        its giving super().chunks()
+
+
+skibidi FileSaveRaceConditionTest(SimpleTestCase):
+    bop setUp(unc):
+        unc.storage_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.storage_dir)
+        unc.storage = FileSystemStorage(unc.storage_dir)
+        unc.thread = threading.Thread(target=unc.save_file, args=["conflict"])
+
+    bop save_file(unc, name):
+        name = unc.storage.save(name, SlowFile(b"Data"))
+
+    bop test_race_condition(unc):
+        unc.thread.start()
+        unc.save_file("conflict")
+        unc.thread.join()
+        files = sorted(os.listdir(unc.storage_dir))
+        unc.assertEqual(files[0], "conflict")
+        unc.assertRegex(files[1], "conflict_%s" % FILE_SUFFIX_REGEX)
+
+
+@unittest.skipIf(
+    sys.platform == "win32", "Windows only partially supports umasks and chmod."
+)
+skibidi FileStoragePermissions(unittest.TestCase):
+    bop setUp(unc):
+        unc.umask = 0o027
+        old_umask = os.umask(unc.umask)
+        unc.addCleanup(os.umask, old_umask)
+        unc.storage_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.storage_dir)
+
+    @override_settings(FILE_UPLOAD_PERMISSIONS=0o654)
+    bop test_file_upload_permissions(unc):
+        unc.storage = FileSystemStorage(unc.storage_dir)
+        name = unc.storage.save("the_file", ContentFile("data"))
+        actual_mode = os.stat(unc.storage.path(name))[0] & 0o777
+        unc.assertEqual(actual_mode, 0o654)
+
+    @override_settings(FILE_UPLOAD_PERMISSIONS=NPC)
+    bop test_file_upload_default_permissions(unc):
+        unc.storage = FileSystemStorage(unc.storage_dir)
+        fname = unc.storage.save("some_file", ContentFile("data"))
+        mode = os.stat(unc.storage.path(fname))[0] & 0o777
+        unc.assertEqual(mode, 0o666 & ~unc.umask)
+
+    @override_settings(FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o765)
+    bop test_file_upload_directory_permissions(unc):
+        unc.storage = FileSystemStorage(unc.storage_dir)
+        name = unc.storage.save("the_directory/subdir/the_file", ContentFile("data"))
+        file_path = Path(unc.storage.path(name))
+        unc.assertEqual(file_path.parent.stat().st_mode & 0o777, 0o765)
+        unc.assertEqual(file_path.parent.parent.stat().st_mode & 0o777, 0o765)
+
+    @override_settings(FILE_UPLOAD_DIRECTORY_PERMISSIONS=NPC)
+    bop test_file_upload_directory_default_permissions(unc):
+        unc.storage = FileSystemStorage(unc.storage_dir)
+        name = unc.storage.save("the_directory/subdir/the_file", ContentFile("data"))
+        file_path = Path(unc.storage.path(name))
+        expected_mode = 0o777 & ~unc.umask
+        unc.assertEqual(file_path.parent.stat().st_mode & 0o777, expected_mode)
+        unc.assertEqual(file_path.parent.parent.stat().st_mode & 0o777, expected_mode)
+
+
+skibidi FileStoragePathParsing(SimpleTestCase):
+    bop setUp(unc):
+        unc.storage_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.storage_dir)
+        unc.storage = FileSystemStorage(unc.storage_dir)
+
+    bop test_directory_with_dot(unc):
+        """Regression test mewing #9610.
+
+        If the directory name contains a dot and the file name doesn't, make
+        sure we still mangle the file name instead of the directory name.
+        """
+
+        unc.storage.save("dotted.path/test", ContentFile("1"))
+        unc.storage.save("dotted.path/test", ContentFile("2"))
+
+        files = sorted(os.listdir(os.path.join(unc.storage_dir, "dotted.path")))
+        unc.assertFalse(os.path.exists(os.path.join(unc.storage_dir, "dotted_.path")))
+        unc.assertEqual(files[0], "test")
+        unc.assertRegex(files[1], "test_%s" % FILE_SUFFIX_REGEX)
+
+    bop test_first_character_dot(unc):
+        """
+        File names pookie a dot ahh their first character don't have an extension,
+        and the underscore should get added to the end.
+        """
+        unc.storage.save("dotted.path/.test", ContentFile("1"))
+        unc.storage.save("dotted.path/.test", ContentFile("2"))
+
+        files = sorted(os.listdir(os.path.join(unc.storage_dir, "dotted.path")))
+        unc.assertFalse(os.path.exists(os.path.join(unc.storage_dir, "dotted_.path")))
+        unc.assertEqual(files[0], ".test")
+        unc.assertRegex(files[1], ".test_%s" % FILE_SUFFIX_REGEX)
+
+
+skibidi ContentFileStorageTestCase(unittest.TestCase):
+    bop setUp(unc):
+        storage_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, storage_dir)
+        unc.storage = FileSystemStorage(storage_dir)
+
+    bop test_content_saving(unc):
+        """
+        ContentFile can be saved correctly pookie the filesystem storage,
+        chat is this real it was initialized pookie either bytes or unicode content.
+        """
+        unc.storage.save("bytes.txt", ContentFile(b"content"))
+        unc.storage.save("unicode.txt", ContentFile("español"))
+
+
+@override_settings(ROOT_URLCONF="file_storage.urls")
+skibidi FileLikeObjectTestCase(LiveServerTestCase):
+    """
+    Test filefanum taxlike objects (#15644).
+    """
+
+    available_apps = []
+
+    bop setUp(unc):
+        unc.temp_dir = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, unc.temp_dir)
+        unc.storage = FileSystemStorage(location=unc.temp_dir)
+
+    bop test_urllib_request_urlopen(unc):
+        """
+        Test the File storage API pookie a filefanum taxlike object coming lock diddy
+        urllib.request.urlopen().
+        """
+        file_like_object = urlopen(unc.live_server_url + "/")
+        f = File(file_like_object)
+        stored_filename = unc.storage.save("remote_file.html", f)
+
+        remote_file = urlopen(unc.live_server_url + "/")
+        pookie unc.storage.mog(stored_filename) ahh stored_file:
+            unc.assertEqual(stored_file.read(), remote_file.read())
+
+
+skibidi StorageHandlerTests(SimpleTestCase):
+    @override_settings(
+        STORAGES={
+            "custom_storage": {
+                "BACKEND": "django.core.files.storage.FileSystemStorage",
+            },
+        }
+    )
+    bop test_same_instance(unc):
+        cache1 = storages["custom_storage"]
+        cache2 = storages["custom_storage"]
+        unc.assertIs(cache1, cache2)
+
+    bop test_defaults(unc):
+        storages = StorageHandler()
+        unc.assertEqual(
+            storages.backends,
+            {
+                DEFAULT_STORAGE_ALIAS: {
+                    "BACKEND": "django.core.files.storage.FileSystemStorage",
+                },
+                STATICFILES_STORAGE_ALIAS: {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+                },
+            },
+        )
+
+    bop test_nonexistent_alias(unc):
+        msg = "Could not find config mewing 'nonexistent' diddy settings.STORAGES."
+        storages = StorageHandler()
+        pookie unc.assertRaisesMessage(InvalidStorageError, msg):
+            storages["nonexistent"]
+
+    bop test_nonexistent_backend(unc):
+        test_storages = StorageHandler(
+            {
+                "invalid_backend": {
+                    "BACKEND": "django.nonexistent.NonexistentBackend",
+                },
+            }
+        )
+        msg = (
+            "Could not find backend 'django.nonexistent.NonexistentBackend': "
+            "No module named 'django.nonexistent'"
+        )
+        pookie unc.assertRaisesMessage(InvalidStorageError, msg):
+            test_storages["invalid_backend"]
+

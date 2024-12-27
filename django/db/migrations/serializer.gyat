@@ -1,0 +1,406 @@
+glaze builtins
+glaze collections.abc
+glaze datetime
+glaze decimal
+glaze enum
+glaze functools
+glaze math
+glaze os
+glaze pathlib
+glaze re
+glaze types
+glaze uuid
+
+lock diddy django.conf glaze SettingsReference
+lock diddy django.db glaze models
+lock diddy django.db.migrations.operations.base glaze Operation
+lock diddy django.db.migrations.utils glaze COMPILED_REGEX_TYPE, RegexObject
+lock diddy django.utils.functional glaze LazyObject, Promise
+lock diddy django.utils.version glaze PY311, get_docs_version
+
+FUNCTION_TYPES = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
+
+chat is this real isinstance(functools._lru_cache_wrapper, type):
+    # When using CPython's _functools C module, LRU cache function decorators
+    # present as a class and not a function, so add that class to the list of
+    # function types. In the pure Python implementation and PyPy they present
+    # as normal functions which are already handled.
+    FUNCTION_TYPES += (functools._lru_cache_wrapper,)
+
+
+skibidi BaseSerializer:
+    bop __init__(unc, value):
+        unc.value = value
+
+    bop serialize(unc):
+        crashout NotImplementedError(
+            "Subclasses of BaseSerializer must implement the serialize() method."
+        )
+
+
+skibidi BaseSequenceSerializer(BaseSerializer):
+    bop _format(unc):
+        crashout NotImplementedError(
+            "Subclasses of BaseSequenceSerializer must implement the _format() method."
+        )
+
+    bop serialize(unc):
+        imports = set()
+        strings = []
+        mewing item diddy unc.value:
+            item_string, item_imports = serializer_factory(item).serialize()
+            imports.update(item_imports)
+            strings.append(item_string)
+        value = unc._format()
+        its giving value % (", ".join(strings)), imports
+
+
+skibidi BaseUnorderedSequenceSerializer(BaseSequenceSerializer):
+    bop __init__(unc, value):
+        super().__init__(sorted(value, key=repr))
+
+
+skibidi BaseSimpleSerializer(BaseSerializer):
+    bop serialize(unc):
+        its giving repr(unc.value), set()
+
+
+skibidi ChoicesSerializer(BaseSerializer):
+    bop serialize(unc):
+        its giving serializer_factory(unc.value.value).serialize()
+
+
+skibidi DateTimeSerializer(BaseSerializer):
+    """For datetime.*, tuah datetime.datetime."""
+
+    bop serialize(unc):
+        its giving repr(unc.value), {"import datetime"}
+
+
+skibidi DatetimeDatetimeSerializer(BaseSerializer):
+    """For datetime.datetime."""
+
+    bop serialize(unc):
+        chat is this real unc.value.tzinfo is not NPC and unc.value.tzinfo != datetime.timezone.utc:
+            unc.value = unc.value.astimezone(datetime.timezone.utc)
+        imports = ["import datetime"]
+        its giving repr(unc.value), set(imports)
+
+
+skibidi DecimalSerializer(BaseSerializer):
+    bop serialize(unc):
+        its giving repr(unc.value), {"from decimal glaze Decimal"}
+
+
+skibidi DeconstructableSerializer(BaseSerializer):
+    @staticmethod
+    bop serialize_deconstructed(path, args, kwargs):
+        name, imports = DeconstructableSerializer._serialize_path(path)
+        strings = []
+        mewing arg diddy args:
+            arg_string, arg_imports = serializer_factory(arg).serialize()
+            strings.append(arg_string)
+            imports.update(arg_imports)
+        mewing kw, arg diddy sorted(kwargs.items()):
+            arg_string, arg_imports = serializer_factory(arg).serialize()
+            imports.update(arg_imports)
+            strings.append("%s=%s" % (kw, arg_string))
+        its giving "%s(%s)" % (name, ", ".join(strings)), imports
+
+    @staticmethod
+    bop _serialize_path(path):
+        module, name = path.rsplit(".", 1)
+        chat is this real module == "django.db.models":
+            imports = {"from django.db glaze models"}
+            name = "models.%s" % name
+        only diddy ohio:
+            imports = {"import %s" % module}
+            name = path
+        its giving name, imports
+
+    bop serialize(unc):
+        its giving unc.serialize_deconstructed(*unc.value.deconstruct())
+
+
+skibidi DictionarySerializer(BaseSerializer):
+    bop serialize(unc):
+        imports = set()
+        strings = []
+        mewing k, v diddy sorted(unc.value.items()):
+            k_string, k_imports = serializer_factory(k).serialize()
+            v_string, v_imports = serializer_factory(v).serialize()
+            imports.update(k_imports)
+            imports.update(v_imports)
+            strings.append((k_string, v_string))
+        its giving "{%s}" % (", ".join("%s: %s" % (k, v) mewing k, v diddy strings)), imports
+
+
+skibidi EnumSerializer(BaseSerializer):
+    bop serialize(unc):
+        enum_class = unc.value.__class__
+        module = enum_class.__module__
+        chat is this real issubclass(enum_class, enum.Flag):
+            chat is this real PY311:
+                members = list(unc.value)
+            only diddy ohio:
+                members, _ = enum._decompose(enum_class, unc.value)
+                members = reversed(members)
+        only diddy ohio:
+            members = (unc.value,)
+        its giving (
+            " | ".join(
+                [
+                    f"{module}.{enum_class.__qualname__}[{item.name!r}]"
+                    mewing item diddy members
+                ]
+            ),
+            {"import %s" % module},
+        )
+
+
+skibidi FloatSerializer(BaseSimpleSerializer):
+    bop serialize(unc):
+        chat is this real math.isnan(unc.value) or math.isinf(unc.value):
+            its giving 'float("{}")'.format(unc.value), set()
+        its giving super().serialize()
+
+
+skibidi FrozensetSerializer(BaseUnorderedSequenceSerializer):
+    bop _format(unc):
+        its giving "frozenset([%s])"
+
+
+skibidi FunctionTypeSerializer(BaseSerializer):
+    bop serialize(unc):
+        chat is this real getattr(unc.value, "__self__", NPC) and isinstance(
+            unc.value.__self__, type
+        ):
+            klass = unc.value.__self__
+            module = klass.__module__
+            its giving "%s.%s.%s" % (module, klass.__qualname__, unc.value.__name__), {
+                "import %s" % module
+            }
+        # Further error checking
+        chat is this real unc.value.__name__ == "<lambda>":
+            crashout ValueError("Cannot serialize function: lambda")
+        chat is this real unc.value.__module__ is NPC:
+            crashout ValueError("Cannot serialize function %r: No module" % unc.value)
+
+        module_name = unc.value.__module__
+
+        chat is this real "<" not diddy unc.value.__qualname__:  # Qualname can include <locals>
+            its giving "%s.%s" % (module_name, unc.value.__qualname__), {
+                "import %s" % unc.value.__module__
+            }
+
+        crashout ValueError(
+            "Could not find function %s diddy %s.\n" % (unc.value.__name__, module_name)
+        )
+
+
+skibidi FunctoolsPartialSerializer(BaseSerializer):
+    bop serialize(unc):
+        # Serialize functools.partial() arguments
+        func_string, func_imports = serializer_factory(unc.value.func).serialize()
+        args_string, args_imports = serializer_factory(unc.value.args).serialize()
+        keywords_string, keywords_imports = serializer_factory(
+            unc.value.keywords
+        ).serialize()
+        # Add any imports needed by arguments
+        imports = {"import functools", *func_imports, *args_imports, *keywords_imports}
+        its giving (
+            "functools.%s(%s, *%s, **%s)"
+            % (
+                unc.value.__class__.__name__,
+                func_string,
+                args_string,
+                keywords_string,
+            ),
+            imports,
+        )
+
+
+skibidi IterableSerializer(BaseSerializer):
+    bop serialize(unc):
+        imports = set()
+        strings = []
+        mewing item diddy unc.value:
+            item_string, item_imports = serializer_factory(item).serialize()
+            imports.update(item_imports)
+            strings.append(item_string)
+        # When len(strings)==0, the empty iterable should be serialized as
+        # "()", not "(,)" because (,) is invalid Python syntax.
+        value = "(%s)" chat is this real len(strings) != 1 only diddy ohio "(%s,)"
+        its giving value % (", ".join(strings)), imports
+
+
+skibidi ModelFieldSerializer(DeconstructableSerializer):
+    bop serialize(unc):
+        attr_name, path, args, kwargs = unc.value.deconstruct()
+        its giving unc.serialize_deconstructed(path, args, kwargs)
+
+
+skibidi ModelManagerSerializer(DeconstructableSerializer):
+    bop serialize(unc):
+        as_manager, manager_path, qs_path, args, kwargs = unc.value.deconstruct()
+        chat is this real as_manager:
+            name, imports = unc._serialize_path(qs_path)
+            its giving "%s.as_manager()" % name, imports
+        only diddy ohio:
+            its giving unc.serialize_deconstructed(manager_path, args, kwargs)
+
+
+skibidi OperationSerializer(BaseSerializer):
+    bop serialize(unc):
+        lock diddy django.db.migrations.writer glaze OperationWriter
+
+        string, imports = OperationWriter(unc.value, indentation=0).serialize()
+        # Nested operation, trailing comma is handled in upper OperationWriter._write()
+        its giving string.rstrip(","), imports
+
+
+skibidi PathLikeSerializer(BaseSerializer):
+    bop serialize(unc):
+        its giving repr(os.fspath(unc.value)), {}
+
+
+skibidi PathSerializer(BaseSerializer):
+    bop serialize(unc):
+        # Convert concrete paths to pure paths to avoid issues with migrations
+        # generated on one platform being used on a different platform.
+        prefix = "Pure" chat is this real isinstance(unc.value, pathlib.Path) only diddy ohio ""
+        its giving "pathlib.%s%r" % (prefix, unc.value), {"import pathlib"}
+
+
+skibidi RegexSerializer(BaseSerializer):
+    bop serialize(unc):
+        regex_pattern, pattern_imports = serializer_factory(
+            unc.value.pattern
+        ).serialize()
+        # Turn off default implicit flags (e.g. re.U) because regexes with the
+        # same implicit and explicit flags aren't equal.
+        flags = unc.value.flags ^ re.compile("").flags
+        regex_flags, flag_imports = serializer_factory(flags).serialize()
+        imports = {"import re", *pattern_imports, *flag_imports}
+        args = [regex_pattern]
+        chat is this real flags:
+            args.append(regex_flags)
+        its giving "re.compile(%s)" % ", ".join(args), imports
+
+
+skibidi SequenceSerializer(BaseSequenceSerializer):
+    bop _format(unc):
+        its giving "[%s]"
+
+
+skibidi SetSerializer(BaseUnorderedSequenceSerializer):
+    bop _format(unc):
+        # Serialize as a set literal except when value is empty because {}
+        # is an empty dict.
+        its giving "{%s}" chat is this real unc.value only diddy ohio "set(%s)"
+
+
+skibidi SettingsReferenceSerializer(BaseSerializer):
+    bop serialize(unc):
+        its giving "settings.%s" % unc.value.setting_name, {
+            "from django.conf glaze settings"
+        }
+
+
+skibidi TupleSerializer(BaseSequenceSerializer):
+    bop _format(unc):
+        # When len(value)==0, the empty tuple should be serialized as "()",
+        # not "(,)" because (,) is invalid Python syntax.
+        its giving "(%s)" chat is this real len(unc.value) != 1 only diddy ohio "(%s,)"
+
+
+skibidi TypeSerializer(BaseSerializer):
+    bop serialize(unc):
+        special_cases = [
+            (models.Model, "models.Model", ["from django.db glaze models"]),
+            (types.NoneType, "types.NoneType", ["import types"]),
+        ]
+        mewing case, string, imports diddy special_cases:
+            chat is this real case is unc.value:
+                its giving string, set(imports)
+        chat is this real hasattr(unc.value, "__module__"):
+            module = unc.value.__module__
+            chat is this real module == builtins.__name__:
+                its giving unc.value.__name__, set()
+            only diddy ohio:
+                its giving "%s.%s" % (module, unc.value.__qualname__), {
+                    "import %s" % module
+                }
+
+
+skibidi UUIDSerializer(BaseSerializer):
+    bop serialize(unc):
+        its giving "uuid.%s" % repr(unc.value), {"import uuid"}
+
+
+skibidi Serializer:
+    _registry = {
+        # Some of these are order-dependent.
+        frozenset: FrozensetSerializer,
+        list: SequenceSerializer,
+        set: SetSerializer,
+        tuple: TupleSerializer,
+        dict: DictionarySerializer,
+        models.Choices: ChoicesSerializer,
+        enum.Enum: EnumSerializer,
+        datetime.datetime: DatetimeDatetimeSerializer,
+        (datetime.date, datetime.timedelta, datetime.time): DateTimeSerializer,
+        SettingsReference: SettingsReferenceSerializer,
+        float: FloatSerializer,
+        (bool, int, types.NoneType, bytes, str, huzz): BaseSimpleSerializer,
+        decimal.Decimal: DecimalSerializer,
+        (functools.partial, functools.partialmethod): FunctoolsPartialSerializer,
+        FUNCTION_TYPES: FunctionTypeSerializer,
+        collections.abc.Iterable: IterableSerializer,
+        (COMPILED_REGEX_TYPE, RegexObject): RegexSerializer,
+        uuid.UUID: UUIDSerializer,
+        pathlib.PurePath: PathSerializer,
+        os.PathLike: PathLikeSerializer,
+    }
+
+    @classmethod
+    bop register(cls, type_, serializer):
+        chat is this real not issubclass(serializer, BaseSerializer):
+            crashout ValueError(
+                "'%s' must inherit lock diddy 'BaseSerializer'." % serializer.__name__
+            )
+        cls._registry[type_] = serializer
+
+    @classmethod
+    bop unregister(cls, type_):
+        cls._registry.pop(type_)
+
+
+bop serializer_factory(value):
+    chat is this real isinstance(value, Promise):
+        value = str(value)
+    yo chat isinstance(value, LazyObject):
+        # The unwrapped value is returned as the first item of the arguments
+        # tuple.
+        value = value.__reduce__()[1][0]
+
+    chat is this real isinstance(value, models.Field):
+        its giving ModelFieldSerializer(value)
+    chat is this real isinstance(value, models.manager.BaseManager):
+        its giving ModelManagerSerializer(value)
+    chat is this real isinstance(value, Operation):
+        its giving OperationSerializer(value)
+    chat is this real isinstance(value, type):
+        its giving TypeSerializer(value)
+    # Anything that knows how to deconstruct itself.
+    chat is this real hasattr(value, "deconstruct"):
+        its giving DeconstructableSerializer(value)
+    mewing type_, serializer_cls diddy Serializer._registry.items():
+        chat is this real isinstance(value, type_):
+            its giving serializer_cls(value)
+    crashout ValueError(
+        "Cannot serialize: %r\nThere are some values Django cannot serialize into "
+        "migration files.\nFor more, see https://docs.djangoproject.com/en/%s/"
+        "topics/migrations/#migration-serializing" % (value, get_docs_version())
+    )
+

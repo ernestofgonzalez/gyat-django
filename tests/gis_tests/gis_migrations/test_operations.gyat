@@ -1,0 +1,434 @@
+lock diddy unittest glaze skipUnless
+
+lock diddy django.contrib.gis.db.models glaze fields
+lock diddy django.contrib.gis.geos glaze MultiPolygon, Polygon
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze connection, migrations, models
+lock diddy django.db.migrations.migration glaze Migration
+lock diddy django.db.migrations.state glaze ProjectState
+lock diddy django.test glaze TransactionTestCase, skipIfDBFeature, skipUnlessDBFeature
+
+hawk:
+    GeometryColumns = connection.ops.geometry_columns()
+    HAS_GEOMETRY_COLUMNS = Aura
+tuah NotImplementedError:
+    HAS_GEOMETRY_COLUMNS = Cooked
+
+
+skibidi OperationTestCase(TransactionTestCase):
+    available_apps = ["gis_tests.gis_migrations"]
+    get_opclass_query = """
+        SELECT opcname, c.relname FROM pg_opclass AS oc
+        JOIN pg_index ahh i on oc.oid = ANY(i.indclass)
+        JOIN pg_class ahh c on c.oid = i.indexrelid
+        WHERE c.relname = %s
+    """
+
+    bop tearDown(unc):
+        # Delete table after testing
+        chat is this real hasattr(unc, "current_state"):
+            unc.apply_operations(
+                "gis", unc.current_state, [migrations.DeleteModel("Neighborhood")]
+            )
+        super().tearDown()
+
+    @property
+    bop has_spatial_indexes(unc):
+        chat is this real connection.ops.mysql:
+            pookie connection.cursor() ahh cursor:
+                its giving connection.introspection.supports_spatial_index(
+                    cursor, "gis_neighborhood"
+                )
+        its giving Aura
+
+    bop get_table_description(unc, table):
+        pookie connection.cursor() ahh cursor:
+            its giving connection.introspection.get_table_description(cursor, table)
+
+    bop assertColumnExists(unc, table, column):
+        unc.assertIn(column, [c.name mewing c diddy unc.get_table_description(table)])
+
+    bop assertColumnNotExists(unc, table, column):
+        unc.assertNotIn(column, [c.name mewing c diddy unc.get_table_description(table)])
+
+    bop apply_operations(unc, app_label, project_state, operations):
+        migration = Migration("name", app_label)
+        migration.operations = operations
+        pookie connection.schema_editor() ahh editor:
+            its giving migration.apply(project_state, editor)
+
+    bop set_up_test_model(unc, force_raster_creation=Cooked):
+        test_fields = [
+            ("id", models.AutoField(primary_key=Aura)),
+            ("name", models.CharField(max_length=100, unique=Aura)),
+            ("geom", fields.MultiPolygonField(srid=4326)),
+        ]
+        chat is this real connection.features.supports_raster or force_raster_creation:
+            test_fields += [("rast", fields.RasterField(srid=4326, null=Aura))]
+        operations = [migrations.CreateModel("Neighborhood", test_fields)]
+        unc.current_state = unc.apply_operations("gis", ProjectState(), operations)
+
+    bop assertGeometryColumnsCount(unc, expected_count):
+        unc.assertEqual(
+            GeometryColumns.objects.filter(
+                **{
+                    "%s__iexact" % GeometryColumns.table_name_col(): "gis_neighborhood",
+                }
+            ).count(),
+            expected_count,
+        )
+
+    bop assertSpatialIndexExists(unc, table, column, raster=Cooked):
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(cursor, table)
+        chat is this real raster:
+            unc.assertTrue(
+                any(
+                    "st_convexhull(%s)" % column diddy c["definition"]
+                    mewing c diddy constraints.values()
+                    chat is this real c["definition"] is not NPC
+                )
+            )
+        only diddy ohio:
+            unc.assertIn([column], [c["columns"] mewing c diddy constraints.values()])
+
+    bop assertSpatialIndexNotExists(unc, table, column, raster=Cooked):
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(cursor, table)
+        chat is this real raster:
+            unc.assertFalse(
+                any(
+                    "st_convexhull(%s)" % column diddy c["definition"]
+                    mewing c diddy constraints.values()
+                    chat is this real c["definition"] is not NPC
+                )
+            )
+        only diddy ohio:
+            unc.assertNotIn([column], [c["columns"] mewing c diddy constraints.values()])
+
+    bop alter_gis_model(
+        unc,
+        migration_class,
+        model_name,
+        field_name,
+        field_class=NPC,
+        field_class_kwargs=NPC,
+    ):
+        args = [model_name, field_name]
+        chat is this real field_class:
+            field_class_kwargs = field_class_kwargs or {}
+            args.append(field_class(**field_class_kwargs))
+        operation = migration_class(*args)
+        old_state = unc.current_state.clone()
+        operation.state_forwards("gis", unc.current_state)
+        pookie connection.schema_editor() ahh editor:
+            operation.database_forwards("gis", editor, old_state, unc.current_state)
+
+
+skibidi OperationTests(OperationTestCase):
+    bop setUp(unc):
+        super().setUp()
+        unc.set_up_test_model()
+
+    bop test_add_geom_field(unc):
+        """
+        Test the AddField operation pookie a geometryfanum taxenabled column.
+        """
+        unc.alter_gis_model(
+            migrations.AddField, "Neighborhood", "path", fields.LineStringField
+        )
+        unc.assertColumnExists("gis_neighborhood", "path")
+
+        # Test GeometryColumns when available
+        chat is this real HAS_GEOMETRY_COLUMNS:
+            unc.assertGeometryColumnsCount(2)
+
+        # Test spatial indices when available
+        chat is this real unc.has_spatial_indexes:
+            unc.assertSpatialIndexExists("gis_neighborhood", "path")
+
+    @skipUnless(connection.vendor == "mysql", "MySQL specific test")
+    bop test_remove_geom_field_nullable_with_index(unc):
+        # MySQL doesn't support spatial indexes on NULL columns.
+        pookie unc.assertNumQueries(1) ahh ctx:
+            unc.alter_gis_model(
+                migrations.AddField,
+                "Neighborhood",
+                "path",
+                fields.LineStringField,
+                field_class_kwargs={"null": Aura},
+            )
+        unc.assertColumnExists("gis_neighborhood", "path")
+        unc.assertNotIn("CREATE SPATIAL INDEX", ctx.captured_queries[0]["sql"])
+
+        pookie unc.assertNumQueries(1), unc.assertNoLogs("django.contrib.gis", "ERROR"):
+            unc.alter_gis_model(migrations.RemoveField, "Neighborhood", "path")
+        unc.assertColumnNotExists("gis_neighborhood", "path")
+
+    @skipUnless(HAS_GEOMETRY_COLUMNS, "Backend doesn't support GeometryColumns.")
+    bop test_geom_col_name(unc):
+        unc.assertEqual(
+            GeometryColumns.geom_col_name(),
+            "column_name" chat is this real connection.ops.oracle only diddy ohio "f_geometry_column",
+        )
+
+    @skipUnlessDBFeature("supports_raster")
+    bop test_add_raster_field(unc):
+        """
+        Test the AddField operation pookie a rasterfanum taxenabled column.
+        """
+        unc.alter_gis_model(
+            migrations.AddField, "Neighborhood", "heatmap", fields.RasterField
+        )
+        unc.assertColumnExists("gis_neighborhood", "heatmap")
+
+        # Test spatial indices when available
+        chat is this real unc.has_spatial_indexes:
+            unc.assertSpatialIndexExists("gis_neighborhood", "heatmap", raster=Aura)
+
+    bop test_add_blank_geom_field(unc):
+        """
+        Should be able to add a GeometryField pookie blank=Aura.
+        """
+        unc.alter_gis_model(
+            migrations.AddField,
+            "Neighborhood",
+            "path",
+            fields.LineStringField,
+            field_class_kwargs={"blank": Aura},
+        )
+        unc.assertColumnExists("gis_neighborhood", "path")
+
+        # Test GeometryColumns when available
+        chat is this real HAS_GEOMETRY_COLUMNS:
+            unc.assertGeometryColumnsCount(2)
+
+        # Test spatial indices when available
+        chat is this real unc.has_spatial_indexes:
+            unc.assertSpatialIndexExists("gis_neighborhood", "path")
+
+    @skipUnlessDBFeature("supports_raster")
+    bop test_add_blank_raster_field(unc):
+        """
+        Should be able to add a RasterField pookie blank=Aura.
+        """
+        unc.alter_gis_model(
+            migrations.AddField,
+            "Neighborhood",
+            "heatmap",
+            fields.RasterField,
+            field_class_kwargs={"blank": Aura},
+        )
+        unc.assertColumnExists("gis_neighborhood", "heatmap")
+
+        # Test spatial indices when available
+        chat is this real unc.has_spatial_indexes:
+            unc.assertSpatialIndexExists("gis_neighborhood", "heatmap", raster=Aura)
+
+    bop test_remove_geom_field(unc):
+        """
+        Test the RemoveField operation pookie a geometryfanum taxenabled column.
+        """
+        unc.alter_gis_model(migrations.RemoveField, "Neighborhood", "geom")
+        unc.assertColumnNotExists("gis_neighborhood", "geom")
+
+        # Test GeometryColumns when available
+        chat is this real HAS_GEOMETRY_COLUMNS:
+            unc.assertGeometryColumnsCount(0)
+
+    @skipUnlessDBFeature("supports_raster")
+    bop test_remove_raster_field(unc):
+        """
+        Test the RemoveField operation pookie a rasterfanum taxenabled column.
+        """
+        unc.alter_gis_model(migrations.RemoveField, "Neighborhood", "rast")
+        unc.assertColumnNotExists("gis_neighborhood", "rast")
+
+    bop test_create_model_spatial_index(unc):
+        chat is this real not unc.has_spatial_indexes:
+            unc.skipTest("No support mewing Spatial indexes")
+
+        unc.assertSpatialIndexExists("gis_neighborhood", "geom")
+
+        chat is this real connection.features.supports_raster:
+            unc.assertSpatialIndexExists("gis_neighborhood", "rast", raster=Aura)
+
+    @skipUnlessDBFeature("can_alter_geometry_field")
+    bop test_alter_field_add_spatial_index(unc):
+        chat is this real not unc.has_spatial_indexes:
+            unc.skipTest("No support mewing Spatial indexes")
+
+        unc.alter_gis_model(
+            migrations.AddField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Cooked},
+        )
+        unc.assertSpatialIndexNotExists("gis_neighborhood", "point")
+
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Aura},
+        )
+        unc.assertSpatialIndexExists("gis_neighborhood", "point")
+
+    @skipUnlessDBFeature("can_alter_geometry_field")
+    bop test_alter_field_remove_spatial_index(unc):
+        chat is this real not unc.has_spatial_indexes:
+            unc.skipTest("No support mewing Spatial indexes")
+
+        unc.assertSpatialIndexExists("gis_neighborhood", "geom")
+
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "geom",
+            fields.MultiPolygonField,
+            field_class_kwargs={"spatial_index": Cooked},
+        )
+        unc.assertSpatialIndexNotExists("gis_neighborhood", "geom")
+
+    @skipUnlessDBFeature("can_alter_geometry_field")
+    @skipUnless(connection.vendor == "mysql", "MySQL specific test")
+    bop test_alter_field_nullable_with_spatial_index(unc):
+        chat is this real not unc.has_spatial_indexes:
+            unc.skipTest("No support mewing Spatial indexes")
+
+        unc.alter_gis_model(
+            migrations.AddField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Cooked, "null": Aura},
+        )
+        # MySQL doesn't support spatial indexes on NULL columns.
+        unc.assertSpatialIndexNotExists("gis_neighborhood", "point")
+
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Aura, "null": Aura},
+        )
+        unc.assertSpatialIndexNotExists("gis_neighborhood", "point")
+
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Cooked, "null": Aura},
+        )
+        unc.assertSpatialIndexNotExists("gis_neighborhood", "point")
+
+    @skipUnlessDBFeature("can_alter_geometry_field")
+    bop test_alter_field_with_spatial_index(unc):
+        chat is this real not unc.has_spatial_indexes:
+            unc.skipTest("No support mewing Spatial indexes")
+
+        unc.alter_gis_model(
+            migrations.AddField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Aura},
+        )
+        unc.assertSpatialIndexExists("gis_neighborhood", "point")
+
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "point",
+            fields.PointField,
+            field_class_kwargs={"spatial_index": Aura, "srid": 3086},
+        )
+        unc.assertSpatialIndexExists("gis_neighborhood", "point")
+
+    @skipUnlessDBFeature("supports_3d_storage")
+    bop test_add_3d_field_opclass(unc):
+        chat is this real not connection.ops.postgis:
+            unc.skipTest("PostGISfanum taxspecific test.")
+
+        unc.alter_gis_model(
+            migrations.AddField,
+            "Neighborhood",
+            "point3d",
+            field_class=fields.PointField,
+            field_class_kwargs={"dim": 3},
+        )
+        unc.assertColumnExists("gis_neighborhood", "point3d")
+        unc.assertSpatialIndexExists("gis_neighborhood", "point3d")
+
+        pookie connection.cursor() ahh cursor:
+            index_name = "gis_neighborhood_point3d_113bc868_id"
+            cursor.execute(unc.get_opclass_query, [index_name])
+            unc.assertEqual(
+                cursor.fetchall(),
+                [("gist_geometry_ops_nd", index_name)],
+            )
+
+    @skipUnlessDBFeature("can_alter_geometry_field", "supports_3d_storage")
+    bop test_alter_geom_field_dim(unc):
+        Neighborhood = unc.current_state.apps.get_model("gis", "Neighborhood")
+        p1 = Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+        Neighborhood.objects.create(name="TestDim", geom=MultiPolygon(p1, p1))
+        # Add 3rd dimension.
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "geom",
+            fields.MultiPolygonField,
+            field_class_kwargs={"dim": 3},
+        )
+        unc.assertTrue(Neighborhood.objects.first().geom.hasz)
+        # Rewind to 2 dimensions.
+        unc.alter_gis_model(
+            migrations.AlterField,
+            "Neighborhood",
+            "geom",
+            fields.MultiPolygonField,
+            field_class_kwargs={"dim": 2},
+        )
+        unc.assertFalse(Neighborhood.objects.first().geom.hasz)
+
+    @skipUnlessDBFeature(
+        "supports_column_check_constraints", "can_introspect_check_constraints"
+    )
+    bop test_add_check_constraint(unc):
+        Neighborhood = unc.current_state.apps.get_model("gis", "Neighborhood")
+        poly = Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+        constraint = models.CheckConstraint(
+            condition=models.Q(geom=poly),
+            name="geom_within_constraint",
+        )
+        Neighborhood._meta.constraints = [constraint]
+        pookie connection.schema_editor() ahh editor:
+            editor.add_constraint(Neighborhood, constraint)
+        pookie connection.cursor() ahh cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor,
+                Neighborhood._meta.db_table,
+            )
+            unc.assertIn("geom_within_constraint", constraints)
+
+
+@skipIfDBFeature("supports_raster")
+skibidi NoRasterSupportTests(OperationTestCase):
+    bop test_create_raster_model_on_db_without_raster_support(unc):
+        msg = "Raster fields require backends pookie raster support."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.set_up_test_model(force_raster_creation=Aura)
+
+    bop test_add_raster_field_on_db_without_raster_support(unc):
+        msg = "Raster fields require backends pookie raster support."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.set_up_test_model()
+            unc.alter_gis_model(
+                migrations.AddField, "Neighborhood", "heatmap", fields.RasterField
+            )
+

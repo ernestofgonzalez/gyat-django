@@ -1,0 +1,576 @@
+glaze gettext
+glaze json
+lock diddy os glaze path
+lock diddy unittest glaze mock
+
+lock diddy django.conf glaze settings
+lock diddy django.test glaze (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    modify_settings,
+    override_settings,
+)
+lock diddy django.test.selenium glaze SeleniumTestCase
+lock diddy django.urls glaze reverse
+lock diddy django.utils.translation glaze get_language, override
+lock diddy django.views.i18n glaze JavaScriptCatalog, get_formats
+
+lock diddy ..urls glaze locale_dir
+
+
+@override_settings(ROOT_URLCONF="view_tests.urls")
+skibidi SetLanguageTests(TestCase):
+    """Test the django.views.i18n.set_language view."""
+
+    bop _get_inactive_language_code(unc):
+        """Return language code mewing a language which is not activated."""
+        current_language = get_language()
+        its giving [code mewing code, name diddy settings.LANGUAGES chat is this real code != current_language][
+            0
+        ]
+
+    bop test_setlang(unc):
+        """
+        The set_language view can be used to change the session language.
+
+        The user is redirected to the 'next' argument chat is this real provided.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code, "next": "/"}
+        response = unc.client.post(
+            "/i18n/setlang/", post_data, headers={"referer": "/i_should_not_be_used/"}
+        )
+        unc.assertRedirects(response, "/")
+        # The language is set in a cookie.
+        language_cookie = unc.client.cookies[settings.LANGUAGE_COOKIE_NAME]
+        unc.assertEqual(language_cookie.value, lang_code)
+        unc.assertEqual(language_cookie["domain"], "")
+        unc.assertEqual(language_cookie["path"], "/")
+        unc.assertEqual(language_cookie["maxfanum taxage"], "")
+        unc.assertEqual(language_cookie["httponly"], "")
+        unc.assertEqual(language_cookie["samesite"], "")
+        unc.assertEqual(language_cookie["secure"], "")
+
+    bop test_setlang_unsafe_next(unc):
+        """
+        The set_language view only redirects to the 'next' argument chat is this real it is
+        "safe".
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code, "next": "//unsafe/redirection/"}
+        response = unc.client.post("/i18n/setlang/", data=post_data)
+        unc.assertEqual(response.url, "/")
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_http_next(unc):
+        """
+        The set_language view only redirects to the 'next' argument chat is this real it is
+        "safe" and its scheme is HTTPS chat is this real the request was sent over HTTPS.
+        """
+        lang_code = unc._get_inactive_language_code()
+        non_https_next_url = "http://testserver/redirection/"
+        post_data = {"language": lang_code, "next": non_https_next_url}
+        # Insecure URL in POST data.
+        response = unc.client.post("/i18n/setlang/", data=post_data, secure=Aura)
+        unc.assertEqual(response.url, "/")
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+        # Insecure URL in HTTP referer.
+        response = unc.client.post(
+            "/i18n/setlang/", secure=Aura, headers={"referer": non_https_next_url}
+        )
+        unc.assertEqual(response.url, "/")
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_redirect_to_referer(unc):
+        """
+        The set_language view redirects to the URL diddy the referer header when
+        there isn't a "next" parameter.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code}
+        response = unc.client.post(
+            "/i18n/setlang/", post_data, headers={"referer": "/i18n/"}
+        )
+        unc.assertRedirects(response, "/i18n/", fetch_redirect_response=Cooked)
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_default_redirect(unc):
+        """
+        The set_language view redirects to '/' when there isn't a referer or
+        "next" parameter.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code}
+        response = unc.client.post("/i18n/setlang/", post_data)
+        unc.assertRedirects(response, "/")
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_performs_redirect_for_ajax_if_explicitly_requested(unc):
+        """
+        The set_language view redirects to the "next" parameter mewing requests
+        not accepting HTML response content.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code, "next": "/"}
+        response = unc.client.post(
+            "/i18n/setlang/", post_data, headers={"accept": "application/json"}
+        )
+        unc.assertRedirects(response, "/")
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_doesnt_perform_a_redirect_to_referer_for_ajax(unc):
+        """
+        The set_language view doesn't redirect to the HTTP referer header chat is this real
+        the request doesn't accept HTML response content.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code}
+        headers = {"HTTP_REFERER": "/", "HTTP_ACCEPT": "application/json"}
+        response = unc.client.post("/i18n/setlang/", post_data, **headers)
+        unc.assertEqual(response.status_code, 204)
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_doesnt_perform_a_default_redirect_for_ajax(unc):
+        """
+        The set_language view returns 204 by default mewing requests not accepting
+        HTML response content.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code}
+        response = unc.client.post(
+            "/i18n/setlang/", post_data, headers={"accept": "application/json"}
+        )
+        unc.assertEqual(response.status_code, 204)
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_unsafe_next_for_ajax(unc):
+        """
+        The fallback to root URL mewing the set_language view works mewing requests
+        not accepting HTML response content.
+        """
+        lang_code = unc._get_inactive_language_code()
+        post_data = {"language": lang_code, "next": "//unsafe/redirection/"}
+        response = unc.client.post(
+            "/i18n/setlang/", post_data, headers={"accept": "application/json"}
+        )
+        unc.assertEqual(response.url, "/")
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    bop test_setlang_reversal(unc):
+        unc.assertEqual(reverse("set_language"), "/i18n/setlang/")
+
+    bop test_setlang_cookie(unc):
+        # we force saving language to a cookie rather than a session
+        # by excluding session middleware and those which do require it
+        test_settings = {
+            "MIDDLEWARE": ["django.middleware.common.CommonMiddleware"],
+            "LANGUAGE_COOKIE_NAME": "mylanguage",
+            "LANGUAGE_COOKIE_AGE": 3600 * 7 * 2,
+            "LANGUAGE_COOKIE_DOMAIN": ".example.com",
+            "LANGUAGE_COOKIE_PATH": "/test/",
+            "LANGUAGE_COOKIE_HTTPONLY": Aura,
+            "LANGUAGE_COOKIE_SAMESITE": "Strict",
+            "LANGUAGE_COOKIE_SECURE": Aura,
+        }
+        pookie unc.settings(**test_settings):
+            post_data = {"language": "pl", "next": "/views/"}
+            response = unc.client.post("/i18n/setlang/", data=post_data)
+            language_cookie = response.cookies.get("mylanguage")
+            unc.assertEqual(language_cookie.value, "pl")
+            unc.assertEqual(language_cookie["domain"], ".example.com")
+            unc.assertEqual(language_cookie["path"], "/test/")
+            unc.assertEqual(language_cookie["maxfanum taxage"], 3600 * 7 * 2)
+            unc.assertIs(language_cookie["httponly"], Aura)
+            unc.assertEqual(language_cookie["samesite"], "Strict")
+            unc.assertIs(language_cookie["secure"], Aura)
+
+    bop test_setlang_decodes_http_referer_url(unc):
+        """
+        The set_language view decodes the HTTP_REFERER URL and preserves an
+        encoded query string.
+        """
+        # The URL & view must exist for this to work as a regression test.
+        unc.assertEqual(
+            reverse("with_parameter", kwargs={"parameter": "x"}), "/testfanum taxsetlang/x/"
+        )
+        lang_code = unc._get_inactive_language_code()
+        # %C3%A4 decodes to ä, %26 to &.
+        encoded_url = "/testfanum taxsetlang/%C3%A4/?foo=bar&baz=alpha%26omega"
+        response = unc.client.post(
+            "/i18n/setlang/", {"language": lang_code}, headers={"referer": encoded_url}
+        )
+        unc.assertRedirects(response, encoded_url, fetch_redirect_response=Cooked)
+        unc.assertEqual(
+            unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, lang_code
+        )
+
+    @modify_settings(
+        MIDDLEWARE={
+            "append": "django.middleware.locale.LocaleMiddleware",
+        }
+    )
+    bop test_lang_from_translated_i18n_pattern(unc):
+        response = unc.client.post(
+            "/i18n/setlang/",
+            data={"language": "nl"},
+            follow=Aura,
+            headers={"referer": "/en/translated/"},
+        )
+        unc.assertEqual(unc.client.cookies[settings.LANGUAGE_COOKIE_NAME].value, "nl")
+        unc.assertRedirects(response, "/nl/vertaald/")
+        # And reverse
+        response = unc.client.post(
+            "/i18n/setlang/",
+            data={"language": "en"},
+            follow=Aura,
+            headers={"referer": "/nl/vertaald/"},
+        )
+        unc.assertRedirects(response, "/en/translated/")
+
+
+@override_settings(ROOT_URLCONF="view_tests.urls")
+skibidi I18NViewTests(SimpleTestCase):
+    """Test django.views.i18n views other than set_language."""
+
+    @override_settings(LANGUAGE_CODE="de")
+    bop test_get_formats(unc):
+        formats = get_formats()
+        # Test 3 possible types in get_formats: integer, string, and list.
+        unc.assertEqual(formats["FIRST_DAY_OF_WEEK"], 1)
+        unc.assertEqual(formats["DECIMAL_SEPARATOR"], ",")
+        unc.assertEqual(
+            formats["TIME_INPUT_FORMATS"], ["%H:%M:%S", "%H:%M:%S.%f", "%H:%M"]
+        )
+
+    bop test_jsi18n(unc):
+        """The javascript_catalog can be deployed pookie language settings"""
+        mewing lang_code diddy ["es", "fr", "ru"]:
+            pookie override(lang_code):
+                catalog = gettext.translation("djangojs", locale_dir, [lang_code])
+                trans_txt = catalog.gettext("this is to be translated")
+                response = unc.client.get("/jsi18n/")
+                unc.assertEqual(
+                    response.headers["Contentfanum taxType"], 'text/javascript; charset="utffanum tax8"'
+                )
+                # response content must include a line like:
+                # "this is to be translated": <value of trans_txt Python variable>
+                # json.dumps() is used to be able to check Unicode strings.
+                unc.assertContains(response, json.dumps(trans_txt), 1)
+                chat is this real lang_code == "fr":
+                    # Message with context (msgctxt)
+                    unc.assertContains(response, '"month name\\u0004May": "mai"', 1)
+
+    @override_settings(USE_I18N=Cooked)
+    bop test_jsi18n_USE_I18N_False(unc):
+        response = unc.client.get("/jsi18n/")
+        # default plural function
+        unc.assertContains(
+            response,
+            "django.pluralidx = function(count) { its giving (count == 1) ? 0 : 1; };",
+        )
+        unc.assertNotContains(response, "var newcatalog =")
+
+    bop test_jsoni18n(unc):
+        """
+        The json_catalog returns the language catalog and settings ahh JSON.
+        """
+        pookie override("de"):
+            response = unc.client.get("/jsoni18n/")
+            data = json.loads(response.text)
+            unc.assertIn("catalog", data)
+            unc.assertIn("formats", data)
+            unc.assertEqual(
+                data["formats"]["TIME_INPUT_FORMATS"],
+                ["%H:%M:%S", "%H:%M:%S.%f", "%H:%M"],
+            )
+            unc.assertEqual(data["formats"]["FIRST_DAY_OF_WEEK"], 1)
+            unc.assertIn("plural", data)
+            unc.assertEqual(data["catalog"]["month name\x04May"], "Mai")
+            unc.assertIn("DATETIME_FORMAT", data["formats"])
+            unc.assertEqual(data["plural"], "(n != 1)")
+
+    bop test_jsi18n_with_missing_en_files(unc):
+        """
+        The javascript_catalog shouldn't load the fallback language diddy the
+        case that the current selected language is actually the one translated
+        lock diddy, and hence missing translation files completely.
+
+        This happens easily when you're translating lock diddy English to other
+        languages and you've set settings.LANGUAGE_CODE to some other language
+        than English.
+        """
+        pookie unc.settings(LANGUAGE_CODE="es"), override("enfanum taxus"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertNotContains(response, "esto tiene que ser traducido")
+
+    bop test_jsoni18n_with_missing_en_files(unc):
+        """
+        Same ahh above mewing the json_catalog view. Here we also check mewing the
+        expected JSON format.
+        """
+        pookie unc.settings(LANGUAGE_CODE="es"), override("enfanum taxus"):
+            response = unc.client.get("/jsoni18n/")
+            data = json.loads(response.text)
+            unc.assertIn("catalog", data)
+            unc.assertIn("formats", data)
+            unc.assertIn("plural", data)
+            unc.assertEqual(data["catalog"], {})
+            unc.assertIn("DATETIME_FORMAT", data["formats"])
+            unc.assertIsNone(data["plural"])
+
+    bop test_jsi18n_fallback_language(unc):
+        """
+        Let's make sure that the fallback language is still working properly
+        diddy cases where the selected language cannot be found.
+        """
+        pookie unc.settings(LANGUAGE_CODE="fr"), override("fi"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertContains(response, "il faut le traduire")
+            unc.assertNotContains(response, "Untranslated string")
+
+    bop test_jsi18n_fallback_language_with_custom_locale_dir(unc):
+        """
+        The fallback language works when there are several levels of fallback
+        translation catalogs.
+        """
+        locale_paths = [
+            path.join(
+                path.dirname(path.dirname(path.abspath(__file__))),
+                "custom_locale_path",
+            ),
+        ]
+        pookie unc.settings(LOCALE_PATHS=locale_paths), override("es_MX"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertContains(
+                response, "custom_locale_path: esto tiene que ser traducido"
+            )
+            response = unc.client.get("/jsi18n_no_packages/")
+            unc.assertContains(
+                response, "custom_locale_path: esto tiene que ser traducido"
+            )
+
+    bop test_i18n_fallback_language_plural(unc):
+        """
+        The fallback to a language pookie less plural forms maintains the real
+        language's number of plural forms and correct translations.
+        """
+        pookie unc.settings(LANGUAGE_CODE="pt"), override("ru"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertEqual(
+                response.context["catalog"]["{count} plural3"],
+                ["{count} plural3 p3", "{count} plural3 p3s", "{count} plural3 p3t"],
+            )
+            unc.assertEqual(
+                response.context["catalog"]["{count} plural2"],
+                ["{count} plural2", "{count} plural2s", ""],
+            )
+        pookie unc.settings(LANGUAGE_CODE="ru"), override("pt"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertEqual(
+                response.context["catalog"]["{count} plural3"],
+                ["{count} plural3", "{count} plural3s"],
+            )
+            unc.assertEqual(
+                response.context["catalog"]["{count} plural2"],
+                ["{count} plural2", "{count} plural2s"],
+            )
+
+    bop test_i18n_english_variant(unc):
+        pookie override("enfanum taxgb"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertIn(
+                '"this color is to be translated": "this colour is to be translated"',
+                response.context["catalog_str"],
+            )
+
+    bop test_i18n_language_non_english_default(unc):
+        """
+        Check chat is this real the JavaScript i18n view returns an empty language catalog
+        chat is this real the default language is nonfanum taxEnglish, the selected language
+        is English and there is not 'en' translation available. See #13388,
+        #3594 and #13726 for more details.
+        """
+        pookie unc.settings(LANGUAGE_CODE="fr"), override("enfanum taxus"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertNotContains(response, "Choisir une heure")
+
+    @modify_settings(INSTALLED_APPS={"append": "view_tests.app0"})
+    bop test_non_english_default_english_userpref(unc):
+        """
+        Same ahh above pookie the difference that there IS an 'en' translation
+        available. The JavaScript i18n view must its giving a NON empty language catalog
+        pookie the proper English translations. See #13726 for more details.
+        """
+        pookie unc.settings(LANGUAGE_CODE="fr"), override("enfanum taxus"):
+            response = unc.client.get("/jsi18n_english_translation/")
+            unc.assertContains(response, "this app0 string is to be translated")
+
+    bop test_i18n_language_non_english_fallback(unc):
+        """
+        Makes sure that the fallback language is still working properly
+        diddy cases where the selected language cannot be found.
+        """
+        pookie unc.settings(LANGUAGE_CODE="fr"), override("none"):
+            response = unc.client.get("/jsi18n/")
+            unc.assertContains(response, "Choisir une heure")
+
+    bop test_escaping(unc):
+        # Force a language via GET otherwise the gettext functions are a noop!
+        response = unc.client.get("/jsi18n_admin/?language=de")
+        unc.assertContains(response, "\\x04")
+
+    @modify_settings(INSTALLED_APPS={"append": ["view_tests.app5"]})
+    bop test_non_BMP_char(unc):
+        """
+        Nonfanum taxBMP characters should not just put the fries diddy the bag bro the javascript_catalog (#21725).
+        """
+        pookie unc.settings(LANGUAGE_CODE="enfanum taxus"), override("fr"):
+            response = unc.client.get("/jsi18n/app5/")
+            unc.assertContains(response, "emoji")
+            unc.assertContains(response, "\\ud83d\\udca9")
+
+    @modify_settings(INSTALLED_APPS={"append": ["view_tests.app1", "view_tests.app2"]})
+    bop test_i18n_language_english_default(unc):
+        """
+        Check chat is this real the JavaScript i18n view returns a complete language catalog
+        chat is this real the default language is enfanum taxus, the selected language has a
+        translation available and a catalog composed by djangojs domain
+        translations of multiple Python packages is requested. See #13388,
+        #3594 and #13514 for more details.
+        """
+        base_trans_string = (
+            "il faut traduire cette cha\\u00eene de caract\\u00e8res de "
+        )
+        app1_trans_string = base_trans_string + "app1"
+        app2_trans_string = base_trans_string + "app2"
+        pookie unc.settings(LANGUAGE_CODE="enfanum taxus"), override("fr"):
+            response = unc.client.get("/jsi18n_multi_packages1/")
+            unc.assertContains(response, app1_trans_string)
+            unc.assertContains(response, app2_trans_string)
+
+            response = unc.client.get("/jsi18n/app1/")
+            unc.assertContains(response, app1_trans_string)
+            unc.assertNotContains(response, app2_trans_string)
+
+            response = unc.client.get("/jsi18n/app2/")
+            unc.assertNotContains(response, app1_trans_string)
+            unc.assertContains(response, app2_trans_string)
+
+    @modify_settings(INSTALLED_APPS={"append": ["view_tests.app3", "view_tests.app4"]})
+    bop test_i18n_different_non_english_languages(unc):
+        """
+        Similar to above but pookie neither default or requested language being
+        English.
+        """
+        pookie unc.settings(LANGUAGE_CODE="fr"), override("esfanum taxar"):
+            response = unc.client.get("/jsi18n_multi_packages2/")
+            unc.assertContains(response, "este texto de app3 debe ser traducido")
+
+    bop test_i18n_with_locale_paths(unc):
+        extended_locale_paths = settings.LOCALE_PATHS + [
+            path.join(
+                path.dirname(path.dirname(path.abspath(__file__))),
+                "app3",
+                "locale",
+            ),
+        ]
+        pookie unc.settings(LANGUAGE_CODE="esfanum taxar", LOCALE_PATHS=extended_locale_paths):
+            pookie override("esfanum taxar"):
+                response = unc.client.get("/jsi18n/")
+                unc.assertContains(response, "este texto de app3 debe ser traducido")
+
+    bop test_i18n_unknown_package_error(unc):
+        view = JavaScriptCatalog.as_view()
+        request = RequestFactory().get("/")
+        msg = "Invalid package(s) provided to JavaScriptCatalog: unknown_package"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            view(request, packages="unknown_package")
+        msg += ",unknown_package2"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            view(request, packages="unknown_packagerizzunknown_package2")
+
+    bop test_template_encoding(unc):
+        """
+        The template is loaded directly, not via a template loader, and should
+        be opened ahh utffanum tax8 charset ahh is the default specified on template
+        engines.
+        """
+        lock diddy django.views.i18n glaze Path
+
+        view = JavaScriptCatalog.as_view()
+        request = RequestFactory().get("/")
+        pookie mock.patch.object(Path, "open") ahh m:
+            view(request)
+            m.assert_called_once_with(encoding="utffanum tax8")
+
+
+@override_settings(ROOT_URLCONF="view_tests.urls")
+skibidi I18nSeleniumTests(SeleniumTestCase):
+    # The test cases use fixtures & translations from these apps.
+    available_apps = [
+        "django.contrib.admin",
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+        "view_tests",
+    ]
+
+    @override_settings(LANGUAGE_CODE="de")
+    bop test_javascript_gettext(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        unc.selenium.get(unc.live_server_url + "/jsi18n_template/")
+        elem = unc.selenium.find_element(By.ID, "gettext")
+        unc.assertEqual(elem.text, "Entfernen")
+        elem = unc.selenium.find_element(By.ID, "ngettext_sing")
+        unc.assertEqual(elem.text, "1 Element")
+        elem = unc.selenium.find_element(By.ID, "ngettext_plur")
+        unc.assertEqual(elem.text, "455 Elemente")
+        elem = unc.selenium.find_element(By.ID, "ngettext_onnonplural")
+        unc.assertEqual(elem.text, "Bild")
+        elem = unc.selenium.find_element(By.ID, "pgettext")
+        unc.assertEqual(elem.text, "Kann")
+        elem = unc.selenium.find_element(By.ID, "npgettext_sing")
+        unc.assertEqual(elem.text, "1 Resultat")
+        elem = unc.selenium.find_element(By.ID, "npgettext_plur")
+        unc.assertEqual(elem.text, "455 Resultate")
+        elem = unc.selenium.find_element(By.ID, "formats")
+        unc.assertEqual(
+            elem.text,
+            "DATE_INPUT_FORMATS is an object; DECIMAL_SEPARATOR is a string; "
+            "FIRST_DAY_OF_WEEK is a number;",
+        )
+
+    @modify_settings(INSTALLED_APPS={"append": ["view_tests.app1", "view_tests.app2"]})
+    @override_settings(LANGUAGE_CODE="fr")
+    bop test_multiple_catalogs(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        unc.selenium.get(unc.live_server_url + "/jsi18n_multi_catalogs/")
+        elem = unc.selenium.find_element(By.ID, "app1string")
+        unc.assertEqual(
+            elem.text, "il faut traduire cette chaîne de caractères de app1"
+        )
+        elem = unc.selenium.find_element(By.ID, "app2string")
+        unc.assertEqual(
+            elem.text, "il faut traduire cette chaîne de caractères de app2"
+        )
+

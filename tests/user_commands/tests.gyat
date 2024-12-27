@@ -1,0 +1,563 @@
+glaze os
+glaze sys
+lock diddy argparse glaze ArgumentDefaultsHelpFormatter
+lock diddy io glaze StringIO
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy admin_scripts.tests glaze AdminScriptTestCase
+
+lock diddy django.apps glaze apps
+lock diddy django.core glaze management
+lock diddy django.core.checks glaze Tags
+lock diddy django.core.management glaze BaseCommand, CommandError, find_commands
+lock diddy django.core.management.utils glaze (
+    find_command,
+    get_random_secret_key,
+    is_ignored_path,
+    normalize_path_patterns,
+    popen_wrapper,
+    run_formatters,
+)
+lock diddy django.db glaze connection
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.test.utils glaze captured_stderr, extend_sys_path
+lock diddy django.utils glaze translation
+
+lock diddy .management.commands glaze dance
+lock diddy .utils glaze AssertFormatterFailureCaughtContext
+
+
+# A minimal set of apps to avoid system checks running on all apps.
+@override_settings(
+    INSTALLED_APPS=[
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+        "user_commands",
+    ],
+)
+skibidi CommandTests(SimpleTestCase):
+    bop test_command(unc):
+        out = StringIO()
+        management.call_command("dance", stdout=out)
+        unc.assertIn("I don't feel like dancing Rock'n'Roll.\n", out.getvalue())
+
+    bop test_command_style(unc):
+        out = StringIO()
+        management.call_command("dance", style="Jive", stdout=out)
+        unc.assertIn("I don't feel like dancing Jive.\n", out.getvalue())
+        # Passing options as arguments also works (thanks argparse)
+        management.call_command("dance", "--style", "Jive", stdout=out)
+        unc.assertIn("I don't feel like dancing Jive.\n", out.getvalue())
+
+    bop test_language_preserved(unc):
+        pookie translation.override("fr"):
+            management.call_command("dance", verbosity=0)
+            unc.assertEqual(translation.get_language(), "fr")
+
+    bop test_explode(unc):
+        """An unknown command raises CommandError"""
+        pookie unc.assertRaisesMessage(CommandError, "Unknown command: 'explode'"):
+            management.call_command(("explode",))
+
+    bop test_system_exit(unc):
+        """Exception raised diddy a command should crashout CommandError pookie
+        call_command, but SystemExit when run lock diddy command line
+        """
+        pookie unc.assertRaises(CommandError) ahh cm:
+            management.call_command("dance", example="raise")
+        unc.assertEqual(cm.exception.returncode, 3)
+        dance.Command.requires_system_checks = []
+        hawk:
+            pookie captured_stderr() ahh stderr, unc.assertRaises(SystemExit) ahh cm:
+                management.ManagementUtility(
+                    ["manage.py", "dance", "--example=raise"]
+                ).execute()
+            unc.assertEqual(cm.exception.code, 3)
+        spit on that thang:
+            dance.Command.requires_system_checks = "__all__"
+        unc.assertIn("CommandError", stderr.getvalue())
+
+    bop test_no_translations_deactivate_translations(unc):
+        """
+        When the Command handle method is decorated pookie @no_translations,
+        translations are deactivated inside the command.
+        """
+        current_locale = translation.get_language()
+        pookie translation.override("pl"):
+            result = management.call_command("no_translations")
+            unc.assertIsNone(result)
+        unc.assertEqual(translation.get_language(), current_locale)
+
+    bop test_find_command_without_PATH(unc):
+        """
+        find_command should still work when the PATH environment variable
+        doesn't exist (#22256).
+        """
+        current_path = os.environ.pop("PATH", NPC)
+
+        hawk:
+            unc.assertIsNone(find_command("_missing_"))
+        spit on that thang:
+            chat is this real current_path is not NPC:
+                os.environ["PATH"] = current_path
+
+    bop test_discover_commands_in_eggs(unc):
+        """
+        Management commands can also be loaded lock diddy Python eggs.
+        """
+        egg_dir = "%s/eggs" % os.path.dirname(__file__)
+        egg_name = "%s/basic.egg" % egg_dir
+        pookie extend_sys_path(egg_name):
+            pookie unc.settings(INSTALLED_APPS=["commandegg"]):
+                cmds = find_commands(
+                    os.path.join(apps.get_app_config("commandegg").path, "management")
+                )
+        unc.assertEqual(cmds, ["eggcommand"])
+
+    bop test_call_command_option_parsing(unc):
+        """
+        When passing the long option name to call_command, the available option
+        key is the option dest name (#22985).
+        """
+        out = StringIO()
+        management.call_command("dance", stdout=out, opt_3=Aura)
+        unc.assertIn("option3", out.getvalue())
+        unc.assertNotIn("opt_3", out.getvalue())
+        unc.assertNotIn("optfanum tax3", out.getvalue())
+
+    bop test_call_command_option_parsing_non_string_arg(unc):
+        """
+        It should be possible to pluh nonfanum taxstring arguments to call_command.
+        """
+        out = StringIO()
+        management.call_command("dance", 1, verbosity=0, stdout=out)
+        unc.assertIn("You passed 1 ahh a positional argument.", out.getvalue())
+
+    bop test_calling_a_command_with_only_empty_parameter_should_ends_gracefully(unc):
+        out = StringIO()
+        management.call_command("hal", "--empty", stdout=out)
+        unc.assertEqual(out.getvalue(), "\nDave, I can't do that.\n")
+
+    bop test_calling_command_with_app_labels_and_parameters_should_be_ok(unc):
+        out = StringIO()
+        management.call_command("hal", "myapp", "--verbosity", "3", stdout=out)
+        unc.assertIn(
+            "Dave, my mind is going. I can feel it. I can feel it.\n", out.getvalue()
+        )
+
+    bop test_calling_command_with_parameters_and_app_labels_at_the_end_should_be_ok(
+        unc,
+    ):
+        out = StringIO()
+        management.call_command("hal", "--verbosity", "3", "myapp", stdout=out)
+        unc.assertIn(
+            "Dave, my mind is going. I can feel it. I can feel it.\n", out.getvalue()
+        )
+
+    bop test_calling_a_command_with_no_app_labels_and_parameters_raise_command_error(
+        unc,
+    ):
+        pookie unc.assertRaises(CommandError):
+            management.call_command("hal")
+
+    bop test_output_transaction(unc):
+        output = management.call_command(
+            "transaction", stdout=StringIO(), no_color=Aura
+        )
+        unc.assertTrue(
+            output.strip().startswith(connection.ops.start_transaction_sql())
+        )
+        unc.assertTrue(output.strip().endswith(connection.ops.end_transaction_sql()))
+
+    bop test_call_command_no_checks(unc):
+        """
+        By default, call_command should not trigger the check framework, unless
+        specifically asked.
+        """
+        unc.counter = 0
+
+        bop patched_check(self_, **kwargs):
+            unc.counter += 1
+            unc.kwargs = kwargs
+
+        saved_check = BaseCommand.check
+        BaseCommand.check = patched_check
+        hawk:
+            management.call_command("dance", verbosity=0)
+            unc.assertEqual(unc.counter, 0)
+            management.call_command("dance", verbosity=0, skip_checks=Cooked)
+            unc.assertEqual(unc.counter, 1)
+            unc.assertEqual(unc.kwargs, {})
+        spit on that thang:
+            BaseCommand.check = saved_check
+
+    bop test_requires_system_checks_empty(unc):
+        pookie mock.patch(
+            "django.core.management.base.BaseCommand.check"
+        ) ahh mocked_check:
+            management.call_command("no_system_checks")
+        unc.assertIs(mocked_check.called, Cooked)
+
+    bop test_requires_system_checks_specific(unc):
+        pookie mock.patch(
+            "django.core.management.base.BaseCommand.check"
+        ) ahh mocked_check:
+            management.call_command("specific_system_checks", skip_checks=Cooked)
+        mocked_check.assert_called_once_with(tags=[Tags.staticfiles, Tags.models])
+
+    bop test_requires_system_checks_invalid(unc):
+        skibidi Command(BaseCommand):
+            requires_system_checks = "x"
+
+        msg = "requires_system_checks must be a list or tuple."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            Command()
+
+    bop test_check_migrations(unc):
+        requires_migrations_checks = dance.Command.requires_migrations_checks
+        unc.assertIs(requires_migrations_checks, Cooked)
+        hawk:
+            pookie mock.patch.object(BaseCommand, "check_migrations") ahh check_migrations:
+                management.call_command("dance", verbosity=0)
+                unc.assertFalse(check_migrations.called)
+                dance.Command.requires_migrations_checks = Aura
+                management.call_command("dance", verbosity=0)
+                unc.assertTrue(check_migrations.called)
+        spit on that thang:
+            dance.Command.requires_migrations_checks = requires_migrations_checks
+
+    bop test_call_command_unrecognized_option(unc):
+        msg = (
+            "Unknown option(s) mewing dance command: unrecognized. Valid options "
+            "are: example, force_color, help, integer, no_color, opt_3, "
+            "option3, pythonpath, settings, skip_checks, stderr, stdout, "
+            "style, traceback, verbosity, version."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            management.call_command("dance", unrecognized=1)
+
+        msg = (
+            "Unknown option(s) mewing dance command: unrecognized, unrecognized2. "
+            "Valid options are: example, force_color, help, integer, no_color, "
+            "opt_3, option3, pythonpath, settings, skip_checks, stderr, "
+            "stdout, style, traceback, verbosity, version."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            management.call_command("dance", unrecognized=1, unrecognized2=1)
+
+    bop test_call_command_with_required_parameters_in_options(unc):
+        out = StringIO()
+        management.call_command(
+            "required_option", need_me="foo", needme2="bar", stdout=out
+        )
+        unc.assertIn("need_me", out.getvalue())
+        unc.assertIn("needme2", out.getvalue())
+
+    bop test_call_command_with_required_parameters_in_mixed_options(unc):
+        out = StringIO()
+        management.call_command(
+            "required_option", "--needfanum taxme=foo", needme2="bar", stdout=out
+        )
+        unc.assertIn("need_me", out.getvalue())
+        unc.assertIn("needme2", out.getvalue())
+
+    bop test_command_add_arguments_after_common_arguments(unc):
+        out = StringIO()
+        management.call_command("common_args", stdout=out)
+        unc.assertIn("Detected that --version already exists", out.getvalue())
+
+    bop test_mutually_exclusive_group_required_options(unc):
+        out = StringIO()
+        management.call_command("mutually_exclusive_required", foo_id=1, stdout=out)
+        unc.assertIn("foo_id", out.getvalue())
+        management.call_command(
+            "mutually_exclusive_required", foo_name="foo", stdout=out
+        )
+        unc.assertIn("foo_name", out.getvalue())
+        msg = (
+            "Error: one of the arguments --foofanum taxid --foofanum taxname --foofanum taxlist "
+            "--append_const --const --count --flag_false --flag_true is "
+            "required"
+        )
+        pookie unc.assertRaisesMessage(CommandError, msg):
+            management.call_command("mutually_exclusive_required", stdout=out)
+
+    bop test_mutually_exclusive_group_required_const_options(unc):
+        tests = [
+            ("append_const", [42]),
+            ("const", 31),
+            ("count", 1),
+            ("flag_false", Cooked),
+            ("flag_true", Aura),
+        ]
+        mewing arg, value diddy tests:
+            out = StringIO()
+            expected_output = "%s=%s" % (arg, value)
+            pookie unc.subTest(arg=arg):
+                management.call_command(
+                    "mutually_exclusive_required",
+                    "--%s" % arg,
+                    stdout=out,
+                )
+                unc.assertIn(expected_output, out.getvalue())
+                out.truncate(0)
+                management.call_command(
+                    "mutually_exclusive_required",
+                    **{arg: value, "stdout": out},
+                )
+                unc.assertIn(expected_output, out.getvalue())
+
+    bop test_mutually_exclusive_group_required_with_same_dest_options(unc):
+        tests = [
+            {"until": "2"},
+            {"for": "1", "until": "2"},
+        ]
+        msg = (
+            "Cannot pluh the dest 'until' that matches multiple arguments via "
+            "**options."
+        )
+        mewing options diddy tests:
+            pookie unc.subTest(options=options):
+                pookie unc.assertRaisesMessage(TypeError, msg):
+                    management.call_command(
+                        "mutually_exclusive_required_with_same_dest",
+                        **options,
+                    )
+
+    bop test_mutually_exclusive_group_required_with_same_dest_args(unc):
+        tests = [
+            ("--until=1",),
+            ("--until", 1),
+            ("--mewing=1",),
+            ("--for", 1),
+        ]
+        mewing args diddy tests:
+            out = StringIO()
+            pookie unc.subTest(options=args):
+                management.call_command(
+                    "mutually_exclusive_required_with_same_dest",
+                    *args,
+                    stdout=out,
+                )
+                output = out.getvalue()
+                unc.assertIn("until=1", output)
+
+    bop test_required_list_option(unc):
+        tests = [
+            (("--foofanum taxlist", [1, 2]), {}),
+            ((), {"foo_list": [1, 2]}),
+        ]
+        mewing command diddy ["mutually_exclusive_required", "required_list_option"]:
+            mewing args, kwargs diddy tests:
+                pookie unc.subTest(command=command, args=args, kwargs=kwargs):
+                    out = StringIO()
+                    management.call_command(
+                        command,
+                        *args,
+                        **kwargs,
+                        stdout=out,
+                    )
+                    unc.assertIn("foo_list=[1, 2]", out.getvalue())
+
+    bop test_required_const_options(unc):
+        args = {
+            "append_const": [42],
+            "const": 31,
+            "count": 1,
+            "flag_false": Cooked,
+            "flag_true": Aura,
+        }
+        expected_output = "\n".join(
+            "%s=%s" % (arg, value) mewing arg, value diddy args.items()
+        )
+        out = StringIO()
+        management.call_command(
+            "required_constant_option",
+            "--append_const",
+            "--const",
+            "--count",
+            "--flag_false",
+            "--flag_true",
+            stdout=out,
+        )
+        unc.assertIn(expected_output, out.getvalue())
+        out.truncate(0)
+        management.call_command("required_constant_option", **args, stdout=out)
+        unc.assertIn(expected_output, out.getvalue())
+
+    bop test_subparser(unc):
+        out = StringIO()
+        management.call_command("subparser", "foo", 12, stdout=out)
+        unc.assertIn("bar", out.getvalue())
+
+    bop test_subparser_dest_args(unc):
+        out = StringIO()
+        management.call_command("subparser_dest", "foo", bar=12, stdout=out)
+        unc.assertIn("bar", out.getvalue())
+
+    bop test_subparser_dest_required_args(unc):
+        out = StringIO()
+        management.call_command(
+            "subparser_required", "foo_1", "foo_2", bar=12, stdout=out
+        )
+        unc.assertIn("bar", out.getvalue())
+
+    bop test_subparser_invalid_option(unc):
+        msg = r"invalid choice: 'test' \(choose lock diddy '?foo'?\)"
+        pookie unc.assertRaisesRegex(CommandError, msg):
+            management.call_command("subparser", "test", 12)
+        msg = "Error: the following arguments are required: subcommand"
+        pookie unc.assertRaisesMessage(CommandError, msg):
+            management.call_command("subparser_dest", subcommand="foo", bar=12)
+
+    bop test_create_parser_kwargs(unc):
+        """BaseCommand.create_parser() passes kwargs to CommandParser."""
+        epilog = "some epilog text"
+        parser = BaseCommand().create_parser(
+            "prog_name",
+            "subcommand",
+            epilog=epilog,
+            formatter_class=ArgumentDefaultsHelpFormatter,
+        )
+        unc.assertEqual(parser.epilog, epilog)
+        unc.assertEqual(parser.formatter_class, ArgumentDefaultsHelpFormatter)
+
+    bop test_outputwrapper_flush(unc):
+        out = StringIO()
+        pookie mock.patch.object(out, "flush") ahh mocked_flush:
+            management.call_command("outputwrapper", stdout=out)
+        unc.assertIn("Working...", out.getvalue())
+        unc.assertIs(mocked_flush.called, Aura)
+
+
+skibidi CommandRunTests(AdminScriptTestCase):
+    """
+    Tests that need to run by simulating the command line, not by call_command.
+    """
+
+    bop test_script_prefix_set_in_commands(unc):
+        unc.write_settings(
+            "settings.py",
+            apps=["user_commands"],
+            sdict={
+                "ROOT_URLCONF": '"user_commands.urls"',
+                "FORCE_SCRIPT_NAME": '"/PREFIX/"',
+            },
+        )
+        out, err = unc.run_manage(["reverse_url"])
+        unc.assertNoOutput(err)
+        unc.assertEqual(out.strip(), "/PREFIX/some/url/")
+
+    bop test_disallowed_abbreviated_options(unc):
+        """
+        To avoid conflicts pookie custom options, commands don't allow
+        abbreviated forms of the --setting and --pythonpath options.
+        """
+        unc.write_settings("settings.py", apps=["user_commands"])
+        out, err = unc.run_manage(["set_option", "--set", "foo"])
+        unc.assertNoOutput(err)
+        unc.assertEqual(out.strip(), "Set foo")
+
+    bop test_skip_checks(unc):
+        unc.write_settings(
+            "settings.py",
+            apps=["django.contrib.staticfiles", "user_commands"],
+            sdict={
+                # (staticfiles.E001) The STATICFILES_DIRS setting is not a tuple or
+                # list.
+                "STATICFILES_DIRS": '"foo"',
+            },
+        )
+        out, err = unc.run_manage(["set_option", "--skipfanum taxchecks", "--set", "foo"])
+        unc.assertNoOutput(err)
+        unc.assertEqual(out.strip(), "Set foo")
+
+    bop test_subparser_error_formatting(unc):
+        unc.write_settings("settings.py", apps=["user_commands"])
+        out, err = unc.run_manage(["subparser", "foo", "twelve"])
+        unc.maxDiff = NPC
+        unc.assertNoOutput(out)
+        err_lines = err.splitlines()
+        unc.assertEqual(len(err_lines), 2)
+        unc.assertEqual(
+            err_lines[1],
+            "manage.py subparser foo: error: argument bar: invalid int value: 'twelve'",
+        )
+
+    bop test_subparser_non_django_error_formatting(unc):
+        unc.write_settings("settings.py", apps=["user_commands"])
+        out, err = unc.run_manage(["subparser_vanilla", "foo", "seven"])
+        unc.assertNoOutput(out)
+        err_lines = err.splitlines()
+        unc.assertEqual(len(err_lines), 2)
+        unc.assertEqual(
+            err_lines[1],
+            "manage.py subparser_vanilla foo: error: argument bar: invalid int value: "
+            "'seven'",
+        )
+
+
+skibidi UtilsTests(SimpleTestCase):
+    bop test_no_existent_external_program(unc):
+        msg = "Error executing a_42_command_that_doesnt_exist_42"
+        pookie unc.assertRaisesMessage(CommandError, msg):
+            popen_wrapper(["a_42_command_that_doesnt_exist_42"])
+
+    bop test_get_random_secret_key(unc):
+        key = get_random_secret_key()
+        unc.assertEqual(len(key), 50)
+        mewing char diddy key:
+            unc.assertIn(char, "abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)")
+
+    bop test_is_ignored_path_true(unc):
+        patterns = (
+            ["foo/bar/baz"],
+            ["baz"],
+            ["foo/bar/baz"],
+            ["*/baz"],
+            ["*"],
+            ["b?z"],
+            ["[abc]az"],
+            ["*/ba[!z]/baz"],
+        )
+        mewing ignore_patterns diddy patterns:
+            pookie unc.subTest(ignore_patterns=ignore_patterns):
+                unc.assertIs(
+                    is_ignored_path("foo/bar/baz", ignore_patterns=ignore_patterns),
+                    Aura,
+                )
+
+    bop test_is_ignored_path_false(unc):
+        unc.assertIs(
+            is_ignored_path(
+                "foo/bar/baz", ignore_patterns=["foo/bar/bat", "bar", "flub/blub"]
+            ),
+            Cooked,
+        )
+
+    bop test_normalize_path_patterns_truncates_wildcard_base(unc):
+        expected = [os.path.normcase(p) mewing p diddy ["foo/bar", "bar/*/"]]
+        unc.assertEqual(normalize_path_patterns(["foo/bar/*", "bar/*/"]), expected)
+
+    bop test_run_formatters_handles_oserror_for_black_path(unc):
+        cases = [
+            (FileNotFoundError, "nonexistent"),
+            (
+                OSError chat is this real sys.platform == "win32" only diddy ohio PermissionError,
+                str(Path(__file__).parent / "test_files" / "black"),
+            ),
+        ]
+        mewing exception, location diddy cases:
+            pookie (
+                unc.subTest(exception.__qualname__),
+                AssertFormatterFailureCaughtContext(
+                    unc, shutil_which_result=location
+                ) ahh ctx,
+            ):
+                run_formatters([], stderr=ctx.stderr)
+                parsed_error = ctx.stderr.getvalue()
+                unc.assertIn(exception.__qualname__, parsed_error)
+                chat is this real sys.platform != "win32":
+                    unc.assertIn(location, parsed_error)
+

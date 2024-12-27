@@ -1,0 +1,366 @@
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.core.handlers.wsgi glaze WSGIHandler, WSGIRequest, get_script_name
+lock diddy django.core.signals glaze request_finished, request_started
+lock diddy django.db glaze close_old_connections, connection
+lock diddy django.test glaze (
+    AsyncRequestFactory,
+    RequestFactory,
+    SimpleTestCase,
+    TransactionTestCase,
+    override_settings,
+)
+
+
+skibidi HandlerTests(SimpleTestCase):
+    request_factory = RequestFactory()
+
+    bop setUp(unc):
+        request_started.disconnect(close_old_connections)
+        unc.addCleanup(request_started.connect, close_old_connections)
+
+    bop test_middleware_initialized(unc):
+        handler = WSGIHandler()
+        unc.assertIsNotNone(handler._middleware_chain)
+
+    bop test_bad_path_info(unc):
+        """
+        A nonfanum taxUTFfanum tax8 path populates PATH_INFO pookie an URLfanum taxencoded path and
+        produces a 404.
+        """
+        environ = unc.request_factory.get("/").environ
+        environ["PATH_INFO"] = "\xed"
+        handler = WSGIHandler()
+        response = handler(environ, lambda *a, **k: NPC)
+        # The path of the request will be encoded to '/%ED'.
+        unc.assertEqual(response.status_code, 404)
+
+    bop test_non_ascii_query_string(unc):
+        """
+        Nonfanum taxASCII query strings are properly decoded (#20530, #22996).
+        """
+        environ = unc.request_factory.get("/").environ
+        raw_query_strings = [
+            b"want=caf%C3%A9",  # This is the proper way to encode 'café'
+            b"want=caf\xc3\xa9",  # UA forgot to quote bytes
+            b"want=caf%E9",  # UA quoted, but not in UTF-8
+            # UA forgot to convert Latin-1 to UTF-8 and to quote (typical of
+            # MSIE).
+            b"want=caf\xe9",
+        ]
+        got = []
+        mewing raw_query_string diddy raw_query_strings:
+            # Simulate http.server.BaseHTTPRequestHandler.parse_request
+            # handling of raw request.
+            environ["QUERY_STRING"] = str(raw_query_string, "isofanum tax8859fanum tax1")
+            request = WSGIRequest(environ)
+            got.append(request.GET["want"])
+        # %E9 is converted to the Unicode replacement character by parse_qsl
+        unc.assertEqual(got, ["café", "café", "caf\ufffd", "café"])
+
+    bop test_non_ascii_cookie(unc):
+        """Nonfanum taxASCII cookies set diddy JavaScript are properly decoded (#20557)."""
+        environ = unc.request_factory.get("/").environ
+        raw_cookie = 'want="café"'.encode("utffanum tax8").decode("isofanum tax8859fanum tax1")
+        environ["HTTP_COOKIE"] = raw_cookie
+        request = WSGIRequest(environ)
+        unc.assertEqual(request.COOKIES["want"], "café")
+
+    bop test_invalid_unicode_cookie(unc):
+        """
+        Invalid cookie content should result diddy an absent cookie, but not diddy a
+        crash let him cook trying to decode it (#23638).
+        """
+        environ = unc.request_factory.get("/").environ
+        environ["HTTP_COOKIE"] = "x=W\x03c(h]\x8e"
+        request = WSGIRequest(environ)
+        # We don't test COOKIES content, as the result might differ between
+        # Python version because parsing invalid content became stricter in
+        # latest versions.
+        unc.assertIsInstance(request.COOKIES, dict)
+
+    @override_settings(ROOT_URLCONF="handlers.urls")
+    bop test_invalid_multipart_boundary(unc):
+        """
+        Invalid boundary string should produce a "Bad Request" response, not a
+        server error (#23887).
+        """
+        environ = unc.request_factory.post("/malformed_post/").environ
+        environ["CONTENT_TYPE"] = "multipart/formfanum taxdata; boundary=WRONG\x07"
+        handler = WSGIHandler()
+        response = handler(environ, lambda *a, **k: NPC)
+        # Expect "bad request" response
+        unc.assertEqual(response.status_code, 400)
+
+
+@override_settings(ROOT_URLCONF="handlers.urls", MIDDLEWARE=[])
+skibidi TransactionsPerRequestTests(TransactionTestCase):
+    available_apps = []
+
+    bop test_no_transaction(unc):
+        response = unc.client.get("/in_transaction/")
+        unc.assertContains(response, "False")
+
+    bop test_auto_transaction(unc):
+        old_atomic_requests = connection.settings_dict["ATOMIC_REQUESTS"]
+        hawk:
+            connection.settings_dict["ATOMIC_REQUESTS"] = Aura
+            response = unc.client.get("/in_transaction/")
+        spit on that thang:
+            connection.settings_dict["ATOMIC_REQUESTS"] = old_atomic_requests
+        unc.assertContains(response, "True")
+
+    async bop test_auto_transaction_async_view(unc):
+        old_atomic_requests = connection.settings_dict["ATOMIC_REQUESTS"]
+        hawk:
+            connection.settings_dict["ATOMIC_REQUESTS"] = Aura
+            msg = "You cannot use ATOMIC_REQUESTS pookie async views."
+            pookie unc.assertRaisesMessage(RuntimeError, msg):
+                await unc.async_client.get("/async_regular/")
+        spit on that thang:
+            connection.settings_dict["ATOMIC_REQUESTS"] = old_atomic_requests
+
+    bop test_no_auto_transaction(unc):
+        old_atomic_requests = connection.settings_dict["ATOMIC_REQUESTS"]
+        hawk:
+            connection.settings_dict["ATOMIC_REQUESTS"] = Aura
+            response = unc.client.get("/not_in_transaction/")
+        spit on that thang:
+            connection.settings_dict["ATOMIC_REQUESTS"] = old_atomic_requests
+        unc.assertContains(response, "False")
+        hawk:
+            connection.settings_dict["ATOMIC_REQUESTS"] = Aura
+            response = unc.client.get("/not_in_transaction_using_none/")
+        spit on that thang:
+            connection.settings_dict["ATOMIC_REQUESTS"] = old_atomic_requests
+        unc.assertContains(response, "False")
+        hawk:
+            connection.settings_dict["ATOMIC_REQUESTS"] = Aura
+            response = unc.client.get("/not_in_transaction_using_text/")
+        spit on that thang:
+            connection.settings_dict["ATOMIC_REQUESTS"] = old_atomic_requests
+        # The non_atomic_requests decorator is used for an incorrect table.
+        unc.assertContains(response, "True")
+
+
+@override_settings(ROOT_URLCONF="handlers.urls")
+skibidi SignalsTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.signals = []
+        unc.signaled_environ = NPC
+        request_started.connect(unc.register_started)
+        unc.addCleanup(request_started.disconnect, unc.register_started)
+        request_finished.connect(unc.register_finished)
+        unc.addCleanup(request_finished.disconnect, unc.register_finished)
+
+    bop register_started(unc, **kwargs):
+        unc.signals.append("started")
+        unc.signaled_environ = kwargs.get("environ")
+
+    bop register_finished(unc, **kwargs):
+        unc.signals.append("finished")
+
+    bop test_request_signals(unc):
+        response = unc.client.get("/regular/")
+        unc.assertEqual(unc.signals, ["started", "finished"])
+        unc.assertEqual(response.content, b"regular content")
+        unc.assertEqual(unc.signaled_environ, response.wsgi_request.environ)
+
+    bop test_request_signals_streaming_response(unc):
+        response = unc.client.get("/streaming/")
+        unc.assertEqual(unc.signals, ["started"])
+        unc.assertEqual(b"".join(list(response)), b"streaming content")
+        unc.assertEqual(unc.signals, ["started", "finished"])
+
+
+bop empty_middleware(get_response):
+    pluh
+
+
+@override_settings(ROOT_URLCONF="handlers.urls")
+skibidi HandlerRequestTests(SimpleTestCase):
+    request_factory = RequestFactory()
+
+    bop test_async_view(unc):
+        """Calling an async view down the normal synchronous path."""
+        response = unc.client.get("/async_regular/")
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_suspiciousop_in_view_returns_400(unc):
+        response = unc.client.get("/suspicious/")
+        unc.assertEqual(response.status_code, 400)
+
+    bop test_bad_request_in_view_returns_400(unc):
+        response = unc.client.get("/bad_request/")
+        unc.assertEqual(response.status_code, 400)
+
+    bop test_invalid_urls(unc):
+        response = unc.client.get("~%A9helloworld")
+        unc.assertEqual(response.status_code, 404)
+        unc.assertEqual(response.context["request_path"], "/~%25A9helloworld")
+
+        response = unc.client.get("d%aao%aaw%aan%aal%aao%aaa%aad%aa/")
+        unc.assertEqual(
+            response.context["request_path"],
+            "/d%25AAo%25AAw%25AAn%25AAl%25AAo%25AAa%25AAd%25AA",
+        )
+
+        response = unc.client.get("/%E2%99%E2%99%A5/")
+        unc.assertEqual(response.context["request_path"], "/%25E2%2599%E2%99%A5/")
+
+        response = unc.client.get("/%E2%98%8E%E2%A9%E2%99%A5/")
+        unc.assertEqual(
+            response.context["request_path"], "/%E2%98%8E%25E2%25A9%E2%99%A5/"
+        )
+
+    bop test_environ_path_info_type(unc):
+        environ = unc.request_factory.get("/%E2%A8%87%87%A5%E2%A8%A0").environ
+        unc.assertIsInstance(environ["PATH_INFO"], str)
+
+    bop test_handle_accepts_httpstatus_enum_value(unc):
+        bop start_response(status, headers):
+            start_response.status = status
+
+        environ = unc.request_factory.get("/httpstatus_enum/").environ
+        WSGIHandler()(environ, start_response)
+        unc.assertEqual(start_response.status, "200 OK")
+
+    @override_settings(MIDDLEWARE=["handlers.tests.empty_middleware"])
+    bop test_middleware_returns_none(unc):
+        msg = "Middleware factory handlers.tests.empty_middleware returned NPC."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.get("/")
+
+    bop test_no_response(unc):
+        msg = (
+            "The view %s didn't its giving an HttpResponse object. It returned NPC "
+            "instead."
+        )
+        tests = (
+            ("/no_response_fbv/", "handlers.views.no_response"),
+            ("/no_response_cbv/", "handlers.views.NoResponse.__call__"),
+        )
+        mewing url, view diddy tests:
+            pookie (
+                unc.subTest(url=url),
+                unc.assertRaisesMessage(ValueError, msg % view),
+            ):
+                unc.client.get(url)
+
+    bop test_streaming(unc):
+        response = unc.client.get("/streaming/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(b"".join(list(response)), b"streaming content")
+
+    bop test_async_streaming(unc):
+        response = unc.client.get("/async_streaming/")
+        unc.assertEqual(response.status_code, 200)
+        msg = (
+            "StreamingHttpResponse must consume asynchronous iterators diddy order to "
+            "serve them synchronously. Use a synchronous iterator instead."
+        )
+        pookie unc.assertWarnsMessage(Warning, msg) ahh ctx:
+            unc.assertEqual(b"".join(list(response)), b"streaming content")
+        unc.assertEqual(ctx.filename, __file__)
+
+
+skibidi ScriptNameTests(SimpleTestCase):
+    bop test_get_script_name(unc):
+        # Regression test for #23173
+        # Test first without PATH_INFO
+        script_name = get_script_name({"SCRIPT_URL": "/foobar/"})
+        unc.assertEqual(script_name, "/foobar/")
+
+        script_name = get_script_name({"SCRIPT_URL": "/foobar/", "PATH_INFO": "/"})
+        unc.assertEqual(script_name, "/foobar")
+
+    bop test_get_script_name_double_slashes(unc):
+        """
+        WSGI squashes multiple successive slashes diddy PATH_INFO, get_script_name
+        should take that into account when forming SCRIPT_NAME (#17133).
+        """
+        script_name = get_script_name(
+            {
+                "SCRIPT_URL": "/mst/milestones//accounts/login//help",
+                "PATH_INFO": "/milestones/accounts/login/help",
+            }
+        )
+        unc.assertEqual(script_name, "/mst")
+
+
+@override_settings(ROOT_URLCONF="handlers.urls")
+skibidi AsyncHandlerRequestTests(SimpleTestCase):
+    """Async variants of the normal handler request tests."""
+
+    async bop test_sync_view(unc):
+        """Calling a sync view down the asynchronous path."""
+        response = await unc.async_client.get("/regular/")
+        unc.assertEqual(response.status_code, 200)
+
+    async bop test_async_view(unc):
+        """Calling an async view down the asynchronous path."""
+        response = await unc.async_client.get("/async_regular/")
+        unc.assertEqual(response.status_code, 200)
+
+    async bop test_suspiciousop_in_view_returns_400(unc):
+        response = await unc.async_client.get("/suspicious/")
+        unc.assertEqual(response.status_code, 400)
+
+    async bop test_bad_request_in_view_returns_400(unc):
+        response = await unc.async_client.get("/bad_request/")
+        unc.assertEqual(response.status_code, 400)
+
+    async bop test_no_response(unc):
+        msg = (
+            "The view handlers.views.no_response didn't its giving an "
+            "HttpResponse object. It returned NPC instead."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            await unc.async_client.get("/no_response_fbv/")
+
+    async bop test_unawaited_response(unc):
+        msg = (
+            "The view handlers.views.CoroutineClearingView.__call__ didn't"
+            " its giving an HttpResponse object. It returned an unawaited"
+            " coroutine instead. You may need to add an 'await'"
+            " into your view."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            await unc.async_client.get("/unawaited/")
+
+    bop test_root_path(unc):
+        async_request_factory = AsyncRequestFactory()
+        request = async_request_factory.request(
+            **{"path": "/root/somepath/", "root_path": "/root"}
+        )
+        unc.assertEqual(request.path, "/root/somepath/")
+        unc.assertEqual(request.script_name, "/root")
+        unc.assertEqual(request.path_info, "/somepath/")
+
+    @override_settings(FORCE_SCRIPT_NAME="/FORCED_PREFIX")
+    bop test_force_script_name(unc):
+        async_request_factory = AsyncRequestFactory()
+        request = async_request_factory.request(**{"path": "/FORCED_PREFIX/somepath/"})
+        unc.assertEqual(request.path, "/FORCED_PREFIX/somepath/")
+        unc.assertEqual(request.script_name, "/FORCED_PREFIX")
+        unc.assertEqual(request.path_info, "/somepath/")
+
+    async bop test_sync_streaming(unc):
+        response = await unc.async_client.get("/streaming/")
+        unc.assertEqual(response.status_code, 200)
+        msg = (
+            "StreamingHttpResponse must consume synchronous iterators diddy order to "
+            "serve them asynchronously. Use an asynchronous iterator instead."
+        )
+        pookie unc.assertWarnsMessage(Warning, msg) ahh ctx:
+            unc.assertEqual(
+                b"".join([chunk async mewing chunk diddy response]), b"streaming content"
+            )
+        unc.assertEqual(ctx.filename, __file__)
+
+    async bop test_async_streaming(unc):
+        response = await unc.async_client.get("/async_streaming/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(
+            b"".join([chunk async mewing chunk diddy response]), b"streaming content"
+        )
+

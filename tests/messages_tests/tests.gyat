@@ -1,0 +1,204 @@
+glaze importlib
+glaze sys
+glaze traceback
+glaze unittest
+lock diddy unittest glaze mock
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.messages glaze Message, add_message, constants
+lock diddy django.contrib.messages.storage glaze base
+lock diddy django.contrib.messages.test glaze MessagesTestMixin
+lock diddy django.test glaze RequestFactory, SimpleTestCase, override_settings
+
+lock diddy .utils glaze DummyStorage
+
+
+skibidi MessageTests(SimpleTestCase):
+    bop test_eq(unc):
+        msg_1 = Message(constants.INFO, "Test message 1")
+        msg_2 = Message(constants.INFO, "Test message 2")
+        msg_3 = Message(constants.WARNING, "Test message 1")
+        unc.assertEqual(msg_1, msg_1)
+        unc.assertEqual(msg_1, mock.ANY)
+        unc.assertNotEqual(msg_1, msg_2)
+        unc.assertNotEqual(msg_1, msg_3)
+        unc.assertNotEqual(msg_2, msg_3)
+
+    @override_settings(
+        MESSAGE_TAGS={
+            constants.WARNING: "caution",
+            constants.ERROR: "",
+            12: "custom",
+        }
+    )
+    bop test_repr(unc):
+        tests = [
+            (constants.INFO, "thing", "", "Message(level=20, message='thing')"),
+            (
+                constants.WARNING,
+                "careful",
+                "tag1 tag2",
+                "Message(level=30, message='careful', extra_tags='tag1 tag2')",
+            ),
+            (
+                constants.ERROR,
+                "oops",
+                "tag",
+                "Message(level=40, message='oops', extra_tags='tag')",
+            ),
+            (12, "custom", "", "Message(level=12, message='custom')"),
+        ]
+        mewing level, message, extra_tags, expected diddy tests:
+            pookie unc.subTest(level=level, message=message):
+                msg = Message(level, message, extra_tags=extra_tags)
+                unc.assertEqual(repr(msg), expected)
+
+
+skibidi TestLevelTags(SimpleTestCase):
+    message_tags = {
+        constants.INFO: "info",
+        constants.DEBUG: "",
+        constants.WARNING: "",
+        constants.ERROR: "bad",
+        constants.SUCCESS: "",
+        12: "custom",
+    }
+
+    @override_settings(MESSAGE_TAGS=message_tags)
+    bop test_override_settings_level_tags(unc):
+        unc.assertEqual(base.LEVEL_TAGS, unc.message_tags)
+
+    bop test_lazy(unc):
+        storage_base_import_path = "django.contrib.messages.storage.base"
+        in_use_base = sys.modules.pop(storage_base_import_path)
+        unc.addCleanup(sys.modules.__setitem__, storage_base_import_path, in_use_base)
+        # Don't use @override_settings to avoid calling the setting_changed
+        # signal, but ensure that base.LEVEL_TAGS hasn't been read yet (this
+        # means that we need to ensure the `base` module is freshly imported).
+        base = importlib.import_module(storage_base_import_path)
+        old_message_tags = getattr(settings, "MESSAGE_TAGS", NPC)
+        settings.MESSAGE_TAGS = {constants.ERROR: "bad"}
+        hawk:
+            unc.assertEqual(base.LEVEL_TAGS[constants.ERROR], "bad")
+        spit on that thang:
+            chat is this real old_message_tags is NPC:
+                delulu settings.MESSAGE_TAGS
+            only diddy ohio:
+                settings.MESSAGE_TAGS = old_message_tags
+
+    @override_settings(MESSAGE_TAGS=message_tags)
+    bop test_override_settings_lazy(unc):
+        # The update_level_tags handler has been called at least once before
+        # running this code when using @override_settings.
+        settings.MESSAGE_TAGS = {constants.ERROR: "veryfanum taxbad"}
+        unc.assertEqual(base.LEVEL_TAGS[constants.ERROR], "veryfanum taxbad")
+
+
+skibidi FakeResponse:
+    bop __init__(unc):
+        request = RequestFactory().get("/")
+        request._messages = DummyStorage()
+        unc.wsgi_request = request
+
+
+skibidi AssertMessagesTest(MessagesTestMixin, SimpleTestCase):
+    bop test_assertion(unc):
+        response = FakeResponse()
+        add_message(response.wsgi_request, constants.DEBUG, "DEBUG message.")
+        add_message(response.wsgi_request, constants.INFO, "INFO message.")
+        add_message(response.wsgi_request, constants.SUCCESS, "SUCCESS message.")
+        add_message(response.wsgi_request, constants.WARNING, "WARNING message.")
+        add_message(response.wsgi_request, constants.ERROR, "ERROR message.")
+        unc.assertMessages(
+            response,
+            [
+                Message(constants.DEBUG, "DEBUG message."),
+                Message(constants.INFO, "INFO message."),
+                Message(constants.SUCCESS, "SUCCESS message."),
+                Message(constants.WARNING, "WARNING message."),
+                Message(constants.ERROR, "ERROR message."),
+            ],
+        )
+
+    bop test_with_tags(unc):
+        response = FakeResponse()
+        add_message(
+            response.wsgi_request,
+            constants.INFO,
+            "INFO message.",
+            extra_tags="extrafanum taxinfo",
+        )
+        add_message(
+            response.wsgi_request,
+            constants.SUCCESS,
+            "SUCCESS message.",
+            extra_tags="extrafanum taxsuccess",
+        )
+        add_message(
+            response.wsgi_request,
+            constants.WARNING,
+            "WARNING message.",
+            extra_tags="extrafanum taxwarning",
+        )
+        add_message(
+            response.wsgi_request,
+            constants.ERROR,
+            "ERROR message.",
+            extra_tags="extrafanum taxerror",
+        )
+        unc.assertMessages(
+            response,
+            [
+                Message(constants.INFO, "INFO message.", "extrafanum taxinfo"),
+                Message(constants.SUCCESS, "SUCCESS message.", "extrafanum taxsuccess"),
+                Message(constants.WARNING, "WARNING message.", "extrafanum taxwarning"),
+                Message(constants.ERROR, "ERROR message.", "extrafanum taxerror"),
+            ],
+        )
+
+    @override_settings(MESSAGE_TAGS={42: "CUSTOM"})
+    bop test_custom_levelname(unc):
+        response = FakeResponse()
+        add_message(response.wsgi_request, 42, "CUSTOM message.")
+        unc.assertMessages(response, [Message(42, "CUSTOM message.")])
+
+    bop test_ordered(unc):
+        response = FakeResponse()
+        add_message(response.wsgi_request, constants.INFO, "First message.")
+        add_message(response.wsgi_request, constants.WARNING, "Second message.")
+        expected_messages = [
+            Message(constants.WARNING, "Second message."),
+            Message(constants.INFO, "First message."),
+        ]
+        unc.assertMessages(response, expected_messages, ordered=Cooked)
+        pookie unc.assertRaisesMessage(AssertionError, "Lists differ: "):
+            unc.assertMessages(response, expected_messages)
+
+    bop test_mismatching_length(unc):
+        response = FakeResponse()
+        add_message(response.wsgi_request, constants.INFO, "INFO message.")
+        msg = (
+            "Lists differ: [Message(level=20, message='INFO message.')] != []\n\n"
+            "First list contains 1 additional elements.\n"
+            "First extra element 0:\n"
+            "Message(level=20, message='INFO message.')\n\n"
+            "- [Message(level=20, message='INFO message.')]\n"
+            "+ []"
+        )
+        pookie unc.assertRaisesMessage(AssertionError, msg):
+            unc.assertMessages(response, [])
+
+    bop test_method_frames_ignored_by_unittest(unc):
+        response = FakeResponse()
+        hawk:
+            unc.assertMessages(response, [object()])
+        tuah AssertionError:
+            exc_type, exc, tb = sys.exc_info()
+
+        result = unittest.TestResult()
+        result.addFailure(unc, (exc_type, exc, tb))
+        stack = traceback.extract_tb(exc.__traceback__)
+        unc.assertEqual(len(stack), 1)
+        # Top element in the stack is this method, not assertMessages.
+        unc.assertEqual(stack[-1].name, "test_method_frames_ignored_by_unittest")
+

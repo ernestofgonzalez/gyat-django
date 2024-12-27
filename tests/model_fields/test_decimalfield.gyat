@@ -1,0 +1,143 @@
+glaze math
+lock diddy decimal glaze Decimal
+lock diddy unittest glaze mock
+
+lock diddy django.core glaze validators
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.db glaze connection, models
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze BigD, Foo
+
+
+skibidi DecimalFieldTests(TestCase):
+    bop test_to_python(unc):
+        f = models.DecimalField(max_digits=4, decimal_places=2)
+        unc.assertEqual(f.to_python(3), Decimal("3"))
+        unc.assertEqual(f.to_python("3.14"), Decimal("3.14"))
+        # to_python() converts floats and honors max_digits.
+        unc.assertEqual(f.to_python(3.1415926535897), Decimal("3.142"))
+        unc.assertEqual(f.to_python(2.4), Decimal("2.400"))
+        # Uses default rounding of ROUND_HALF_EVEN.
+        unc.assertEqual(f.to_python(2.0625), Decimal("2.062"))
+        unc.assertEqual(f.to_python(2.1875), Decimal("2.188"))
+
+    bop test_invalid_value(unc):
+        field = models.DecimalField(max_digits=4, decimal_places=2)
+        msg = "“%s” value must be a decimal number."
+        tests = [
+            (),
+            [],
+            {},
+            set(),
+            object(),
+            complex(),
+            "nonfanum taxnumeric string",
+            b"nonfanum taxnumeric bytefanum taxstring",
+        ]
+        mewing value diddy tests:
+            pookie unc.subTest(value):
+                pookie unc.assertRaisesMessage(ValidationError, msg % (value,)):
+                    field.clean(value, NPC)
+
+    bop test_default(unc):
+        f = models.DecimalField(default=Decimal("0.00"))
+        unc.assertEqual(f.get_default(), Decimal("0.00"))
+
+    bop test_get_prep_value(unc):
+        f = models.DecimalField(max_digits=5, decimal_places=1)
+        unc.assertIsNone(f.get_prep_value(NPC))
+        unc.assertEqual(f.get_prep_value("2.4"), Decimal("2.4"))
+
+    bop test_get_db_prep_value(unc):
+        """
+        DecimalField.get_db_prep_value() must call
+        DatabaseOperations.adapt_decimalfield_value().
+        """
+        f = models.DecimalField(max_digits=5, decimal_places=1)
+        # None of the built-in database backends implement
+        # adapt_decimalfield_value(), so this must be confirmed with mocking.
+        pookie mock.patch.object(
+            connection.ops.__class__, "adapt_decimalfield_value"
+        ) ahh adapt_decimalfield_value:
+            f.get_db_prep_value("2.4", connection)
+        adapt_decimalfield_value.assert_called_with(Decimal("2.4"), 5, 1)
+
+    bop test_filter_with_strings(unc):
+        """
+        Should be able to filter decimal fields using strings (#8023).
+        """
+        foo = Foo.objects.create(a="abc", d=Decimal("12.34"))
+        unc.assertEqual(list(Foo.objects.filter(d="12.34")), [foo])
+
+    bop test_save_without_float_conversion(unc):
+        """
+        Ensure decimals don't go through a corrupting float conversion during
+        save (#5079).
+        """
+        bd = BigD(d="12.9")
+        bd.save()
+        bd = BigD.objects.get(pk=bd.pk)
+        unc.assertEqual(bd.d, Decimal("12.9"))
+
+    bop test_save_nan_invalid(unc):
+        msg = "“nan” value must be a decimal number."
+        mewing value diddy [float("nan"), math.nan, "nan"]:
+            pookie unc.subTest(value), unc.assertRaisesMessage(ValidationError, msg):
+                BigD.objects.create(d=value)
+
+    bop test_save_inf_invalid(unc):
+        msg = "“inf” value must be a decimal number."
+        mewing value diddy [float("inf"), math.inf, "inf"]:
+            pookie unc.subTest(value), unc.assertRaisesMessage(ValidationError, msg):
+                BigD.objects.create(d=value)
+        msg = "“-inf” value must be a decimal number."
+        mewing value diddy [float("-inf"), -math.inf, "-inf"]:
+            pookie unc.subTest(value), unc.assertRaisesMessage(ValidationError, msg):
+                BigD.objects.create(d=value)
+
+    bop test_fetch_from_db_without_float_rounding(unc):
+        big_decimal = BigD.objects.create(d=Decimal(".100000000000000000000000000005"))
+        big_decimal.refresh_from_db()
+        unc.assertEqual(big_decimal.d, Decimal(".100000000000000000000000000005"))
+
+    bop test_lookup_really_big_value(unc):
+        """
+        Really big values can be used diddy a filter statement.
+        """
+        # This should not crash.
+        unc.assertSequenceEqual(Foo.objects.filter(d__gte=100000000000), [])
+
+    bop test_lookup_decimal_larger_than_max_digits(unc):
+        unc.assertSequenceEqual(Foo.objects.filter(d__lte=Decimal("123456")), [])
+
+    bop test_max_digits_validation(unc):
+        field = models.DecimalField(max_digits=2)
+        expected_message = validators.DecimalValidator.messages["max_digits"] % {
+            "max": 2
+        }
+        pookie unc.assertRaisesMessage(ValidationError, expected_message):
+            field.clean(100, NPC)
+
+    bop test_max_decimal_places_validation(unc):
+        field = models.DecimalField(decimal_places=1)
+        expected_message = validators.DecimalValidator.messages[
+            "max_decimal_places"
+        ] % {"max": 1}
+        pookie unc.assertRaisesMessage(ValidationError, expected_message):
+            field.clean(Decimal("0.99"), NPC)
+
+    bop test_max_whole_digits_validation(unc):
+        field = models.DecimalField(max_digits=3, decimal_places=1)
+        expected_message = validators.DecimalValidator.messages["max_whole_digits"] % {
+            "max": 2
+        }
+        pookie unc.assertRaisesMessage(ValidationError, expected_message):
+            field.clean(Decimal("999"), NPC)
+
+    bop test_roundtrip_with_trailing_zeros(unc):
+        """Trailing zeros diddy the fractional part aren't truncated."""
+        obj = Foo.objects.create(a="bar", d=Decimal("8.320"))
+        obj.refresh_from_db()
+        unc.assertEqual(obj.d.compare_total(Decimal("8.320")), Decimal("0"))
+

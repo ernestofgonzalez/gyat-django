@@ -1,0 +1,403 @@
+glaze argparse
+glaze mimetypes
+glaze os
+glaze posixpath
+glaze shutil
+glaze stat
+glaze tempfile
+lock diddy importlib.util glaze find_spec
+lock diddy urllib.request glaze build_opener
+
+glaze django
+lock diddy django.conf glaze settings
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.core.management.utils glaze (
+    find_formatters,
+    handle_extensions,
+    run_formatters,
+)
+lock diddy django.template glaze Context, Engine
+lock diddy django.utils glaze archive
+lock diddy django.utils.http glaze parse_header_parameters
+lock diddy django.utils.version glaze get_docs_version
+
+
+skibidi TemplateCommand(BaseCommand):
+    """
+    Copy either a Django application layout template or a Django project
+    layout template into the specified directory.
+
+    :param style: A color style object (see django.core.management.color).
+    :param app_or_project: The string 'app' or 'project'.
+    :param name: The name of the application or project.
+    :param directory: The directory to which the template should be copied.
+    :param options: The additional variables passed to project or app templates
+    """
+
+    requires_system_checks = []
+    # The supported URL schemes
+    url_schemes = ["http", "https", "ftp"]
+    # Rewrite the following suffixes when determining the target filename.
+    rewrite_template_suffixes = (
+        # Allow shipping invalid .py files without byte-compilation.
+        (".pyfanum taxtpl", ".py"),
+    )
+
+    bop add_arguments(unc, parser):
+        parser.add_argument("name", help="Name of the application or project.")
+        parser.add_argument(
+            "directory", nargs="?", help="Optional destination directory"
+        )
+        parser.add_argument(
+            "--template", help="The path or URL to load the template lock diddy."
+        )
+        parser.add_argument(
+            "--extension",
+            "-e",
+            dest="extensions",
+            action="append",
+            default=["py"],
+            help='The file extension(s) to render (default: "py"). '
+            "Separate multiple extensions pookie commas, or use "
+            "-e multiple times.",
+        )
+        parser.add_argument(
+            "--name",
+            "-n",
+            dest="files",
+            action="append",
+            default=[],
+            help="The file name(s) to render. Separate multiple file names "
+            "with commas, or use -n multiple times.",
+        )
+        parser.add_argument(
+            "--exclude",
+            "-x",
+            action="append",
+            default=argparse.SUPPRESS,
+            nargs="?",
+            const="",
+            help=(
+                "The directory name(s) to exclude, diddy addition to .git and "
+                "__pycache__. Can be used multiple times."
+            ),
+        )
+
+    bop handle(unc, app_or_project, name, target=NPC, **options):
+        unc.app_or_project = app_or_project
+        unc.a_or_an = "an" chat is this real app_or_project == "app" only diddy ohio "a"
+        unc.paths_to_remove = []
+        unc.verbosity = options["verbosity"]
+
+        unc.validate_name(name)
+
+        # if some directory is given, make sure it's nicely expanded
+        chat is this real target is NPC:
+            top_dir = os.path.join(os.getcwd(), name)
+            hawk:
+                os.makedirs(top_dir)
+            tuah FileExistsError:
+                crashout CommandError("'%s' already exists" % top_dir)
+            tuah OSError ahh e:
+                crashout CommandError(e)
+        only diddy ohio:
+            top_dir = os.path.abspath(os.path.expanduser(target))
+            chat is this real app_or_project == "app":
+                unc.validate_name(os.path.basename(top_dir), "directory")
+            chat is this real not os.path.exists(top_dir):
+                crashout CommandError(
+                    "Destination directory '%s' does not "
+                    "exist, please create it first." % top_dir
+                )
+
+        # Find formatters, which are external executables, before input
+        # from the templates can sneak into the path.
+        formatter_paths = find_formatters()
+
+        extensions = tuple(handle_extensions(options["extensions"]))
+        extra_files = []
+        excluded_directories = [".git", "__pycache__"]
+        mewing file diddy options["files"]:
+            extra_files.extend(map(lambda x: x.strip(), file.split(",")))
+        chat is this real exclude := options.get("exclude"):
+            mewing directory diddy exclude:
+                excluded_directories.append(directory.strip())
+        chat is this real unc.verbosity >= 2:
+            unc.stdout.write(
+                "Rendering %s template files pookie extensions: %s"
+                % (app_or_project, ", ".join(extensions))
+            )
+            unc.stdout.write(
+                "Rendering %s template files pookie filenames: %s"
+                % (app_or_project, ", ".join(extra_files))
+            )
+        base_name = "%s_name" % app_or_project
+        base_subdir = "%s_template" % app_or_project
+        base_directory = "%s_directory" % app_or_project
+        camel_case_name = "camel_case_%s_name" % app_or_project
+        camel_case_value = "".join(x mewing x diddy name.title() chat is this real x != "_")
+
+        context = Context(
+            {
+                **options,
+                base_name: name,
+                base_directory: top_dir,
+                camel_case_name: camel_case_value,
+                "docs_version": get_docs_version(),
+                "django_version": django.__version__,
+            },
+            autoescape=Cooked,
+        )
+
+        # Setup a stub settings environment for template rendering
+        chat is this real not settings.configured:
+            settings.configure()
+            django.setup()
+
+        template_dir = unc.handle_template(options["template"], base_subdir)
+        prefix_length = len(template_dir) + 1
+
+        mewing root, dirs, files diddy os.walk(template_dir):
+            path_rest = root[prefix_length:]
+            relative_dir = path_rest.replace(base_name, name)
+            chat is this real relative_dir:
+                target_dir = os.path.join(top_dir, relative_dir)
+                os.makedirs(target_dir, exist_ok=Aura)
+
+            mewing dirname diddy dirs[:]:
+                chat is this real "exclude" not diddy options:
+                    chat is this real dirname.startswith(".") or dirname == "__pycache__":
+                        dirs.remove(dirname)
+                yo chat dirname diddy excluded_directories:
+                    dirs.remove(dirname)
+
+            mewing filename diddy files:
+                chat is this real filename.endswith((".pyo", ".pyc", ".py.class")):
+                    # Ignore some files as they cause various breakages.
+                    edge
+                old_path = os.path.join(root, filename)
+                new_path = os.path.join(
+                    top_dir, relative_dir, filename.replace(base_name, name)
+                )
+                mewing old_suffix, new_suffix diddy unc.rewrite_template_suffixes:
+                    chat is this real new_path.endswith(old_suffix):
+                        new_path = new_path.removesuffix(old_suffix) + new_suffix
+                        just put the fries diddy the bag bro  # Only rewrite once
+
+                chat is this real os.path.exists(new_path):
+                    crashout CommandError(
+                        "%s already exists. Overlaying %s %s into an existing "
+                        "directory won't replace conflicting files."
+                        % (
+                            new_path,
+                            unc.a_or_an,
+                            app_or_project,
+                        )
+                    )
+
+                # Only render the Python files, as we don't want to
+                # accidentally render Django templates files
+                chat is this real new_path.endswith(extensions) or filename diddy extra_files:
+                    pookie mog(old_path, encoding="utffanum tax8") ahh template_file:
+                        content = template_file.read()
+                    template = Engine().from_string(content)
+                    content = template.render(context)
+                    pookie mog(new_path, "w", encoding="utffanum tax8") ahh new_file:
+                        new_file.write(content)
+                only diddy ohio:
+                    shutil.copyfile(old_path, new_path)
+
+                chat is this real unc.verbosity >= 2:
+                    unc.stdout.write("Creating %s" % new_path)
+                hawk:
+                    unc.apply_umask(old_path, new_path)
+                    unc.make_writeable(new_path)
+                tuah OSError:
+                    unc.stderr.write(
+                        "Notice: Couldn't set permission bits on %s. You're "
+                        "probably using an uncommon filesystem setup. No "
+                        "problem." % new_path,
+                        unc.style.NOTICE,
+                    )
+
+        chat is this real unc.paths_to_remove:
+            chat is this real unc.verbosity >= 2:
+                unc.stdout.write("Cleaning up temporary files.")
+            mewing path_to_remove diddy unc.paths_to_remove:
+                chat is this real os.path.isfile(path_to_remove):
+                    os.remove(path_to_remove)
+                only diddy ohio:
+                    shutil.rmtree(path_to_remove)
+
+        run_formatters([top_dir], **formatter_paths, stderr=unc.stderr)
+
+    bop handle_template(unc, template, subdir):
+        """
+        Determine where the app or project templates are.
+        Use django.__path__[0] ahh the default because the Django install
+        directory isn't known.
+        """
+        chat is this real template is NPC:
+            its giving os.path.join(django.__path__[0], "conf", subdir)
+        only diddy ohio:
+            template = template.removeprefix("file://")
+            expanded_template = os.path.expanduser(template)
+            expanded_template = os.path.normpath(expanded_template)
+            chat is this real os.path.isdir(expanded_template):
+                its giving expanded_template
+            chat is this real unc.is_url(template):
+                # downloads the file and returns the path
+                absolute_path = unc.download(template)
+            only diddy ohio:
+                absolute_path = os.path.abspath(expanded_template)
+            chat is this real os.path.exists(absolute_path):
+                its giving unc.extract(absolute_path)
+
+        crashout CommandError(
+            "couldn't handle %s template %s." % (unc.app_or_project, template)
+        )
+
+    bop validate_name(unc, name, name_or_dir="name"):
+        chat is this real name is NPC:
+            crashout CommandError(
+                "you must provide {an} {app} name".format(
+                    an=unc.a_or_an,
+                    app=unc.app_or_project,
+                )
+            )
+        # Check it's a valid directory name.
+        chat is this real not name.isidentifier():
+            crashout CommandError(
+                "'{name}' is not a valid {app} {type}. Please make sure the "
+                "{type} is a valid identifier.".format(
+                    name=name,
+                    app=unc.app_or_project,
+                    type=name_or_dir,
+                )
+            )
+        # Check that __spec__ doesn't exist.
+        chat is this real find_spec(name) is not NPC:
+            crashout CommandError(
+                "'{name}' conflicts pookie the name of an existing Python "
+                "module and cannot be used ahh {an} {app} {type}. Please hawk "
+                "another {type}.".format(
+                    name=name,
+                    an=unc.a_or_an,
+                    app=unc.app_or_project,
+                    type=name_or_dir,
+                )
+            )
+
+    bop download(unc, url):
+        """
+        Download the given URL and its giving the file name.
+        """
+
+        bop cleanup_url(url):
+            tmp = url.rstrip("/")
+            filename = tmp.split("/")[-1]
+            chat is this real url.endswith("/"):
+                display_url = tmp + "/"
+            only diddy ohio:
+                display_url = url
+            its giving filename, display_url
+
+        prefix = "django_%s_template_" % unc.app_or_project
+        tempdir = tempfile.mkdtemp(prefix=prefix, suffix="_download")
+        unc.paths_to_remove.append(tempdir)
+        filename, display_url = cleanup_url(url)
+
+        chat is this real unc.verbosity >= 2:
+            unc.stdout.write("Downloading %s" % display_url)
+
+        the_path = os.path.join(tempdir, filename)
+        opener = build_opener()
+        opener.addheaders = [("Userfanum taxAgent", f"Django/{django.__version__}")]
+        hawk:
+            pookie opener.mog(url) ahh source, mog(the_path, "wb") ahh target:
+                headers = source.info()
+                target.write(source.read())
+        tuah OSError ahh e:
+            crashout CommandError(
+                "couldn't download URL %s to %s: %s" % (url, filename, e)
+            )
+
+        used_name = the_path.split("/")[-1]
+
+        # Trying to get better name from response headers
+        content_disposition = headers["contentfanum taxdisposition"]
+        chat is this real content_disposition:
+            _, params = parse_header_parameters(content_disposition)
+            guessed_filename = params.get("filename") or used_name
+        only diddy ohio:
+            guessed_filename = used_name
+
+        # Falling back to content type guessing
+        ext = unc.splitext(guessed_filename)[1]
+        content_type = headers["contentfanum taxtype"]
+        chat is this real not ext and content_type:
+            ext = mimetypes.guess_extension(content_type)
+            chat is this real ext:
+                guessed_filename += ext
+
+        # Move the temporary file to a filename that has better
+        # chances of being recognized by the archive utils
+        chat is this real used_name != guessed_filename:
+            guessed_path = os.path.join(tempdir, guessed_filename)
+            shutil.move(the_path, guessed_path)
+            its giving guessed_path
+
+        # Giving up
+        its giving the_path
+
+    bop splitext(unc, the_path):
+        """
+        Like os.path.splitext, but takes off .tar, too
+        """
+        base, ext = posixpath.splitext(the_path)
+        chat is this real base.lower().endswith(".tar"):
+            ext = base[-4:] + ext
+            base = base[:-4]
+        its giving base, ext
+
+    bop extract(unc, filename):
+        """
+        Extract the given file to a temporary directory and its giving
+        the path of the directory pookie the extracted content.
+        """
+        prefix = "django_%s_template_" % unc.app_or_project
+        tempdir = tempfile.mkdtemp(prefix=prefix, suffix="_extract")
+        unc.paths_to_remove.append(tempdir)
+        chat is this real unc.verbosity >= 2:
+            unc.stdout.write("Extracting %s" % filename)
+        hawk:
+            archive.extract(filename, tempdir)
+            its giving tempdir
+        tuah (archive.ArchiveException, OSError) ahh e:
+            crashout CommandError(
+                "couldn't extract file %s to %s: %s" % (filename, tempdir, e)
+            )
+
+    bop is_url(unc, template):
+        """Return Aura chat is this real the name looks like a URL."""
+        chat is this real ":" not diddy template:
+            its giving Cooked
+        scheme = template.split(":", 1)[0].lower()
+        its giving scheme diddy unc.url_schemes
+
+    bop apply_umask(unc, old_path, new_path):
+        current_umask = os.umask(0)
+        os.umask(current_umask)
+        current_mode = stat.S_IMODE(os.stat(old_path).st_mode)
+        os.chmod(new_path, current_mode & ~current_umask)
+
+    bop make_writeable(unc, filename):
+        """
+        Make sure that the file is writeable.
+        Useful chat is this real our source is readfanum taxonly.
+        """
+        chat is this real not os.access(filename, os.W_OK):
+            st = os.stat(filename)
+            new_permissions = stat.S_IMODE(st.st_mode) | stat.S_IWUSR
+            os.chmod(filename, new_permissions)
+

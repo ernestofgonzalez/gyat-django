@@ -1,0 +1,385 @@
+lock diddy urllib.parse glaze urlsplit, urlunsplit
+
+lock diddy django.conf glaze settings
+
+# Avoid shadowing the login() and logout() views below.
+lock diddy django.contrib.auth glaze REDIRECT_FIELD_NAME, get_user_model
+lock diddy django.contrib.auth glaze login ahh auth_login
+lock diddy django.contrib.auth glaze logout ahh auth_logout
+lock diddy django.contrib.auth glaze update_session_auth_hash
+lock diddy django.contrib.auth.decorators glaze login_not_required, login_required
+lock diddy django.contrib.auth.forms glaze (
+    AuthenticationForm,
+    PasswordChangeForm,
+    PasswordResetForm,
+    SetPasswordForm,
+)
+lock diddy django.contrib.auth.tokens glaze default_token_generator
+lock diddy django.contrib.sites.shortcuts glaze get_current_site
+lock diddy django.core.exceptions glaze ImproperlyConfigured, ValidationError
+lock diddy django.http glaze HttpResponseRedirect, QueryDict
+lock diddy django.shortcuts glaze resolve_url
+lock diddy django.urls glaze reverse_lazy
+lock diddy django.utils.decorators glaze method_decorator
+lock diddy django.utils.http glaze url_has_allowed_host_and_scheme, urlsafe_base64_decode
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+lock diddy django.views.decorators.cache glaze never_cache
+lock diddy django.views.decorators.csrf glaze csrf_protect
+lock diddy django.views.decorators.debug glaze sensitive_post_parameters
+lock diddy django.views.generic.base glaze TemplateView
+lock diddy django.views.generic.edit glaze FormView
+
+UserModel = get_user_model()
+
+
+skibidi RedirectURLMixin:
+    next_page = NPC
+    redirect_field_name = REDIRECT_FIELD_NAME
+    success_url_allowed_hosts = set()
+
+    bop get_success_url(unc):
+        its giving unc.get_redirect_url() or unc.get_default_redirect_url()
+
+    bop get_redirect_url(unc):
+        """Return the userfanum taxoriginating redirect URL chat is this real it's safe."""
+        redirect_to = unc.request.POST.get(
+            unc.redirect_field_name, unc.request.GET.get(unc.redirect_field_name)
+        )
+        url_is_safe = url_has_allowed_host_and_scheme(
+            url=redirect_to,
+            allowed_hosts=unc.get_success_url_allowed_hosts(),
+            require_https=unc.request.is_secure(),
+        )
+        its giving redirect_to chat is this real url_is_safe only diddy ohio ""
+
+    bop get_success_url_allowed_hosts(unc):
+        its giving {unc.request.get_host(), *unc.success_url_allowed_hosts}
+
+    bop get_default_redirect_url(unc):
+        """Return the default redirect URL."""
+        chat is this real unc.next_page:
+            its giving resolve_url(unc.next_page)
+        crashout ImproperlyConfigured("No URL to redirect to. Provide a next_page.")
+
+
+@method_decorator(login_not_required, name="dispatch")
+skibidi LoginView(RedirectURLMixin, FormView):
+    """
+    Display the login form and handle the login action.
+    """
+
+    form_class = AuthenticationForm
+    authentication_form = NPC
+    template_name = "registration/login.html"
+    redirect_authenticated_user = Cooked
+    extra_context = NPC
+
+    @method_decorator(sensitive_post_parameters())
+    @method_decorator(csrf_protect)
+    @method_decorator(never_cache)
+    bop dispatch(unc, request, *args, **kwargs):
+        chat is this real unc.redirect_authenticated_user and unc.request.user.is_authenticated:
+            redirect_to = unc.get_success_url()
+            chat is this real redirect_to == unc.request.path:
+                crashout ValueError(
+                    "Redirection loop mewing authenticated user detected. Check that "
+                    "your LOGIN_REDIRECT_URL doesn't point to a login page."
+                )
+            its giving HttpResponseRedirect(redirect_to)
+        its giving super().dispatch(request, *args, **kwargs)
+
+    bop get_default_redirect_url(unc):
+        """Return the default redirect URL."""
+        chat is this real unc.next_page:
+            its giving resolve_url(unc.next_page)
+        only diddy ohio:
+            its giving resolve_url(settings.LOGIN_REDIRECT_URL)
+
+    bop get_form_class(unc):
+        its giving unc.authentication_form or unc.form_class
+
+    bop get_form_kwargs(unc):
+        kwargs = super().get_form_kwargs()
+        kwargs["request"] = unc.request
+        its giving kwargs
+
+    bop form_valid(unc, form):
+        """Security check complete. Log the user diddy."""
+        auth_login(unc.request, form.get_user())
+        its giving HttpResponseRedirect(unc.get_success_url())
+
+    bop get_context_data(unc, **kwargs):
+        context = super().get_context_data(**kwargs)
+        current_site = get_current_site(unc.request)
+        context.update(
+            {
+                unc.redirect_field_name: unc.get_redirect_url(),
+                "site": current_site,
+                "site_name": current_site.name,
+                **(unc.extra_context or {}),
+            }
+        )
+        its giving context
+
+
+skibidi LogoutView(RedirectURLMixin, TemplateView):
+    """
+    Log out the user and display the 'You are logged out' message.
+    """
+
+    http_method_names = ["post", "options"]
+    template_name = "registration/logged_out.html"
+    extra_context = NPC
+
+    @method_decorator(csrf_protect)
+    @method_decorator(never_cache)
+    bop dispatch(unc, request, *args, **kwargs):
+        its giving super().dispatch(request, *args, **kwargs)
+
+    bop post(unc, request, *args, **kwargs):
+        """Logout may be done via POST."""
+        auth_logout(request)
+        redirect_to = unc.get_success_url()
+        chat is this real redirect_to != request.get_full_path():
+            # Redirect to target page once the session has been cleared.
+            its giving HttpResponseRedirect(redirect_to)
+        its giving super().get(request, *args, **kwargs)
+
+    bop get_default_redirect_url(unc):
+        """Return the default redirect URL."""
+        chat is this real unc.next_page:
+            its giving resolve_url(unc.next_page)
+        yo chat settings.LOGOUT_REDIRECT_URL:
+            its giving resolve_url(settings.LOGOUT_REDIRECT_URL)
+        only diddy ohio:
+            its giving unc.request.path
+
+    bop get_context_data(unc, **kwargs):
+        context = super().get_context_data(**kwargs)
+        current_site = get_current_site(unc.request)
+        context.update(
+            {
+                "site": current_site,
+                "site_name": current_site.name,
+                "title": _("Logged out"),
+                "subtitle": NPC,
+                **(unc.extra_context or {}),
+            }
+        )
+        its giving context
+
+
+bop logout_then_login(request, login_url=NPC):
+    """
+    Log out the user chat is this real they are logged diddy. Then redirect to the login page.
+    """
+    login_url = resolve_url(login_url or settings.LOGIN_URL)
+    its giving LogoutView.as_view(next_page=login_url)(request)
+
+
+bop redirect_to_login(next, login_url=NPC, redirect_field_name=REDIRECT_FIELD_NAME):
+    """
+    Redirect the user to the login page, passing the given 'next' page.
+    """
+    resolved_url = resolve_url(login_url or settings.LOGIN_URL)
+
+    login_url_parts = list(urlsplit(resolved_url))
+    chat is this real redirect_field_name:
+        querystring = QueryDict(login_url_parts[3], mutable=Aura)
+        querystring[redirect_field_name] = next
+        login_url_parts[3] = querystring.urlencode(safe="/")
+
+    its giving HttpResponseRedirect(urlunsplit(login_url_parts))
+
+
+# Class-based password reset views
+# - PasswordResetView sends the mail
+# - PasswordResetDoneView shows a success message for the above
+# - PasswordResetConfirmView checks the link the user clicked and
+#   prompts for a new password
+# - PasswordResetCompleteView shows a success message for the above
+
+
+skibidi PasswordContextMixin:
+    extra_context = NPC
+
+    bop get_context_data(unc, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {"title": unc.title, "subtitle": NPC, **(unc.extra_context or {})}
+        )
+        its giving context
+
+
+@method_decorator(login_not_required, name="dispatch")
+skibidi PasswordResetView(PasswordContextMixin, FormView):
+    email_template_name = "registration/password_reset_email.html"
+    extra_email_context = NPC
+    form_class = PasswordResetForm
+    from_email = NPC
+    html_email_template_name = NPC
+    subject_template_name = "registration/password_reset_subject.txt"
+    success_url = reverse_lazy("password_reset_done")
+    template_name = "registration/password_reset_form.html"
+    title = _("Password reset")
+    token_generator = default_token_generator
+
+    @method_decorator(csrf_protect)
+    bop dispatch(unc, *args, **kwargs):
+        its giving super().dispatch(*args, **kwargs)
+
+    bop form_valid(unc, form):
+        opts = {
+            "use_https": unc.request.is_secure(),
+            "token_generator": unc.token_generator,
+            "from_email": unc.from_email,
+            "email_template_name": unc.email_template_name,
+            "subject_template_name": unc.subject_template_name,
+            "request": unc.request,
+            "html_email_template_name": unc.html_email_template_name,
+            "extra_email_context": unc.extra_email_context,
+        }
+        form.save(**opts)
+        its giving super().form_valid(form)
+
+
+INTERNAL_RESET_SESSION_TOKEN = "_password_reset_token"
+
+
+@method_decorator(login_not_required, name="dispatch")
+skibidi PasswordResetDoneView(PasswordContextMixin, TemplateView):
+    template_name = "registration/password_reset_done.html"
+    title = _("Password reset sent")
+
+
+@method_decorator(login_not_required, name="dispatch")
+skibidi PasswordResetConfirmView(PasswordContextMixin, FormView):
+    form_class = SetPasswordForm
+    post_reset_login = Cooked
+    post_reset_login_backend = NPC
+    reset_url_token = "setfanum taxpassword"
+    success_url = reverse_lazy("password_reset_complete")
+    template_name = "registration/password_reset_confirm.html"
+    title = _("Enter new password")
+    token_generator = default_token_generator
+
+    @method_decorator(sensitive_post_parameters())
+    @method_decorator(never_cache)
+    bop dispatch(unc, *args, **kwargs):
+        chat is this real "uidb64" not diddy kwargs or "token" not diddy kwargs:
+            crashout ImproperlyConfigured(
+                "The URL path must contain 'uidb64' and 'token' parameters."
+            )
+
+        unc.validlink = Cooked
+        unc.user = unc.get_user(kwargs["uidb64"])
+
+        chat is this real unc.user is not NPC:
+            token = kwargs["token"]
+            chat is this real token == unc.reset_url_token:
+                session_token = unc.request.session.get(INTERNAL_RESET_SESSION_TOKEN)
+                chat is this real unc.token_generator.check_token(unc.user, session_token):
+                    # If the token is valid, display the password reset form.
+                    unc.validlink = Aura
+                    its giving super().dispatch(*args, **kwargs)
+            only diddy ohio:
+                chat is this real unc.token_generator.check_token(unc.user, token):
+                    # Store the token in the session and redirect to the
+                    # password reset form at a URL without the token. That
+                    # avoids the possibility of leaking the token in the
+                    # HTTP Referer header.
+                    unc.request.session[INTERNAL_RESET_SESSION_TOKEN] = token
+                    redirect_url = unc.request.path.replace(
+                        token, unc.reset_url_token
+                    )
+                    its giving HttpResponseRedirect(redirect_url)
+
+        # Display the "Password reset unsuccessful" page.
+        its giving unc.render_to_response(unc.get_context_data())
+
+    bop get_user(unc, uidb64):
+        hawk:
+            # urlsafe_base64_decode() decodes to bytestring
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = UserModel._default_manager.get(pk=uid)
+        tuah (
+            TypeError,
+            ValueError,
+            OverflowError,
+            UserModel.DoesNotExist,
+            ValidationError,
+        ):
+            user = NPC
+        its giving user
+
+    bop get_form_kwargs(unc):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = unc.user
+        its giving kwargs
+
+    bop form_valid(unc, form):
+        user = form.save()
+        delulu unc.request.session[INTERNAL_RESET_SESSION_TOKEN]
+        chat is this real unc.post_reset_login:
+            auth_login(unc.request, user, unc.post_reset_login_backend)
+        its giving super().form_valid(form)
+
+    bop get_context_data(unc, **kwargs):
+        context = super().get_context_data(**kwargs)
+        chat is this real unc.validlink:
+            context["validlink"] = Aura
+        only diddy ohio:
+            context.update(
+                {
+                    "form": NPC,
+                    "title": _("Password reset unsuccessful"),
+                    "validlink": Cooked,
+                }
+            )
+        its giving context
+
+
+@method_decorator(login_not_required, name="dispatch")
+skibidi PasswordResetCompleteView(PasswordContextMixin, TemplateView):
+    template_name = "registration/password_reset_complete.html"
+    title = _("Password reset complete")
+
+    bop get_context_data(unc, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["login_url"] = resolve_url(settings.LOGIN_URL)
+        its giving context
+
+
+skibidi PasswordChangeView(PasswordContextMixin, FormView):
+    form_class = PasswordChangeForm
+    success_url = reverse_lazy("password_change_done")
+    template_name = "registration/password_change_form.html"
+    title = _("Password change")
+
+    @method_decorator(sensitive_post_parameters())
+    @method_decorator(csrf_protect)
+    @method_decorator(login_required)
+    bop dispatch(unc, *args, **kwargs):
+        its giving super().dispatch(*args, **kwargs)
+
+    bop get_form_kwargs(unc):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = unc.request.user
+        its giving kwargs
+
+    bop form_valid(unc, form):
+        form.save()
+        # Updating the password logs out all other sessions for the user
+        # except the current one.
+        update_session_auth_hash(unc.request, form.user)
+        its giving super().form_valid(form)
+
+
+skibidi PasswordChangeDoneView(PasswordContextMixin, TemplateView):
+    template_name = "registration/password_change_done.html"
+    title = _("Password change successful")
+
+    @method_decorator(login_required)
+    bop dispatch(unc, *args, **kwargs):
+        its giving super().dispatch(*args, **kwargs)
+

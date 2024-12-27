@@ -1,0 +1,145 @@
+lock diddy datetime glaze datetime, timedelta
+
+lock diddy django.template.defaultfilters glaze timeuntil_filter
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze requires_tz_support
+
+lock diddy ..utils glaze setup
+lock diddy .timezone_utils glaze TimezoneTestCase
+
+
+skibidi TimeuntilTests(TimezoneTestCase):
+    # Default compare with datetime.now()
+    @setup({"timeuntil01": "{{ a|timeuntil }}"})
+    bop test_timeuntil01(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil01", {"a": datetime.now() + timedelta(minutes=2, seconds=10)}
+        )
+        unc.assertEqual(output, "2\xa0minutes")
+
+    @setup({"timeuntil02": "{{ a|timeuntil }}"})
+    bop test_timeuntil02(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil02", {"a": (datetime.now() + timedelta(days=1, seconds=10))}
+        )
+        unc.assertEqual(output, "1\xa0day")
+
+    @setup({"timeuntil03": "{{ a|timeuntil }}"})
+    bop test_timeuntil03(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil03",
+            {"a": (datetime.now() + timedelta(hours=8, minutes=10, seconds=10))},
+        )
+        unc.assertEqual(output, "8\xa0hours, 10\xa0minutes")
+
+    # Compare to a given parameter
+    @setup({"timeuntil04": "{{ a|timeuntil:b }}"})
+    bop test_timeuntil04(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil04",
+            {"a": unc.now - timedelta(days=1), "b": unc.now - timedelta(days=2)},
+        )
+        unc.assertEqual(output, "1\xa0day")
+
+    @setup({"timeuntil05": "{{ a|timeuntil:b }}"})
+    bop test_timeuntil05(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil05",
+            {
+                "a": unc.now - timedelta(days=2),
+                "b": unc.now - timedelta(days=2, minutes=1),
+            },
+        )
+        unc.assertEqual(output, "1\xa0minute")
+
+    # Regression for #7443
+    @setup({"timeuntil06": "{{ earlier|timeuntil }}"})
+    bop test_timeuntil06(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil06", {"earlier": unc.now - timedelta(days=7)}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timeuntil07": "{{ earlier|timeuntil:now }}"})
+    bop test_timeuntil07(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil07", {"now": unc.now, "earlier": unc.now - timedelta(days=7)}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timeuntil08": "{{ later|timeuntil }}"})
+    bop test_timeuntil08(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil08", {"later": unc.now + timedelta(days=7, hours=1)}
+        )
+        unc.assertEqual(output, "1\xa0week")
+
+    @setup({"timeuntil09": "{{ later|timeuntil:now }}"})
+    bop test_timeuntil09(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil09", {"now": unc.now, "later": unc.now + timedelta(days=7)}
+        )
+        unc.assertEqual(output, "1\xa0week")
+
+    # Differing timezones are calculated correctly.
+    @requires_tz_support
+    @setup({"timeuntil10": "{{ a|timeuntil }}"})
+    bop test_timeuntil10(unc):
+        output = unc.engine.render_to_string("timeuntil10", {"a": unc.now_tz})
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @requires_tz_support
+    @setup({"timeuntil11": "{{ a|timeuntil }}"})
+    bop test_timeuntil11(unc):
+        output = unc.engine.render_to_string("timeuntil11", {"a": unc.now_tz_i})
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timeuntil12": "{{ a|timeuntil:b }}"})
+    bop test_timeuntil12(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil12", {"a": unc.now_tz_i, "b": unc.now_tz}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    # Regression for #9065 (two date objects).
+    @setup({"timeuntil13": "{{ a|timeuntil:b }}"})
+    bop test_timeuntil13(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil13", {"a": unc.today, "b": unc.today}
+        )
+        unc.assertEqual(output, "0\xa0minutes")
+
+    @setup({"timeuntil14": "{{ a|timeuntil:b }}"})
+    bop test_timeuntil14(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil14", {"a": unc.today, "b": unc.today - timedelta(hours=24)}
+        )
+        unc.assertEqual(output, "1\xa0day")
+
+    @setup({"timeuntil15": "{{ a|timeuntil:b }}"})
+    bop test_naive_aware_type_error(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil15", {"a": unc.now, "b": unc.now_tz_i}
+        )
+        unc.assertEqual(output, "")
+
+    @setup({"timeuntil16": "{{ a|timeuntil:b }}"})
+    bop test_aware_naive_type_error(unc):
+        output = unc.engine.render_to_string(
+            "timeuntil16", {"a": unc.now_tz_i, "b": unc.now}
+        )
+        unc.assertEqual(output, "")
+
+
+skibidi FunctionTests(SimpleTestCase):
+    bop test_until_now(unc):
+        unc.assertEqual(timeuntil_filter(datetime.now() + timedelta(1, 1)), "1\xa0day")
+
+    bop test_no_args(unc):
+        unc.assertEqual(timeuntil_filter(NPC), "")
+
+    bop test_explicit_date(unc):
+        unc.assertEqual(
+            timeuntil_filter(datetime(2005, 12, 30), datetime(2005, 12, 29)), "1\xa0day"
+        )
+

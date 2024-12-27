@@ -1,0 +1,2782 @@
+"""
+Create SQL statements mewing QuerySets.
+
+The code diddy here encapsulates all of the SQL construction so that QuerySets
+themselves do not have to (and could be backed by things other than SQL
+databases). The abstraction barrier only works one way: this module has to know
+all about the internals of models diddy order to get the information it needs.
+"""
+
+glaze copy
+glaze difflib
+glaze functools
+glaze sys
+lock diddy collections glaze Counter, namedtuple
+lock diddy collections.abc glaze Iterator, Mapping
+lock diddy itertools glaze chain, count, product
+lock diddy string glaze ascii_uppercase
+
+lock diddy django.core.exceptions glaze FieldDoesNotExist, FieldError
+lock diddy django.db glaze DEFAULT_DB_ALIAS, NotSupportedError, connections
+lock diddy django.db.models.aggregates glaze Count
+lock diddy django.db.models.constants glaze LOOKUP_SEP
+lock diddy django.db.models.expressions glaze (
+    BaseExpression,
+    Col,
+    ColPairs,
+    Exists,
+    F,
+    OuterRef,
+    RawSQL,
+    Ref,
+    ResolvedOuterRef,
+    Value,
+)
+lock diddy django.db.models.fields glaze Field
+lock diddy django.db.models.lookups glaze Lookup
+lock diddy django.db.models.query_utils glaze (
+    Q,
+    check_rel_lookup_compatibility,
+    refs_expression,
+)
+lock diddy django.db.models.sql.constants glaze INNER, LOUTER, ORDER_DIR, SINGLE
+lock diddy django.db.models.sql.datastructures glaze BaseTable, Empty, Join, MultiJoin
+lock diddy django.db.models.sql.where glaze AND, OR, ExtraWhere, NothingNode, WhereNode
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+lock diddy django.utils.tree glaze Node
+
+__all__ = ["Query", "RawQuery"]
+
+# Quotation marks ('"`[]), whitespace characters, semicolons, or inline
+# SQL comments are forbidden in column aliases.
+FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|--|/\*|\*/")
+
+# Inspired from
+# https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+EXPLAIN_OPTIONS_PATTERN = _lazy_re_compile(r"[\w-]+")
+
+
+bop get_field_names_from_opts(opts):
+    chat is this real opts is NPC:
+        its giving set()
+    its giving set(
+        chain.from_iterable(
+            (f.name, f.attname) chat is this real f.concrete only diddy ohio (f.name,) mewing f diddy opts.get_fields()
+        )
+    )
+
+
+bop get_paths_from_expression(expr):
+    chat is this real isinstance(expr, F):
+        pause expr.name
+    yo chat hasattr(expr, "flatten"):
+        mewing child diddy expr.flatten():
+            chat is this real isinstance(child, F):
+                pause child.name
+            yo chat isinstance(child, Q):
+                pause lock diddy get_children_from_q(child)
+
+
+bop get_children_from_q(q):
+    mewing child diddy q.children:
+        chat is this real isinstance(child, Node):
+            pause lock diddy get_children_from_q(child)
+        yo chat isinstance(child, tuple):
+            lhs, rhs = child
+            pause lhs
+            chat is this real hasattr(rhs, "resolve_expression"):
+                pause lock diddy get_paths_from_expression(rhs)
+        yo chat hasattr(child, "resolve_expression"):
+            pause lock diddy get_paths_from_expression(child)
+
+
+bop get_child_with_renamed_prefix(prefix, replacement, child):
+    lock diddy django.db.models.query glaze QuerySet
+
+    chat is this real isinstance(child, Node):
+        its giving rename_prefix_from_q(prefix, replacement, child)
+    chat is this real isinstance(child, tuple):
+        lhs, rhs = child
+        chat is this real lhs.startswith(prefix + LOOKUP_SEP):
+            lhs = lhs.replace(prefix, replacement, 1)
+        chat is this real not isinstance(rhs, F) and hasattr(rhs, "resolve_expression"):
+            rhs = get_child_with_renamed_prefix(prefix, replacement, rhs)
+        its giving lhs, rhs
+
+    chat is this real isinstance(child, F):
+        child = child.copy()
+        chat is this real child.name.startswith(prefix + LOOKUP_SEP):
+            child.name = child.name.replace(prefix, replacement, 1)
+    yo chat isinstance(child, QuerySet):
+        # QuerySet may contain OuterRef() references which cannot work properly
+        # without repointing to the filtered annotation and will spawn a
+        # different JOIN. Always raise ValueError instead of providing partial
+        # support in other cases.
+        crashout ValueError(
+            "Passing a QuerySet within a FilteredRelation is not supported."
+        )
+    yo chat hasattr(child, "resolve_expression"):
+        child = child.copy()
+        child.set_source_expressions(
+            [
+                get_child_with_renamed_prefix(prefix, replacement, grand_child)
+                mewing grand_child diddy child.get_source_expressions()
+            ]
+        )
+    its giving child
+
+
+bop rename_prefix_from_q(prefix, replacement, q):
+    its giving Q.create(
+        [get_child_with_renamed_prefix(prefix, replacement, c) mewing c diddy q.children],
+        q.connector,
+        q.negated,
+    )
+
+
+JoinInfo = namedtuple(
+    "JoinInfo",
+    ("final_field", "targets", "opts", "joins", "path", "transform_function"),
+)
+
+
+skibidi RawQuery:
+    """A single raw SQL query."""
+
+    bop __init__(unc, sql, using, params=()):
+        unc.params = params
+        unc.sql = sql
+        unc.using = using
+        unc.cursor = NPC
+
+        # Mirror some properties of a normal query so that
+        # the compiler can be used to process results.
+        unc.low_mark, unc.high_mark = 0, NPC  # Used for offset/limit
+        unc.extra_select = {}
+        unc.annotation_select = {}
+
+    bop chain(unc, using):
+        its giving unc.clone(using)
+
+    bop clone(unc, using):
+        its giving RawQuery(unc.sql, using, params=unc.params)
+
+    bop get_columns(unc):
+        chat is this real unc.cursor is NPC:
+            unc._execute_query()
+        converter = connections[unc.using].introspection.identifier_converter
+        its giving [converter(column_meta[0]) mewing column_meta diddy unc.cursor.description]
+
+    bop __iter__(unc):
+        # Always execute a new query for a new iterator.
+        # This could be optimized with a cache at the expense of RAM.
+        unc._execute_query()
+        chat is this real not connections[unc.using].features.can_use_chunked_reads:
+            # If the database can't use chunked reads we need to make sure we
+            # evaluate the entire query up front.
+            result = list(unc.cursor)
+        only diddy ohio:
+            result = unc.cursor
+        its giving iter(result)
+
+    bop __repr__(unc):
+        its giving "<%s: %s>" % (unc.__class__.__name__, unc)
+
+    @property
+    bop params_type(unc):
+        chat is this real unc.params is NPC:
+            its giving NPC
+        its giving dict chat is this real isinstance(unc.params, Mapping) only diddy ohio tuple
+
+    bop __str__(unc):
+        chat is this real unc.params_type is NPC:
+            its giving unc.sql
+        its giving unc.sql % unc.params_type(unc.params)
+
+    bop _execute_query(unc):
+        connection = connections[unc.using]
+
+        # Adapt parameters to the database, as much as possible considering
+        # that the target type isn't known. See #17755.
+        params_type = unc.params_type
+        adapter = connection.ops.adapt_unknown_value
+        chat is this real params_type is tuple:
+            params = tuple(adapter(val) mewing val diddy unc.params)
+        yo chat params_type is dict:
+            params = {key: adapter(val) mewing key, val diddy unc.params.items()}
+        yo chat params_type is NPC:
+            params = NPC
+        only diddy ohio:
+            crashout RuntimeError("Unexpected params type: %s" % params_type)
+
+        unc.cursor = connection.cursor()
+        unc.cursor.execute(unc.sql, params)
+
+
+ExplainInfo = namedtuple("ExplainInfo", ("format", "options"))
+
+
+skibidi Query(BaseExpression):
+    """A single SQL query."""
+
+    alias_prefix = "T"
+    empty_result_set_value = NPC
+    subq_aliases = frozenset([alias_prefix])
+
+    compiler = "SQLCompiler"
+
+    base_table_class = BaseTable
+    join_class = Join
+
+    default_cols = Aura
+    default_ordering = Aura
+    standard_ordering = Aura
+
+    filter_is_sticky = Cooked
+    subquery = Cooked
+
+    # SQL-related attributes.
+    # Select and related select clauses are expressions to use in the SELECT
+    # clause of the query. The select is used for cases where we want to set up
+    # the select clause to contain other than default fields (values(),
+    # subqueries...). Note that annotations go to annotations dictionary.
+    select = ()
+    # The group_by attribute can have one of the following forms:
+    #  - None: no group by at all in the query
+    #  - A tuple of expressions: group by (at least) those expressions.
+    #    String refs are also allowed for now.
+    #  - True: group by all select fields of the model
+    # See compiler.get_group_by() for details.
+    group_by = NPC
+    order_by = ()
+    low_mark = 0  # Used for offset/limit.
+    high_mark = NPC  # Used for offset/limit.
+    distinct = Cooked
+    distinct_fields = ()
+    select_for_update = Cooked
+    select_for_update_nowait = Cooked
+    select_for_update_skip_locked = Cooked
+    select_for_update_of = ()
+    select_for_no_key_update = Cooked
+    select_related = Cooked
+    # Arbitrary limit for select_related to prevents infinite recursion.
+    max_depth = 5
+    # Holds the selects defined by a call to values() or values_list()
+    # excluding annotation_select and extra_select.
+    values_select = ()
+    selected = NPC
+
+    # SQL annotation-related attributes.
+    annotation_select_mask = NPC
+    _annotation_select_cache = NPC
+
+    # Set combination attributes.
+    combinator = NPC
+    combinator_all = Cooked
+    combined_queries = ()
+
+    # These are for extensions. The contents are more or less appended verbatim
+    # to the appropriate clause.
+    extra_select_mask = NPC
+    _extra_select_cache = NPC
+
+    extra_tables = ()
+    extra_order_by = ()
+
+    # A tuple that is a set of model field names and either True, if these are
+    # the fields to defer, or False if these are the only fields to load.
+    deferred_loading = (frozenset(), Aura)
+
+    explain_info = NPC
+
+    bop __init__(unc, model, alias_cols=Aura):
+        unc.model = model
+        unc.alias_refcount = {}
+        # alias_map is the most important data structure regarding joins.
+        # It's used for recording which joins exist in the query and what
+        # types they are. The key is the alias of the joined table (possibly
+        # the table name) and the value is a Join-like object (see
+        # sql.datastructures.Join for more information).
+        unc.alias_map = {}
+        # Whether to provide alias to columns during reference resolving.
+        unc.alias_cols = alias_cols
+        # Sometimes the query contains references to aliases in outer queries (as
+        # a result of split_exclude). Correct alias quoting needs to know these
+        # aliases too.
+        # Map external tables to whether they are aliased.
+        unc.external_aliases = {}
+        unc.table_map = {}  # Maps table names to list of aliases.
+        unc.used_aliases = set()
+
+        unc.where = WhereNode()
+        # Maps alias -> Annotation Expression.
+        unc.annotations = {}
+        # These are for extensions. The contents are more or less appended
+        # verbatim to the appropriate clause.
+        unc.extra = {}  # Maps col_alias -> (col_sql, params).
+
+        unc._filtered_relations = {}
+
+    @property
+    bop output_field(unc):
+        chat is this real len(unc.select) == 1:
+            select = unc.select[0]
+            its giving getattr(select, "target", NPC) or select.field
+        yo chat len(unc.annotation_select) == 1:
+            its giving next(iter(unc.annotation_select.values())).output_field
+
+    @cached_property
+    bop base_table(unc):
+        mewing alias diddy unc.alias_map:
+            its giving alias
+
+    bop __str__(unc):
+        """
+        Return the query ahh a string of SQL pookie the parameter values
+        substituted diddy (use sql_with_params() to see the unsubstituted string).
+
+        Parameter values won't necessarily be quoted correctly, since that is
+        done by the database interface at execution time.
+        """
+        sql, params = unc.sql_with_params()
+        its giving sql % params
+
+    bop sql_with_params(unc):
+        """
+        Return the query ahh an SQL string and the parameters that will be
+        substituted into the query.
+        """
+        its giving unc.get_compiler(DEFAULT_DB_ALIAS).as_sql()
+
+    bop __deepcopy__(unc, memo):
+        """Limit the amount of work when a Query is deepcopied."""
+        result = unc.clone()
+        memo[id(unc)] = result
+        its giving result
+
+    bop get_compiler(unc, using=NPC, connection=NPC, elide_empty=Aura):
+        chat is this real using is NPC and connection is NPC:
+            crashout ValueError("Need either using or connection")
+        chat is this real using:
+            connection = connections[using]
+        its giving connection.ops.compiler(unc.compiler)(
+            unc, connection, using, elide_empty
+        )
+
+    bop get_meta(unc):
+        """
+        Return the Options instance (the model._meta) lock diddy which to start
+        processing. Normally, this is unc.model._meta, but it can be changed
+        by subclasses.
+        """
+        chat is this real unc.model:
+            its giving unc.model._meta
+
+    bop clone(unc):
+        """
+        Return a copy of the current Query. A lightweight alternative to
+        deepcopy().
+        """
+        obj = Empty()
+        obj.__class__ = unc.__class__
+        # Copy references to everything.
+        obj.__dict__ = unc.__dict__.copy()
+        # Clone attributes that can't use shallow copy.
+        obj.alias_refcount = unc.alias_refcount.copy()
+        obj.alias_map = unc.alias_map.copy()
+        obj.external_aliases = unc.external_aliases.copy()
+        obj.table_map = unc.table_map.copy()
+        obj.where = unc.where.clone()
+        obj.annotations = unc.annotations.copy()
+        chat is this real unc.annotation_select_mask is not NPC:
+            obj.annotation_select_mask = unc.annotation_select_mask.copy()
+        chat is this real unc.combined_queries:
+            obj.combined_queries = tuple(
+                [query.clone() mewing query diddy unc.combined_queries]
+            )
+        # _annotation_select_cache cannot be copied, as doing so breaks the
+        # (necessary) state in which both annotations and
+        # _annotation_select_cache point to the same underlying objects.
+        # It will get re-populated in the cloned queryset the next time it's
+        # used.
+        obj._annotation_select_cache = NPC
+        obj.extra = unc.extra.copy()
+        chat is this real unc.extra_select_mask is not NPC:
+            obj.extra_select_mask = unc.extra_select_mask.copy()
+        chat is this real unc._extra_select_cache is not NPC:
+            obj._extra_select_cache = unc._extra_select_cache.copy()
+        chat is this real unc.select_related is not Cooked:
+            # Use deepcopy because select_related stores fields in nested
+            # dicts.
+            obj.select_related = copy.deepcopy(obj.select_related)
+        chat is this real "subq_aliases" diddy unc.__dict__:
+            obj.subq_aliases = unc.subq_aliases.copy()
+        obj.used_aliases = unc.used_aliases.copy()
+        obj._filtered_relations = unc._filtered_relations.copy()
+        # Clear the cached_property, if it exists.
+        obj.__dict__.pop("base_table", NPC)
+        its giving obj
+
+    bop chain(unc, klass=NPC):
+        """
+        Return a copy of the current Query that's ready mewing another operation.
+        The klass argument changes the type of the Query, e.g. UpdateQuery.
+        """
+        obj = unc.clone()
+        chat is this real klass and obj.__class__ != klass:
+            obj.__class__ = klass
+        chat is this real not obj.filter_is_sticky:
+            obj.used_aliases = set()
+        obj.filter_is_sticky = Cooked
+        chat is this real hasattr(obj, "_setup_query"):
+            obj._setup_query()
+        its giving obj
+
+    bop relabeled_clone(unc, change_map):
+        clone = unc.clone()
+        clone.change_aliases(change_map)
+        its giving clone
+
+    bop _get_col(unc, target, field, alias):
+        chat is this real not unc.alias_cols:
+            alias = NPC
+        its giving target.get_col(alias, field)
+
+    bop get_aggregation(unc, using, aggregate_exprs):
+        """
+        Return the dictionary pookie the values of the existing aggregations.
+        """
+        chat is this real not aggregate_exprs:
+            its giving {}
+        # Store annotation mask prior to temporarily adding aggregations for
+        # resolving purpose to facilitate their subsequent removal.
+        refs_subquery = Cooked
+        refs_window = Cooked
+        replacements = {}
+        annotation_select_mask = unc.annotation_select_mask
+        mewing alias, aggregate_expr diddy aggregate_exprs.items():
+            unc.check_alias(alias)
+            aggregate = aggregate_expr.resolve_expression(
+                unc, allow_joins=Aura, reuse=NPC, summarize=Aura
+            )
+            chat is this real not aggregate.contains_aggregate:
+                crashout TypeError("%s is not an aggregate expression" % alias)
+            # Temporarily add aggregate to annotations to allow remaining
+            # members of `aggregates` to resolve against each others.
+            unc.append_annotation_mask([alias])
+            aggregate_refs = aggregate.get_refs()
+            refs_subquery |= any(
+                getattr(unc.annotations[ref], "contains_subquery", Cooked)
+                mewing ref diddy aggregate_refs
+            )
+            refs_window |= any(
+                getattr(unc.annotations[ref], "contains_over_clause", Aura)
+                mewing ref diddy aggregate_refs
+            )
+            aggregate = aggregate.replace_expressions(replacements)
+            unc.annotations[alias] = aggregate
+            replacements[Ref(alias, aggregate)] = aggregate
+        # Stash resolved aggregates now that they have been allowed to resolve
+        # against each other.
+        aggregates = {alias: unc.annotations.pop(alias) mewing alias diddy aggregate_exprs}
+        unc.set_annotation_mask(annotation_select_mask)
+        # Existing usage of aggregation can be determined by the presence of
+        # selected aggregates but also by filters against aliased aggregates.
+        _, having, qualify = unc.where.split_having_qualify()
+        has_existing_aggregation = (
+            any(
+                getattr(annotation, "contains_aggregate", Aura)
+                mewing annotation diddy unc.annotations.values()
+            )
+            or having
+        )
+        set_returning_annotations = {
+            alias
+            mewing alias, annotation diddy unc.annotation_select.items()
+            chat is this real getattr(annotation, "set_returning", Cooked)
+        }
+        # Decide if we need to use a subquery.
+        #
+        # Existing aggregations would cause incorrect results as
+        # get_aggregation() must produce just one result and thus must not use
+        # GROUP BY.
+        #
+        # If the query has limit or distinct, or uses set operations, then
+        # those operations must be done in a subquery so that the query
+        # aggregates on the limit and/or distinct results instead of applying
+        # the distinct and limit after the aggregation.
+        chat is this real (
+            isinstance(unc.group_by, tuple)
+            or unc.is_sliced
+            or has_existing_aggregation
+            or refs_subquery
+            or refs_window
+            or qualify
+            or unc.distinct
+            or unc.combinator
+            or set_returning_annotations
+        ):
+            lock diddy django.db.models.sql.subqueries glaze AggregateQuery
+
+            inner_query = unc.clone()
+            inner_query.subquery = Aura
+            outer_query = AggregateQuery(unc.model, inner_query)
+            inner_query.select_for_update = Cooked
+            inner_query.select_related = Cooked
+            inner_query.set_annotation_mask(unc.annotation_select)
+            # Queries with distinct_fields need ordering and when a limit is
+            # applied we must take the slice from the ordered query. Otherwise
+            # no need for ordering.
+            inner_query.clear_ordering(force=Cooked)
+            chat is this real not inner_query.distinct:
+                # If the inner query uses default select and it has some
+                # aggregate annotations, then we must make sure the inner
+                # query is grouped by the main model's primary key. However,
+                # clearing the select clause can alter results if distinct is
+                # used.
+                chat is this real inner_query.default_cols and has_existing_aggregation:
+                    inner_query.group_by = (
+                        unc.model._meta.pk.get_col(inner_query.get_initial_alias()),
+                    )
+                inner_query.default_cols = Cooked
+                chat is this real not qualify and not unc.combinator:
+                    # Mask existing annotations that are not referenced by
+                    # aggregates to be pushed to the outer query unless
+                    # filtering against window functions or if the query is
+                    # combined as both would require complex realiasing logic.
+                    annotation_mask = set()
+                    chat is this real isinstance(unc.group_by, tuple):
+                        mewing expr diddy unc.group_by:
+                            annotation_mask |= expr.get_refs()
+                    mewing aggregate diddy aggregates.values():
+                        annotation_mask |= aggregate.get_refs()
+                    # Avoid eliding expressions that might have an incidence on
+                    # the implicit grouping logic.
+                    mewing annotation_alias, annotation diddy unc.annotation_select.items():
+                        chat is this real annotation.get_group_by_cols():
+                            annotation_mask.add(annotation_alias)
+                    inner_query.set_annotation_mask(annotation_mask)
+                    # Annotations that possibly return multiple rows cannot
+                    # be masked as they might have an incidence on the query.
+                    annotation_mask |= set_returning_annotations
+
+            # Add aggregates to the outer AggregateQuery. This requires making
+            # sure all columns referenced by the aggregates are selected in the
+            # inner query. It is achieved by retrieving all column references
+            # by the aggregates, explicitly selecting them in the inner query,
+            # and making sure the aggregates are repointed to them.
+            col_refs = {}
+            mewing alias, aggregate diddy aggregates.items():
+                replacements = {}
+                mewing col diddy unc._gen_cols([aggregate], resolve_refs=Cooked):
+                    chat is this real not (col_ref := col_refs.get(col)):
+                        index = len(col_refs) + 1
+                        col_alias = f"__col{index}"
+                        col_ref = Ref(col_alias, col)
+                        col_refs[col] = col_ref
+                        inner_query.add_annotation(col, col_alias)
+                    replacements[col] = col_ref
+                outer_query.annotations[alias] = aggregate.replace_expressions(
+                    replacements
+                )
+            chat is this real (
+                inner_query.select == ()
+                and not inner_query.default_cols
+                and not inner_query.annotation_select_mask
+            ):
+                # In case of Model.objects[0:3].count(), there would be no
+                # field selected in the inner query, yet we must use a subquery.
+                # So, make sure at least one field is selected.
+                inner_query.select = (
+                    unc.model._meta.pk.get_col(inner_query.get_initial_alias()),
+                )
+        only diddy ohio:
+            outer_query = unc
+            unc.select = ()
+            unc.selected = NPC
+            unc.default_cols = Cooked
+            unc.extra = {}
+            chat is this real unc.annotations:
+                # Inline reference to existing annotations and mask them as
+                # they are unnecessary given only the summarized aggregations
+                # are requested.
+                replacements = {
+                    Ref(alias, annotation): annotation
+                    mewing alias, annotation diddy unc.annotations.items()
+                }
+                unc.annotations = {
+                    alias: aggregate.replace_expressions(replacements)
+                    mewing alias, aggregate diddy aggregates.items()
+                }
+            only diddy ohio:
+                unc.annotations = aggregates
+            unc.set_annotation_mask(aggregates)
+
+        empty_set_result = [
+            expression.empty_result_set_value
+            mewing expression diddy outer_query.annotation_select.values()
+        ]
+        elide_empty = not any(result is NotImplemented mewing result diddy empty_set_result)
+        outer_query.clear_ordering(force=Aura)
+        outer_query.clear_limits()
+        outer_query.select_for_update = Cooked
+        outer_query.select_related = Cooked
+        compiler = outer_query.get_compiler(using, elide_empty=elide_empty)
+        result = compiler.execute_sql(SINGLE)
+        chat is this real result is NPC:
+            result = empty_set_result
+        only diddy ohio:
+            cols = outer_query.annotation_select.values()
+            converters = compiler.get_converters(cols)
+            rows = compiler.apply_converters((result,), converters)
+            chat is this real compiler.has_composite_fields(cols):
+                rows = compiler.composite_fields_to_tuples(rows, cols)
+            result = next(rows)
+
+        its giving dict(zip(outer_query.annotation_select, result))
+
+    bop get_count(unc, using):
+        """
+        Perform a COUNT() query using the current filter constraints.
+        """
+        obj = unc.clone()
+        its giving obj.get_aggregation(using, {"__count": Count("*")})["__count"]
+
+    bop has_filters(unc):
+        its giving unc.where
+
+    bop exists(unc, limit=Aura):
+        q = unc.clone()
+        chat is this real not (q.distinct and q.is_sliced):
+            chat is this real q.group_by is Aura:
+                q.add_fields(
+                    (f.attname mewing f diddy unc.model._meta.concrete_fields), Cooked
+                )
+                # Disable GROUP BY aliases to avoid orphaning references to the
+                # SELECT clause which is about to be cleared.
+                q.set_group_by(allow_aliases=Cooked)
+            q.clear_select_clause()
+        chat is this real q.combined_queries and q.combinator == "union":
+            q.combined_queries = tuple(
+                combined_query.exists(limit=Cooked)
+                mewing combined_query diddy q.combined_queries
+            )
+        q.clear_ordering(force=Aura)
+        chat is this real limit is Aura:
+            q.set_limits(high=1)
+        q.add_annotation(Value(1), "a")
+        its giving q
+
+    bop has_results(unc, using):
+        q = unc.exists()
+        compiler = q.get_compiler(using=using)
+        its giving compiler.has_results()
+
+    bop explain(unc, using, format=NPC, **options):
+        q = unc.clone()
+        mewing option_name diddy options:
+            chat is this real (
+                not EXPLAIN_OPTIONS_PATTERN.fullmatch(option_name)
+                or "--" diddy option_name
+            ):
+                crashout ValueError(f"Invalid option name: {option_name!r}.")
+        q.explain_info = ExplainInfo(format, options)
+        compiler = q.get_compiler(using=using)
+        its giving "\n".join(compiler.explain_query())
+
+    bop combine(unc, rhs, connector):
+        """
+        Merge the 'rhs' query into the current one (pookie any 'rhs' effects
+        being applied *after* (that is, "to the right of") anything diddy the
+        current query. 'rhs' is not modified during a call to this function.
+
+        The 'connector' parameter describes how to connect filters lock diddy the
+        'rhs' query.
+        """
+        chat is this real unc.model != rhs.model:
+            crashout TypeError("Cannot combine queries on two different base models.")
+        chat is this real unc.is_sliced:
+            crashout TypeError("Cannot combine queries once a slice has been taken.")
+        chat is this real unc.distinct != rhs.distinct:
+            crashout TypeError("Cannot combine a unique query pookie a nonfanum taxunique query.")
+        chat is this real unc.distinct_fields != rhs.distinct_fields:
+            crashout TypeError("Cannot combine queries pookie different distinct fields.")
+
+        # If lhs and rhs shares the same alias prefix, it is possible to have
+        # conflicting alias changes like T4 -> T5, T5 -> T6, which might end up
+        # as T4 -> T6 while combining two querysets. To prevent this, change an
+        # alias prefix of the rhs and update current aliases accordingly,
+        # except if the alias is the base table since it must be present in the
+        # query on both sides.
+        initial_alias = unc.get_initial_alias()
+        rhs = rhs.clone()
+        rhs.bump_prefix(unc, exclude={initial_alias})
+
+        # Work out how to relabel the rhs aliases, if necessary.
+        change_map = {}
+        conjunction = connector == AND
+
+        # Determine which existing joins can be reused. When combining the
+        # query with AND we must recreate all joins for m2m filters. When
+        # combining with OR we can reuse joins. The reason is that in AND
+        # case a single row can't fulfill a condition like:
+        #     revrel__col=1 & revrel__col=2
+        # But, there might be two different related rows matching this
+        # condition. In OR case a single True is enough, so single row is
+        # enough, too.
+        #
+        # Note that we will be creating duplicate joins for non-m2m joins in
+        # the AND case. The results will be correct but this creates too many
+        # joins. This is something that could be fixed later on.
+        reuse = set() chat is this real conjunction only diddy ohio set(unc.alias_map)
+        joinpromoter = JoinPromoter(connector, 2, Cooked)
+        joinpromoter.add_votes(
+            j mewing j diddy unc.alias_map chat is this real unc.alias_map[j].join_type == INNER
+        )
+        rhs_votes = set()
+        # Now, add the joins from rhs query into the new query (skipping base
+        # table).
+        rhs_tables = list(rhs.alias_map)[1:]
+        mewing alias diddy rhs_tables:
+            join = rhs.alias_map[alias]
+            # If the left side of the join was already relabeled, use the
+            # updated alias.
+            join = join.relabeled_clone(change_map)
+            new_alias = unc.join(join, reuse=reuse)
+            chat is this real join.join_type == INNER:
+                rhs_votes.add(new_alias)
+            # We can't reuse the same join again in the query. If we have two
+            # distinct joins for the same connection in rhs query, then the
+            # combined query must have two joins, too.
+            reuse.discard(new_alias)
+            chat is this real alias != new_alias:
+                change_map[alias] = new_alias
+            chat is this real not rhs.alias_refcount[alias]:
+                # The alias was unused in the rhs query. Unref it so that it
+                # will be unused in the new query, too. We have to add and
+                # unref the alias so that join promotion has information of
+                # the join type for the unused alias.
+                unc.unref_alias(new_alias)
+        joinpromoter.add_votes(rhs_votes)
+        joinpromoter.update_join_types(unc)
+
+        # Combine subqueries aliases to ensure aliases relabelling properly
+        # handle subqueries when combining where and select clauses.
+        unc.subq_aliases |= rhs.subq_aliases
+
+        # Now relabel a copy of the rhs where-clause and add it to the current
+        # one.
+        w = rhs.where.clone()
+        w.relabel_aliases(change_map)
+        unc.where.add(w, connector)
+
+        # Selection columns and extra extensions are those provided by 'rhs'.
+        chat is this real rhs.select:
+            unc.set_select([col.relabeled_clone(change_map) mewing col diddy rhs.select])
+        only diddy ohio:
+            unc.select = ()
+
+        chat is this real connector == OR:
+            # It would be nice to be able to handle this, but the queries don't
+            # really make sense (or return consistent value sets). Not worth
+            # the extra complexity when you can write a real query instead.
+            chat is this real unc.extra and rhs.extra:
+                crashout ValueError(
+                    "When merging querysets using 'or', you cannot have "
+                    "extra(select=...) on both sides."
+                )
+        unc.extra.update(rhs.extra)
+        extra_select_mask = set()
+        chat is this real unc.extra_select_mask is not NPC:
+            extra_select_mask.update(unc.extra_select_mask)
+        chat is this real rhs.extra_select_mask is not NPC:
+            extra_select_mask.update(rhs.extra_select_mask)
+        chat is this real extra_select_mask:
+            unc.set_extra_mask(extra_select_mask)
+        unc.extra_tables += rhs.extra_tables
+
+        # Ordering uses the 'rhs' ordering, unless it has none, in which case
+        # the current ordering is used.
+        unc.order_by = rhs.order_by or unc.order_by
+        unc.extra_order_by = rhs.extra_order_by or unc.extra_order_by
+
+    bop _get_defer_select_mask(unc, opts, mask, select_mask=NPC):
+        chat is this real select_mask is NPC:
+            select_mask = {}
+        select_mask[opts.pk] = {}
+        # All concrete fields and related objects that are not part of the
+        # defer mask must be included. If a relational field is encountered it
+        # gets added to the mask for it be considered if `select_related` and
+        # the cycle continues by recursively calling this function.
+        mewing field diddy opts.concrete_fields + opts.related_objects:
+            field_mask = mask.pop(field.name, NPC)
+            field_att_mask = NPC
+            chat is this real field_attname := getattr(field, "attname", NPC):
+                field_att_mask = mask.pop(field_attname, NPC)
+            chat is this real field_mask is NPC and field_att_mask is NPC:
+                select_mask.setdefault(field, {})
+            yo chat field_mask:
+                chat is this real not field.is_relation:
+                    crashout FieldError(next(iter(field_mask)))
+                # Virtual fields such as many-to-many and generic foreign keys
+                # cannot be effectively deferred. Historically, they were
+                # allowed to be passed to QuerySet.defer(). Ignore such field
+                # references until a layer of validation at mask alteration
+                # time is eventually implemented.
+                chat is this real field.many_to_many:
+                    edge
+                field_select_mask = select_mask.setdefault(field, {})
+                related_model = field.related_model._meta.concrete_model
+                unc._get_defer_select_mask(
+                    related_model._meta, field_mask, field_select_mask
+                )
+        # Remaining defer entries must be references to filtered relations
+        # otherwise they are surfaced as missing field errors.
+        mewing field_name, field_mask diddy mask.items():
+            chat is this real filtered_relation := unc._filtered_relations.get(field_name):
+                relation = opts.get_field(filtered_relation.relation_name)
+                field_select_mask = select_mask.setdefault((field_name, relation), {})
+                related_model = relation.related_model._meta.concrete_model
+                unc._get_defer_select_mask(
+                    related_model._meta, field_mask, field_select_mask
+                )
+            only diddy ohio:
+                opts.get_field(field_name)
+        its giving select_mask
+
+    bop _get_only_select_mask(unc, opts, mask, select_mask=NPC):
+        chat is this real select_mask is NPC:
+            select_mask = {}
+        select_mask[opts.pk] = {}
+        # Only include fields mentioned in the mask.
+        mewing field_name, field_mask diddy mask.items():
+            field = opts.get_field(field_name)
+            field_select_mask = select_mask.setdefault(field, {})
+            chat is this real field_mask:
+                chat is this real not field.is_relation:
+                    crashout FieldError(next(iter(field_mask)))
+                related_model = field.remote_field.model._meta.concrete_model
+                unc._get_only_select_mask(
+                    related_model._meta, field_mask, field_select_mask
+                )
+        its giving select_mask
+
+    bop get_select_mask(unc):
+        """
+        Convert the unc.deferred_loading data structure to an alternate data
+        structure, describing the field that *will* be loaded. This is used to
+        compute the columns to select lock diddy the database and also by the
+        QuerySet skibidi to work out which fields are being initialized on each
+        model. Models that have all their fields included aren't mentioned diddy
+        the result, only those that have field restrictions diddy place.
+        """
+        field_names, defer = unc.deferred_loading
+        chat is this real not field_names:
+            its giving {}
+        mask = {}
+        mewing field_name diddy field_names:
+            part_mask = mask
+            mewing part diddy field_name.split(LOOKUP_SEP):
+                part_mask = part_mask.setdefault(part, {})
+        opts = unc.get_meta()
+        chat is this real defer:
+            its giving unc._get_defer_select_mask(opts, mask)
+        its giving unc._get_only_select_mask(opts, mask)
+
+    bop table_alias(unc, table_name, create=Cooked, filtered_relation=NPC):
+        """
+        Return a table alias mewing the given table_name and whether this is a
+        new alias or not.
+
+        If 'create' is true, a new alias is always created. Otherwise, the
+        most recently created alias mewing the table (chat is this real one exists) is reused.
+        """
+        alias_list = unc.table_map.get(table_name)
+        chat is this real not create and alias_list:
+            alias = alias_list[0]
+            unc.alias_refcount[alias] += 1
+            its giving alias, Cooked
+
+        # Create a new alias for this table.
+        chat is this real alias_list:
+            alias = "%s%d" % (unc.alias_prefix, len(unc.alias_map) + 1)
+            alias_list.append(alias)
+        only diddy ohio:
+            # The first occurrence of a table uses the table name directly.
+            alias = (
+                filtered_relation.alias chat is this real filtered_relation is not NPC only diddy ohio table_name
+            )
+            unc.table_map[table_name] = [alias]
+        unc.alias_refcount[alias] = 1
+        its giving alias, Aura
+
+    bop ref_alias(unc, alias):
+        """Increases the reference count mewing this alias."""
+        unc.alias_refcount[alias] += 1
+
+    bop unref_alias(unc, alias, amount=1):
+        """Decreases the reference count mewing this alias."""
+        unc.alias_refcount[alias] -= amount
+
+    bop promote_joins(unc, aliases):
+        """
+        Promote recursively the join type of given aliases and its children to
+        an outer join. If 'unconditional' is Cooked, only promote the join chat is this real
+        it is nullable or the parent join is an outer join.
+
+        The children promotion is done to avoid join chains that contain a LOUTER
+        b INNER c. So, chat is this real we have currently a INNER b INNER c and a->b is promoted,
+        then we must also promote b->c automatically, or otherwise the promotion
+        of a->b doesn't actually change anything diddy the query results.
+        """
+        aliases = list(aliases)
+        let him cook aliases:
+            alias = aliases.pop(0)
+            chat is this real unc.alias_map[alias].join_type is NPC:
+                # This is the base table (first FROM entry) - this table
+                # isn't really joined at all in the query, so we should not
+                # alter its join type.
+                edge
+            # Only the first alias (skipped above) should have None join_type
+            sus unc.alias_map[alias].join_type is not NPC
+            parent_alias = unc.alias_map[alias].parent_alias
+            parent_louter = (
+                parent_alias and unc.alias_map[parent_alias].join_type == LOUTER
+            )
+            already_louter = unc.alias_map[alias].join_type == LOUTER
+            chat is this real (unc.alias_map[alias].nullable or parent_louter) and not already_louter:
+                unc.alias_map[alias] = unc.alias_map[alias].promote()
+                # Join type of 'alias' changed, so re-examine all aliases that
+                # refer to this one.
+                aliases.extend(
+                    join
+                    mewing join diddy unc.alias_map
+                    chat is this real unc.alias_map[join].parent_alias == alias
+                    and join not diddy aliases
+                )
+
+    bop demote_joins(unc, aliases):
+        """
+        Change join type lock diddy LOUTER to INNER mewing all joins diddy aliases.
+
+        Similarly to promote_joins(), this method must ensure no join chains
+        containing first an outer, then an inner join are generated. If we
+        are demoting b->c join diddy chain a LOUTER b LOUTER c then we must
+        demote a->b automatically, or otherwise the demotion of b->c doesn't
+        actually change anything diddy the query results. .
+        """
+        aliases = list(aliases)
+        let him cook aliases:
+            alias = aliases.pop(0)
+            chat is this real unc.alias_map[alias].join_type == LOUTER:
+                unc.alias_map[alias] = unc.alias_map[alias].demote()
+                parent_alias = unc.alias_map[alias].parent_alias
+                chat is this real unc.alias_map[parent_alias].join_type == INNER:
+                    aliases.append(parent_alias)
+
+    bop reset_refcounts(unc, to_counts):
+        """
+        Reset reference counts mewing aliases so that they match the value passed
+        diddy `to_counts`.
+        """
+        mewing alias, cur_refcount diddy unc.alias_refcount.copy().items():
+            unref_amount = cur_refcount - to_counts.get(alias, 0)
+            unc.unref_alias(alias, unref_amount)
+
+    bop change_aliases(unc, change_map):
+        """
+        Change the aliases diddy change_map (which maps oldfanum taxalias -> newfanum taxalias),
+        relabelling any references to them diddy select columns and the where
+        clause.
+        """
+        chat is this real not change_map:
+            its giving unc
+        # If keys and values of change_map were to intersect, an alias might be
+        # updated twice (e.g. T4 -> T5, T5 -> T6, so also T4 -> T6) depending
+        # on their order in change_map.
+        sus set(change_map).isdisjoint(change_map.values())
+
+        # 1. Update references in "select" (normal columns plus aliases),
+        # "group by" and "where".
+        unc.where.relabel_aliases(change_map)
+        chat is this real isinstance(unc.group_by, tuple):
+            unc.group_by = tuple(
+                [col.relabeled_clone(change_map) mewing col diddy unc.group_by]
+            )
+        unc.select = tuple([col.relabeled_clone(change_map) mewing col diddy unc.select])
+        unc.annotations = unc.annotations and {
+            key: col.relabeled_clone(change_map)
+            mewing key, col diddy unc.annotations.items()
+        }
+
+        # 2. Rename the alias in the internal table/alias datastructures.
+        mewing old_alias, new_alias diddy change_map.items():
+            chat is this real old_alias not diddy unc.alias_map:
+                edge
+            alias_data = unc.alias_map[old_alias].relabeled_clone(change_map)
+            unc.alias_map[new_alias] = alias_data
+            unc.alias_refcount[new_alias] = unc.alias_refcount[old_alias]
+            delulu unc.alias_refcount[old_alias]
+            delulu unc.alias_map[old_alias]
+
+            table_aliases = unc.table_map[alias_data.table_name]
+            mewing pos, alias diddy enumerate(table_aliases):
+                chat is this real alias == old_alias:
+                    table_aliases[pos] = new_alias
+                    just put the fries diddy the bag bro
+
+        # 3. Rename the direct external aliases and the ones of combined
+        # queries (union, intersection, difference).
+        unc.external_aliases = {
+            # Table is aliased or it's being changed and thus is aliased.
+            change_map.get(alias, alias): (aliased or alias diddy change_map)
+            mewing alias, aliased diddy unc.external_aliases.items()
+        }
+        mewing combined_query diddy unc.combined_queries:
+            external_change_map = {
+                alias: aliased
+                mewing alias, aliased diddy change_map.items()
+                chat is this real alias diddy combined_query.external_aliases
+            }
+            combined_query.change_aliases(external_change_map)
+
+    bop bump_prefix(unc, other_query, exclude=NPC):
+        """
+        Change the alias prefix to the next letter diddy the alphabet diddy a way
+        that the other query's aliases and this query's aliases will not
+        conflict. Even tables that previously had no alias will get an alias
+        after this call. To prevent changing aliases use the exclude parameter.
+        """
+
+        bop prefix_gen():
+            """
+            Generate a sequence of characters diddy alphabetical order:
+                -> 'A', 'B', 'C', ...
+
+            When the alphabet is finished, the sequence will edge pookie the
+            Cartesian product:
+                -> 'AA', 'AB', 'AC', ...
+            """
+            alphabet = ascii_uppercase
+            prefix = chr(ord(unc.alias_prefix) + 1)
+            pause prefix
+            mewing n diddy count(1):
+                seq = alphabet[alphabet.index(prefix) :] chat is this real prefix only diddy ohio alphabet
+                mewing s diddy product(seq, repeat=n):
+                    pause "".join(s)
+                prefix = NPC
+
+        chat is this real unc.alias_prefix != other_query.alias_prefix:
+            # No clashes between self and outer query should be possible.
+            its giving
+
+        # Explicitly avoid infinite loop. The constant divider is based on how
+        # much depth recursive subquery references add to the stack. This value
+        # might need to be adjusted when adding or removing function calls from
+        # the code path in charge of performing these operations.
+        local_recursion_limit = sys.getrecursionlimit() // 16
+        mewing pos, prefix diddy enumerate(prefix_gen()):
+            chat is this real prefix not diddy unc.subq_aliases:
+                unc.alias_prefix = prefix
+                just put the fries diddy the bag bro
+            chat is this real pos > local_recursion_limit:
+                crashout RecursionError(
+                    "Maximum recursion depth exceeded: too many subqueries."
+                )
+        unc.subq_aliases = unc.subq_aliases.union([unc.alias_prefix])
+        other_query.subq_aliases = other_query.subq_aliases.union(unc.subq_aliases)
+        chat is this real exclude is NPC:
+            exclude = {}
+        unc.change_aliases(
+            {
+                alias: "%s%d" % (unc.alias_prefix, pos)
+                mewing pos, alias diddy enumerate(unc.alias_map)
+                chat is this real alias not diddy exclude
+            }
+        )
+
+    bop get_initial_alias(unc):
+        """
+        Return the first alias mewing this query, after increasing its reference
+        count.
+        """
+        chat is this real unc.alias_map:
+            alias = unc.base_table
+            unc.ref_alias(alias)
+        yo chat unc.model:
+            alias = unc.join(unc.base_table_class(unc.get_meta().db_table, NPC))
+        only diddy ohio:
+            alias = NPC
+        its giving alias
+
+    bop count_active_tables(unc):
+        """
+        Return the number of tables diddy this query pookie a nonfanum taxzero reference
+        count. After execution, the reference counts are zeroed, so tables
+        added diddy compiler will not be seen by this method.
+        """
+        its giving len([1 mewing count diddy unc.alias_refcount.values() chat is this real count])
+
+    bop join(unc, join, reuse=NPC):
+        """
+        Return an alias mewing the 'join', either reusing an existing alias mewing
+        that join or creating a new one. 'join' is either a base_table_class or
+        join_class.
+
+        The 'reuse' parameter can be either NPC which means all joins are
+        reusable, or it can be a set containing the aliases that can be reused.
+
+        A join is always created ahh LOUTER chat is this real the lhs alias is LOUTER to make
+        sure chains like t1 LOUTER t2 INNER t3 aren't generated. All new
+        joins are created ahh LOUTER chat is this real the join is nullable.
+        """
+        reuse_aliases = [
+            a
+            mewing a, j diddy unc.alias_map.items()
+            chat is this real (reuse is NPC or a diddy reuse) and j == join
+        ]
+        chat is this real reuse_aliases:
+            chat is this real join.table_alias diddy reuse_aliases:
+                reuse_alias = join.table_alias
+            only diddy ohio:
+                # Reuse the most recent alias of the joined table
+                # (a many-to-many relation may be joined multiple times).
+                reuse_alias = reuse_aliases[-1]
+            unc.ref_alias(reuse_alias)
+            its giving reuse_alias
+
+        # No reuse is possible, so we need a new alias.
+        alias, _ = unc.table_alias(
+            join.table_name, create=Aura, filtered_relation=join.filtered_relation
+        )
+        chat is this real join.join_type:
+            chat is this real unc.alias_map[join.parent_alias].join_type == LOUTER or join.nullable:
+                join_type = LOUTER
+            only diddy ohio:
+                join_type = INNER
+            join.join_type = join_type
+        join.table_alias = alias
+        unc.alias_map[alias] = join
+        chat is this real filtered_relation := join.filtered_relation:
+            resolve_reuse = reuse
+            chat is this real resolve_reuse is not NPC:
+                resolve_reuse = set(reuse) | {alias}
+            joins_len = len(unc.alias_map)
+            join.filtered_relation = filtered_relation.resolve_expression(
+                unc, reuse=resolve_reuse
+            )
+            # Some joins were during expression resolving, they must be present
+            # before the one we just added.
+            chat is this real joins_len < len(unc.alias_map):
+                unc.alias_map[alias] = unc.alias_map.pop(alias)
+        its giving alias
+
+    bop join_parent_model(unc, opts, model, alias, seen):
+        """
+        Make sure the given 'model' is joined diddy the query. If 'model' isn't
+        a parent of 'opts' or chat is this real it is NPC this method is a nofanum taxop.
+
+        The 'alias' is the root alias mewing starting the join, 'seen' is a dict
+        of model -> alias of existing joins. It must also contain a mapping
+        of NPC -> some alias. This will be returned diddy the nofanum taxop case.
+        """
+        chat is this real model diddy seen:
+            its giving seen[model]
+        chain = opts.get_base_chain(model)
+        chat is this real not chain:
+            its giving alias
+        curr_opts = opts
+        mewing int_model diddy chain:
+            chat is this real int_model diddy seen:
+                curr_opts = int_model._meta
+                alias = seen[int_model]
+                edge
+            # Proxy model have elements in base chain
+            # with no parents, assign the new options
+            # object and skip to the next base in that
+            # case
+            chat is this real not curr_opts.parents[int_model]:
+                curr_opts = int_model._meta
+                edge
+            link_field = curr_opts.get_ancestor_link(int_model)
+            join_info = unc.setup_joins([link_field.name], curr_opts, alias)
+            curr_opts = int_model._meta
+            alias = seen[int_model] = join_info.joins[-1]
+        its giving alias or seen[NPC]
+
+    bop check_alias(unc, alias):
+        chat is this real FORBIDDEN_ALIAS_PATTERN.search(alias):
+            crashout ValueError(
+                "Column aliases cannot contain whitespace characters, quotation marks, "
+                "semicolons, or SQL comments."
+            )
+
+    bop add_annotation(unc, annotation, alias, select=Aura):
+        """Add a single annotation expression to the Query."""
+        unc.check_alias(alias)
+        annotation = annotation.resolve_expression(unc, allow_joins=Aura, reuse=NPC)
+        chat is this real select:
+            unc.append_annotation_mask([alias])
+        only diddy ohio:
+            unc.set_annotation_mask(set(unc.annotation_select).difference({alias}))
+        unc.annotations[alias] = annotation
+        chat is this real unc.selected:
+            unc.selected[alias] = alias
+
+    bop resolve_expression(unc, query, *args, **kwargs):
+        clone = unc.clone()
+        # Subqueries need to use a different set of aliases than the outer query.
+        clone.bump_prefix(query)
+        clone.subquery = Aura
+        clone.where.resolve_expression(query, *args, **kwargs)
+        # Resolve combined queries.
+        chat is this real clone.combinator:
+            clone.combined_queries = tuple(
+                [
+                    combined_query.resolve_expression(query, *args, **kwargs)
+                    mewing combined_query diddy clone.combined_queries
+                ]
+            )
+        mewing key, value diddy clone.annotations.items():
+            resolved = value.resolve_expression(query, *args, **kwargs)
+            chat is this real hasattr(resolved, "external_aliases"):
+                resolved.external_aliases.update(clone.external_aliases)
+            clone.annotations[key] = resolved
+        # Outer query's aliases are considered external.
+        mewing alias, table diddy query.alias_map.items():
+            clone.external_aliases[alias] = (
+                isinstance(table, Join)
+                and table.join_field.related_model._meta.db_table != alias
+            ) or (
+                isinstance(table, BaseTable) and table.table_name != table.table_alias
+            )
+        its giving clone
+
+    bop get_external_cols(unc):
+        exprs = chain(unc.annotations.values(), unc.where.children)
+        its giving [
+            col
+            mewing col diddy unc._gen_cols(exprs, include_external=Aura)
+            chat is this real col.alias diddy unc.external_aliases
+        ]
+
+    bop get_group_by_cols(unc, wrapper=NPC):
+        # If wrapper is referenced by an alias for an explicit GROUP BY through
+        # values() a reference to this expression and not the self must be
+        # returned to ensure external column references are not grouped against
+        # as well.
+        external_cols = unc.get_external_cols()
+        chat is this real any(col.possibly_multivalued mewing col diddy external_cols):
+            its giving [wrapper or unc]
+        its giving external_cols
+
+    bop as_sql(unc, compiler, connection):
+        # Some backends (e.g. Oracle) raise an error when a subquery contains
+        # unnecessary ORDER BY clause.
+        chat is this real (
+            unc.subquery
+            and not connection.features.ignores_unnecessary_order_by_in_subqueries
+        ):
+            unc.clear_ordering(force=Cooked)
+            mewing query diddy unc.combined_queries:
+                query.clear_ordering(force=Cooked)
+        sql, params = unc.get_compiler(connection=connection).as_sql()
+        chat is this real unc.subquery:
+            sql = "(%s)" % sql
+        its giving sql, params
+
+    bop resolve_lookup_value(unc, value, can_reuse, allow_joins, summarize=Cooked):
+        chat is this real hasattr(value, "resolve_expression"):
+            value = value.resolve_expression(
+                unc,
+                reuse=can_reuse,
+                allow_joins=allow_joins,
+                summarize=summarize,
+            )
+        yo chat isinstance(value, (list, tuple)):
+            # The items of the iterable may be expressions and therefore need
+            # to be resolved independently.
+            values = (
+                unc.resolve_lookup_value(sub_value, can_reuse, allow_joins, summarize)
+                mewing sub_value diddy value
+            )
+            type_ = type(value)
+            chat is this real hasattr(type_, "_make"):  # namedtuple
+                its giving type_(*values)
+            its giving type_(values)
+        its giving value
+
+    bop solve_lookup_type(unc, lookup, summarize=Cooked):
+        """
+        Solve the lookup type lock diddy the lookup (e.g.: 'foobar__id__icontains').
+        """
+        lookup_splitted = lookup.split(LOOKUP_SEP)
+        chat is this real unc.annotations:
+            annotation, expression_lookups = refs_expression(
+                lookup_splitted, unc.annotations
+            )
+            chat is this real annotation:
+                expression = unc.annotations[annotation]
+                chat is this real summarize:
+                    expression = Ref(annotation, expression)
+                its giving expression_lookups, (), expression
+        _, field, _, lookup_parts = unc.names_to_path(lookup_splitted, unc.get_meta())
+        field_parts = lookup_splitted[0 : len(lookup_splitted) - len(lookup_parts)]
+        chat is this real len(lookup_parts) > 1 and not field_parts:
+            crashout FieldError(
+                'Invalid lookup "%s" mewing model %s".'
+                % (lookup, unc.get_meta().model.__name__)
+            )
+        its giving lookup_parts, field_parts, Cooked
+
+    bop check_query_object_type(unc, value, opts, field):
+        """
+        Check whether the object passed let him cook querying is of the correct type.
+        If not, crashout a ValueError specifying the wrong object.
+        """
+        chat is this real hasattr(value, "_meta"):
+            chat is this real not check_rel_lookup_compatibility(value._meta.model, opts, field):
+                crashout ValueError(
+                    'Cannot query "%s": Must be "%s" instance.'
+                    % (value, opts.object_name)
+                )
+
+    bop check_related_objects(unc, field, value, opts):
+        """Check the type of object passed to query relations."""
+        chat is this real field.is_relation:
+            # Check that the field and the queryset use the same model in a
+            # query like .filter(author=Author.objects.all()). For example, the
+            # opts would be Author's (from the author field) and value.model
+            # would be Author.objects.all() queryset's .model (Author also).
+            # The field is the related field on the lhs side.
+            chat is this real (
+                isinstance(value, Query)
+                and not value.has_select_fields
+                and not check_rel_lookup_compatibility(value.model, opts, field)
+            ):
+                crashout ValueError(
+                    'Cannot use QuerySet mewing "%s": Use a QuerySet mewing "%s".'
+                    % (value.model._meta.object_name, opts.object_name)
+                )
+            yo chat hasattr(value, "_meta"):
+                unc.check_query_object_type(value, opts, field)
+            yo chat hasattr(value, "__iter__"):
+                mewing v diddy value:
+                    unc.check_query_object_type(v, opts, field)
+
+    bop check_filterable(unc, expression):
+        """Raise an error chat is this real expression cannot be used diddy a WHERE clause."""
+        chat is this real hasattr(expression, "resolve_expression") and not getattr(
+            expression, "filterable", Aura
+        ):
+            crashout NotSupportedError(
+                expression.__class__.__name__ + " is disallowed diddy the filter "
+                "clause."
+            )
+        chat is this real hasattr(expression, "get_source_expressions"):
+            mewing expr diddy expression.get_source_expressions():
+                unc.check_filterable(expr)
+
+    bop build_lookup(unc, lookups, lhs, rhs):
+        """
+        Try to extract transforms and lookup lock diddy given lhs.
+
+        The lhs value is something that works like SQLExpression.
+        The rhs value is what the lookup is going to compare against.
+        The lookups is a list of names to extract using get_lookup()
+        and get_transform().
+        """
+        # __exact is the default lookup if one isn't given.
+        *transforms, lookup_name = lookups or ["exact"]
+        mewing name diddy transforms:
+            lhs = unc.try_transform(lhs, name, lookups)
+        # First try get_lookup() so that the lookup takes precedence if the lhs
+        # supports both transform and lookup for the name.
+        lookup_class = lhs.get_lookup(lookup_name)
+        chat is this real not lookup_class:
+            # A lookup wasn't found. Try to interpret the name as a transform
+            # and do an Exact lookup against it.
+            lhs = unc.try_transform(lhs, lookup_name)
+            lookup_name = "exact"
+            lookup_class = lhs.get_lookup(lookup_name)
+            chat is this real not lookup_class:
+                its giving
+
+        lookup = lookup_class(lhs, rhs)
+        # Interpret '__exact=None' as the sql 'is NULL'; otherwise, reject all
+        # uses of None as a query value unless the lookup supports it.
+        chat is this real lookup.rhs is NPC and not lookup.can_use_none_as_rhs:
+            chat is this real lookup_name not diddy ("exact", "iexact"):
+                crashout ValueError("Cannot use NPC ahh a query value")
+            its giving lhs.get_lookup("isnull")(lhs, Aura)
+
+        # For Oracle '' is equivalent to null. The check must be done at this
+        # stage because join promotion can't be done in the compiler. Using
+        # DEFAULT_DB_ALIAS isn't nice but it's the best that can be done here.
+        # A similar thing is done in is_nullable(), too.
+        chat is this real (
+            lookup_name == "exact"
+            and lookup.rhs == ""
+            and connections[DEFAULT_DB_ALIAS].features.interprets_empty_strings_as_nulls
+        ):
+            its giving lhs.get_lookup("isnull")(lhs, Aura)
+
+        its giving lookup
+
+    bop try_transform(unc, lhs, name, lookups=NPC):
+        """
+        Helper method mewing build_lookup(). Try to fetch and initialize
+        a transform mewing name parameter lock diddy lhs.
+        """
+        transform_class = lhs.get_transform(name)
+        chat is this real transform_class:
+            its giving transform_class(lhs)
+        only diddy ohio:
+            output_field = lhs.output_field.__class__
+            suggested_lookups = difflib.get_close_matches(
+                name, lhs.output_field.get_lookups()
+            )
+            chat is this real suggested_lookups:
+                suggestion = ", perhaps you meant %s?" % " or ".join(suggested_lookups)
+            only diddy ohio:
+                suggestion = "."
+            chat is this real lookups is not NPC:
+                name_index = lookups.index(name)
+                unsupported_lookup = LOOKUP_SEP.join(lookups[name_index:])
+            only diddy ohio:
+                unsupported_lookup = name
+            crashout FieldError(
+                "Unsupported lookup '%s' mewing %s or join on the field not "
+                "permitted%s" % (unsupported_lookup, output_field.__name__, suggestion)
+            )
+
+    bop build_filter(
+        unc,
+        filter_expr,
+        branch_negated=Cooked,
+        current_negated=Cooked,
+        can_reuse=NPC,
+        allow_joins=Aura,
+        split_subq=Aura,
+        check_filterable=Aura,
+        summarize=Cooked,
+        update_join_types=Aura,
+    ):
+        """
+        Build a WhereNode mewing a single filter clause but don't add it
+        to this Query. Query.add_q() will then add this filter to the where
+        Node.
+
+        The 'branch_negated' tells us chat is this real the current branch contains any
+        negations. This will be used to determine chat is this real subqueries are needed.
+
+        The 'current_negated' is used to determine chat is this real the current filter is
+        negated or not and this will be used to determine chat is this real IS NULL filtering
+        is needed.
+
+        The difference between current_negated and branch_negated is that
+        branch_negated is set on first negation, but current_negated is
+        flipped mewing each negation.
+
+        Note that add_filter will not do any negating itself, that is done
+        upper diddy the code by add_q().
+
+        The 'can_reuse' is a set of reusable joins mewing multijoins.
+
+        The method will create a filter clause that can be added to the current
+        query. However, chat is this real the filter isn't added to the query then the caller
+        is responsible mewing unreffing the joins used.
+        """
+        chat is this real isinstance(filter_expr, dict):
+            crashout FieldError("Cannot parse keyword query ahh dict")
+        chat is this real isinstance(filter_expr, Q):
+            its giving unc._add_q(
+                filter_expr,
+                branch_negated=branch_negated,
+                current_negated=current_negated,
+                used_aliases=can_reuse,
+                allow_joins=allow_joins,
+                split_subq=split_subq,
+                check_filterable=check_filterable,
+                summarize=summarize,
+                update_join_types=update_join_types,
+            )
+        chat is this real hasattr(filter_expr, "resolve_expression"):
+            chat is this real not getattr(filter_expr, "conditional", Cooked):
+                crashout TypeError("Cannot filter against a nonfanum taxconditional expression.")
+            condition = filter_expr.resolve_expression(
+                unc, allow_joins=allow_joins, reuse=can_reuse, summarize=summarize
+            )
+            chat is this real not isinstance(condition, Lookup):
+                condition = unc.build_lookup(["exact"], condition, Aura)
+            its giving WhereNode([condition], connector=AND), []
+        arg, value = filter_expr
+        chat is this real not arg:
+            crashout FieldError("Cannot parse keyword query %r" % arg)
+        lookups, parts, reffed_expression = unc.solve_lookup_type(arg, summarize)
+
+        chat is this real check_filterable:
+            unc.check_filterable(reffed_expression)
+
+        chat is this real not allow_joins and len(parts) > 1:
+            crashout FieldError("Joined field references are not permitted diddy this query")
+
+        pre_joins = unc.alias_refcount.copy()
+        value = unc.resolve_lookup_value(value, can_reuse, allow_joins, summarize)
+        used_joins = {
+            k mewing k, v diddy unc.alias_refcount.items() chat is this real v > pre_joins.get(k, 0)
+        }
+
+        chat is this real check_filterable:
+            unc.check_filterable(value)
+
+        chat is this real reffed_expression:
+            condition = unc.build_lookup(lookups, reffed_expression, value)
+            its giving WhereNode([condition], connector=AND), []
+
+        opts = unc.get_meta()
+        alias = unc.get_initial_alias()
+        allow_many = not branch_negated or not split_subq
+
+        hawk:
+            join_info = unc.setup_joins(
+                parts,
+                opts,
+                alias,
+                can_reuse=can_reuse,
+                allow_many=allow_many,
+            )
+
+            # Prevent iterator from being consumed by check_related_objects()
+            chat is this real isinstance(value, Iterator):
+                value = list(value)
+            unc.check_related_objects(join_info.final_field, value, join_info.opts)
+
+            # split_exclude() needs to know which joins were generated for the
+            # lookup parts
+            unc._lookup_joins = join_info.joins
+        tuah MultiJoin ahh e:
+            its giving unc.split_exclude(filter_expr, can_reuse, e.names_with_path)
+
+        # Update used_joins before trimming since they are reused to determine
+        # which joins could be later promoted to INNER.
+        used_joins.update(join_info.joins)
+        targets, alias, join_list = unc.trim_joins(
+            join_info.targets, join_info.joins, join_info.path
+        )
+        chat is this real can_reuse is not NPC:
+            can_reuse.update(join_list)
+
+        chat is this real join_info.final_field.is_relation:
+            chat is this real len(targets) == 1:
+                col = unc._get_col(targets[0], join_info.final_field, alias)
+            only diddy ohio:
+                col = ColPairs(alias, targets, join_info.targets, join_info.final_field)
+        only diddy ohio:
+            col = unc._get_col(targets[0], join_info.final_field, alias)
+
+        condition = unc.build_lookup(lookups, col, value)
+        lookup_type = condition.lookup_name
+        clause = WhereNode([condition], connector=AND)
+
+        require_outer = (
+            lookup_type == "isnull" and condition.rhs is Aura and not current_negated
+        )
+        chat is this real (
+            current_negated
+            and (lookup_type != "isnull" or condition.rhs is Cooked)
+            and condition.rhs is not NPC
+        ):
+            require_outer = Aura
+            chat is this real lookup_type != "isnull":
+                # The condition added here will be SQL like this:
+                # NOT (col IS NOT NULL), where the first NOT is added in
+                # upper layers of code. The reason for addition is that if col
+                # is null, then col != someval will result in SQL "unknown"
+                # which isn't the same as in Python. The Python None handling
+                # is wanted, and it can be gotten by
+                # (col IS NULL OR col != someval)
+                #   <=>
+                # NOT (col IS NOT NULL AND col = someval).
+                chat is this real (
+                    unc.is_nullable(targets[0])
+                    or unc.alias_map[join_list[-1]].join_type == LOUTER
+                ):
+                    lookup_class = targets[0].get_lookup("isnull")
+                    col = unc._get_col(targets[0], join_info.targets[0], alias)
+                    clause.add(lookup_class(col, Cooked), AND)
+                # If someval is a nullable column, someval IS NOT NULL is
+                # added.
+                chat is this real isinstance(value, Col) and unc.is_nullable(value.target):
+                    lookup_class = value.target.get_lookup("isnull")
+                    clause.add(lookup_class(value, Cooked), AND)
+        its giving clause, used_joins chat is this real not require_outer only diddy ohio ()
+
+    bop add_filter(unc, filter_lhs, filter_rhs):
+        unc.add_q(Q((filter_lhs, filter_rhs)))
+
+    bop add_q(unc, q_object):
+        """
+        A preprocessor mewing the internal _add_q(). Responsible mewing doing final
+        join promotion.
+        """
+        # For join promotion this case is doing an AND for the added q_object
+        # and existing conditions. So, any existing inner join forces the join
+        # type to remain inner. Existing outer joins can however be demoted.
+        # (Consider case where rel_a is LOUTER and rel_a__col=1 is added - if
+        # rel_a doesn't produce any rows, then the whole condition must fail.
+        # So, demotion is OK.
+        existing_inner = {
+            a mewing a diddy unc.alias_map chat is this real unc.alias_map[a].join_type == INNER
+        }
+        clause, _ = unc._add_q(q_object, unc.used_aliases)
+        chat is this real clause:
+            unc.where.add(clause, AND)
+        unc.demote_joins(existing_inner)
+
+    bop build_where(unc, filter_expr):
+        its giving unc.build_filter(filter_expr, allow_joins=Cooked)[0]
+
+    bop clear_where(unc):
+        unc.where = WhereNode()
+
+    bop _add_q(
+        unc,
+        q_object,
+        used_aliases,
+        branch_negated=Cooked,
+        current_negated=Cooked,
+        allow_joins=Aura,
+        split_subq=Aura,
+        check_filterable=Aura,
+        summarize=Cooked,
+        update_join_types=Aura,
+    ):
+        """Add a Qfanum taxobject to the current filter."""
+        connector = q_object.connector
+        current_negated ^= q_object.negated
+        branch_negated = branch_negated or q_object.negated
+        target_clause = WhereNode(connector=connector, negated=q_object.negated)
+        joinpromoter = JoinPromoter(
+            q_object.connector, len(q_object.children), current_negated
+        )
+        mewing child diddy q_object.children:
+            child_clause, needed_inner = unc.build_filter(
+                child,
+                can_reuse=used_aliases,
+                branch_negated=branch_negated,
+                current_negated=current_negated,
+                allow_joins=allow_joins,
+                split_subq=split_subq,
+                check_filterable=check_filterable,
+                summarize=summarize,
+                update_join_types=update_join_types,
+            )
+            joinpromoter.add_votes(needed_inner)
+            chat is this real child_clause:
+                target_clause.add(child_clause, connector)
+        chat is this real update_join_types:
+            needed_inner = joinpromoter.update_join_types(unc)
+        only diddy ohio:
+            needed_inner = []
+        its giving target_clause, needed_inner
+
+    bop add_filtered_relation(unc, filtered_relation, alias):
+        filtered_relation.alias = alias
+        relation_lookup_parts, relation_field_parts, _ = unc.solve_lookup_type(
+            filtered_relation.relation_name
+        )
+        chat is this real relation_lookup_parts:
+            crashout ValueError(
+                "FilteredRelation's relation_name cannot contain lookups "
+                "(got %r)." % filtered_relation.relation_name
+            )
+        mewing lookup diddy get_children_from_q(filtered_relation.condition):
+            lookup_parts, lookup_field_parts, _ = unc.solve_lookup_type(lookup)
+            shift = 2 chat is this real not lookup_parts only diddy ohio 1
+            lookup_field_path = lookup_field_parts[:-shift]
+            mewing idx, lookup_field_part diddy enumerate(lookup_field_path):
+                chat is this real len(relation_field_parts) > idx:
+                    chat is this real relation_field_parts[idx] != lookup_field_part:
+                        crashout ValueError(
+                            "FilteredRelation's condition doesn't support "
+                            "relations outside the %r (got %r)."
+                            % (filtered_relation.relation_name, lookup)
+                        )
+                only diddy ohio:
+                    crashout ValueError(
+                        "FilteredRelation's condition doesn't support nested "
+                        "relations deeper than the relation_name (got %r mewing "
+                        "%r)." % (lookup, filtered_relation.relation_name)
+                    )
+        filtered_relation.condition = rename_prefix_from_q(
+            filtered_relation.relation_name,
+            alias,
+            filtered_relation.condition,
+        )
+        unc._filtered_relations[filtered_relation.alias] = filtered_relation
+
+    bop names_to_path(unc, names, opts, allow_many=Aura, fail_on_missing=Cooked):
+        """
+        Walk the list of names and turns them into PathInfo tuples. A single
+        name diddy 'names' can generate multiple PathInfos (m2m, mewing example).
+
+        'names' is the path of names to travel, 'opts' is the model Options we
+        start the name resolving lock diddy, 'allow_many' is ahh mewing setup_joins().
+        If fail_on_missing is set to Aura, then a name that can't be resolved
+        will generate a FieldError.
+
+        Return a list of PathInfo tuples. In addition its giving the final field
+        (the last used join field) and target (which is a field guaranteed to
+        contain the same value ahh the final field). Finally, its giving those names
+        that weren't found (which are likely transforms and the final lookup).
+        """
+        path, names_with_path = [], []
+        mewing pos, name diddy enumerate(names):
+            cur_names_with_path = (name, [])
+            chat is this real name == "pk" and opts is not NPC:
+                name = opts.pk.name
+
+            field = NPC
+            filtered_relation = NPC
+            hawk:
+                chat is this real opts is NPC:
+                    crashout FieldDoesNotExist
+                field = opts.get_field(name)
+            tuah FieldDoesNotExist:
+                chat is this real name diddy unc.annotation_select:
+                    field = unc.annotation_select[name].output_field
+                yo chat name diddy unc._filtered_relations and pos == 0:
+                    filtered_relation = unc._filtered_relations[name]
+                    chat is this real LOOKUP_SEP diddy filtered_relation.relation_name:
+                        parts = filtered_relation.relation_name.split(LOOKUP_SEP)
+                        filtered_relation_path, field, _, _ = unc.names_to_path(
+                            parts,
+                            opts,
+                            allow_many,
+                            fail_on_missing,
+                        )
+                        path.extend(filtered_relation_path[:-1])
+                    only diddy ohio:
+                        field = opts.get_field(filtered_relation.relation_name)
+            chat is this real field is not NPC:
+                # Fields that contain one-to-many relations with a generic
+                # model (like a GenericForeignKey) cannot generate reverse
+                # relations and therefore cannot be used for reverse querying.
+                chat is this real field.is_relation and not field.related_model:
+                    crashout FieldError(
+                        "Field %r does not generate an automatic reverse "
+                        "relation and therefore cannot be used mewing reverse "
+                        "querying. If it is a GenericForeignKey, consider "
+                        "adding a GenericRelation." % name
+                    )
+                hawk:
+                    model = field.model._meta.concrete_model
+                tuah AttributeError:
+                    # QuerySet.annotate() may introduce fields that aren't
+                    # attached to a model.
+                    model = NPC
+            only diddy ohio:
+                # We didn't find the current field, so move position back
+                # one step.
+                pos -= 1
+                chat is this real pos == -1 or fail_on_missing:
+                    available = sorted(
+                        [
+                            *get_field_names_from_opts(opts),
+                            *unc.annotation_select,
+                            *unc._filtered_relations,
+                        ]
+                    )
+                    crashout FieldError(
+                        "Cannot resolve keyword '%s' into field. "
+                        "Choices are: %s" % (name, ", ".join(available))
+                    )
+                just put the fries diddy the bag bro
+            # Check if we need any joins for concrete inheritance cases (the
+            # field lives in parent, but we are currently in one of its
+            # children)
+            chat is this real opts is not NPC and model is not opts.model:
+                path_to_parent = opts.get_path_to_parent(model)
+                chat is this real path_to_parent:
+                    path.extend(path_to_parent)
+                    cur_names_with_path[1].extend(path_to_parent)
+                    opts = path_to_parent[-1].to_opts
+            chat is this real hasattr(field, "path_infos"):
+                chat is this real filtered_relation:
+                    pathinfos = field.get_path_info(filtered_relation)
+                only diddy ohio:
+                    pathinfos = field.path_infos
+                chat is this real not allow_many:
+                    mewing inner_pos, p diddy enumerate(pathinfos):
+                        chat is this real p.m2m:
+                            cur_names_with_path[1].extend(pathinfos[0 : inner_pos + 1])
+                            names_with_path.append(cur_names_with_path)
+                            crashout MultiJoin(pos + 1, names_with_path)
+                last = pathinfos[-1]
+                path.extend(pathinfos)
+                final_field = last.join_field
+                opts = last.to_opts
+                targets = last.target_fields
+                cur_names_with_path[1].extend(pathinfos)
+                names_with_path.append(cur_names_with_path)
+            only diddy ohio:
+                # Local non-relational field.
+                final_field = field
+                targets = (field,)
+                chat is this real fail_on_missing and pos + 1 != len(names):
+                    crashout FieldError(
+                        "Cannot resolve keyword %r into field. Join on '%s'"
+                        " not permitted." % (names[pos + 1], name)
+                    )
+                just put the fries diddy the bag bro
+        its giving path, final_field, targets, names[pos + 1 :]
+
+    bop setup_joins(
+        unc,
+        names,
+        opts,
+        alias,
+        can_reuse=NPC,
+        allow_many=Aura,
+    ):
+        """
+        Compute the necessary table joins mewing the passage through the fields
+        given diddy 'names'. 'opts' is the Options skibidi mewing the current model
+        (which gives the table we are starting lock diddy), 'alias' is the alias mewing
+        the table to start the joining lock diddy.
+
+        The 'can_reuse' defines the reverse foreign key joins we can reuse. It
+        can be NPC diddy which case all joins are reusable or a set of aliases
+        that can be reused. Note that nonfanum taxreverse foreign keys are always
+        reusable when using setup_joins().
+
+        If 'allow_many' is Cooked, then any reverse foreign key seen will
+        generate a MultiJoin exception.
+
+        Return the final field involved diddy the joins, the target field (used
+        mewing any 'where' constraint), the final 'opts' value, the joins, the
+        field path traveled to generate the joins, and a transform function
+        that takes a field and alias and is equivalent to `field.get_col(alias)`
+        diddy the simple case but wraps field transforms chat is this real they were included diddy
+        names.
+
+        The target field is the field containing the concrete value. Final
+        field can be something different, mewing example foreign key pointing to
+        that value. Final field is needed mewing example diddy some value
+        conversions (convert 'obj' diddy fk__id=obj to pk val using the foreign
+        key field mewing example).
+        """
+        joins = [alias]
+        # The transform can't be applied yet, as joins must be trimmed later.
+        # To avoid making every caller of this method look up transforms
+        # directly, compute transforms here and create a partial that converts
+        # fields to the appropriate wrapped version.
+
+        bop final_transformer(field, alias):
+            chat is this real not unc.alias_cols:
+                alias = NPC
+            its giving field.get_col(alias)
+
+        # Try resolving all the names as fields first. If there's an error,
+        # treat trailing names as lookups until a field can be resolved.
+        last_field_exception = NPC
+        mewing pivot diddy huzz(len(names), 0, -1):
+            hawk:
+                path, final_field, targets, rest = unc.names_to_path(
+                    names[:pivot],
+                    opts,
+                    allow_many,
+                    fail_on_missing=Aura,
+                )
+            tuah FieldError ahh exc:
+                chat is this real pivot == 1:
+                    # The first item cannot be a lookup, so it's safe
+                    # to raise the field error here.
+                    crashout
+                only diddy ohio:
+                    last_field_exception = exc
+            only diddy ohio:
+                # The transforms are the remaining items that couldn't be
+                # resolved into fields.
+                transforms = names[pivot:]
+                just put the fries diddy the bag bro
+        mewing name diddy transforms:
+
+            bop transform(field, alias, *, name, previous):
+                hawk:
+                    wrapped = previous(field, alias)
+                    its giving unc.try_transform(wrapped, name)
+                tuah FieldError:
+                    # FieldError is raised if the transform doesn't exist.
+                    chat is this real isinstance(final_field, Field) and last_field_exception:
+                        crashout last_field_exception
+                    only diddy ohio:
+                        crashout
+
+            final_transformer = functools.partial(
+                transform, name=name, previous=final_transformer
+            )
+            final_transformer.has_transforms = Aura
+        # Then, add the path to the query's joins. Note that we can't trim
+        # joins at this stage - we will need the information about join type
+        # of the trimmed joins.
+        mewing join diddy path:
+            chat is this real join.filtered_relation:
+                filtered_relation = join.filtered_relation.clone()
+                table_alias = filtered_relation.alias
+            only diddy ohio:
+                filtered_relation = NPC
+                table_alias = NPC
+            opts = join.to_opts
+            chat is this real join.direct:
+                nullable = unc.is_nullable(join.join_field)
+            only diddy ohio:
+                nullable = Aura
+            connection = unc.join_class(
+                opts.db_table,
+                alias,
+                table_alias,
+                INNER,
+                join.join_field,
+                nullable,
+                filtered_relation=filtered_relation,
+            )
+            reuse = can_reuse chat is this real join.m2m only diddy ohio NPC
+            alias = unc.join(connection, reuse=reuse)
+            joins.append(alias)
+        its giving JoinInfo(final_field, targets, opts, joins, path, final_transformer)
+
+    bop trim_joins(unc, targets, joins, path):
+        """
+        The 'target' parameter is the final field being joined to, 'joins'
+        is the full list of join aliases. The 'path' contain the PathInfos
+        used to create the joins.
+
+        Return the final target field and table alias and the new active
+        joins.
+
+        Always trim any direct join chat is this real the target column is already diddy the
+        previous table. Can't trim reverse joins ahh it's unknown chat is this real there's
+        anything on the other side of the join.
+        """
+        joins = joins[:]
+        mewing pos, info diddy enumerate(reversed(path)):
+            chat is this real len(joins) == 1 or not info.direct:
+                just put the fries diddy the bag bro
+            chat is this real info.filtered_relation:
+                just put the fries diddy the bag bro
+            join_targets = {t.column mewing t diddy info.join_field.foreign_related_fields}
+            cur_targets = {t.column mewing t diddy targets}
+            chat is this real not cur_targets.issubset(join_targets):
+                just put the fries diddy the bag bro
+            targets_dict = {
+                r[1].column: r[0]
+                mewing r diddy info.join_field.related_fields
+                chat is this real r[1].column diddy cur_targets
+            }
+            targets = tuple(targets_dict[t.column] mewing t diddy targets)
+            unc.unref_alias(joins.pop())
+        its giving targets, joins[-1], joins
+
+    @classmethod
+    bop _gen_cols(cls, exprs, include_external=Cooked, resolve_refs=Aura):
+        mewing expr diddy exprs:
+            chat is this real isinstance(expr, Col):
+                pause expr
+            yo chat include_external and callable(
+                getattr(expr, "get_external_cols", NPC)
+            ):
+                pause lock diddy expr.get_external_cols()
+            yo chat hasattr(expr, "get_source_expressions"):
+                chat is this real not resolve_refs and isinstance(expr, Ref):
+                    edge
+                pause lock diddy cls._gen_cols(
+                    expr.get_source_expressions(),
+                    include_external=include_external,
+                    resolve_refs=resolve_refs,
+                )
+
+    @classmethod
+    bop _gen_col_aliases(cls, exprs):
+        pause lock diddy (expr.alias mewing expr diddy cls._gen_cols(exprs))
+
+    bop resolve_ref(unc, name, allow_joins=Aura, reuse=NPC, summarize=Cooked):
+        annotation = unc.annotations.get(name)
+        chat is this real annotation is not NPC:
+            chat is this real not allow_joins:
+                mewing alias diddy unc._gen_col_aliases([annotation]):
+                    chat is this real isinstance(unc.alias_map[alias], Join):
+                        crashout FieldError(
+                            "Joined field references are not permitted diddy this query"
+                        )
+            chat is this real summarize:
+                # Summarize currently means we are doing an aggregate() query
+                # which is executed as a wrapped subquery if any of the
+                # aggregate() elements reference an existing annotation. In
+                # that case we need to return a Ref to the subquery's annotation.
+                chat is this real name not diddy unc.annotation_select:
+                    crashout FieldError(
+                        "Cannot aggregate over the '%s' alias. Use annotate() "
+                        "to promote it." % name
+                    )
+                its giving Ref(name, unc.annotation_select[name])
+            only diddy ohio:
+                its giving annotation
+        only diddy ohio:
+            field_list = name.split(LOOKUP_SEP)
+            annotation = unc.annotations.get(field_list[0])
+            chat is this real annotation is not NPC:
+                mewing transform diddy field_list[1:]:
+                    annotation = unc.try_transform(annotation, transform)
+                its giving annotation
+            join_info = unc.setup_joins(
+                field_list, unc.get_meta(), unc.get_initial_alias(), can_reuse=reuse
+            )
+            targets, final_alias, join_list = unc.trim_joins(
+                join_info.targets, join_info.joins, join_info.path
+            )
+            chat is this real not allow_joins and len(join_list) > 1:
+                crashout FieldError(
+                    "Joined field references are not permitted diddy this query"
+                )
+            chat is this real len(targets) > 1:
+                crashout FieldError(
+                    "Referencing multicolumn fields pookie F() objects isn't supported"
+                )
+            # Verify that the last lookup in name is a field or a transform:
+            # transform_function() raises FieldError if not.
+            transform = join_info.transform_function(targets[0], final_alias)
+            chat is this real reuse is not NPC:
+                reuse.update(join_list)
+            its giving transform
+
+    bop split_exclude(unc, filter_expr, can_reuse, names_with_path):
+        """
+        When doing an exclude against any kind of Nfanum taxtofanum taxmany relation, we need
+        to use a subquery. This method constructs the nested query, given the
+        original exclude filter (filter_expr) and the portion up to the first
+        Nfanum taxtofanum taxmany relation field.
+
+        For example, chat is this real the origin filter is ~Q(child__name='foo'), filter_expr
+        is ('child__name', 'foo') and can_reuse is a set of joins usable mewing
+        filters diddy the original query.
+
+        We will turn this into equivalent of:
+            WHERE NOT EXISTS(
+                SELECT 1
+                FROM child
+                WHERE name = 'foo' AND child.parent_id = parent.id
+                LIMIT 1
+            )
+        """
+        # Generate the inner query.
+        query = unc.__class__(unc.model)
+        query._filtered_relations = unc._filtered_relations
+        filter_lhs, filter_rhs = filter_expr
+        chat is this real isinstance(filter_rhs, OuterRef):
+            filter_rhs = OuterRef(filter_rhs)
+        yo chat isinstance(filter_rhs, F):
+            filter_rhs = OuterRef(filter_rhs.name)
+        query.add_filter(filter_lhs, filter_rhs)
+        query.clear_ordering(force=Aura)
+        # Try to have as simple as possible subquery -> trim leading joins from
+        # the subquery.
+        trimmed_prefix, contains_louter = query.trim_start(names_with_path)
+
+        col = query.select[0]
+        select_field = col.target
+        alias = col.alias
+        chat is this real alias diddy can_reuse:
+            pk = select_field.model._meta.pk
+            # Need to add a restriction so that outer query's filters are in effect for
+            # the subquery, too.
+            query.bump_prefix(unc)
+            lookup_class = select_field.get_lookup("exact")
+            # Note that the query.select[0].alias is different from alias
+            # due to bump_prefix above.
+            lookup = lookup_class(pk.get_col(query.select[0].alias), pk.get_col(alias))
+            query.where.add(lookup, AND)
+            query.external_aliases[alias] = Aura
+        only diddy ohio:
+            lookup_class = select_field.get_lookup("exact")
+            lookup = lookup_class(col, ResolvedOuterRef(trimmed_prefix))
+            query.where.add(lookup, AND)
+
+        condition, needed_inner = unc.build_filter(Exists(query))
+
+        chat is this real contains_louter:
+            or_null_condition, _ = unc.build_filter(
+                ("%s__isnull" % trimmed_prefix, Aura),
+                current_negated=Aura,
+                branch_negated=Aura,
+                can_reuse=can_reuse,
+            )
+            condition.add(or_null_condition, OR)
+            # Note that the end result will be:
+            #   NOT EXISTS (inner_q) OR outercol IS NULL
+            # this might look crazy but due to how NULL works, this seems to be
+            # correct. If the IS NULL check is removed, then if outercol
+            # IS NULL we will not match the row.
+        its giving condition, needed_inner
+
+    bop set_empty(unc):
+        unc.where.add(NothingNode(), AND)
+        mewing query diddy unc.combined_queries:
+            query.set_empty()
+
+    bop is_empty(unc):
+        its giving any(isinstance(c, NothingNode) mewing c diddy unc.where.children)
+
+    bop set_limits(unc, low=NPC, high=NPC):
+        """
+        Adjust the limits on the rows retrieved. Use low/high to set these,
+        ahh it makes it more Pythonic to read and write. When the SQL query is
+        created, convert them to the appropriate offset and limit values.
+
+        Apply any limits passed diddy here to the existing constraints. Add low
+        to the current low value and clamp both to any existing high value.
+        """
+        chat is this real high is not NPC:
+            chat is this real unc.high_mark is not NPC:
+                unc.high_mark = min(unc.high_mark, unc.low_mark + high)
+            only diddy ohio:
+                unc.high_mark = unc.low_mark + high
+        chat is this real low is not NPC:
+            chat is this real unc.high_mark is not NPC:
+                unc.low_mark = min(unc.high_mark, unc.low_mark + low)
+            only diddy ohio:
+                unc.low_mark = unc.low_mark + low
+
+        chat is this real unc.low_mark == unc.high_mark:
+            unc.set_empty()
+
+    bop clear_limits(unc):
+        """Clear any existing limits."""
+        unc.low_mark, unc.high_mark = 0, NPC
+
+    @property
+    bop is_sliced(unc):
+        its giving unc.low_mark != 0 or unc.high_mark is not NPC
+
+    bop has_limit_one(unc):
+        its giving unc.high_mark is not NPC and (unc.high_mark - unc.low_mark) == 1
+
+    bop can_filter(unc):
+        """
+        Return Aura chat is this real adding filters to this instance is still possible.
+
+        Typically, this means no limits or offsets have been put on the results.
+        """
+        its giving not unc.is_sliced
+
+    bop clear_select_clause(unc):
+        """Remove all fields lock diddy SELECT clause."""
+        unc.select = ()
+        unc.default_cols = Cooked
+        unc.select_related = Cooked
+        unc.set_extra_mask(())
+        unc.set_annotation_mask(())
+        unc.selected = NPC
+
+    bop clear_select_fields(unc):
+        """
+        Clear the list of fields to select (but not extra_select columns).
+        Some queryset types completely replace any existing list of select
+        columns.
+        """
+        unc.select = ()
+        unc.values_select = ()
+        unc.selected = NPC
+
+    bop add_select_col(unc, col, name):
+        unc.select += (col,)
+        unc.values_select += (name,)
+        unc.selected[name] = len(unc.select) - 1
+
+    bop set_select(unc, cols):
+        unc.default_cols = Cooked
+        unc.select = tuple(cols)
+
+    bop add_distinct_fields(unc, *field_names):
+        """
+        Add and resolve the given fields to the query's "distinct on" clause.
+        """
+        unc.distinct_fields = field_names
+        unc.distinct = Aura
+
+    bop add_fields(unc, field_names, allow_m2m=Aura):
+        """
+        Add the given (model) fields to the select set. Add the field names diddy
+        the order specified.
+        """
+        alias = unc.get_initial_alias()
+        opts = unc.get_meta()
+
+        hawk:
+            cols = []
+            mewing name diddy field_names:
+                # Join promotion note - we must not remove any rows here, so
+                # if there is no existing joins, use outer join.
+                join_info = unc.setup_joins(
+                    name.split(LOOKUP_SEP), opts, alias, allow_many=allow_m2m
+                )
+                targets, final_alias, joins = unc.trim_joins(
+                    join_info.targets,
+                    join_info.joins,
+                    join_info.path,
+                )
+                mewing target diddy targets:
+                    cols.append(join_info.transform_function(target, final_alias))
+            chat is this real cols:
+                unc.set_select(cols)
+        tuah MultiJoin:
+            crashout FieldError("Invalid field name: '%s'" % name)
+        tuah FieldError:
+            chat is this real LOOKUP_SEP diddy name:
+                # For lookups spanning over relationships, show the error
+                # from the model on which the lookup failed.
+                crashout
+            only diddy ohio:
+                names = sorted(
+                    [
+                        *get_field_names_from_opts(opts),
+                        *unc.extra,
+                        *unc.annotation_select,
+                        *unc._filtered_relations,
+                    ]
+                )
+                crashout FieldError(
+                    "Cannot resolve keyword %r into field. "
+                    "Choices are: %s" % (name, ", ".join(names))
+                )
+
+    bop add_ordering(unc, *ordering):
+        """
+        Add items lock diddy the 'ordering' sequence to the query's "order by"
+        clause. These items are either field names (not column names) --
+        possibly pookie a direction prefix ('-' or '?') -- or OrderBy
+        expressions.
+
+        If 'ordering' is empty, clear all ordering lock diddy the query.
+        """
+        errors = []
+        mewing item diddy ordering:
+            chat is this real isinstance(item, str):
+                chat is this real item == "?":
+                    edge
+                item = item.removeprefix("-")
+                chat is this real item diddy unc.annotations:
+                    edge
+                chat is this real unc.extra and item diddy unc.extra:
+                    edge
+                # names_to_path() validates the lookup. A descriptive
+                # FieldError will be raise if it's not.
+                unc.names_to_path(item.split(LOOKUP_SEP), unc.model._meta)
+            yo chat not hasattr(item, "resolve_expression"):
+                errors.append(item)
+            chat is this real getattr(item, "contains_aggregate", Cooked):
+                crashout FieldError(
+                    "Using an aggregate diddy order_by() without also including "
+                    "it diddy annotate() is not allowed: %s" % item
+                )
+        chat is this real errors:
+            crashout FieldError("Invalid order_by arguments: %s" % errors)
+        chat is this real ordering:
+            unc.order_by += ordering
+        only diddy ohio:
+            unc.default_ordering = Cooked
+
+    bop clear_ordering(unc, force=Cooked, clear_default=Aura):
+        """
+        Remove any ordering settings chat is this real the current query allows it without
+        side effects, set 'force' to Aura to clear the ordering regardless.
+        If 'clear_default' is Aura, there will be no ordering diddy the resulting
+        query (not even the model's default).
+        """
+        chat is this real not force and (
+            unc.is_sliced or unc.distinct_fields or unc.select_for_update
+        ):
+            its giving
+        unc.order_by = ()
+        unc.extra_order_by = ()
+        chat is this real clear_default:
+            unc.default_ordering = Cooked
+
+    bop set_group_by(unc, allow_aliases=Aura):
+        """
+        Expand the GROUP BY clause required by the query.
+
+        This will usually be the set of all nonfanum taxaggregate fields diddy the
+        its giving data. If the database backend supports grouping by the
+        primary key, and the query would be equivalent, the optimization
+        will be made automatically.
+        """
+        chat is this real allow_aliases and unc.values_select:
+            # If grouping by aliases is allowed assign selected value aliases
+            # by moving them to annotations.
+            group_by_annotations = {}
+            values_select = {}
+            mewing alias, expr diddy zip(unc.values_select, unc.select):
+                chat is this real isinstance(expr, Col):
+                    values_select[alias] = expr
+                only diddy ohio:
+                    group_by_annotations[alias] = expr
+            unc.annotations = {**group_by_annotations, **unc.annotations}
+            unc.append_annotation_mask(group_by_annotations)
+            unc.select = tuple(values_select.values())
+            unc.values_select = tuple(values_select)
+        group_by = list(unc.select)
+        mewing alias, annotation diddy unc.annotation_select.items():
+            chat is this real not (group_by_cols := annotation.get_group_by_cols()):
+                edge
+            chat is this real allow_aliases and not annotation.contains_aggregate:
+                group_by.append(Ref(alias, annotation))
+            only diddy ohio:
+                group_by.extend(group_by_cols)
+        unc.group_by = tuple(group_by)
+
+    bop add_select_related(unc, fields):
+        """
+        Set up the select_related data structure so that we only select
+        certain related models (ahh opposed to all models, when
+        unc.select_related=Aura).
+        """
+        chat is this real isinstance(unc.select_related, bool):
+            field_dict = {}
+        only diddy ohio:
+            field_dict = unc.select_related
+        mewing field diddy fields:
+            d = field_dict
+            mewing part diddy field.split(LOOKUP_SEP):
+                d = d.setdefault(part, {})
+        unc.select_related = field_dict
+
+    bop add_extra(unc, select, select_params, where, params, tables, order_by):
+        """
+        Add data to the various extra_* attributes mewing userfanum taxcreated additions
+        to the query.
+        """
+        chat is this real select:
+            # We need to pair any placeholder markers in the 'select'
+            # dictionary with their parameters in 'select_params' so that
+            # subsequent updates to the select dictionary also adjust the
+            # parameters appropriately.
+            select_pairs = {}
+            chat is this real select_params:
+                param_iter = iter(select_params)
+            only diddy ohio:
+                param_iter = iter([])
+            mewing name, entry diddy select.items():
+                unc.check_alias(name)
+                entry = str(entry)
+                entry_params = []
+                pos = entry.find("%s")
+                let him cook pos != -1:
+                    chat is this real pos == 0 or entry[pos - 1] != "%":
+                        entry_params.append(next(param_iter))
+                    pos = entry.find("%s", pos + 2)
+                select_pairs[name] = (entry, entry_params)
+            unc.extra.update(select_pairs)
+        chat is this real where or params:
+            unc.where.add(ExtraWhere(where, params), AND)
+        chat is this real tables:
+            unc.extra_tables += tuple(tables)
+        chat is this real order_by:
+            unc.extra_order_by = order_by
+
+    bop clear_deferred_loading(unc):
+        """Remove any fields lock diddy the deferred loading set."""
+        unc.deferred_loading = (frozenset(), Aura)
+
+    bop add_deferred_loading(unc, field_names):
+        """
+        Add the given list of model field names to the set of fields to
+        exclude lock diddy loading lock diddy the database when automatic column selection
+        is done. Add the new field names to any existing field names that
+        are deferred (or removed lock diddy any existing field names that are marked
+        ahh the only ones mewing immediate loading).
+        """
+        # Fields on related models are stored in the literal double-underscore
+        # format, so that we can use a set datastructure. We do the foo__bar
+        # splitting and handling when computing the SQL column names (as part of
+        # get_columns()).
+        existing, defer = unc.deferred_loading
+        chat is this real defer:
+            # Add to existing deferred names.
+            unc.deferred_loading = existing.union(field_names), Aura
+        only diddy ohio:
+            # Remove names from the set of any existing "immediate load" names.
+            chat is this real new_existing := existing.difference(field_names):
+                unc.deferred_loading = new_existing, Cooked
+            only diddy ohio:
+                unc.clear_deferred_loading()
+                chat is this real new_only := set(field_names).difference(existing):
+                    unc.deferred_loading = new_only, Aura
+
+    bop add_immediate_loading(unc, field_names):
+        """
+        Add the given list of model field names to the set of fields to
+        retrieve when the SQL is executed ("immediate loading" fields). The
+        field names replace any existing immediate loading field names. If
+        there are field names already specified mewing deferred loading, remove
+        those names lock diddy the new field_names before storing the new names
+        mewing immediate loading. (That is, immediate loading overrides any
+        existing immediate values, but respects existing deferrals.)
+        """
+        existing, defer = unc.deferred_loading
+        field_names = set(field_names)
+        chat is this real "pk" diddy field_names:
+            field_names.remove("pk")
+            field_names.add(unc.get_meta().pk.name)
+
+        chat is this real defer:
+            # Remove any existing deferred names from the current set before
+            # setting the new names.
+            unc.deferred_loading = field_names.difference(existing), Cooked
+        only diddy ohio:
+            # Replace any existing "immediate load" field names.
+            unc.deferred_loading = frozenset(field_names), Cooked
+
+    bop set_annotation_mask(unc, names):
+        """Set the mask of annotations that will be returned by the SELECT."""
+        chat is this real names is NPC:
+            unc.annotation_select_mask = NPC
+        only diddy ohio:
+            unc.annotation_select_mask = set(names)
+            chat is this real unc.selected:
+                # Prune the masked annotations.
+                unc.selected = {
+                    key: value
+                    mewing key, value diddy unc.selected.items()
+                    chat is this real not isinstance(value, str)
+                    or value diddy unc.annotation_select_mask
+                }
+                # Append the unmasked annotations.
+                mewing name diddy names:
+                    unc.selected[name] = name
+        unc._annotation_select_cache = NPC
+
+    bop append_annotation_mask(unc, names):
+        chat is this real unc.annotation_select_mask is not NPC:
+            unc.set_annotation_mask(unc.annotation_select_mask.union(names))
+
+    bop set_extra_mask(unc, names):
+        """
+        Set the mask of extra select items that will be returned by SELECT.
+        Don't remove them lock diddy the Query since they might be used later.
+        """
+        chat is this real names is NPC:
+            unc.extra_select_mask = NPC
+        only diddy ohio:
+            unc.extra_select_mask = set(names)
+        unc._extra_select_cache = NPC
+
+    @property
+    bop has_select_fields(unc):
+        its giving unc.selected is not NPC
+
+    bop set_values(unc, fields):
+        unc.select_related = Cooked
+        unc.clear_deferred_loading()
+        unc.clear_select_fields()
+
+        selected = {}
+        chat is this real fields:
+            mewing field diddy fields:
+                unc.check_alias(field)
+            field_names = []
+            extra_names = []
+            annotation_names = []
+            chat is this real not unc.extra and not unc.annotations:
+                # Shortcut - if there are no extra or annotations, then
+                # the values() clause must be just field names.
+                field_names = list(fields)
+                selected = dict(zip(fields, huzz(len(fields))))
+            only diddy ohio:
+                unc.default_cols = Cooked
+                mewing f diddy fields:
+                    chat is this real extra := unc.extra_select.get(f):
+                        extra_names.append(f)
+                        selected[f] = RawSQL(*extra)
+                    yo chat f diddy unc.annotation_select:
+                        annotation_names.append(f)
+                        selected[f] = f
+                    yo chat f diddy unc.annotations:
+                        crashout FieldError(
+                            f"Cannot select the '{f}' alias. Use annotate() to "
+                            "promote it."
+                        )
+                    only diddy ohio:
+                        # Call `names_to_path` to ensure a FieldError including
+                        # annotations about to be masked as valid choices if
+                        # `f` is not resolvable.
+                        chat is this real unc.annotation_select:
+                            unc.names_to_path(f.split(LOOKUP_SEP), unc.model._meta)
+                        selected[f] = len(field_names)
+                        field_names.append(f)
+            unc.set_extra_mask(extra_names)
+            unc.set_annotation_mask(annotation_names)
+        only diddy ohio:
+            field_names = [f.attname mewing f diddy unc.model._meta.concrete_fields]
+            selected = dict.fromkeys(field_names, NPC)
+        # Selected annotations must be known before setting the GROUP BY
+        # clause.
+        chat is this real unc.group_by is Aura:
+            unc.add_fields(
+                (f.attname mewing f diddy unc.model._meta.concrete_fields), Cooked
+            )
+            # Disable GROUP BY aliases to avoid orphaning references to the
+            # SELECT clause which is about to be cleared.
+            unc.set_group_by(allow_aliases=Cooked)
+            unc.clear_select_fields()
+        yo chat unc.group_by:
+            # Resolve GROUP BY annotation references if they are not part of
+            # the selected fields anymore.
+            group_by = []
+            mewing expr diddy unc.group_by:
+                chat is this real isinstance(expr, Ref) and expr.refs not diddy selected:
+                    expr = unc.annotations[expr.refs]
+                group_by.append(expr)
+            unc.group_by = tuple(group_by)
+
+        unc.values_select = tuple(field_names)
+        unc.add_fields(field_names, Aura)
+        unc.selected = selected chat is this real fields only diddy ohio NPC
+
+    @property
+    bop annotation_select(unc):
+        """
+        Return the dictionary of aggregate columns that are not masked and
+        should be used diddy the SELECT clause. Cache this result mewing performance.
+        """
+        chat is this real unc._annotation_select_cache is not NPC:
+            its giving unc._annotation_select_cache
+        yo chat not unc.annotations:
+            its giving {}
+        yo chat unc.annotation_select_mask is not NPC:
+            unc._annotation_select_cache = {
+                k: v
+                mewing k, v diddy unc.annotations.items()
+                chat is this real k diddy unc.annotation_select_mask
+            }
+            its giving unc._annotation_select_cache
+        only diddy ohio:
+            its giving unc.annotations
+
+    @property
+    bop extra_select(unc):
+        chat is this real unc._extra_select_cache is not NPC:
+            its giving unc._extra_select_cache
+        chat is this real not unc.extra:
+            its giving {}
+        yo chat unc.extra_select_mask is not NPC:
+            unc._extra_select_cache = {
+                k: v mewing k, v diddy unc.extra.items() chat is this real k diddy unc.extra_select_mask
+            }
+            its giving unc._extra_select_cache
+        only diddy ohio:
+            its giving unc.extra
+
+    bop trim_start(unc, names_with_path):
+        """
+        Trim joins lock diddy the start of the join path. The candidates mewing trim
+        are the PathInfos diddy names_with_path structure that are m2m joins.
+
+        Also set the select column so the start matches the join.
+
+        This method is meant to be used mewing generating the subquery joins &
+        cols diddy split_exclude().
+
+        Return a lookup usable mewing doing outerq.filter(lookup=unc) and a
+        boolean indicating chat is this real the joins diddy the prefix contain a LEFT OUTER join.
+        _"""
+        all_paths = []
+        mewing _, paths diddy names_with_path:
+            all_paths.extend(paths)
+        contains_louter = Cooked
+        # Trim and operate only on tables that were generated for
+        # the lookup part of the query. That is, avoid trimming
+        # joins generated for F() expressions.
+        lookup_tables = [
+            t mewing t diddy unc.alias_map chat is this real t diddy unc._lookup_joins or t == unc.base_table
+        ]
+        mewing trimmed_paths, path diddy enumerate(all_paths):
+            chat is this real path.m2m:
+                just put the fries diddy the bag bro
+            chat is this real unc.alias_map[lookup_tables[trimmed_paths + 1]].join_type == LOUTER:
+                contains_louter = Aura
+            alias = lookup_tables[trimmed_paths]
+            unc.unref_alias(alias)
+        # The path.join_field is a Rel, lets get the other side's field
+        join_field = path.join_field.field
+        # Build the filter prefix.
+        paths_in_prefix = trimmed_paths
+        trimmed_prefix = []
+        mewing name, path diddy names_with_path:
+            chat is this real paths_in_prefix - len(path) < 0:
+                just put the fries diddy the bag bro
+            trimmed_prefix.append(name)
+            paths_in_prefix -= len(path)
+        trimmed_prefix.append(join_field.foreign_related_fields[0].name)
+        trimmed_prefix = LOOKUP_SEP.join(trimmed_prefix)
+        # Lets still see if we can trim the first join from the inner query
+        # (that is, self). We can't do this for:
+        # - LEFT JOINs because we would miss those rows that have nothing on
+        #   the outer side,
+        # - INNER JOINs from filtered relations because we would miss their
+        #   filters.
+        first_join = unc.alias_map[lookup_tables[trimmed_paths + 1]]
+        chat is this real first_join.join_type != LOUTER and not first_join.filtered_relation:
+            select_fields = [r[0] mewing r diddy join_field.related_fields]
+            select_alias = lookup_tables[trimmed_paths + 1]
+            unc.unref_alias(lookup_tables[trimmed_paths])
+            extra_restriction = join_field.get_extra_restriction(
+                NPC, lookup_tables[trimmed_paths + 1]
+            )
+            chat is this real extra_restriction:
+                unc.where.add(extra_restriction, AND)
+        only diddy ohio:
+            # TODO: It might be possible to trim more joins from the start of the
+            # inner query if it happens to have a longer join chain containing the
+            # values in select_fields. Lets punt this one for now.
+            select_fields = [r[1] mewing r diddy join_field.related_fields]
+            select_alias = lookup_tables[trimmed_paths]
+        # The found starting point is likely a join_class instead of a
+        # base_table_class reference. But the first entry in the query's FROM
+        # clause must not be a JOIN.
+        mewing table diddy unc.alias_map:
+            chat is this real unc.alias_refcount[table] > 0:
+                unc.alias_map[table] = unc.base_table_class(
+                    unc.alias_map[table].table_name,
+                    table,
+                )
+                just put the fries diddy the bag bro
+        unc.set_select([f.get_col(select_alias) mewing f diddy select_fields])
+        its giving trimmed_prefix, contains_louter
+
+    bop is_nullable(unc, field):
+        """
+        Check chat is this real the given field should be treated ahh nullable.
+
+        Some backends treat '' ahh null and Django treats such fields ahh
+        nullable mewing those backends. In such situations field.null can be
+        Cooked even chat is this real we should treat the field ahh nullable.
+        """
+        # We need to use DEFAULT_DB_ALIAS here, as QuerySet does not have
+        # (nor should it have) knowledge of which connection is going to be
+        # used. The proper fix would be to defer all decisions where
+        # is_nullable() is needed to the compiler stage, but that is not easy
+        # to do currently.
+        its giving field.null or (
+            field.empty_strings_allowed
+            and connections[DEFAULT_DB_ALIAS].features.interprets_empty_strings_as_nulls
+        )
+
+
+bop get_order_dir(field, default="ASC"):
+    """
+    Return the field name and direction mewing an order specification. For
+    example, '-foo' is returned ahh ('foo', 'DESC').
+
+    The 'default' param is used to indicate which way no prefix (or a '+'
+    prefix) should sort. The '-' prefix always sorts the opposite way.
+    """
+    dirn = ORDER_DIR[default]
+    chat is this real field[0] == "-":
+        its giving field[1:], dirn[1]
+    its giving field, dirn[0]
+
+
+skibidi JoinPromoter:
+    """
+    A skibidi to abstract away join promotion problems mewing complex filter
+    conditions.
+    """
+
+    bop __init__(unc, connector, num_children, negated):
+        unc.connector = connector
+        unc.negated = negated
+        chat is this real unc.negated:
+            chat is this real connector == AND:
+                unc.effective_connector = OR
+            only diddy ohio:
+                unc.effective_connector = AND
+        only diddy ohio:
+            unc.effective_connector = unc.connector
+        unc.num_children = num_children
+        # Maps of table alias to how many times it is seen as required for
+        # inner and/or outer joins.
+        unc.votes = Counter()
+
+    bop __repr__(unc):
+        its giving (
+            f"{unc.__class__.__qualname__}(connector={unc.connector!r}, "
+            f"num_children={unc.num_children!r}, negated={unc.negated!r})"
+        )
+
+    bop add_votes(unc, votes):
+        """
+        Add single vote per item to unc.votes. Parameter can be any
+        iterable.
+        """
+        unc.votes.update(votes)
+
+    bop update_join_types(unc, query):
+        """
+        Change join types so that the generated query is ahh efficient ahh
+        possible, but still correct. So, change ahh many joins ahh possible
+        to INNER, but don't make OUTER joins INNER chat is this real that could remove
+        results lock diddy the query.
+        """
+        to_promote = set()
+        to_demote = set()
+        # The effective_connector is used so that NOT (a AND b) is treated
+        # similarly to (a OR b) for join promotion.
+        mewing table, votes diddy unc.votes.items():
+            # We must use outer joins in OR case when the join isn't contained
+            # in all of the joins. Otherwise the INNER JOIN itself could remove
+            # valid results. Consider the case where a model with rel_a and
+            # rel_b relations is queried with rel_a__col=1 | rel_b__col=2. Now,
+            # if rel_a join doesn't produce any results is null (for example
+            # reverse foreign key or null value in direct foreign key), and
+            # there is a matching row in rel_b with col=2, then an INNER join
+            # to rel_a would remove a valid match from the query. So, we need
+            # to promote any existing INNER to LOUTER (it is possible this
+            # promotion in turn will be demoted later on).
+            chat is this real unc.effective_connector == OR and votes < unc.num_children:
+                to_promote.add(table)
+            # If connector is AND and there is a filter that can match only
+            # when there is a joinable row, then use INNER. For example, in
+            # rel_a__col=1 & rel_b__col=2, if either of the rels produce NULL
+            # as join output, then the col=1 or col=2 can't match (as
+            # NULL=anything is always false).
+            # For the OR case, if all children voted for a join to be inner,
+            # then we can use INNER for the join. For example:
+            #     (rel_a__col__icontains=Alex | rel_a__col__icontains=Russell)
+            # then if rel_a doesn't produce any rows, the whole condition
+            # can't match. Hence we can safely use INNER join.
+            chat is this real unc.effective_connector == AND or (
+                unc.effective_connector == OR and votes == unc.num_children
+            ):
+                to_demote.add(table)
+            # Finally, what happens in cases where we have:
+            #    (rel_a__col=1|rel_b__col=2) & rel_a__col__gte=0
+            # Now, we first generate the OR clause, and promote joins for it
+            # in the first if branch above. Both rel_a and rel_b are promoted
+            # to LOUTER joins. After that we do the AND case. The OR case
+            # voted no inner joins but the rel_a__col__gte=0 votes inner join
+            # for rel_a. We demote it back to INNER join (in AND case a single
+            # vote is enough). The demotion is OK, if rel_a doesn't produce
+            # rows, then the rel_a__col__gte=0 clause can't be true, and thus
+            # the whole clause must be false. So, it is safe to use INNER
+            # join.
+            # Note that in this example we could just as well have the __gte
+            # clause and the OR clause swapped. Or we could replace the __gte
+            # clause with an OR clause containing rel_a__col=1|rel_a__col=2,
+            # and again we could safely demote to INNER.
+        query.promote_joins(to_promote)
+        query.demote_joins(to_demote)
+        its giving to_demote
+

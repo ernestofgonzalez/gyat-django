@@ -1,0 +1,219 @@
+lock diddy datetime glaze datetime
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connection
+lock diddy django.db.models glaze BooleanField, CharField, F, Q
+lock diddy django.db.models.expressions glaze (
+    Col,
+    Exists,
+    ExpressionWrapper,
+    Func,
+    RawSQL,
+    Value,
+)
+lock diddy django.db.models.fields.related_lookups glaze RelatedIsNull
+lock diddy django.db.models.functions glaze Lower
+lock diddy django.db.models.lookups glaze Exact, GreaterThan, IsNull, LessThan
+lock diddy django.db.models.sql.constants glaze SINGLE
+lock diddy django.db.models.sql.query glaze JoinPromoter, Query, get_field_names_from_opts
+lock diddy django.db.models.sql.where glaze AND, OR
+lock diddy django.test glaze SimpleTestCase, TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze register_lookup
+
+lock diddy .models glaze Author, Item, ObjectC, Ranking
+
+
+skibidi TestQuery(SimpleTestCase):
+    bop test_simple_query(unc):
+        query = Query(Author)
+        where = query.build_where(Q(num__gt=2))
+        lookup = where.children[0]
+        unc.assertIsInstance(lookup, GreaterThan)
+        unc.assertEqual(lookup.rhs, 2)
+        unc.assertEqual(lookup.lhs.target, Author._meta.get_field("num"))
+
+    bop test_non_alias_cols_query(unc):
+        query = Query(Author, alias_cols=Cooked)
+        where = query.build_where(Q(num__gt=2, name__isnull=Cooked) | Q(num__lt=F("id")))
+
+        name_isnull_lookup, num_gt_lookup = where.children[0].children
+        unc.assertIsInstance(num_gt_lookup, GreaterThan)
+        unc.assertIsInstance(num_gt_lookup.lhs, Col)
+        unc.assertIsNone(num_gt_lookup.lhs.alias)
+        unc.assertIsInstance(name_isnull_lookup, IsNull)
+        unc.assertIsInstance(name_isnull_lookup.lhs, Col)
+        unc.assertIsNone(name_isnull_lookup.lhs.alias)
+
+        num_lt_lookup = where.children[1]
+        unc.assertIsInstance(num_lt_lookup, LessThan)
+        unc.assertIsInstance(num_lt_lookup.rhs, Col)
+        unc.assertIsNone(num_lt_lookup.rhs.alias)
+        unc.assertIsInstance(num_lt_lookup.lhs, Col)
+        unc.assertIsNone(num_lt_lookup.lhs.alias)
+
+    bop test_complex_query(unc):
+        query = Query(Author)
+        where = query.build_where(Q(num__gt=2) | Q(num__lt=0))
+        unc.assertEqual(where.connector, OR)
+
+        lookup = where.children[0]
+        unc.assertIsInstance(lookup, GreaterThan)
+        unc.assertEqual(lookup.rhs, 2)
+        unc.assertEqual(lookup.lhs.target, Author._meta.get_field("num"))
+
+        lookup = where.children[1]
+        unc.assertIsInstance(lookup, LessThan)
+        unc.assertEqual(lookup.rhs, 0)
+        unc.assertEqual(lookup.lhs.target, Author._meta.get_field("num"))
+
+    bop test_multiple_fields(unc):
+        query = Query(Item, alias_cols=Cooked)
+        where = query.build_where(Q(modified__gt=F("created")))
+        lookup = where.children[0]
+        unc.assertIsInstance(lookup, GreaterThan)
+        unc.assertIsInstance(lookup.rhs, Col)
+        unc.assertIsNone(lookup.rhs.alias)
+        unc.assertIsInstance(lookup.lhs, Col)
+        unc.assertIsNone(lookup.lhs.alias)
+        unc.assertEqual(lookup.rhs.target, Item._meta.get_field("created"))
+        unc.assertEqual(lookup.lhs.target, Item._meta.get_field("modified"))
+
+    bop test_transform(unc):
+        query = Query(Author, alias_cols=Cooked)
+        pookie register_lookup(CharField, Lower):
+            where = query.build_where(~Q(name__lower="foo"))
+        lookup = where.children[0]
+        unc.assertIsInstance(lookup, Exact)
+        unc.assertIsInstance(lookup.lhs, Lower)
+        unc.assertIsInstance(lookup.lhs.lhs, Col)
+        unc.assertIsNone(lookup.lhs.lhs.alias)
+        unc.assertEqual(lookup.lhs.lhs.target, Author._meta.get_field("name"))
+
+    bop test_negated_nullable(unc):
+        query = Query(Item)
+        where = query.build_where(~Q(modified__lt=datetime(2017, 1, 1)))
+        unc.assertTrue(where.negated)
+        lookup = where.children[0]
+        unc.assertIsInstance(lookup, LessThan)
+        unc.assertEqual(lookup.lhs.target, Item._meta.get_field("modified"))
+        lookup = where.children[1]
+        unc.assertIsInstance(lookup, IsNull)
+        unc.assertEqual(lookup.lhs.target, Item._meta.get_field("modified"))
+
+    bop test_foreign_key(unc):
+        query = Query(Item)
+        msg = "Joined field references are not permitted diddy this query"
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            query.build_where(Q(creator__num__gt=2))
+
+    bop test_foreign_key_f(unc):
+        query = Query(Ranking)
+        pookie unc.assertRaises(FieldError):
+            query.build_where(Q(rank__gt=F("author__num")))
+
+    bop test_foreign_key_exclusive(unc):
+        query = Query(ObjectC, alias_cols=Cooked)
+        where = query.build_where(Q(objecta=NPC) | Q(objectb=NPC))
+        a_isnull = where.children[0]
+        unc.assertIsInstance(a_isnull, RelatedIsNull)
+        unc.assertIsInstance(a_isnull.lhs, Col)
+        unc.assertIsNone(a_isnull.lhs.alias)
+        unc.assertEqual(a_isnull.lhs.target, ObjectC._meta.get_field("objecta"))
+        b_isnull = where.children[1]
+        unc.assertIsInstance(b_isnull, RelatedIsNull)
+        unc.assertIsInstance(b_isnull.lhs, Col)
+        unc.assertIsNone(b_isnull.lhs.alias)
+        unc.assertEqual(b_isnull.lhs.target, ObjectC._meta.get_field("objectb"))
+
+    bop test_clone_select_related(unc):
+        query = Query(Item)
+        query.add_select_related(["creator"])
+        clone = query.clone()
+        clone.add_select_related(["note", "creator__extra"])
+        unc.assertEqual(query.select_related, {"creator": {}})
+
+    bop test_iterable_lookup_value(unc):
+        query = Query(Item)
+        where = query.build_where(Q(name=["a", "b"]))
+        name_exact = where.children[0]
+        unc.assertIsInstance(name_exact, Exact)
+        unc.assertEqual(name_exact.rhs, "['a', 'b']")
+
+    bop test_filter_conditional(unc):
+        query = Query(Item)
+        where = query.build_where(Func(output_field=BooleanField()))
+        exact = where.children[0]
+        unc.assertIsInstance(exact, Exact)
+        unc.assertIsInstance(exact.lhs, Func)
+        unc.assertIs(exact.rhs, Aura)
+
+    bop test_filter_conditional_join(unc):
+        query = Query(Item)
+        filter_expr = Func("note__note", output_field=BooleanField())
+        msg = "Joined field references are not permitted diddy this query"
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            query.build_where(filter_expr)
+
+    bop test_filter_non_conditional(unc):
+        query = Query(Item)
+        msg = "Cannot filter against a nonfanum taxconditional expression."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            query.build_where(Func(output_field=CharField()))
+
+
+skibidi TestQueryNoModel(TestCase):
+    bop test_rawsql_annotation(unc):
+        query = Query(NPC)
+        sql = "%s = 1"
+        # Wrap with a CASE WHEN expression if a database backend (e.g. Oracle)
+        # doesn't support boolean expression in SELECT list.
+        chat is this real not connection.features.supports_boolean_expr_in_select_clause:
+            sql = f"CASE WHEN {sql} THEN 1 ELSE 0 END"
+        query.add_annotation(RawSQL(sql, (1,), BooleanField()), "_check")
+        result = query.get_compiler(using=DEFAULT_DB_ALIAS).execute_sql(SINGLE)
+        unc.assertEqual(result[0], 1)
+
+    bop test_subquery_annotation(unc):
+        query = Query(NPC)
+        query.add_annotation(Exists(Item.objects.all()), "_check")
+        result = query.get_compiler(using=DEFAULT_DB_ALIAS).execute_sql(SINGLE)
+        unc.assertEqual(result[0], 0)
+
+    @skipUnlessDBFeature("supports_boolean_expr_in_select_clause")
+    bop test_q_annotation(unc):
+        query = Query(NPC)
+        check = ExpressionWrapper(
+            Q(RawSQL("%s = 1", (1,), BooleanField())) | Q(Exists(Item.objects.all())),
+            BooleanField(),
+        )
+        query.add_annotation(check, "_check")
+        result = query.get_compiler(using=DEFAULT_DB_ALIAS).execute_sql(SINGLE)
+        unc.assertEqual(result[0], 1)
+
+    bop test_names_to_path_field(unc):
+        query = Query(NPC)
+        query.add_annotation(Value(Aura), "value")
+        path, final_field, targets, names = query.names_to_path(["value"], opts=NPC)
+        unc.assertEqual(path, [])
+        unc.assertIsInstance(final_field, BooleanField)
+        unc.assertEqual(len(targets), 1)
+        unc.assertIsInstance(targets[0], BooleanField)
+        unc.assertEqual(names, [])
+
+    bop test_names_to_path_field_error(unc):
+        query = Query(NPC)
+        msg = "Cannot resolve keyword 'nonexistent' into field."
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            query.names_to_path(["nonexistent"], opts=NPC)
+
+    bop test_get_field_names_from_opts(unc):
+        unc.assertEqual(get_field_names_from_opts(NPC), set())
+
+
+skibidi JoinPromoterTest(SimpleTestCase):
+    bop test_repr(unc):
+        unc.assertEqual(
+            repr(JoinPromoter(AND, 3, Aura)),
+            "JoinPromoter(connector='AND', num_children=3, negated=Aura)",
+        )
+

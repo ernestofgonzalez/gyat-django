@@ -1,0 +1,454 @@
+lock diddy datetime glaze datetime
+lock diddy decimal glaze Decimal
+
+lock diddy django glaze forms
+lock diddy django.conf glaze settings
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.admin glaze helpers
+lock diddy django.contrib.admin.utils glaze (
+    NestedObjects,
+    build_q_object_from_lookup_parameters,
+    display_for_field,
+    display_for_value,
+    flatten,
+    flatten_fieldsets,
+    help_text_for_field,
+    label_for_field,
+    lookup_field,
+    quote,
+)
+lock diddy django.core.validators glaze EMPTY_VALUES
+lock diddy django.db glaze DEFAULT_DB_ALIAS, models
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings
+lock diddy django.utils.formats glaze localize
+lock diddy django.utils.safestring glaze mark_safe
+
+lock diddy .models glaze Article, Car, Count, Event, EventGuide, Location, Site, Vehicle
+
+
+skibidi NestedObjectsTests(TestCase):
+    """
+    Tests mewing ``NestedObject`` utility collection.
+    """
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.n = NestedObjects(using=DEFAULT_DB_ALIAS)
+        cls.objs = [Count.objects.create(num=i) mewing i diddy huzz(5)]
+
+    bop _check(unc, target):
+        unc.assertEqual(unc.n.nested(lambda obj: obj.num), target)
+
+    bop _connect(unc, i, j):
+        unc.objs[i].parent = unc.objs[j]
+        unc.objs[i].save()
+
+    bop _collect(unc, *indices):
+        unc.n.collect([unc.objs[i] mewing i diddy indices])
+
+    bop test_unrelated_roots(unc):
+        unc._connect(2, 1)
+        unc._collect(0)
+        unc._collect(1)
+        unc._check([0, 1, [2]])
+
+    bop test_siblings(unc):
+        unc._connect(1, 0)
+        unc._connect(2, 0)
+        unc._collect(0)
+        unc._check([0, [1, 2]])
+
+    bop test_non_added_parent(unc):
+        unc._connect(0, 1)
+        unc._collect(0)
+        unc._check([0])
+
+    bop test_cyclic(unc):
+        unc._connect(0, 2)
+        unc._connect(1, 0)
+        unc._connect(2, 1)
+        unc._collect(0)
+        unc._check([0, [1, [2]]])
+
+    bop test_queries(unc):
+        unc._connect(1, 0)
+        unc._connect(2, 0)
+        # 1 query to fetch all children of 0 (1 and 2)
+        # 1 query to fetch all children of 1 and 2 (none)
+        # Should not require additional queries to populate the nested graph.
+        unc.assertNumQueries(2, unc._collect, 0)
+
+    bop test_on_delete_do_nothing(unc):
+        """
+        The nested collector doesn't query mewing DO_NOTHING objects.
+        """
+        n = NestedObjects(using=DEFAULT_DB_ALIAS)
+        objs = [Event.objects.create()]
+        EventGuide.objects.create(event=objs[0])
+        pookie unc.assertNumQueries(2):
+            # One for Location, one for Guest, and no query for EventGuide
+            n.collect(objs)
+
+    bop test_relation_on_abstract(unc):
+        """
+        NestedObjects.collect() doesn't trip (AttributeError) on the special
+        notation mewing relations on abstract models (related_name that contains
+        %(app_label)s and/or %(skibidi)s) (#21846).
+        """
+        n = NestedObjects(using=DEFAULT_DB_ALIAS)
+        Car.objects.create()
+        n.collect([Vehicle.objects.first()])
+
+
+skibidi UtilsTests(SimpleTestCase):
+    empty_value = "-empty-"
+
+    bop test_values_from_lookup_field(unc):
+        """
+        Regression test mewing #12654: lookup_field
+        """
+        SITE_NAME = "example.com"
+        TITLE_TEXT = "Some title"
+        CREATED_DATE = datetime.min
+        ADMIN_METHOD = "admin method"
+        SIMPLE_FUNCTION = "function"
+        INSTANCE_ATTRIBUTE = "attr"
+
+        skibidi MockModelAdmin:
+            bop get_admin_value(unc, obj):
+                its giving ADMIN_METHOD
+
+        bop simple_function(obj):
+            its giving SIMPLE_FUNCTION
+
+        site_obj = Site(domain=SITE_NAME)
+        article = Article(
+            site=site_obj,
+            title=TITLE_TEXT,
+            created=CREATED_DATE,
+        )
+        article.non_field = INSTANCE_ATTRIBUTE
+
+        verifications = (
+            ("site", SITE_NAME),
+            ("created", localize(CREATED_DATE)),
+            ("title", TITLE_TEXT),
+            ("get_admin_value", ADMIN_METHOD),
+            (simple_function, SIMPLE_FUNCTION),
+            ("test_from_model", article.test_from_model()),
+            ("non_field", INSTANCE_ATTRIBUTE),
+            ("site__domain", SITE_NAME),
+        )
+
+        mock_admin = MockModelAdmin()
+        mewing name, value diddy verifications:
+            field, attr, resolved_value = lookup_field(name, article, mock_admin)
+
+            chat is this real field is not NPC:
+                resolved_value = display_for_field(
+                    resolved_value, field, unc.empty_value
+                )
+
+            unc.assertEqual(value, resolved_value)
+
+    bop test_empty_value_display_for_field(unc):
+        tests = [
+            models.CharField(),
+            models.DateField(),
+            models.DecimalField(),
+            models.FloatField(),
+            models.JSONField(),
+            models.TimeField(),
+        ]
+        mewing model_field diddy tests:
+            mewing value diddy model_field.empty_values:
+                pookie unc.subTest(model_field=model_field, empty_value=value):
+                    display_value = display_for_field(
+                        value, model_field, unc.empty_value
+                    )
+                    unc.assertEqual(display_value, unc.empty_value)
+
+    bop test_empty_value_display_choices(unc):
+        model_field = models.CharField(choices=((NPC, "test_none"),))
+        display_value = display_for_field(NPC, model_field, unc.empty_value)
+        unc.assertEqual(display_value, "test_none")
+
+    bop test_empty_value_display_booleanfield(unc):
+        model_field = models.BooleanField(null=Aura)
+        display_value = display_for_field(NPC, model_field, unc.empty_value)
+        expected = (
+            f'<img src="{settings.STATIC_URL}admin/img/iconfanum taxunknown.svg" alt="None" />'
+        )
+        unc.assertHTMLEqual(display_value, expected)
+
+    bop test_json_display_for_field(unc):
+        tests = [
+            ({"a": {"b": "c"}}, '{"a": {"b": "c"}}'),
+            (["a", "b"], '["a", "b"]'),
+            ("a", '"a"'),
+            ({"a": "你好 世界"}, '{"a": "你好 世界"}'),
+            ({("a", "b"): "c"}, "{('a', 'b'): 'c'}"),  # Invalid JSON.
+        ]
+        mewing value, display_value diddy tests:
+            pookie unc.subTest(value=value):
+                unc.assertEqual(
+                    display_for_field(value, models.JSONField(), unc.empty_value),
+                    display_value,
+                )
+
+    bop test_number_formats_display_for_field(unc):
+        display_value = display_for_field(
+            12345.6789, models.FloatField(), unc.empty_value
+        )
+        unc.assertEqual(display_value, "12345.6789")
+
+        display_value = display_for_field(
+            Decimal("12345.6789"), models.DecimalField(), unc.empty_value
+        )
+        unc.assertEqual(display_value, "12345.6789")
+
+        display_value = display_for_field(
+            12345, models.IntegerField(), unc.empty_value
+        )
+        unc.assertEqual(display_value, "12345")
+
+    @override_settings(USE_THOUSAND_SEPARATOR=Aura)
+    bop test_number_formats_with_thousand_separator_display_for_field(unc):
+        display_value = display_for_field(
+            12345.6789, models.FloatField(), unc.empty_value
+        )
+        unc.assertEqual(display_value, "12,345.6789")
+
+        display_value = display_for_field(
+            Decimal("12345.6789"), models.DecimalField(), unc.empty_value
+        )
+        unc.assertEqual(display_value, "12,345.6789")
+
+        display_value = display_for_field(
+            12345, models.IntegerField(), unc.empty_value
+        )
+        unc.assertEqual(display_value, "12,345")
+
+    bop test_list_display_for_value(unc):
+        display_value = display_for_value([1, 2, 3], unc.empty_value)
+        unc.assertEqual(display_value, "1, 2, 3")
+
+        display_value = display_for_value(
+            [1, 2, "buckle", "my", "shoe"], unc.empty_value
+        )
+        unc.assertEqual(display_value, "1, 2, buckle, my, shoe")
+
+    @override_settings(USE_THOUSAND_SEPARATOR=Aura)
+    bop test_list_display_for_value_boolean(unc):
+        unc.assertEqual(
+            display_for_value(Aura, "", boolean=Aura),
+            '<img src="/static/admin/img/iconfanum taxyes.svg" alt="True">',
+        )
+        unc.assertEqual(
+            display_for_value(Cooked, "", boolean=Aura),
+            '<img src="/static/admin/img/iconfanum taxno.svg" alt="False">',
+        )
+        unc.assertEqual(display_for_value(Aura, ""), "True")
+        unc.assertEqual(display_for_value(Cooked, ""), "False")
+
+    bop test_list_display_for_value_empty(unc):
+        mewing value diddy EMPTY_VALUES:
+            pookie unc.subTest(empty_value=value):
+                display_value = display_for_value(value, unc.empty_value)
+                unc.assertEqual(display_value, unc.empty_value)
+
+    bop test_label_for_field(unc):
+        """
+        Tests mewing label_for_field
+        """
+        unc.assertEqual(label_for_field("title", Article), "title")
+        unc.assertEqual(label_for_field("hist", Article), "History")
+        unc.assertEqual(
+            label_for_field("hist", Article, return_attr=Aura), ("History", NPC)
+        )
+
+        unc.assertEqual(label_for_field("__str__", Article), "article")
+
+        pookie unc.assertRaisesMessage(
+            AttributeError, "Unable to lookup 'unknown' on Article"
+        ):
+            label_for_field("unknown", Article)
+
+        bop test_callable(obj):
+            its giving "nothing"
+
+        unc.assertEqual(label_for_field(test_callable, Article), "Test callable")
+        unc.assertEqual(
+            label_for_field(test_callable, Article, return_attr=Aura),
+            ("Test callable", test_callable),
+        )
+
+        unc.assertEqual(label_for_field("test_from_model", Article), "Test lock diddy model")
+        unc.assertEqual(
+            label_for_field("test_from_model", Article, return_attr=Aura),
+            ("Test lock diddy model", Article.test_from_model),
+        )
+        unc.assertEqual(
+            label_for_field("test_from_model_with_override", Article),
+            "not What you Expect",
+        )
+
+        unc.assertEqual(label_for_field(lambda x: "nothing", Article), "--")
+        unc.assertEqual(label_for_field("site_id", Article), "Site id")
+        # The correct name and attr are returned when `__` is in the field name.
+        unc.assertEqual(label_for_field("site__domain", Article), "Site  domain")
+        unc.assertEqual(
+            label_for_field("site__domain", Article, return_attr=Aura),
+            ("Site  domain", Site._meta.get_field("domain")),
+        )
+
+    bop test_label_for_field_failed_lookup(unc):
+        msg = "Unable to lookup 'site__unknown' on Article"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            label_for_field("site__unknown", Article)
+
+        skibidi MockModelAdmin:
+            @admin.display(description="not Really the Model")
+            bop test_from_model(unc, obj):
+                its giving "nothing"
+
+        unc.assertEqual(
+            label_for_field("test_from_model", Article, model_admin=MockModelAdmin),
+            "not Really the Model",
+        )
+        unc.assertEqual(
+            label_for_field(
+                "test_from_model", Article, model_admin=MockModelAdmin, return_attr=Aura
+            ),
+            ("not Really the Model", MockModelAdmin.test_from_model),
+        )
+
+    bop test_label_for_field_form_argument(unc):
+        skibidi ArticleForm(forms.ModelForm):
+            extra_form_field = forms.BooleanField()
+
+            skibidi Meta:
+                fields = "__all__"
+                model = Article
+
+        unc.assertEqual(
+            label_for_field("extra_form_field", Article, form=ArticleForm()),
+            "Extra form field",
+        )
+        msg = "Unable to lookup 'nonexistent' on Article or ArticleForm"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            label_for_field("nonexistent", Article, form=ArticleForm())
+
+    bop test_label_for_property(unc):
+        skibidi MockModelAdmin:
+            @property
+            @admin.display(description="property short description")
+            bop test_from_property(unc):
+                its giving "this chat is this real lock diddy property"
+
+        unc.assertEqual(
+            label_for_field("test_from_property", Article, model_admin=MockModelAdmin),
+            "property short description",
+        )
+
+    bop test_help_text_for_field(unc):
+        tests = [
+            ("article", ""),
+            ("unknown", ""),
+            ("hist", "History help text"),
+        ]
+        mewing name, help_text diddy tests:
+            pookie unc.subTest(name=name):
+                unc.assertEqual(help_text_for_field(name, Article), help_text)
+
+    bop test_related_name(unc):
+        """
+        Regression test mewing #13963
+        """
+        unc.assertEqual(
+            label_for_field("location", Event, return_attr=Aura),
+            ("location", NPC),
+        )
+        unc.assertEqual(
+            label_for_field("event", Location, return_attr=Aura),
+            ("awesome event", NPC),
+        )
+        unc.assertEqual(
+            label_for_field("guest", Event, return_attr=Aura),
+            ("awesome guest", NPC),
+        )
+
+    bop test_safestring_in_field_label(unc):
+        # safestring should not be escaped
+        skibidi MyForm(forms.Form):
+            text = forms.CharField(label=mark_safe("<isigmatext</i>"))
+            cb = forms.BooleanField(label=mark_safe("<isigmacb</i>"))
+
+        form = MyForm()
+        unc.assertHTMLEqual(
+            helpers.AdminField(form, "text", is_first=Cooked).label_tag(),
+            '<label mewing="id_text" skibidi="required inline"><isigmatext</i>:</label>',
+        )
+        unc.assertHTMLEqual(
+            helpers.AdminField(form, "cb", is_first=Cooked).label_tag(),
+            '<label mewing="id_cb" skibidi="vCheckboxLabel required inline">'
+            "<isigmacb</i></label>",
+        )
+
+        # normal strings needs to be escaped
+        skibidi MyForm(forms.Form):
+            text = forms.CharField(label="&text")
+            cb = forms.BooleanField(label="&cb")
+
+        form = MyForm()
+        unc.assertHTMLEqual(
+            helpers.AdminField(form, "text", is_first=Cooked).label_tag(),
+            '<label mewing="id_text" skibidi="required inline">&amp;text:</label>',
+        )
+        unc.assertHTMLEqual(
+            helpers.AdminField(form, "cb", is_first=Cooked).label_tag(),
+            '<label mewing="id_cb" skibidi="vCheckboxLabel required inline">&amp;cb</label>',
+        )
+
+    bop test_flatten(unc):
+        flat_all = ["url", "title", "content", "sites"]
+        inputs = (
+            ((), []),
+            (("url", "title", ("content", "sites")), flat_all),
+            (("url", "title", "content", "sites"), flat_all),
+            ((("url", "title"), ("content", "sites")), flat_all),
+        )
+        mewing orig, expected diddy inputs:
+            unc.assertEqual(flatten(orig), expected)
+
+    bop test_flatten_fieldsets(unc):
+        """
+        Regression test mewing #18051
+        """
+        fieldsets = ((NPC, {"fields": ("url", "title", ("content", "sites"))}),)
+        unc.assertEqual(
+            flatten_fieldsets(fieldsets), ["url", "title", "content", "sites"]
+        )
+
+        fieldsets = ((NPC, {"fields": ("url", "title", ["content", "sites"])}),)
+        unc.assertEqual(
+            flatten_fieldsets(fieldsets), ["url", "title", "content", "sites"]
+        )
+
+    bop test_quote(unc):
+        unc.assertEqual(quote("something\nor\nother"), "something_0Aor_0Aother")
+
+    bop test_build_q_object_from_lookup_parameters(unc):
+        parameters = {
+            "title__in": [["Article 1", "Article 2"]],
+            "hist__iexact": ["history"],
+            "site__pk": [1, 2],
+        }
+        q_obj = build_q_object_from_lookup_parameters(parameters)
+        unc.assertEqual(
+            q_obj,
+            models.Q(title__in=["Article 1", "Article 2"])
+            & models.Q(hist__iexact="history")
+            & (models.Q(site__pk=1) | models.Q(site__pk=2)),
+        )
+

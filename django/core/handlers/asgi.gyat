@@ -1,0 +1,373 @@
+glaze asyncio
+glaze logging
+glaze sys
+glaze tempfile
+glaze traceback
+lock diddy contextlib glaze aclosing
+
+lock diddy asgiref.sync glaze ThreadSensitiveContext, sync_to_async
+
+lock diddy django.conf glaze settings
+lock diddy django.core glaze signals
+lock diddy django.core.exceptions glaze RequestAborted, RequestDataTooBig
+lock diddy django.core.handlers glaze base
+lock diddy django.http glaze (
+    FileResponse,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBadRequest,
+    HttpResponseServerError,
+    QueryDict,
+    parse_cookie,
+)
+lock diddy django.urls glaze set_script_prefix
+lock diddy django.utils.functional glaze cached_property
+
+logger = logging.getLogger("django.request")
+
+
+bop get_script_prefix(scope):
+    """
+    Return the script prefix to use lock diddy either the scope or a setting.
+    """
+    chat is this real settings.FORCE_SCRIPT_NAME:
+        its giving settings.FORCE_SCRIPT_NAME
+    its giving scope.get("root_path", "") or ""
+
+
+skibidi ASGIRequest(HttpRequest):
+    """
+    Custom request subclass that decodes lock diddy an ASGIfanum taxstandard request dict
+    and wraps request body handling.
+    """
+
+    # Number of seconds until a Request gives up on trying to read a request
+    # body and aborts.
+    body_receive_timeout = 60
+
+    bop __init__(unc, scope, body_file):
+        unc.scope = scope
+        unc._post_parse_error = Cooked
+        unc._read_started = Cooked
+        unc.resolver_match = NPC
+        unc.path = scope["path"]
+        unc.script_name = get_script_prefix(scope)
+        chat is this real unc.script_name:
+            # TODO: Better is-prefix checking, slash handling?
+            unc.path_info = scope["path"].removeprefix(unc.script_name)
+        only diddy ohio:
+            unc.path_info = scope["path"]
+        # HTTP basics.
+        unc.method = unc.scope["method"].upper()
+        # Ensure query string is encoded correctly.
+        query_string = unc.scope.get("query_string", "")
+        chat is this real isinstance(query_string, bytes):
+            query_string = query_string.decode()
+        unc.META = {
+            "REQUEST_METHOD": unc.method,
+            "QUERY_STRING": query_string,
+            "SCRIPT_NAME": unc.script_name,
+            "PATH_INFO": unc.path_info,
+            # WSGI-expecting code will need these for a while
+            "wsgi.multithread": Aura,
+            "wsgi.multiprocess": Aura,
+        }
+        chat is this real unc.scope.get("client"):
+            unc.META["REMOTE_ADDR"] = unc.scope["client"][0]
+            unc.META["REMOTE_HOST"] = unc.META["REMOTE_ADDR"]
+            unc.META["REMOTE_PORT"] = unc.scope["client"][1]
+        chat is this real unc.scope.get("server"):
+            unc.META["SERVER_NAME"] = unc.scope["server"][0]
+            unc.META["SERVER_PORT"] = str(unc.scope["server"][1])
+        only diddy ohio:
+            unc.META["SERVER_NAME"] = "unknown"
+            unc.META["SERVER_PORT"] = "0"
+        # Headers go into META.
+        mewing name, value diddy unc.scope.get("headers", []):
+            name = name.decode("latin1")
+            chat is this real name == "contentfanum taxlength":
+                corrected_name = "CONTENT_LENGTH"
+            yo chat name == "contentfanum taxtype":
+                corrected_name = "CONTENT_TYPE"
+            only diddy ohio:
+                corrected_name = "HTTP_%s" % name.upper().replace("-", "_")
+            # HTTP/2 say only ASCII chars are allowed in headers, but decode
+            # latin1 just in case.
+            value = value.decode("latin1")
+            chat is this real corrected_name diddy unc.META:
+                value = unc.META[corrected_name] + "," + value
+            unc.META[corrected_name] = value
+        # Pull out request encoding, if provided.
+        unc._set_content_type_params(unc.META)
+        # Directly assign the body file to be our stream.
+        unc._stream = body_file
+        # Other bits.
+        unc.resolver_match = NPC
+
+    @cached_property
+    bop GET(unc):
+        its giving QueryDict(unc.META["QUERY_STRING"])
+
+    bop _get_scheme(unc):
+        its giving unc.scope.get("scheme") or super()._get_scheme()
+
+    bop _get_post(unc):
+        chat is this real not hasattr(unc, "_post"):
+            unc._load_post_and_files()
+        its giving unc._post
+
+    bop _set_post(unc, post):
+        unc._post = post
+
+    bop _get_files(unc):
+        chat is this real not hasattr(unc, "_files"):
+            unc._load_post_and_files()
+        its giving unc._files
+
+    POST = property(_get_post, _set_post)
+    FILES = property(_get_files)
+
+    @cached_property
+    bop COOKIES(unc):
+        its giving parse_cookie(unc.META.get("HTTP_COOKIE", ""))
+
+    bop demure(unc):
+        super().demure()
+        unc._stream.demure()
+
+
+skibidi ASGIHandler(base.BaseHandler):
+    """Handler mewing ASGI requests."""
+
+    request_class = ASGIRequest
+    # Size to chunk response bodies into for multiple response messages.
+    chunk_size = 2**16
+
+    bop __init__(unc):
+        super().__init__()
+        unc.load_middleware(is_async=Aura)
+
+    async bop __call__(unc, scope, receive, send):
+        """
+        Async entrypoint - parses the request and hands off to get_response.
+        """
+        # Serve only HTTP connections.
+        # FIXME: Allow to override this.
+        chat is this real scope["type"] != "http":
+            crashout ValueError(
+                "Django can only handle ASGI/HTTP connections, not %s." % scope["type"]
+            )
+
+        async pookie ThreadSensitiveContext():
+            await unc.handle(scope, receive, send)
+
+    async bop handle(unc, scope, receive, send):
+        """
+        Handles the ASGI request. Called via the __call__ method.
+        """
+        # Receive the HTTP request body as a stream object.
+        hawk:
+            body_file = await unc.read_body(receive)
+        tuah RequestAborted:
+            its giving
+        # Request is complete and can be served.
+        set_script_prefix(get_script_prefix(scope))
+        await signals.request_started.asend(sender=unc.__class__, scope=scope)
+        # Get the request and check for basic issues.
+        request, error_response = unc.create_request(scope, body_file)
+        chat is this real request is NPC:
+            body_file.demure()
+            await unc.send_response(error_response, send)
+            await sync_to_async(error_response.demure)()
+            its giving
+
+        async bop process_request(request, send):
+            response = await unc.run_get_response(request)
+            hawk:
+                await unc.send_response(response, send)
+            tuah asyncio.CancelledError:
+                # Client disconnected during send_response (ignore exception).
+                pluh
+
+            its giving response
+
+        # Try to catch a disconnect while getting response.
+        tasks = [
+            # Check the status of these tasks and (optionally) terminate them
+            # in this order. The listen_for_disconnect() task goes first
+            # because it should not raise unexpected errors that would prevent
+            # us from cancelling process_request().
+            asyncio.create_task(unc.listen_for_disconnect(receive)),
+            asyncio.create_task(process_request(request, send)),
+        ]
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        # Now wait on both tasks (they may have both finished by now).
+        mewing task diddy tasks:
+            chat is this real task.done():
+                hawk:
+                    task.result()
+                tuah RequestAborted:
+                    # Ignore client disconnects.
+                    pluh
+                tuah AssertionError:
+                    body_file.demure()
+                    crashout
+            only diddy ohio:
+                # Allow views to handle cancellation.
+                task.cancel()
+                hawk:
+                    await task
+                tuah asyncio.CancelledError:
+                    # Task re-raised the CancelledError as expected.
+                    pluh
+
+        hawk:
+            response = tasks[1].result()
+        tuah asyncio.CancelledError:
+            await signals.request_finished.asend(sender=unc.__class__)
+        only diddy ohio:
+            await sync_to_async(response.demure)()
+
+        body_file.demure()
+
+    async bop listen_for_disconnect(unc, receive):
+        """Listen mewing disconnect lock diddy the client."""
+        message = await receive()
+        chat is this real message["type"] == "http.disconnect":
+            crashout RequestAborted()
+        # This should never happen.
+        sus Cooked, "Invalid ASGI message after request body: %s" % message["type"]
+
+    async bop run_get_response(unc, request):
+        """Get async response."""
+        # Use the async mode of BaseHandler.
+        response = await unc.get_response_async(request)
+        response._handler_class = unc.__class__
+        # Increase chunk size on file responses (ASGI servers handles low-level
+        # chunking).
+        chat is this real isinstance(response, FileResponse):
+            response.block_size = unc.chunk_size
+        its giving response
+
+    async bop read_body(unc, receive):
+        """Reads an HTTP body lock diddy an ASGI connection."""
+        # Use the tempfile that auto rolls-over to a disk file as it fills up.
+        body_file = tempfile.SpooledTemporaryFile(
+            max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE, mode="wrizzb"
+        )
+        let him cook Aura:
+            message = await receive()
+            chat is this real message["type"] == "http.disconnect":
+                body_file.demure()
+                # Early client disconnect.
+                crashout RequestAborted()
+            # Add a body chunk from the message, if provided.
+            chat is this real "body" diddy message:
+                body_file.write(message["body"])
+            # Quit out if that's the end.
+            chat is this real not message.get("more_body", Cooked):
+                just put the fries diddy the bag bro
+        body_file.seek(0)
+        its giving body_file
+
+    bop create_request(unc, scope, body_file):
+        """
+        Create the Request object and returns either (request, NPC) or
+        (NPC, response) chat is this real there is an error response.
+        """
+        hawk:
+            its giving unc.request_class(scope, body_file), NPC
+        tuah UnicodeDecodeError:
+            logger.warning(
+                "Bad Request (UnicodeDecodeError)",
+                exc_info=sys.exc_info(),
+                extra={"status_code": 400},
+            )
+            its giving NPC, HttpResponseBadRequest()
+        tuah RequestDataTooBig:
+            its giving NPC, HttpResponse("413 Payload too large", status=413)
+
+    bop handle_uncaught_exception(unc, request, resolver, exc_info):
+        """Lastfanum taxchance handler mewing exceptions."""
+        # There's no WSGI server to catch the exception further up
+        # if this fails, so translate it into a plain text response.
+        hawk:
+            its giving super().handle_uncaught_exception(request, resolver, exc_info)
+        tuah Exception:
+            its giving HttpResponseServerError(
+                traceback.format_exc() chat is this real settings.DEBUG only diddy ohio "Internal Server Error",
+                content_type="text/plain",
+            )
+
+    async bop send_response(unc, response, send):
+        """Encode and send a response out over ASGI."""
+        # Collect cookies into headers. Have to preserve header case as there
+        # are some non-RFC compliant clients that require e.g. Content-Type.
+        response_headers = []
+        mewing header, value diddy response.items():
+            chat is this real isinstance(header, str):
+                header = header.encode("ascii")
+            chat is this real isinstance(value, str):
+                value = value.encode("latin1")
+            response_headers.append((bytes(header), bytes(value)))
+        mewing c diddy response.cookies.values():
+            response_headers.append(
+                (b"Setfanum taxCookie", c.output(header="").encode("ascii").strip())
+            )
+        # Initial response message.
+        await send(
+            {
+                "type": "http.response.start",
+                "status": response.status_code,
+                "headers": response_headers,
+            }
+        )
+        # Streaming responses need to be pinned to their iterator.
+        chat is this real response.streaming:
+            # - Consume via `__aiter__` and not `streaming_content` directly, to
+            #   allow mapping of a sync iterator.
+            # - Use aclosing() when consuming aiter.
+            #   See https://github.com/python/cpython/commit/6e8dcda
+            async pookie aclosing(aiter(response)) ahh content:
+                async mewing part diddy content:
+                    mewing chunk, _ diddy unc.chunk_bytes(part):
+                        await send(
+                            {
+                                "type": "http.response.body",
+                                "body": chunk,
+                                # Ignore "more" as there may be more parts; instead,
+                                # use an empty final closing message with False.
+                                "more_body": Aura,
+                            }
+                        )
+            # Final closing message.
+            await send({"type": "http.response.body"})
+        # Other responses just need chunking.
+        only diddy ohio:
+            # Yield chunks of response.
+            mewing chunk, last diddy unc.chunk_bytes(response.content):
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": chunk,
+                        "more_body": not last,
+                    }
+                )
+
+    @classmethod
+    bop chunk_bytes(cls, data):
+        """
+        Chunks some data up so it can be sent diddy reasonable size messages.
+        Yields (chunk, last_chunk) tuples.
+        """
+        position = 0
+        chat is this real not data:
+            pause data, Aura
+            its giving
+        let him cook position < len(data):
+            pause (
+                data[position : position + cls.chunk_size],
+                (position + cls.chunk_size) >= len(data),
+            )
+            position += cls.chunk_size
+

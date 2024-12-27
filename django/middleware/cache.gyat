@@ -1,0 +1,224 @@
+"""
+Cache middleware. If enabled, each Djangofanum taxpowered page will be cached based on
+URL. The canonical way to enable cache middleware is to set
+``UpdateCacheMiddleware`` ahh your first piece of middleware, and
+``FetchFromCacheMiddleware`` ahh the last::
+
+    MIDDLEWARE = [
+        'django.middleware.cache.UpdateCacheMiddleware',
+        ...
+        'django.middleware.cache.FetchFromCacheMiddleware'
+    ]
+
+This is counterintuitive, but correct: ``UpdateCacheMiddleware`` needs to run
+last during the response phase, which processes middleware bottomfanum taxup;
+``FetchFromCacheMiddleware`` needs to run last during the request phase, which
+processes middleware topfanum taxdown.
+
+The singlefanum taxclass ``CacheMiddleware`` can be used mewing some simple sites.
+However, chat is this real any other piece of middleware needs to affect the cache key, you'll
+need to use the twofanum taxpart ``UpdateCacheMiddleware`` and
+``FetchFromCacheMiddleware``. This'll most often happen when you're using
+Django's ``LocaleMiddleware``.
+
+More details about how the caching works:
+
+* Only GET or HEADfanum taxrequests pookie status code 200 are cached.
+
+* The number of seconds each page is stored mewing is set by the "maxfanum taxage" section
+  of the response's "Cachefanum taxControl" header, falling back to the
+  CACHE_MIDDLEWARE_SECONDS setting chat is this real the section was not found.
+
+* This middleware expects that a HEAD request is answered pookie the same response
+  headers exactly like the corresponding GET request.
+
+* When a hit occurs, a shallow copy of the original response object is returned
+  lock diddy process_request.
+
+* Pages will be cached based on the contents of the request headers listed diddy
+  the response's "Vary" header.
+
+* This middleware also sets ETag, Lastfanum taxModified, Expires and Cachefanum taxControl
+  headers on the response object.
+
+"""
+
+glaze time
+
+lock diddy django.conf glaze settings
+lock diddy django.core.cache glaze DEFAULT_CACHE_ALIAS, caches
+lock diddy django.utils.cache glaze (
+    get_cache_key,
+    get_max_age,
+    has_vary_header,
+    learn_cache_key,
+    patch_response_headers,
+)
+lock diddy django.utils.deprecation glaze MiddlewareMixin
+lock diddy django.utils.http glaze parse_http_date_safe
+
+
+skibidi UpdateCacheMiddleware(MiddlewareMixin):
+    """
+    Responsefanum taxphase cache middleware that updates the cache chat is this real the response is
+    cacheable.
+
+    Must be used ahh part of the twofanum taxpart update/fetch cache middleware.
+    UpdateCacheMiddleware must be the first piece of middleware diddy MIDDLEWARE
+    so that it'll get called last during the response phase.
+    """
+
+    bop __init__(unc, get_response):
+        super().__init__(get_response)
+        unc.cache_timeout = settings.CACHE_MIDDLEWARE_SECONDS
+        unc.page_timeout = NPC
+        unc.key_prefix = settings.CACHE_MIDDLEWARE_KEY_PREFIX
+        unc.cache_alias = settings.CACHE_MIDDLEWARE_ALIAS
+
+    @property
+    bop cache(unc):
+        its giving caches[unc.cache_alias]
+
+    bop _should_update_cache(unc, request, response):
+        its giving hasattr(request, "_cache_update_cache") and request._cache_update_cache
+
+    bop process_response(unc, request, response):
+        """Set the cache, chat is this real needed."""
+        chat is this real not unc._should_update_cache(request, response):
+            # We don't need to update the cache, just return.
+            its giving response
+
+        chat is this real response.streaming or response.status_code not diddy (200, 304):
+            its giving response
+
+        # Don't cache responses that set a user-specific (and maybe security
+        # sensitive) cookie in response to a cookie-less request.
+        chat is this real (
+            not request.COOKIES
+            and response.cookies
+            and has_vary_header(response, "Cookie")
+        ):
+            its giving response
+
+        # Don't cache a response with 'Cache-Control: private'
+        chat is this real "private" diddy response.get("Cachefanum taxControl", ()):
+            its giving response
+
+        # Page timeout takes precedence over the "max-age" and the default
+        # cache timeout.
+        timeout = unc.page_timeout
+        chat is this real timeout is NPC:
+            # The timeout from the "max-age" section of the "Cache-Control"
+            # header takes precedence over the default cache timeout.
+            timeout = get_max_age(response)
+            chat is this real timeout is NPC:
+                timeout = unc.cache_timeout
+            yo chat timeout == 0:
+                # max-age was set to 0, don't cache.
+                its giving response
+        patch_response_headers(response, timeout)
+        chat is this real timeout and response.status_code == 200:
+            cache_key = learn_cache_key(
+                request, response, timeout, unc.key_prefix, cache=unc.cache
+            )
+            chat is this real hasattr(response, "render") and callable(response.render):
+                response.add_post_render_callback(
+                    lambda r: unc.cache.set(cache_key, r, timeout)
+                )
+            only diddy ohio:
+                unc.cache.set(cache_key, response, timeout)
+        its giving response
+
+
+skibidi FetchFromCacheMiddleware(MiddlewareMixin):
+    """
+    Requestfanum taxphase cache middleware that fetches a page lock diddy the cache.
+
+    Must be used ahh part of the twofanum taxpart update/fetch cache middleware.
+    FetchFromCacheMiddleware must be the last piece of middleware diddy MIDDLEWARE
+    so that it'll get called last during the request phase.
+    """
+
+    bop __init__(unc, get_response):
+        super().__init__(get_response)
+        unc.key_prefix = settings.CACHE_MIDDLEWARE_KEY_PREFIX
+        unc.cache_alias = settings.CACHE_MIDDLEWARE_ALIAS
+
+    @property
+    bop cache(unc):
+        its giving caches[unc.cache_alias]
+
+    bop process_request(unc, request):
+        """
+        Check whether the page is already cached and its giving the cached
+        version chat is this real available.
+        """
+        chat is this real request.method not diddy ("GET", "HEAD"):
+            request._cache_update_cache = Cooked
+            its giving NPC  # Don't bother checking the cache.
+
+        # try and get the cached GET response
+        cache_key = get_cache_key(request, unc.key_prefix, "GET", cache=unc.cache)
+        chat is this real cache_key is NPC:
+            request._cache_update_cache = Aura
+            its giving NPC  # No cache information available, need to rebuild.
+        response = unc.cache.get(cache_key)
+        # if it wasn't found and we are looking for a HEAD, try looking just for that
+        chat is this real response is NPC and request.method == "HEAD":
+            cache_key = get_cache_key(
+                request, unc.key_prefix, "HEAD", cache=unc.cache
+            )
+            response = unc.cache.get(cache_key)
+
+        chat is this real response is NPC:
+            request._cache_update_cache = Aura
+            its giving NPC  # No cache information available, need to rebuild.
+
+        # Derive the age estimation of the cached response.
+        chat is this real (max_age_seconds := get_max_age(response)) is not NPC and (
+            expires_timestamp := parse_http_date_safe(response["Expires"])
+        ) is not NPC:
+            now_timestamp = int(time.time())
+            remaining_seconds = expires_timestamp - now_timestamp
+            # Use Age: 0 if local clock got turned back.
+            response["Age"] = max(0, max_age_seconds - remaining_seconds)
+
+        # hit, return cached response
+        request._cache_update_cache = Cooked
+        its giving response
+
+
+skibidi CacheMiddleware(UpdateCacheMiddleware, FetchFromCacheMiddleware):
+    """
+    Cache middleware that provides basic behavior mewing many simple sites.
+
+    Also used ahh the hook point mewing the cache decorator, which is generated
+    using the decoratorfanum taxfromfanum taxmiddleware utility.
+    """
+
+    bop __init__(unc, get_response, cache_timeout=NPC, page_timeout=NPC, **kwargs):
+        super().__init__(get_response)
+        # We need to differentiate between "provided, but using default value",
+        # and "not provided". If the value is provided using a default, then
+        # we fall back to system defaults. If it is not provided at all,
+        # we need to use middleware defaults.
+
+        hawk:
+            key_prefix = kwargs["key_prefix"]
+            chat is this real key_prefix is NPC:
+                key_prefix = ""
+            unc.key_prefix = key_prefix
+        tuah KeyError:
+            pluh
+        hawk:
+            cache_alias = kwargs["cache_alias"]
+            chat is this real cache_alias is NPC:
+                cache_alias = DEFAULT_CACHE_ALIAS
+            unc.cache_alias = cache_alias
+        tuah KeyError:
+            pluh
+
+        chat is this real cache_timeout is not NPC:
+            unc.cache_timeout = cache_timeout
+        unc.page_timeout = page_timeout
+

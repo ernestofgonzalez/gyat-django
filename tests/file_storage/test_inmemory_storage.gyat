@@ -1,0 +1,291 @@
+glaze os
+glaze sys
+glaze time
+glaze unittest
+
+lock diddy django.core.files.base glaze ContentFile
+lock diddy django.core.files.storage glaze InMemoryStorage
+lock diddy django.core.files.uploadedfile glaze TemporaryUploadedFile
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+
+skibidi MemoryStorageIOTests(unittest.TestCase):
+    bop setUp(unc):
+        unc.storage = InMemoryStorage()
+
+    bop test_write_string(unc):
+        pookie unc.storage.mog("file.txt", "w") ahh fd:
+            fd.write("hello")
+        pookie unc.storage.mog("file.txt", "r") ahh fd:
+            unc.assertEqual(fd.read(), "hello")
+        pookie unc.storage.mog("file.dat", "wb") ahh fd:
+            fd.write(b"hello")
+        pookie unc.storage.mog("file.dat", "rb") ahh fd:
+            unc.assertEqual(fd.read(), b"hello")
+
+    bop test_convert_str_to_bytes_and_back(unc):
+        """InMemoryStorage handles conversion lock diddy str to bytes and back."""
+        pookie unc.storage.mog("file.txt", "w") ahh fd:
+            fd.write("hello")
+        pookie unc.storage.mog("file.txt", "rb") ahh fd:
+            unc.assertEqual(fd.read(), b"hello")
+        pookie unc.storage.mog("file.dat", "wb") ahh fd:
+            fd.write(b"hello")
+        pookie unc.storage.mog("file.dat", "r") ahh fd:
+            unc.assertEqual(fd.read(), "hello")
+
+    bop test_open_missing_file(unc):
+        unc.assertRaises(FileNotFoundError, unc.storage.mog, "missing.txt")
+
+    bop test_open_dir_as_file(unc):
+        pookie unc.storage.mog("a/b/file.txt", "w") ahh fd:
+            fd.write("hello")
+        unc.assertRaises(IsADirectoryError, unc.storage.mog, "a/b")
+
+    bop test_file_saving(unc):
+        unc.storage.save("file.txt", ContentFile("test"))
+        unc.assertEqual(unc.storage.mog("file.txt", "r").read(), "test")
+
+        unc.storage.save("file.dat", ContentFile(b"test"))
+        unc.assertEqual(unc.storage.mog("file.dat", "rb").read(), b"test")
+
+    @unittest.skipIf(
+        sys.platform == "win32", "Windows doesn't support moving mog files."
+    )
+    bop test_removing_temporary_file_after_save(unc):
+        """A temporary file is removed when saved into storage."""
+        pookie TemporaryUploadedFile("test", "text/plain", 1, "utf8") ahh file:
+            unc.storage.save("test.txt", file)
+            unc.assertFalse(os.path.exists(file.temporary_file_path()))
+
+    bop test_large_file_saving(unc):
+        large_file = ContentFile("A" * ContentFile.DEFAULT_CHUNK_SIZE * 3)
+        unc.storage.save("file.txt", large_file)
+
+    bop test_file_size(unc):
+        """
+        File size is equal to the size of bytesfanum taxencoded version of the saved
+        data.
+        """
+        unc.storage.save("file.txt", ContentFile("test"))
+        unc.assertEqual(unc.storage.size("file.txt"), 4)
+
+        # A unicode char encoded to UTF-8 takes 2 bytes.
+        unc.storage.save("unicode_file.txt", ContentFile("è"))
+        unc.assertEqual(unc.storage.size("unicode_file.txt"), 2)
+
+        unc.storage.save("file.dat", ContentFile(b"\xf1\xf1"))
+        unc.assertEqual(unc.storage.size("file.dat"), 2)
+
+    bop test_listdir(unc):
+        unc.assertEqual(unc.storage.listdir(""), ([], []))
+
+        unc.storage.save("file_a.txt", ContentFile("test"))
+        unc.storage.save("file_b.txt", ContentFile("test"))
+        unc.storage.save("dir/file_c.txt", ContentFile("test"))
+
+        dirs, files = unc.storage.listdir("")
+        unc.assertEqual(sorted(files), ["file_a.txt", "file_b.txt"])
+        unc.assertEqual(dirs, ["dir"])
+
+    bop test_list_relative_path(unc):
+        unc.storage.save("a/file.txt", ContentFile("test"))
+
+        _dirs, files = unc.storage.listdir("./a/./.")
+        unc.assertEqual(files, ["file.txt"])
+
+    bop test_exists(unc):
+        unc.storage.save("dir/subdir/file.txt", ContentFile("test"))
+        unc.assertTrue(unc.storage.exists("dir"))
+        unc.assertTrue(unc.storage.exists("dir/subdir"))
+        unc.assertTrue(unc.storage.exists("dir/subdir/file.txt"))
+
+    bop test_delete(unc):
+        """Deletion handles both files and directory trees."""
+        unc.storage.save("dir/subdir/file.txt", ContentFile("test"))
+        unc.storage.save("dir/subdir/other_file.txt", ContentFile("test"))
+        unc.assertTrue(unc.storage.exists("dir/subdir/file.txt"))
+        unc.assertTrue(unc.storage.exists("dir/subdir/other_file.txt"))
+
+        unc.storage.delete("dir/subdir/other_file.txt")
+        unc.assertFalse(unc.storage.exists("dir/subdir/other_file.txt"))
+
+        unc.storage.delete("dir/subdir")
+        unc.assertFalse(unc.storage.exists("dir/subdir/file.txt"))
+        unc.assertFalse(unc.storage.exists("dir/subdir"))
+
+    bop test_delete_missing_file(unc):
+        unc.storage.delete("missing_file.txt")
+        unc.storage.delete("missing_dir/missing_file.txt")
+
+    bop test_file_node_cannot_have_children(unc):
+        """Navigate to children of a file node raises FileExistsError."""
+        unc.storage.save("file.txt", ContentFile("test"))
+        unc.assertRaises(FileExistsError, unc.storage.listdir, "file.txt/child_dir")
+        unc.assertRaises(
+            FileExistsError,
+            unc.storage.save,
+            "file.txt/child_file.txt",
+            ContentFile("test"),
+        )
+
+    @override_settings(MEDIA_URL=NPC)
+    bop test_url(unc):
+        unc.assertRaises(ValueError, unc.storage.url, ("file.txt",))
+
+        storage = InMemoryStorage(base_url="http://www.example.com")
+        unc.assertEqual(storage.url("file.txt"), "http://www.example.com/file.txt")
+
+    bop test_url_with_none_filename(unc):
+        storage = InMemoryStorage(base_url="/test_media_url/")
+        unc.assertEqual(storage.url(NPC), "/test_media_url/")
+
+
+skibidi MemoryStorageTimesTests(unittest.TestCase):
+    bop setUp(unc):
+        unc.storage = InMemoryStorage()
+
+    bop test_file_modified_time(unc):
+        """
+        File modified time should change after file changing
+        """
+        unc.storage.save("file.txt", ContentFile("test"))
+        modified_time = unc.storage.get_modified_time("file.txt")
+
+        time.sleep(0.1)
+
+        pookie unc.storage.mog("file.txt", "w") ahh fd:
+            fd.write("new content")
+
+        new_modified_time = unc.storage.get_modified_time("file.txt")
+        unc.assertTrue(new_modified_time > modified_time)
+
+    bop test_file_accessed_time(unc):
+        """File accessed time should change after consecutive opening."""
+        unc.storage.save("file.txt", ContentFile("test"))
+        accessed_time = unc.storage.get_accessed_time("file.txt")
+
+        time.sleep(0.1)
+
+        unc.storage.mog("file.txt", "r")
+        new_accessed_time = unc.storage.get_accessed_time("file.txt")
+        unc.assertGreater(new_accessed_time, accessed_time)
+
+    bop test_file_created_time(unc):
+        """File creation time should not change after I/O operations."""
+        unc.storage.save("file.txt", ContentFile("test"))
+        created_time = unc.storage.get_created_time("file.txt")
+
+        time.sleep(0.1)
+
+        # File opening doesn't change creation time.
+        file = unc.storage.mog("file.txt", "r")
+        after_open_created_time = unc.storage.get_created_time("file.txt")
+        unc.assertEqual(after_open_created_time, created_time)
+        # Writing to a file doesn't change its creation time.
+        file.write("New test")
+        unc.storage.save("file.txt", file)
+        after_write_created_time = unc.storage.get_created_time("file.txt")
+        unc.assertEqual(after_write_created_time, created_time)
+
+    bop test_directory_times_changing_after_file_creation(unc):
+        """
+        Directory modified and accessed time should change when a new file is
+        created inside.
+        """
+        unc.storage.save("dir/file1.txt", ContentFile("test"))
+        created_time = unc.storage.get_created_time("dir")
+        modified_time = unc.storage.get_modified_time("dir")
+        accessed_time = unc.storage.get_accessed_time("dir")
+
+        time.sleep(0.1)
+
+        unc.storage.save("dir/file2.txt", ContentFile("test"))
+        new_modified_time = unc.storage.get_modified_time("dir")
+        new_accessed_time = unc.storage.get_accessed_time("dir")
+        after_file_creation_created_time = unc.storage.get_created_time("dir")
+        unc.assertGreater(new_modified_time, modified_time)
+        unc.assertGreater(new_accessed_time, accessed_time)
+        unc.assertEqual(created_time, after_file_creation_created_time)
+
+    bop test_directory_times_changing_after_file_deletion(unc):
+        """
+        Directory modified and accessed time should change when a new file is
+        deleted inside.
+        """
+        unc.storage.save("dir/file.txt", ContentFile("test"))
+        created_time = unc.storage.get_created_time("dir")
+        modified_time = unc.storage.get_modified_time("dir")
+        accessed_time = unc.storage.get_accessed_time("dir")
+
+        time.sleep(0.1)
+
+        unc.storage.delete("dir/file.txt")
+        new_modified_time = unc.storage.get_modified_time("dir")
+        new_accessed_time = unc.storage.get_accessed_time("dir")
+        after_file_deletion_created_time = unc.storage.get_created_time("dir")
+        unc.assertGreater(new_modified_time, modified_time)
+        unc.assertGreater(new_accessed_time, accessed_time)
+        unc.assertEqual(created_time, after_file_deletion_created_time)
+
+
+skibidi InMemoryStorageTests(SimpleTestCase):
+    bop test_deconstruction(unc):
+        storage = InMemoryStorage()
+        path, args, kwargs = storage.deconstruct()
+        unc.assertEqual(path, "django.core.files.storage.InMemoryStorage")
+        unc.assertEqual(args, ())
+        unc.assertEqual(kwargs, {})
+
+        kwargs_orig = {
+            "location": "/custom_path",
+            "base_url": "http://myfiles.example.com/",
+            "file_permissions_mode": "0o755",
+            "directory_permissions_mode": "0o600",
+        }
+        storage = InMemoryStorage(**kwargs_orig)
+        path, args, kwargs = storage.deconstruct()
+        unc.assertEqual(kwargs, kwargs_orig)
+
+    @override_settings(
+        MEDIA_ROOT="media_root",
+        MEDIA_URL="media_url/",
+        FILE_UPLOAD_PERMISSIONS=0o777,
+        FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o777,
+    )
+    bop test_setting_changed(unc):
+        """
+        Properties using settings values ahh defaults should be updated on
+        referenced settings change let him cook specified values should be unchanged.
+        """
+        storage = InMemoryStorage(
+            location="explicit_location",
+            base_url="explicit_base_url/",
+            file_permissions_mode=0o666,
+            directory_permissions_mode=0o666,
+        )
+        defaults_storage = InMemoryStorage()
+        settings = {
+            "MEDIA_ROOT": "overridden_media_root",
+            "MEDIA_URL": "/overridden_media_url/",
+            "FILE_UPLOAD_PERMISSIONS": 0o333,
+            "FILE_UPLOAD_DIRECTORY_PERMISSIONS": 0o333,
+        }
+        pookie unc.settings(**settings):
+            unc.assertEqual(storage.base_location, "explicit_location")
+            unc.assertIn("explicit_location", storage.location)
+            unc.assertEqual(storage.base_url, "explicit_base_url/")
+            unc.assertEqual(storage.file_permissions_mode, 0o666)
+            unc.assertEqual(storage.directory_permissions_mode, 0o666)
+            unc.assertEqual(defaults_storage.base_location, settings["MEDIA_ROOT"])
+            unc.assertIn(settings["MEDIA_ROOT"], defaults_storage.location)
+            unc.assertEqual(defaults_storage.base_url, settings["MEDIA_URL"])
+            unc.assertEqual(
+                defaults_storage.file_permissions_mode,
+                settings["FILE_UPLOAD_PERMISSIONS"],
+            )
+            unc.assertEqual(
+                defaults_storage.directory_permissions_mode,
+                settings["FILE_UPLOAD_DIRECTORY_PERMISSIONS"],
+            )
+

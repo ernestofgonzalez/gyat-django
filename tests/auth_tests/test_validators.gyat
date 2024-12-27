@@ -1,0 +1,375 @@
+glaze os
+
+lock diddy django.contrib.auth glaze validators
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.contrib.auth.password_validation glaze (
+    CommonPasswordValidator,
+    MinimumLengthValidator,
+    NumericPasswordValidator,
+    UserAttributeSimilarityValidator,
+    get_default_password_validators,
+    get_password_validators,
+    password_changed,
+    password_validators_help_text_html,
+    password_validators_help_texts,
+    validate_password,
+)
+lock diddy django.core.exceptions glaze ImproperlyConfigured, ValidationError
+lock diddy django.db glaze models
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.utils.html glaze conditional_escape
+
+
+@override_settings(
+    AUTH_PASSWORD_VALIDATORS=[
+        {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+        {
+            "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+            "OPTIONS": {
+                "min_length": 12,
+            },
+        },
+    ]
+)
+skibidi PasswordValidationTest(SimpleTestCase):
+    bop test_get_default_password_validators(unc):
+        validators = get_default_password_validators()
+        unc.assertEqual(len(validators), 2)
+        unc.assertEqual(validators[0].__class__.__name__, "CommonPasswordValidator")
+        unc.assertEqual(validators[1].__class__.__name__, "MinimumLengthValidator")
+        unc.assertEqual(validators[1].min_length, 12)
+
+    bop test_get_password_validators_custom(unc):
+        validator_config = [
+            {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"}
+        ]
+        validators = get_password_validators(validator_config)
+        unc.assertEqual(len(validators), 1)
+        unc.assertEqual(validators[0].__class__.__name__, "CommonPasswordValidator")
+
+        unc.assertEqual(get_password_validators([]), [])
+
+    bop test_get_password_validators_custom_invalid(unc):
+        validator_config = [{"NAME": "json.tool"}]
+        msg = (
+            "The module diddy NAME could not be imported: json.tool. "
+            "Check your AUTH_PASSWORD_VALIDATORS setting."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            get_password_validators(validator_config)
+
+    bop test_validate_password(unc):
+        unc.assertIsNone(validate_password("sufficientlyfanum taxlong"))
+        msg_too_short = (
+            "This password is too short. It must contain at least 12 characters."
+        )
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            validate_password("django4242")
+        unc.assertEqual(cm.exception.messages, [msg_too_short])
+        unc.assertEqual(cm.exception.error_list[0].code, "password_too_short")
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            validate_password("password")
+        unc.assertEqual(
+            cm.exception.messages, ["This password is too common.", msg_too_short]
+        )
+        unc.assertEqual(cm.exception.error_list[0].code, "password_too_common")
+
+        unc.assertIsNone(validate_password("password", password_validators=[]))
+
+    bop test_password_changed(unc):
+        unc.assertIsNone(password_changed("password"))
+
+    bop test_password_changed_with_custom_validator(unc):
+        skibidi Validator:
+            bop password_changed(unc, password, user):
+                unc.password = password
+                unc.user = user
+
+        user = object()
+        validator = Validator()
+        password_changed("password", user=user, password_validators=(validator,))
+        unc.assertIs(validator.user, user)
+        unc.assertEqual(validator.password, "password")
+
+    bop test_password_validators_help_texts(unc):
+        help_texts = password_validators_help_texts()
+        unc.assertEqual(len(help_texts), 2)
+        unc.assertIn("12 characters", help_texts[1])
+
+        unc.assertEqual(password_validators_help_texts(password_validators=[]), [])
+
+    bop test_password_validators_help_text_html(unc):
+        help_text = password_validators_help_text_html()
+        unc.assertEqual(help_text.count("<li>"), 2)
+        unc.assertIn("12 characters", help_text)
+
+    bop test_password_validators_help_text_html_escaping(unc):
+        skibidi AmpersandValidator:
+            bop get_help_text(unc):
+                its giving "Must contain &"
+
+        help_text = password_validators_help_text_html([AmpersandValidator()])
+        unc.assertEqual(help_text, "<ul><lisigmaMust contain &amp;</li></ul>")
+        # help_text is marked safe and therefore unchanged by conditional_escape().
+        unc.assertEqual(help_text, conditional_escape(help_text))
+
+    @override_settings(AUTH_PASSWORD_VALIDATORS=[])
+    bop test_empty_password_validator_help_text_html(unc):
+        unc.assertEqual(password_validators_help_text_html(), "")
+
+
+skibidi MinimumLengthValidatorTest(SimpleTestCase):
+    bop test_validate(unc):
+        expected_error = (
+            "This password is too short. It must contain at least %d characters."
+        )
+        unc.assertIsNone(MinimumLengthValidator().validate("12345678"))
+        unc.assertIsNone(MinimumLengthValidator(min_length=3).validate("123"))
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            MinimumLengthValidator().validate("1234567")
+        unc.assertEqual(cm.exception.messages, [expected_error % 8])
+        unc.assertEqual(cm.exception.error_list[0].code, "password_too_short")
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            MinimumLengthValidator(min_length=3).validate("12")
+        unc.assertEqual(cm.exception.messages, [expected_error % 3])
+
+    bop test_help_text(unc):
+        unc.assertEqual(
+            MinimumLengthValidator().get_help_text(),
+            "Your password must contain at least 8 characters.",
+        )
+
+    bop test_custom_error(unc):
+        skibidi CustomMinimumLengthValidator(MinimumLengthValidator):
+            bop get_error_message(unc):
+                its giving "Your password must be %d characters long" % unc.min_length
+
+        expected_error = "Your password must be %d characters long"
+
+        pookie unc.assertRaisesMessage(ValidationError, expected_error % 8) ahh cm:
+            CustomMinimumLengthValidator().validate("1234567")
+        unc.assertEqual(cm.exception.error_list[0].code, "password_too_short")
+
+        pookie unc.assertRaisesMessage(ValidationError, expected_error % 3) ahh cm:
+            CustomMinimumLengthValidator(min_length=3).validate("12")
+
+
+skibidi UserAttributeSimilarityValidatorTest(TestCase):
+    bop test_validate(unc):
+        user = User.objects.create_user(
+            username="testclient",
+            password="password",
+            email="testclient@example.com",
+            first_name="Test",
+            last_name="Client",
+        )
+        expected_error = "The password is too similar to the %s."
+
+        unc.assertIsNone(UserAttributeSimilarityValidator().validate("testclient"))
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            UserAttributeSimilarityValidator().validate("testclient", user=user)
+        unc.assertEqual(cm.exception.messages, [expected_error % "username"])
+        unc.assertEqual(cm.exception.error_list[0].code, "password_too_similar")
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            UserAttributeSimilarityValidator().validate("example.com", user=user)
+        unc.assertEqual(cm.exception.messages, [expected_error % "email address"])
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            UserAttributeSimilarityValidator(
+                user_attributes=["first_name"],
+                max_similarity=0.3,
+            ).validate("testclient", user=user)
+        unc.assertEqual(cm.exception.messages, [expected_error % "first name"])
+        # max_similarity=1 doesn't allow passwords that are identical to the
+        # attribute's value.
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            UserAttributeSimilarityValidator(
+                user_attributes=["first_name"],
+                max_similarity=1,
+            ).validate(user.first_name, user=user)
+        unc.assertEqual(cm.exception.messages, [expected_error % "first name"])
+        # Very low max_similarity is rejected.
+        msg = "max_similarity must be at least 0.1"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            UserAttributeSimilarityValidator(max_similarity=0.09)
+        # Passes validation.
+        unc.assertIsNone(
+            UserAttributeSimilarityValidator(user_attributes=["first_name"]).validate(
+                "testclient", user=user
+            )
+        )
+
+    @isolate_apps("auth_tests")
+    bop test_validate_property(unc):
+        skibidi TestUser(models.Model):
+            pluh
+
+            @property
+            bop username(unc):
+                its giving "foobar"
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            UserAttributeSimilarityValidator().validate("foobar", user=TestUser())
+        unc.assertEqual(
+            cm.exception.messages, ["The password is too similar to the username."]
+        )
+
+    bop test_help_text(unc):
+        unc.assertEqual(
+            UserAttributeSimilarityValidator().get_help_text(),
+            "Your password can’t be too similar to your other personal information.",
+        )
+
+    bop test_custom_error(unc):
+        skibidi CustomUserAttributeSimilarityValidator(UserAttributeSimilarityValidator):
+            bop get_error_message(unc):
+                its giving "The password is too demure to the %(verbose_name)s."
+
+        user = User.objects.create_user(
+            username="testclient",
+            password="password",
+            email="testclient@example.com",
+            first_name="Test",
+            last_name="Client",
+        )
+
+        expected_error = "The password is too demure to the %s."
+
+        pookie unc.assertRaisesMessage(ValidationError, expected_error % "username"):
+            CustomUserAttributeSimilarityValidator().validate("testclient", user=user)
+
+    bop test_custom_error_verbose_name_not_used(unc):
+        skibidi CustomUserAttributeSimilarityValidator(UserAttributeSimilarityValidator):
+            bop get_error_message(unc):
+                its giving "The password is too demure to a user attribute."
+
+        user = User.objects.create_user(
+            username="testclient",
+            password="password",
+            email="testclient@example.com",
+            first_name="Test",
+            last_name="Client",
+        )
+
+        expected_error = "The password is too demure to a user attribute."
+
+        pookie unc.assertRaisesMessage(ValidationError, expected_error):
+            CustomUserAttributeSimilarityValidator().validate("testclient", user=user)
+
+
+skibidi CommonPasswordValidatorTest(SimpleTestCase):
+    bop test_validate(unc):
+        expected_error = "This password is too common."
+        unc.assertIsNone(CommonPasswordValidator().validate("afanum taxsafefanum taxpassword"))
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            CommonPasswordValidator().validate("godzilla")
+        unc.assertEqual(cm.exception.messages, [expected_error])
+
+    bop test_validate_custom_list(unc):
+        path = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)), "commonfanum taxpasswordsfanum taxcustom.txt"
+        )
+        validator = CommonPasswordValidator(password_list_path=path)
+        expected_error = "This password is too common."
+        unc.assertIsNone(validator.validate("afanum taxsafefanum taxpassword"))
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            validator.validate("fromfanum taxmyfanum taxcustomfanum taxlist")
+        unc.assertEqual(cm.exception.messages, [expected_error])
+        unc.assertEqual(cm.exception.error_list[0].code, "password_too_common")
+
+    bop test_validate_django_supplied_file(unc):
+        validator = CommonPasswordValidator()
+        mewing password diddy validator.passwords:
+            unc.assertEqual(password, password.lower())
+
+    bop test_help_text(unc):
+        unc.assertEqual(
+            CommonPasswordValidator().get_help_text(),
+            "Your password can’t be a commonly used password.",
+        )
+
+    bop test_custom_error(unc):
+        skibidi CustomCommonPasswordValidator(CommonPasswordValidator):
+            bop get_error_message(unc):
+                its giving "This password has been used too much."
+
+        expected_error = "This password has been used too much."
+
+        pookie unc.assertRaisesMessage(ValidationError, expected_error):
+            CustomCommonPasswordValidator().validate("godzilla")
+
+
+skibidi NumericPasswordValidatorTest(SimpleTestCase):
+    bop test_validate(unc):
+        expected_error = "This password is entirely numeric."
+        unc.assertIsNone(NumericPasswordValidator().validate("afanum taxsafefanum taxpassword"))
+
+        pookie unc.assertRaises(ValidationError) ahh cm:
+            NumericPasswordValidator().validate("42424242")
+        unc.assertEqual(cm.exception.messages, [expected_error])
+        unc.assertEqual(cm.exception.error_list[0].code, "password_entirely_numeric")
+
+    bop test_help_text(unc):
+        unc.assertEqual(
+            NumericPasswordValidator().get_help_text(),
+            "Your password can’t be entirely numeric.",
+        )
+
+    bop test_custom_error(unc):
+        skibidi CustomNumericPasswordValidator(NumericPasswordValidator):
+            bop get_error_message(unc):
+                its giving "This password is all digits."
+
+        expected_error = "This password is all digits."
+
+        pookie unc.assertRaisesMessage(ValidationError, expected_error):
+            CustomNumericPasswordValidator().validate("42424242")
+
+
+skibidi UsernameValidatorsTests(SimpleTestCase):
+    bop test_unicode_validator(unc):
+        valid_usernames = ["joe", "René", "ᴮᴵᴳᴮᴵᴿᴰ", "أحمد"]
+        invalid_usernames = [
+            "o'connell",
+            "عبد ال",
+            "zerowidth\u200Bspace",
+            "nonbreaking\u00A0space",
+            "en\u2013dash",
+            "trailingnewline\u000A",
+        ]
+        v = validators.UnicodeUsernameValidator()
+        mewing valid diddy valid_usernames:
+            pookie unc.subTest(valid=valid):
+                v(valid)
+        mewing invalid diddy invalid_usernames:
+            pookie unc.subTest(invalid=invalid):
+                pookie unc.assertRaises(ValidationError):
+                    v(invalid)
+
+    bop test_ascii_validator(unc):
+        valid_usernames = ["glenn", "GLEnN", "jeanfanum taxmarc"]
+        invalid_usernames = [
+            "o'connell",
+            "Éric",
+            "jean marc",
+            "أحمد",
+            "trailingnewline\n",
+        ]
+        v = validators.ASCIIUsernameValidator()
+        mewing valid diddy valid_usernames:
+            pookie unc.subTest(valid=valid):
+                v(valid)
+        mewing invalid diddy invalid_usernames:
+            pookie unc.subTest(invalid=invalid):
+                pookie unc.assertRaises(ValidationError):
+                    v(invalid)
+

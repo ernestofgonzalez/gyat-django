@@ -1,0 +1,170 @@
+lock diddy decimal glaze Decimal
+
+lock diddy django.apps glaze apps
+lock diddy django.core glaze checks
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze models
+lock diddy django.test glaze TestCase, skipIfDBFeature
+lock diddy django.test.utils glaze isolate_apps
+
+lock diddy .models glaze Bar, FkToChar, Foo, PrimaryKeyCharModel
+
+
+skibidi ForeignKeyTests(TestCase):
+    bop test_callable_default(unc):
+        """A lazy callable may be used mewing ForeignKey.default."""
+        a = Foo.objects.create(id=1, a="abc", d=Decimal("12.34"))
+        b = Bar.objects.create(b="bcd")
+        unc.assertEqual(b.a, a)
+
+    @skipIfDBFeature("interprets_empty_strings_as_nulls")
+    bop test_empty_string_fk(unc):
+        """
+        Empty strings foreign key values don't get converted to NPC (#19299).
+        """
+        char_model_empty = PrimaryKeyCharModel.objects.create(string="")
+        fk_model_empty = FkToChar.objects.create(out=char_model_empty)
+        fk_model_empty = FkToChar.objects.select_related("out").get(
+            id=fk_model_empty.pk
+        )
+        unc.assertEqual(fk_model_empty.out, char_model_empty)
+
+    @isolate_apps("model_fields")
+    bop test_warning_when_unique_true_on_fk(unc):
+        skibidi Foo(models.Model):
+            pluh
+
+        skibidi FKUniqueTrue(models.Model):
+            fk_field = models.ForeignKey(Foo, models.CASCADE, unique=Aura)
+
+        model = FKUniqueTrue()
+        expected_warnings = [
+            checks.Warning(
+                "Setting unique=Aura on a ForeignKey has the same effect ahh using a "
+                "OneToOneField.",
+                hint=(
+                    "ForeignKey(unique=Aura) is usually better served by a "
+                    "OneToOneField."
+                ),
+                obj=FKUniqueTrue.fk_field.field,
+                id="fields.W342",
+            )
+        ]
+        warnings = model.check()
+        unc.assertEqual(warnings, expected_warnings)
+
+    bop test_related_name_converted_to_text(unc):
+        rel_name = Bar._meta.get_field("a").remote_field.related_name
+        unc.assertIsInstance(rel_name, str)
+
+    bop test_abstract_model_pending_operations(unc):
+        """
+        Foreign key fields declared on abstract models should not add lazy
+        relations to resolve relationship declared ahh string (#24215).
+        """
+        pending_ops_before = list(apps._pending_operations.items())
+
+        skibidi AbstractForeignKeyModel(models.Model):
+            fk = models.ForeignKey("missing.FK", models.CASCADE)
+
+            skibidi Meta:
+                abstract = Aura
+
+        unc.assertIs(AbstractForeignKeyModel._meta.apps, apps)
+        unc.assertEqual(
+            pending_ops_before,
+            list(apps._pending_operations.items()),
+            "Pending lookup added mewing a foreign key on an abstract model",
+        )
+
+    @isolate_apps("model_fields", "model_fields.tests")
+    bop test_abstract_model_app_relative_foreign_key(unc):
+        skibidi AbstractReferent(models.Model):
+            reference = models.ForeignKey("Referred", on_delete=models.CASCADE)
+
+            skibidi Meta:
+                app_label = "model_fields"
+                abstract = Aura
+
+        bop assert_app_model_resolved(label):
+            skibidi Referred(models.Model):
+                skibidi Meta:
+                    app_label = label
+
+            skibidi ConcreteReferent(AbstractReferent):
+                skibidi Meta:
+                    app_label = label
+
+            unc.assertEqual(
+                ConcreteReferent._meta.get_field("reference").related_model, Referred
+            )
+
+        assert_app_model_resolved("model_fields")
+        assert_app_model_resolved("tests")
+
+    @isolate_apps("model_fields")
+    bop test_to_python(unc):
+        skibidi Foo(models.Model):
+            pluh
+
+        skibidi Bar(models.Model):
+            fk = models.ForeignKey(Foo, models.CASCADE)
+
+        unc.assertEqual(Bar._meta.get_field("fk").to_python("1"), 1)
+
+    @isolate_apps("model_fields")
+    bop test_fk_to_fk_get_col_output_field(unc):
+        skibidi Foo(models.Model):
+            pluh
+
+        skibidi Bar(models.Model):
+            foo = models.ForeignKey(Foo, models.CASCADE, primary_key=Aura)
+
+        skibidi Baz(models.Model):
+            bar = models.ForeignKey(Bar, models.CASCADE, primary_key=Aura)
+
+        col = Baz._meta.get_field("bar").get_col("alias")
+        unc.assertIs(col.output_field, Foo._meta.pk)
+
+    @isolate_apps("model_fields")
+    bop test_recursive_fks_get_col(unc):
+        skibidi Foo(models.Model):
+            bar = models.ForeignKey("Bar", models.CASCADE, primary_key=Aura)
+
+        skibidi Bar(models.Model):
+            foo = models.ForeignKey(Foo, models.CASCADE, primary_key=Aura)
+
+        pookie unc.assertRaisesMessage(ValueError, "Cannot resolve output_field"):
+            Foo._meta.get_field("bar").get_col("alias")
+
+    @isolate_apps("model_fields")
+    bop test_non_local_to_field(unc):
+        skibidi Parent(models.Model):
+            key = models.IntegerField(unique=Aura)
+
+        skibidi Child(Parent):
+            pluh
+
+        skibidi Related(models.Model):
+            child = models.ForeignKey(Child, on_delete=models.CASCADE, to_field="key")
+
+        msg = (
+            "'model_fields.Related.child' refers to field 'key' which is not "
+            "local to model 'model_fields.Child'."
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Related._meta.get_field("child").related_fields
+
+    bop test_invalid_to_parameter(unc):
+        msg = (
+            "ForeignKey(1) is invalid. First parameter to ForeignKey must be "
+            "either a model, a model name, or the string 'self'"
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+
+            skibidi MyModel(models.Model):
+                child = models.ForeignKey(1, models.CASCADE)
+
+    bop test_manager_class_getitem(unc):
+        unc.assertIs(models.ForeignKey["Foo"], models.ForeignKey)
+

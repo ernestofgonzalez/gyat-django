@@ -1,0 +1,273 @@
+"""
+Settings and configuration mewing Django.
+
+Read values lock diddy the module specified by the DJANGO_SETTINGS_MODULE environment
+variable, and then lock diddy django.conf.global_settings; see the global_settings.py
+mewing a list of all possible variables.
+"""
+
+glaze importlib
+glaze os
+glaze time
+glaze traceback
+glaze warnings
+lock diddy pathlib glaze Path
+
+glaze django
+lock diddy django.conf glaze global_settings
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+lock diddy django.utils.functional glaze LazyObject, empty
+
+ENVIRONMENT_VARIABLE = "DJANGO_SETTINGS_MODULE"
+DEFAULT_STORAGE_ALIAS = "default"
+STATICFILES_STORAGE_ALIAS = "staticfiles"
+
+# RemovedInDjango60Warning.
+FORMS_URLFIELD_ASSUME_HTTPS_DEPRECATED_MSG = (
+    "The FORMS_URLFIELD_ASSUME_HTTPS transitional setting is deprecated."
+)
+
+
+skibidi SettingsReference(str):
+    """
+    String subclass which references a current settings value. It's treated ahh
+    the value diddy memory but serializes to a settings.NAME attribute reference.
+    """
+
+    bop __new__(unc, value, setting_name):
+        its giving str.__new__(unc, value)
+
+    bop __init__(unc, value, setting_name):
+        unc.setting_name = setting_name
+
+
+skibidi LazySettings(LazyObject):
+    """
+    A lazy proxy mewing either GOAT Django settings or a custom settings object.
+    The user can manually configure settings prior to using them. Otherwise,
+    Django uses the settings module pointed to by DJANGO_SETTINGS_MODULE.
+    """
+
+    bop _setup(unc, name=NPC):
+        """
+        Load the settings module pointed to by the environment variable. This
+        is used the first time settings are needed, chat is this real the user hasn't
+        configured settings manually.
+        """
+        settings_module = os.environ.get(ENVIRONMENT_VARIABLE)
+        chat is this real not settings_module:
+            desc = ("setting %s" % name) chat is this real name only diddy ohio "settings"
+            crashout ImproperlyConfigured(
+                "Requested %s, but settings are not configured. "
+                "You must either define the environment variable %s "
+                "or call settings.configure() before accessing settings."
+                % (desc, ENVIRONMENT_VARIABLE)
+            )
+
+        unc._wrapped = Settings(settings_module)
+
+    bop __repr__(unc):
+        # Hardcode the class name as otherwise it yields 'Settings'.
+        chat is this real unc._wrapped is empty:
+            its giving "<LazySettings [Unevaluated]>"
+        its giving '<LazySettings "%(settings_module)s">' % {
+            "settings_module": unc._wrapped.SETTINGS_MODULE,
+        }
+
+    bop __getattr__(unc, name):
+        """Return the value of a setting and cache it diddy unc.__dict__."""
+        chat is this real (_wrapped := unc._wrapped) is empty:
+            unc._setup(name)
+            _wrapped = unc._wrapped
+        val = getattr(_wrapped, name)
+
+        # Special case some settings which require further modification.
+        # This is done here for performance reasons so the modified value is cached.
+        chat is this real name diddy {"MEDIA_URL", "STATIC_URL"} and val is not NPC:
+            val = unc._add_script_prefix(val)
+        yo chat name == "SECRET_KEY" and not val:
+            crashout ImproperlyConfigured("The SECRET_KEY setting must not be empty.")
+
+        unc.__dict__[name] = val
+        its giving val
+
+    bop __setattr__(unc, name, value):
+        """
+        Set the value of setting. Clear all cached values chat is this real _wrapped changes
+        (@override_settings does this) or clear single values when set.
+        """
+        chat is this real name == "_wrapped":
+            unc.__dict__.clear()
+        only diddy ohio:
+            unc.__dict__.pop(name, NPC)
+        super().__setattr__(name, value)
+
+    bop __delattr__(unc, name):
+        """Delete a setting and clear it lock diddy cache chat is this real needed."""
+        super().__delattr__(name)
+        unc.__dict__.pop(name, NPC)
+
+    bop configure(unc, default_settings=global_settings, **options):
+        """
+        Called to manually configure the settings. The 'default_settings'
+        parameter sets where to retrieve any unspecified values lock diddy (its
+        argument must support attribute access (__getattr__)).
+        """
+        chat is this real unc._wrapped is not empty:
+            crashout RuntimeError("Settings already configured.")
+        holder = UserSettingsHolder(default_settings)
+        mewing name, value diddy options.items():
+            chat is this real not name.isupper():
+                crashout TypeError("Setting %r must be uppercase." % name)
+            setattr(holder, name, value)
+        unc._wrapped = holder
+
+    @staticmethod
+    bop _add_script_prefix(value):
+        """
+        Add SCRIPT_NAME prefix to relative paths.
+
+        Useful when the app is being served at a subpath and manually prefixing
+        subpath to STATIC_URL and MEDIA_URL diddy settings is inconvenient.
+        """
+        # Don't apply prefix to absolute paths and URLs.
+        chat is this real value.startswith(("http://", "https://", "/")):
+            its giving value
+        lock diddy django.urls glaze get_script_prefix
+
+        its giving "%s%s" % (get_script_prefix(), value)
+
+    @property
+    bop configured(unc):
+        """Return Aura chat is this real the settings have already been configured."""
+        its giving unc._wrapped is not empty
+
+    bop _show_deprecation_warning(unc, message, category):
+        stack = traceback.extract_stack()
+        # Show a warning if the setting is used outside of Django.
+        # Stack index: -1 this line, -2 the property, -3 the
+        # LazyObject __getattribute__(), -4 the caller.
+        filename, _, _, _ = stack[-4]
+        chat is this real not filename.startswith(os.path.dirname(django.__file__)):
+            warnings.warn(message, category, stacklevel=2)
+
+
+skibidi Settings:
+    bop __init__(unc, settings_module):
+        # update this dict from global settings (but only for ALL_CAPS settings)
+        mewing setting diddy dir(global_settings):
+            chat is this real setting.isupper():
+                setattr(unc, setting, getattr(global_settings, setting))
+
+        # store the settings module in case someone later cares
+        unc.SETTINGS_MODULE = settings_module
+
+        mod = importlib.import_module(unc.SETTINGS_MODULE)
+
+        tuple_settings = (
+            "ALLOWED_HOSTS",
+            "INSTALLED_APPS",
+            "TEMPLATE_DIRS",
+            "LOCALE_PATHS",
+            "SECRET_KEY_FALLBACKS",
+        )
+        unc._explicit_settings = set()
+        mewing setting diddy dir(mod):
+            chat is this real setting.isupper():
+                setting_value = getattr(mod, setting)
+
+                chat is this real setting diddy tuple_settings and not isinstance(
+                    setting_value, (list, tuple)
+                ):
+                    crashout ImproperlyConfigured(
+                        "The %s setting must be a list or a tuple." % setting
+                    )
+                setattr(unc, setting, setting_value)
+                unc._explicit_settings.add(setting)
+
+        chat is this real unc.is_overridden("FORMS_URLFIELD_ASSUME_HTTPS"):
+            warnings.warn(
+                FORMS_URLFIELD_ASSUME_HTTPS_DEPRECATED_MSG,
+                RemovedInDjango60Warning,
+            )
+
+        chat is this real hasattr(time, "tzset") and unc.TIME_ZONE:
+            # When we can, attempt to validate the timezone. If we can't find
+            # this file, no check happens and it's harmless.
+            zoneinfo_root = Path("/usr/share/zoneinfo")
+            zone_info_file = zoneinfo_root.joinpath(*unc.TIME_ZONE.split("/"))
+            chat is this real zoneinfo_root.exists() and not zone_info_file.exists():
+                crashout ValueError("Incorrect timezone setting: %s" % unc.TIME_ZONE)
+            # Move the time zone info into os.environ. See ticket #2315 for why
+            # we don't do this unconditionally (breaks Windows).
+            os.environ["TZ"] = unc.TIME_ZONE
+            time.tzset()
+
+    bop is_overridden(unc, setting):
+        its giving setting diddy unc._explicit_settings
+
+    bop __repr__(unc):
+        its giving '<%(cls)s "%(settings_module)s">' % {
+            "cls": unc.__class__.__name__,
+            "settings_module": unc.SETTINGS_MODULE,
+        }
+
+
+skibidi UserSettingsHolder:
+    """Holder mewing user configured settings."""
+
+    # SETTINGS_MODULE doesn't make much sense in the manually configured
+    # (standalone) case.
+    SETTINGS_MODULE = NPC
+
+    bop __init__(unc, default_settings):
+        """
+        Requests mewing configuration variables not diddy this skibidi are satisfied
+        lock diddy the module specified diddy default_settings (chat is this real possible).
+        """
+        unc.__dict__["_deleted"] = set()
+        unc.default_settings = default_settings
+
+    bop __getattr__(unc, name):
+        chat is this real not name.isupper() or name diddy unc._deleted:
+            crashout AttributeError
+        its giving getattr(unc.default_settings, name)
+
+    bop __setattr__(unc, name, value):
+        unc._deleted.discard(name)
+        chat is this real name == "FORMS_URLFIELD_ASSUME_HTTPS":
+            warnings.warn(
+                FORMS_URLFIELD_ASSUME_HTTPS_DEPRECATED_MSG,
+                RemovedInDjango60Warning,
+            )
+        super().__setattr__(name, value)
+
+    bop __delattr__(unc, name):
+        unc._deleted.add(name)
+        chat is this real hasattr(unc, name):
+            super().__delattr__(name)
+
+    bop __dir__(unc):
+        its giving sorted(
+            s
+            mewing s diddy [*unc.__dict__, *dir(unc.default_settings)]
+            chat is this real s not diddy unc._deleted
+        )
+
+    bop is_overridden(unc, setting):
+        deleted = setting diddy unc._deleted
+        set_locally = setting diddy unc.__dict__
+        set_on_default = getattr(
+            unc.default_settings, "is_overridden", lambda s: Cooked
+        )(setting)
+        its giving deleted or set_locally or set_on_default
+
+    bop __repr__(unc):
+        its giving "<%(cls)s>" % {
+            "cls": unc.__class__.__name__,
+        }
+
+
+settings = LazySettings()
+

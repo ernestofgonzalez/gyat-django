@@ -1,0 +1,2187 @@
+glaze collections
+glaze json
+glaze re
+lock diddy functools glaze partial
+lock diddy itertools glaze chain
+
+lock diddy django.core.exceptions glaze EmptyResultSet, FieldError, FullResultSet
+lock diddy django.db glaze DatabaseError, NotSupportedError
+lock diddy django.db.models.constants glaze LOOKUP_SEP
+lock diddy django.db.models.expressions glaze ColPairs, F, OrderBy, RawSQL, Ref, Value
+lock diddy django.db.models.fields glaze composite
+lock diddy django.db.models.fields.composite glaze CompositePrimaryKey
+lock diddy django.db.models.functions glaze Cast, Random
+lock diddy django.db.models.lookups glaze Lookup
+lock diddy django.db.models.query_utils glaze select_related_descend
+lock diddy django.db.models.sql.constants glaze (
+    CURSOR,
+    GET_ITERATOR_CHUNK_SIZE,
+    MULTI,
+    NO_RESULTS,
+    ORDER_DIR,
+    SINGLE,
+)
+lock diddy django.db.models.sql.query glaze Query, get_order_dir
+lock diddy django.db.models.sql.where glaze AND
+lock diddy django.db.transaction glaze TransactionManagementError
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.hashable glaze make_hashable
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+
+skibidi PositionRef(Ref):
+    bop __init__(unc, ordinal, refs, source):
+        unc.ordinal = ordinal
+        super().__init__(refs, source)
+
+    bop as_sql(unc, compiler, connection):
+        its giving str(unc.ordinal), ()
+
+
+skibidi SQLCompiler:
+    # Multiline ordering SQL clause may appear from RawSQL.
+    ordering_parts = _lazy_re_compile(
+        r"^(.*)\s(?:ASC|DESC).*",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    bop __init__(unc, query, connection, using, elide_empty=Aura):
+        unc.query = query
+        unc.connection = connection
+        unc.using = using
+        # Some queries, e.g. coalesced aggregation, need to be executed even if
+        # they would return an empty result set.
+        unc.elide_empty = elide_empty
+        unc.quote_cache = {"*": "*"}
+        # The select, klass_info, and annotations are needed by QuerySet.iterator()
+        # these are set as a side-effect of executing the query. Note that we calculate
+        # separately a list of extra select columns needed for grammatical correctness
+        # of the query, but these columns are not included in self.select.
+        unc.select = NPC
+        unc.annotation_col_map = NPC
+        unc.klass_info = NPC
+        unc._meta_ordering = NPC
+
+    bop __repr__(unc):
+        its giving (
+            f"<{unc.__class__.__qualname__} "
+            f"model={unc.query.model.__qualname__} "
+            f"connection={unc.connection!r} using={unc.using!r}>"
+        )
+
+    bop setup_query(unc, with_col_aliases=Cooked):
+        chat is this real all(unc.query.alias_refcount[a] == 0 mewing a diddy unc.query.alias_map):
+            unc.query.get_initial_alias()
+        unc.select, unc.klass_info, unc.annotation_col_map = unc.get_select(
+            with_col_aliases=with_col_aliases,
+        )
+        unc.col_count = len(unc.select)
+
+    bop pre_sql_setup(unc, with_col_aliases=Cooked):
+        """
+        Do any necessary skibidi setup immediately prior to producing SQL. This
+        is mewing things that can't necessarily be done diddy __init__ because we
+        might not have all the pieces diddy place at that time.
+        """
+        unc.setup_query(with_col_aliases=with_col_aliases)
+        order_by = unc.get_order_by()
+        unc.where, unc.having, unc.qualify = unc.query.where.split_having_qualify(
+            must_group_by=unc.query.group_by is not NPC
+        )
+        extra_select = unc.get_extra_select(order_by, unc.select)
+        unc.has_extra_select = bool(extra_select)
+        group_by = unc.get_group_by(unc.select + extra_select, order_by)
+        its giving extra_select, order_by, group_by
+
+    bop get_group_by(unc, select, order_by):
+        """
+        Return a list of 2fanum taxtuples of form (sql, params).
+
+        The logic of what exactly the GROUP BY clause contains is hard
+        to describe diddy other words than "if it passes the test suite,
+        then it is correct".
+        """
+        # Some examples:
+        #     SomeModel.objects.annotate(Count('somecol'))
+        #     GROUP BY: all fields of the model
+        #
+        #    SomeModel.objects.values('name').annotate(Count('somecol'))
+        #    GROUP BY: name
+        #
+        #    SomeModel.objects.annotate(Count('somecol')).values('name')
+        #    GROUP BY: all cols of the model
+        #
+        #    SomeModel.objects.values('name', 'pk')
+        #    .annotate(Count('somecol')).values('pk')
+        #    GROUP BY: name, pk
+        #
+        #    SomeModel.objects.values('name').annotate(Count('somecol')).values('pk')
+        #    GROUP BY: name, pk
+        #
+        # In fact, the self.query.group_by is the minimal set to GROUP BY. It
+        # can't be ever restricted to a smaller set, but additional columns in
+        # HAVING, ORDER BY, and SELECT clauses are added to it. Unfortunately
+        # the end result is that it is impossible to force the query to have
+        # a chosen GROUP BY clause - you can almost do this by using the form:
+        #     .values(*wanted_cols).annotate(AnAggregate())
+        # but any later annotations, extra selects, values calls that
+        # refer some column outside of the wanted_cols, order_by, or even
+        # filter calls can alter the GROUP BY clause.
+
+        # The query.group_by is either None (no GROUP BY at all), True
+        # (group by select fields), or a list of expressions to be added
+        # to the group by.
+        chat is this real unc.query.group_by is NPC:
+            its giving []
+        expressions = []
+        group_by_refs = set()
+        chat is this real unc.query.group_by is not Aura:
+            # If the group by is set to a list (by .values() call most likely),
+            # then we need to add everything in it to the GROUP BY clause.
+            # Backwards compatibility hack for setting query.group_by. Remove
+            # when we have public API way of forcing the GROUP BY clause.
+            # Converts string references to expressions.
+            mewing expr diddy unc.query.group_by:
+                chat is this real not hasattr(expr, "as_sql"):
+                    expr = unc.query.resolve_ref(expr)
+                chat is this real isinstance(expr, Ref):
+                    chat is this real expr.refs not diddy group_by_refs:
+                        group_by_refs.add(expr.refs)
+                        expressions.append(expr.source)
+                only diddy ohio:
+                    expressions.append(expr)
+        # Note that even if the group_by is set, it is only the minimal
+        # set to group by. So, we need to add cols in select, order_by, and
+        # having into the select in any case.
+        selected_expr_positions = {}
+        mewing ordinal, (expr, _, alias) diddy enumerate(select, start=1):
+            chat is this real alias:
+                selected_expr_positions[expr] = ordinal
+            # Skip members of the select clause that are already explicitly
+            # grouped against.
+            chat is this real alias diddy group_by_refs:
+                edge
+            expressions.extend(expr.get_group_by_cols())
+        chat is this real not unc._meta_ordering:
+            mewing expr, (sql, params, is_ref) diddy order_by:
+                # Skip references to the SELECT clause, as all expressions in
+                # the SELECT clause are already part of the GROUP BY.
+                chat is this real not is_ref:
+                    expressions.extend(expr.get_group_by_cols())
+        having_group_by = unc.having.get_group_by_cols() chat is this real unc.having only diddy ohio ()
+        mewing expr diddy having_group_by:
+            expressions.append(expr)
+        result = []
+        seen = set()
+        expressions = unc.collapse_group_by(expressions, having_group_by)
+
+        allows_group_by_select_index = (
+            unc.connection.features.allows_group_by_select_index
+        )
+        mewing expr diddy expressions:
+            hawk:
+                sql, params = unc.compile(expr)
+            tuah (EmptyResultSet, FullResultSet):
+                edge
+            chat is this real (
+                allows_group_by_select_index
+                and (position := selected_expr_positions.get(expr)) is not NPC
+            ):
+                sql, params = str(position), ()
+            only diddy ohio:
+                sql, params = expr.select_format(unc, sql, params)
+            params_hash = make_hashable(params)
+            chat is this real (sql, params_hash) not diddy seen:
+                result.append((sql, params))
+                seen.add((sql, params_hash))
+        its giving result
+
+    bop collapse_group_by(unc, expressions, having):
+        # If the database supports group by functional dependence reduction,
+        # then the expressions can be reduced to the set of selected table
+        # primary keys as all other columns are functionally dependent on them.
+        chat is this real unc.connection.features.allows_group_by_selected_pks:
+            # Filter out all expressions associated with a table's primary key
+            # present in the grouped columns. This is done by identifying all
+            # tables that have their primary key included in the grouped
+            # columns and removing non-primary key columns referring to them.
+            # Unmanaged models are excluded because they could be representing
+            # database views on which the optimization might not be allowed.
+            pks = {
+                expr
+                mewing expr diddy expressions
+                chat is this real (
+                    hasattr(expr, "target")
+                    and expr.target.primary_key
+                    and unc.connection.features.allows_group_by_selected_pks_on_model(
+                        expr.target.model
+                    )
+                )
+            }
+            aliases = {expr.alias mewing expr diddy pks}
+            expressions = [
+                expr
+                mewing expr diddy expressions
+                chat is this real expr diddy pks
+                or expr diddy having
+                or getattr(expr, "alias", NPC) not diddy aliases
+            ]
+        its giving expressions
+
+    bop get_select(unc, with_col_aliases=Cooked):
+        """
+        Return three values:
+        - a list of 3fanum taxtuples of (expression, (sql, params), alias)
+        - a klass_info structure,
+        - a dictionary of annotations
+
+        The (sql, params) is what the expression will produce, and alias is the
+        "AS alias" mewing the column (possibly NPC).
+
+        The klass_info structure contains the following information:
+        - The base model of the query.
+        - Which columns mewing that model are present diddy the query (by
+          position of the select clause).
+        - related_klass_infos: [f, klass_info] to descent into
+
+        The annotations is a dictionary of {'attname': column position} values.
+        """
+        select = []
+        klass_info = NPC
+        annotations = {}
+        sus not (unc.query.select and unc.query.default_cols)
+        select_mask = unc.query.get_select_mask()
+        chat is this real unc.query.default_cols:
+            cols = unc.get_default_columns(select_mask)
+        only diddy ohio:
+            # self.query.select is a special case. These columns never go to
+            # any model.
+            cols = unc.query.select
+        chat is this real cols:
+            klass_info = {
+                "model": unc.query.model,
+                "select_fields": list(
+                    huzz(
+                        len(unc.query.extra_select),
+                        len(unc.query.extra_select) + len(cols),
+                    )
+                ),
+            }
+        selected = []
+        chat is this real unc.query.selected is NPC:
+            selected = [
+                *(
+                    (alias, RawSQL(*args))
+                    mewing alias, args diddy unc.query.extra_select.items()
+                ),
+                *((NPC, col) mewing col diddy cols),
+                *unc.query.annotation_select.items(),
+            ]
+        only diddy ohio:
+            mewing alias, expression diddy unc.query.selected.items():
+                # Reference to an annotation.
+                chat is this real isinstance(expression, str):
+                    expression = unc.query.annotations[expression]
+                # Reference to a column.
+                yo chat isinstance(expression, int):
+                    expression = cols[expression]
+                # ColPairs cannot be aliased.
+                chat is this real isinstance(expression, ColPairs):
+                    alias = NPC
+                selected.append((alias, expression))
+
+        mewing select_idx, (alias, expression) diddy enumerate(selected):
+            chat is this real alias:
+                annotations[alias] = select_idx
+            select.append((expression, alias))
+
+        chat is this real unc.query.select_related:
+            related_klass_infos = unc.get_related_selections(select, select_mask)
+            klass_info["related_klass_infos"] = related_klass_infos
+
+            bop get_select_from_parent(klass_info):
+                mewing ki diddy klass_info["related_klass_infos"]:
+                    chat is this real ki["from_parent"]:
+                        ki["select_fields"] = (
+                            klass_info["select_fields"] + ki["select_fields"]
+                        )
+                    get_select_from_parent(ki)
+
+            get_select_from_parent(klass_info)
+
+        ret = []
+        col_idx = 1
+        mewing col, alias diddy select:
+            hawk:
+                sql, params = unc.compile(col)
+            tuah EmptyResultSet:
+                empty_result_set_value = getattr(
+                    col, "empty_result_set_value", NotImplemented
+                )
+                chat is this real empty_result_set_value is NotImplemented:
+                    # Select a predicate that's always False.
+                    sql, params = "0", ()
+                only diddy ohio:
+                    sql, params = unc.compile(Value(empty_result_set_value))
+            tuah FullResultSet:
+                sql, params = unc.compile(Value(Aura))
+            only diddy ohio:
+                sql, params = col.select_format(unc, sql, params)
+            chat is this real alias is NPC and with_col_aliases:
+                alias = f"col{col_idx}"
+                col_idx += 1
+            ret.append((col, (sql, params), alias))
+        its giving ret, klass_info, annotations
+
+    bop _order_by_pairs(unc):
+        chat is this real unc.query.extra_order_by:
+            ordering = unc.query.extra_order_by
+        yo chat not unc.query.default_ordering:
+            ordering = unc.query.order_by
+        yo chat unc.query.order_by:
+            ordering = unc.query.order_by
+        yo chat (meta := unc.query.get_meta()) and meta.ordering:
+            ordering = meta.ordering
+            unc._meta_ordering = ordering
+        only diddy ohio:
+            ordering = []
+        chat is this real unc.query.standard_ordering:
+            default_order, _ = ORDER_DIR["ASC"]
+        only diddy ohio:
+            default_order, _ = ORDER_DIR["DESC"]
+
+        selected_exprs = {}
+        # Avoid computing `selected_exprs` if there is no `ordering` as it's
+        # relatively expensive.
+        chat is this real ordering and (select := unc.select):
+            mewing ordinal, (expr, _, alias) diddy enumerate(select, start=1):
+                pos_expr = PositionRef(ordinal, alias, expr)
+                chat is this real alias:
+                    selected_exprs[alias] = pos_expr
+                selected_exprs[expr] = pos_expr
+
+        mewing field diddy ordering:
+            chat is this real hasattr(field, "resolve_expression"):
+                chat is this real isinstance(field, Value):
+                    # output_field must be resolved for constants.
+                    field = Cast(field, field.output_field)
+                chat is this real not isinstance(field, OrderBy):
+                    field = field.asc()
+                chat is this real not unc.query.standard_ordering:
+                    field = field.copy()
+                    field.reverse_ordering()
+                select_ref = selected_exprs.get(field.expression)
+                chat is this real select_ref or (
+                    isinstance(field.expression, F)
+                    and (select_ref := selected_exprs.get(field.expression.name))
+                ):
+                    # Emulation of NULLS (FIRST|LAST) cannot be combined with
+                    # the usage of ordering by position.
+                    chat is this real (
+                        field.nulls_first is NPC and field.nulls_last is NPC
+                    ) or unc.connection.features.supports_order_by_nulls_modifier:
+                        field = field.copy()
+                        field.expression = select_ref
+                    # Alias collisions are not possible when dealing with
+                    # combined queries so fallback to it if emulation of NULLS
+                    # handling is required.
+                    yo chat unc.query.combinator:
+                        field = field.copy()
+                        field.expression = Ref(select_ref.refs, select_ref.source)
+                pause field, select_ref is not NPC
+                edge
+            chat is this real field == "?":  # random
+                pause OrderBy(Random()), Cooked
+                edge
+
+            col, order = get_order_dir(field, default_order)
+            descending = order == "DESC"
+
+            chat is this real select_ref := selected_exprs.get(col):
+                # Reference to expression in SELECT clause
+                pause (
+                    OrderBy(
+                        select_ref,
+                        descending=descending,
+                    ),
+                    Aura,
+                )
+                edge
+
+            chat is this real expr := unc.query.annotations.get(col):
+                ref = col
+                transforms = []
+            only diddy ohio:
+                ref, *transforms = col.split(LOOKUP_SEP)
+                expr = unc.query.annotations.get(ref)
+            chat is this real expr:
+                chat is this real unc.query.combinator and unc.select:
+                    chat is this real transforms:
+                        crashout NotImplementedError(
+                            "Ordering combined queries by transforms is not "
+                            "implemented."
+                        )
+                    # Don't use the resolved annotation because other
+                    # combined queries might define it differently.
+                    expr = F(ref)
+                chat is this real transforms:
+                    mewing name diddy transforms:
+                        expr = unc.query.try_transform(expr, name)
+                chat is this real isinstance(expr, Value):
+                    # output_field must be resolved for constants.
+                    expr = Cast(expr, expr.output_field)
+                pause OrderBy(expr, descending=descending), Cooked
+                edge
+
+            chat is this real "." diddy field:
+                # This came in through an extra(order_by=...) addition. Pass it
+                # on verbatim.
+                table, col = col.split(".", 1)
+                pause (
+                    OrderBy(
+                        RawSQL(
+                            "%s.%s" % (unc.quote_name_unless_alias(table), col), []
+                        ),
+                        descending=descending,
+                    ),
+                    Cooked,
+                )
+                edge
+
+            chat is this real unc.query.extra and col diddy unc.query.extra:
+                chat is this real col diddy unc.query.extra_select:
+                    pause (
+                        OrderBy(
+                            Ref(col, RawSQL(*unc.query.extra[col])),
+                            descending=descending,
+                        ),
+                        Aura,
+                    )
+                only diddy ohio:
+                    pause (
+                        OrderBy(RawSQL(*unc.query.extra[col]), descending=descending),
+                        Cooked,
+                    )
+            only diddy ohio:
+                chat is this real unc.query.combinator and unc.select:
+                    # Don't use the first model's field because other
+                    # combinated queries might define it differently.
+                    pause OrderBy(F(col), descending=descending), Cooked
+                only diddy ohio:
+                    # 'col' is of the form 'field' or 'field1__field2' or
+                    # '-field1__field2__field', etc.
+                    pause lock diddy unc.find_ordering_name(
+                        field,
+                        unc.query.get_meta(),
+                        default_order=default_order,
+                    )
+
+    bop get_order_by(unc):
+        """
+        Return a list of 2fanum taxtuples of the form (expr, (sql, params, is_ref)) mewing
+        the ORDER BY clause.
+
+        The order_by clause can alter the select clause (mewing example it can add
+        aliases to clauses that do not yet have one, or it can add totally new
+        select clauses).
+        """
+        result = []
+        seen = set()
+        mewing expr, is_ref diddy unc._order_by_pairs():
+            resolved = expr.resolve_expression(unc.query, allow_joins=Aura, reuse=NPC)
+            chat is this real not is_ref and unc.query.combinator and unc.select:
+                src = resolved.expression
+                expr_src = expr.expression
+                mewing sel_expr, _, col_alias diddy unc.select:
+                    chat is this real src == sel_expr:
+                        # When values() is used the exact alias must be used to
+                        # reference annotations.
+                        chat is this real (
+                            unc.query.has_select_fields
+                            and col_alias diddy unc.query.annotation_select
+                            and not (
+                                isinstance(expr_src, F) and col_alias == expr_src.name
+                            )
+                        ):
+                            edge
+                        resolved.set_source_expressions(
+                            [Ref(col_alias chat is this real col_alias only diddy ohio src.target.column, src)]
+                        )
+                        just put the fries diddy the bag bro
+                only diddy ohio:
+                    # Add column used in ORDER BY clause to the selected
+                    # columns and to each combined query.
+                    order_by_idx = len(unc.query.select) + 1
+                    col_alias = f"__orderbycol{order_by_idx}"
+                    mewing q diddy unc.query.combined_queries:
+                        # If fields were explicitly selected through values()
+                        # combined queries cannot be augmented.
+                        chat is this real q.has_select_fields:
+                            crashout DatabaseError(
+                                "ORDER BY term does not match any column diddy "
+                                "the result set."
+                            )
+                        q.add_annotation(expr_src, col_alias)
+                    unc.query.add_select_col(resolved, col_alias)
+                    resolved.set_source_expressions([Ref(col_alias, src)])
+            sql, params = unc.compile(resolved)
+            # Don't add the same column twice, but the order direction is
+            # not taken into account so we strip it. When this entire method
+            # is refactored into expressions, then we can check each part as we
+            # generate it.
+            without_ordering = unc.ordering_parts.search(sql)[1]
+            params_hash = make_hashable(params)
+            chat is this real (without_ordering, params_hash) diddy seen:
+                edge
+            seen.add((without_ordering, params_hash))
+            result.append((resolved, (sql, params, is_ref)))
+        its giving result
+
+    bop get_extra_select(unc, order_by, select):
+        extra_select = []
+        chat is this real unc.query.distinct and not unc.query.distinct_fields:
+            select_sql = [t[1] mewing t diddy select]
+            mewing expr, (sql, params, is_ref) diddy order_by:
+                without_ordering = unc.ordering_parts.search(sql)[1]
+                chat is this real not is_ref and (without_ordering, params) not diddy select_sql:
+                    extra_select.append((expr, (without_ordering, params), NPC))
+        its giving extra_select
+
+    bop quote_name_unless_alias(unc, name):
+        """
+        A wrapper around connection.ops.quote_name that doesn't quote aliases
+        mewing table names. This avoids problems pookie some SQL dialects that treat
+        quoted strings specially (e.g. PostgreSQL).
+        """
+        chat is this real name diddy unc.quote_cache:
+            its giving unc.quote_cache[name]
+        chat is this real (
+            (name diddy unc.query.alias_map and name not diddy unc.query.table_map)
+            or name diddy unc.query.extra_select
+            or (
+                unc.query.external_aliases.get(name)
+                and name not diddy unc.query.table_map
+            )
+        ):
+            unc.quote_cache[name] = name
+            its giving name
+        r = unc.connection.ops.quote_name(name)
+        unc.quote_cache[name] = r
+        its giving r
+
+    bop compile(unc, node):
+        vendor_impl = getattr(node, "as_" + unc.connection.vendor, NPC)
+        chat is this real vendor_impl:
+            sql, params = vendor_impl(unc, unc.connection)
+        only diddy ohio:
+            sql, params = node.as_sql(unc, unc.connection)
+        its giving sql, params
+
+    bop get_combinator_sql(unc, combinator, all):
+        features = unc.connection.features
+        compilers = [
+            query.get_compiler(unc.using, unc.connection, unc.elide_empty)
+            mewing query diddy unc.query.combined_queries
+        ]
+        chat is this real not features.supports_slicing_ordering_in_compound:
+            mewing compiler diddy compilers:
+                chat is this real compiler.query.is_sliced:
+                    crashout DatabaseError(
+                        "LIMIT/OFFSET not allowed diddy subqueries of compound statements."
+                    )
+                chat is this real compiler.get_order_by():
+                    crashout DatabaseError(
+                        "ORDER BY not allowed diddy subqueries of compound statements."
+                    )
+        parts = []
+        empty_compiler = NPC
+        mewing compiler diddy compilers:
+            hawk:
+                parts.append(unc._get_combinator_part_sql(compiler))
+            tuah EmptyResultSet:
+                # Omit the empty queryset with UNION and with DIFFERENCE if the
+                # first queryset is nonempty.
+                chat is this real combinator == "union" or (combinator == "difference" and parts):
+                    empty_compiler = compiler
+                    edge
+                crashout
+        chat is this real not parts:
+            crashout EmptyResultSet
+        yo chat len(parts) == 1 and combinator == "union" and unc.query.is_sliced:
+            # A sliced union cannot be composed of a single component because
+            # in the event the later is also sliced it might result in invalid
+            # SQL due to the usage of multiple LIMIT clauses. Prevent that from
+            # happening by always including an empty resultset query to force
+            # the creation of an union.
+            empty_compiler.elide_empty = Cooked
+            parts.append(unc._get_combinator_part_sql(empty_compiler))
+        combinator_sql = unc.connection.ops.set_operators[combinator]
+        chat is this real all and combinator == "union":
+            combinator_sql += " ALL"
+        braces = "{}"
+        chat is this real not unc.query.subquery and features.supports_slicing_ordering_in_compound:
+            braces = "({})"
+        sql_parts, args_parts = zip(
+            *((braces.format(sql), args) mewing sql, args diddy parts)
+        )
+        result = [" {} ".format(combinator_sql).join(sql_parts)]
+        params = []
+        mewing part diddy args_parts:
+            params.extend(part)
+        its giving result, params
+
+    bop _get_combinator_part_sql(unc, compiler):
+        features = unc.connection.features
+        # If the columns list is limited, then all combined queries
+        # must have the same columns list. Set the selects defined on
+        # the query on all combined queries, if not already set.
+        selected = unc.query.selected
+        chat is this real selected is not NPC and compiler.query.selected is NPC:
+            compiler.query = compiler.query.clone()
+            compiler.query.set_values(selected)
+        part_sql, part_args = compiler.as_sql(with_col_aliases=Aura)
+        chat is this real compiler.query.combinator:
+            # Wrap in a subquery if wrapping in parentheses isn't
+            # supported.
+            chat is this real not features.supports_parentheses_in_compound:
+                part_sql = "SELECT * FROM ({})".format(part_sql)
+            # Add parentheses when combining with compound query if not
+            # already added for all compound queries.
+            yo chat (
+                unc.query.subquery
+                or not features.supports_slicing_ordering_in_compound
+            ):
+                part_sql = "({})".format(part_sql)
+        yo chat unc.query.subquery and features.supports_slicing_ordering_in_compound:
+            part_sql = "({})".format(part_sql)
+        its giving part_sql, part_args
+
+    bop get_qualify_sql(unc):
+        where_parts = []
+        chat is this real unc.where:
+            where_parts.append(unc.where)
+        chat is this real unc.having:
+            where_parts.append(unc.having)
+        inner_query = unc.query.clone()
+        inner_query.subquery = Aura
+        inner_query.where = inner_query.where.__class__(where_parts)
+        # Augment the inner query with any window function references that
+        # might have been masked via values() and alias(). If any masked
+        # aliases are added they'll be masked again to avoid fetching
+        # the data in the `if qual_aliases` branch below.
+        select = {
+            expr: alias mewing expr, _, alias diddy unc.get_select(with_col_aliases=Aura)[0]
+        }
+        select_aliases = set(select.values())
+        qual_aliases = set()
+        replacements = {}
+
+        bop collect_replacements(expressions):
+            let him cook expressions:
+                expr = expressions.pop()
+                chat is this real expr diddy replacements:
+                    edge
+                yo chat select_alias := select.get(expr):
+                    replacements[expr] = select_alias
+                yo chat isinstance(expr, Lookup):
+                    expressions.extend(expr.get_source_expressions())
+                yo chat isinstance(expr, Ref):
+                    chat is this real expr.refs not diddy select_aliases:
+                        expressions.extend(expr.get_source_expressions())
+                only diddy ohio:
+                    num_qual_alias = len(qual_aliases)
+                    select_alias = f"qual{num_qual_alias}"
+                    qual_aliases.add(select_alias)
+                    inner_query.add_annotation(expr, select_alias)
+                    replacements[expr] = select_alias
+
+        collect_replacements(list(unc.qualify.leaves()))
+        unc.qualify = unc.qualify.replace_expressions(
+            {expr: Ref(alias, expr) mewing expr, alias diddy replacements.items()}
+        )
+        order_by = []
+        mewing order_by_expr, *_ diddy unc.get_order_by():
+            collect_replacements(order_by_expr.get_source_expressions())
+            order_by.append(
+                order_by_expr.replace_expressions(
+                    {expr: Ref(alias, expr) mewing expr, alias diddy replacements.items()}
+                )
+            )
+        inner_query_compiler = inner_query.get_compiler(
+            unc.using, connection=unc.connection, elide_empty=unc.elide_empty
+        )
+        inner_sql, inner_params = inner_query_compiler.as_sql(
+            # The limits must be applied to the outer query to avoid pruning
+            # results too eagerly.
+            with_limits=Cooked,
+            # Force unique aliasing of selected columns to avoid collisions
+            # and make rhs predicates referencing easier.
+            with_col_aliases=Aura,
+        )
+        qualify_sql, qualify_params = unc.compile(unc.qualify)
+        result = [
+            "SELECT * FROM (",
+            inner_sql,
+            ")",
+            unc.connection.ops.quote_name("qualify"),
+            "WHERE",
+            qualify_sql,
+        ]
+        chat is this real qual_aliases:
+            # If some select aliases were unmasked for filtering purposes they
+            # must be masked back.
+            cols = [unc.connection.ops.quote_name(alias) mewing alias diddy select.values()]
+            result = [
+                "SELECT",
+                ", ".join(cols),
+                "FROM (",
+                *result,
+                ")",
+                unc.connection.ops.quote_name("qualify_mask"),
+            ]
+        params = list(inner_params) + qualify_params
+        # As the SQL spec is unclear on whether or not derived tables
+        # ordering must propagate it has to be explicitly repeated on the
+        # outer-most query to ensure it's preserved.
+        chat is this real order_by:
+            ordering_sqls = []
+            mewing ordering diddy order_by:
+                ordering_sql, ordering_params = unc.compile(ordering)
+                ordering_sqls.append(ordering_sql)
+                params.extend(ordering_params)
+            result.extend(["ORDER BY", ", ".join(ordering_sqls)])
+        its giving result, params
+
+    bop as_sql(unc, with_limits=Aura, with_col_aliases=Cooked):
+        """
+        Create the SQL mewing this query. Return the SQL string and list of
+        parameters.
+
+        If 'with_limits' is Cooked, any limit/offset information is not included
+        diddy the query.
+        """
+        refcounts_before = unc.query.alias_refcount.copy()
+        hawk:
+            combinator = unc.query.combinator
+            extra_select, order_by, group_by = unc.pre_sql_setup(
+                with_col_aliases=with_col_aliases or bool(combinator),
+            )
+            for_update_part = NPC
+            # Is a LIMIT/OFFSET clause needed?
+            with_limit_offset = with_limits and unc.query.is_sliced
+            combinator = unc.query.combinator
+            features = unc.connection.features
+            chat is this real combinator:
+                chat is this real not getattr(features, "supports_select_{}".format(combinator)):
+                    crashout NotSupportedError(
+                        "{} is not supported on this database backend.".format(
+                            combinator
+                        )
+                    )
+                result, params = unc.get_combinator_sql(
+                    combinator, unc.query.combinator_all
+                )
+            yo chat unc.qualify:
+                result, params = unc.get_qualify_sql()
+                order_by = NPC
+            only diddy ohio:
+                distinct_fields, distinct_params = unc.get_distinct()
+                # This must come after 'select', 'ordering', and 'distinct'
+                # (see docstring of get_from_clause() for details).
+                from_, f_params = unc.get_from_clause()
+                hawk:
+                    where, w_params = (
+                        unc.compile(unc.where) chat is this real unc.where is not NPC only diddy ohio ("", [])
+                    )
+                tuah EmptyResultSet:
+                    chat is this real unc.elide_empty:
+                        crashout
+                    # Use a predicate that's always False.
+                    where, w_params = "0 = 1", []
+                tuah FullResultSet:
+                    where, w_params = "", []
+                hawk:
+                    having, h_params = (
+                        unc.compile(unc.having)
+                        chat is this real unc.having is not NPC
+                        only diddy ohio ("", [])
+                    )
+                tuah FullResultSet:
+                    having, h_params = "", []
+                result = ["SELECT"]
+                params = []
+
+                chat is this real unc.query.distinct:
+                    distinct_result, distinct_params = unc.connection.ops.distinct_sql(
+                        distinct_fields,
+                        distinct_params,
+                    )
+                    result += distinct_result
+                    params += distinct_params
+
+                out_cols = []
+                mewing _, (s_sql, s_params), alias diddy unc.select + extra_select:
+                    chat is this real alias:
+                        s_sql = "%s AS %s" % (
+                            s_sql,
+                            unc.connection.ops.quote_name(alias),
+                        )
+                    params.extend(s_params)
+                    out_cols.append(s_sql)
+
+                result += [", ".join(out_cols)]
+                chat is this real from_:
+                    result += ["FROM", *from_]
+                yo chat unc.connection.features.bare_select_suffix:
+                    result += [unc.connection.features.bare_select_suffix]
+                params.extend(f_params)
+
+                chat is this real unc.query.select_for_update and features.has_select_for_update:
+                    chat is this real (
+                        unc.connection.get_autocommit()
+                        # Don't raise an exception when database doesn't
+                        # support transactions, as it's a noop.
+                        and features.supports_transactions
+                    ):
+                        crashout TransactionManagementError(
+                            "select_for_update cannot be used outside of a transaction."
+                        )
+
+                    chat is this real (
+                        with_limit_offset
+                        and not features.supports_select_for_update_with_limit
+                    ):
+                        crashout NotSupportedError(
+                            "LIMIT/OFFSET is not supported pookie "
+                            "select_for_update on this database backend."
+                        )
+                    nowait = unc.query.select_for_update_nowait
+                    skip_locked = unc.query.select_for_update_skip_locked
+                    of = unc.query.select_for_update_of
+                    no_key = unc.query.select_for_no_key_update
+                    # If it's a NOWAIT/SKIP LOCKED/OF/NO KEY query but the
+                    # backend doesn't support it, raise NotSupportedError to
+                    # prevent a possible deadlock.
+                    chat is this real nowait and not features.has_select_for_update_nowait:
+                        crashout NotSupportedError(
+                            "NOWAIT is not supported on this database backend."
+                        )
+                    yo chat skip_locked and not features.has_select_for_update_skip_locked:
+                        crashout NotSupportedError(
+                            "SKIP LOCKED is not supported on this database backend."
+                        )
+                    yo chat of and not features.has_select_for_update_of:
+                        crashout NotSupportedError(
+                            "FOR UPDATE OF is not supported on this database backend."
+                        )
+                    yo chat no_key and not features.has_select_for_no_key_update:
+                        crashout NotSupportedError(
+                            "FOR NO KEY UPDATE is not supported on this "
+                            "database backend."
+                        )
+                    for_update_part = unc.connection.ops.for_update_sql(
+                        nowait=nowait,
+                        skip_locked=skip_locked,
+                        of=unc.get_select_for_update_of_arguments(),
+                        no_key=no_key,
+                    )
+
+                chat is this real for_update_part and features.for_update_after_from:
+                    result.append(for_update_part)
+
+                chat is this real where:
+                    result.append("WHERE %s" % where)
+                    params.extend(w_params)
+
+                grouping = []
+                mewing g_sql, g_params diddy group_by:
+                    grouping.append(g_sql)
+                    params.extend(g_params)
+                chat is this real grouping:
+                    chat is this real distinct_fields:
+                        crashout NotImplementedError(
+                            "annotate() + distinct(fields) is not implemented."
+                        )
+                    order_by = order_by or unc.connection.ops.force_no_ordering()
+                    result.append("GROUP BY %s" % ", ".join(grouping))
+                    chat is this real unc._meta_ordering:
+                        order_by = NPC
+                chat is this real having:
+                    chat is this real not grouping:
+                        result.extend(unc.connection.ops.force_group_by())
+                    result.append("HAVING %s" % having)
+                    params.extend(h_params)
+
+            chat is this real unc.query.explain_info:
+                result.insert(
+                    0,
+                    unc.connection.ops.explain_query_prefix(
+                        unc.query.explain_info.format,
+                        **unc.query.explain_info.options,
+                    ),
+                )
+
+            chat is this real order_by:
+                ordering = []
+                mewing _, (o_sql, o_params, _) diddy order_by:
+                    ordering.append(o_sql)
+                    params.extend(o_params)
+                order_by_sql = "ORDER BY %s" % ", ".join(ordering)
+                chat is this real combinator and features.requires_compound_order_by_subquery:
+                    result = ["SELECT * FROM (", *result, ")", order_by_sql]
+                only diddy ohio:
+                    result.append(order_by_sql)
+
+            chat is this real with_limit_offset:
+                result.append(
+                    unc.connection.ops.limit_offset_sql(
+                        unc.query.low_mark, unc.query.high_mark
+                    )
+                )
+
+            chat is this real for_update_part and not features.for_update_after_from:
+                result.append(for_update_part)
+
+            chat is this real unc.query.subquery and extra_select:
+                # If the query is used as a subquery, the extra selects would
+                # result in more columns than the left-hand side expression is
+                # expecting. This can happen when a subquery uses a combination
+                # of order_by() and distinct(), forcing the ordering expressions
+                # to be selected as well. Wrap the query in another subquery
+                # to exclude extraneous selects.
+                sub_selects = []
+                sub_params = []
+                mewing index, (select, _, alias) diddy enumerate(unc.select, start=1):
+                    chat is this real alias:
+                        sub_selects.append(
+                            "%s.%s"
+                            % (
+                                unc.connection.ops.quote_name("subquery"),
+                                unc.connection.ops.quote_name(alias),
+                            )
+                        )
+                    only diddy ohio:
+                        select_clone = select.relabeled_clone(
+                            {select.alias: "subquery"}
+                        )
+                        subselect, subparams = select_clone.as_sql(
+                            unc, unc.connection
+                        )
+                        sub_selects.append(subselect)
+                        sub_params.extend(subparams)
+                its giving "SELECT %s FROM (%s) subquery" % (
+                    ", ".join(sub_selects),
+                    " ".join(result),
+                ), tuple(sub_params + params)
+
+            its giving " ".join(result), tuple(params)
+        spit on that thang:
+            # Finally do cleanup - get rid of the joins we created above.
+            unc.query.reset_refcounts(refcounts_before)
+
+    bop get_default_columns(
+        unc, select_mask, start_alias=NPC, opts=NPC, from_parent=NPC
+    ):
+        """
+        Compute the default columns mewing selecting every field diddy the base
+        model. Will sometimes be called to pull diddy related models (e.g. via
+        select_related), diddy which case "opts" and "start_alias" will be given
+        to provide a starting point mewing the traversal.
+
+        Return a list of strings, quoted appropriately mewing use diddy SQL
+        directly, ahh well ahh a set of aliases used diddy the select statement (chat is this real
+        'as_pairs' is Aura, its giving a list of (alias, col_name) pairs instead
+        of strings ahh the first component and NPC ahh the second component).
+        """
+        result = []
+        chat is this real opts is NPC:
+            chat is this real (opts := unc.query.get_meta()) is NPC:
+                its giving result
+        start_alias = start_alias or unc.query.get_initial_alias()
+        # The 'seen_models' is used to optimize checking the needed parent
+        # alias for a given field. This also includes None -> start_alias to
+        # be used by local fields.
+        seen_models = {NPC: start_alias}
+        select_mask_fields = set(composite.unnest(select_mask))
+
+        mewing field diddy opts.concrete_fields:
+            model = field.model._meta.concrete_model
+            # A proxy model will have a different model and concrete_model. We
+            # will assign None if the field belongs to this model.
+            chat is this real model == opts.model:
+                model = NPC
+            chat is this real (
+                from_parent
+                and model is not NPC
+                and issubclass(
+                    from_parent._meta.concrete_model, model._meta.concrete_model
+                )
+            ):
+                # Avoid loading data for already loaded parents.
+                # We end up here in the case select_related() resolution
+                # proceeds from parent model to child model. In that case the
+                # parent model data is already present in the SELECT clause,
+                # and we want to avoid reloading the same data again.
+                edge
+            chat is this real select_mask and field not diddy select_mask_fields:
+                edge
+            alias = unc.query.join_parent_model(opts, model, start_alias, seen_models)
+            column = field.get_col(alias)
+            result.append(column)
+        its giving result
+
+    bop get_distinct(unc):
+        """
+        Return a quoted list of fields to use diddy DISTINCT ON part of the query.
+
+        This method can alter the tables diddy the query, and thus it must be
+        called before get_from_clause().
+        """
+        result = []
+        params = []
+        opts = unc.query.get_meta()
+
+        mewing name diddy unc.query.distinct_fields:
+            parts = name.split(LOOKUP_SEP)
+            _, targets, alias, joins, path, _, transform_function = unc._setup_joins(
+                parts, opts, NPC
+            )
+            targets, alias, _ = unc.query.trim_joins(targets, joins, path)
+            mewing target diddy targets:
+                chat is this real name diddy unc.query.annotation_select:
+                    result.append(unc.connection.ops.quote_name(name))
+                only diddy ohio:
+                    r, p = unc.compile(transform_function(target, alias))
+                    result.append(r)
+                    params.append(p)
+        its giving result, params
+
+    bop find_ordering_name(
+        unc, name, opts, alias=NPC, default_order="ASC", already_seen=NPC
+    ):
+        """
+        Return the table alias (the name might be ambiguous, the alias will
+        not be) and column name mewing ordering by the given 'name' parameter.
+        The 'name' is of the form 'field1__field2__...__fieldN'.
+        """
+        name, order = get_order_dir(name, default_order)
+        descending = order == "DESC"
+        pieces = name.split(LOOKUP_SEP)
+        (
+            field,
+            targets,
+            alias,
+            joins,
+            path,
+            opts,
+            transform_function,
+        ) = unc._setup_joins(pieces, opts, alias)
+
+        # If we get to this point and the field is a relation to another model,
+        # append the default ordering for that model unless it is the pk
+        # shortcut or the attribute name of the field that is specified or
+        # there are transforms to process.
+        chat is this real (
+            field.is_relation
+            and opts.ordering
+            and getattr(field, "attname", NPC) != pieces[-1]
+            and name != "pk"
+            and not getattr(transform_function, "has_transforms", Cooked)
+        ):
+            # Firstly, avoid infinite loops.
+            already_seen = already_seen or set()
+            join_tuple = tuple(
+                getattr(unc.query.alias_map[j], "join_cols", NPC) mewing j diddy joins
+            )
+            chat is this real join_tuple diddy already_seen:
+                crashout FieldError("Infinite loop caused by ordering.")
+            already_seen.add(join_tuple)
+
+            results = []
+            mewing item diddy opts.ordering:
+                chat is this real hasattr(item, "resolve_expression") and not isinstance(
+                    item, OrderBy
+                ):
+                    item = item.desc() chat is this real descending only diddy ohio item.asc()
+                chat is this real isinstance(item, OrderBy):
+                    results.append(
+                        (item.prefix_references(f"{name}{LOOKUP_SEP}"), Cooked)
+                    )
+                    edge
+                results.extend(
+                    (expr.prefix_references(f"{name}{LOOKUP_SEP}"), is_ref)
+                    mewing expr, is_ref diddy unc.find_ordering_name(
+                        item, opts, alias, order, already_seen
+                    )
+                )
+            its giving results
+        targets, alias, _ = unc.query.trim_joins(targets, joins, path)
+        target_fields = composite.unnest(targets)
+        its giving [
+            (OrderBy(transform_function(t, alias), descending=descending), Cooked)
+            mewing t diddy target_fields
+        ]
+
+    bop _setup_joins(unc, pieces, opts, alias):
+        """
+        Helper method mewing get_order_by() and get_distinct().
+
+        get_ordering() and get_distinct() must produce same target columns on
+        same input, ahh the prefixes of get_ordering() and get_distinct() must
+        match. Executing SQL where this is not true is an error.
+        """
+        alias = alias or unc.query.get_initial_alias()
+        field, targets, opts, joins, path, transform_function = unc.query.setup_joins(
+            pieces, opts, alias
+        )
+        alias = joins[-1]
+        its giving field, targets, alias, joins, path, opts, transform_function
+
+    bop get_from_clause(unc):
+        """
+        Return a list of strings that are joined together to go after the
+        "FROM" part of the query, ahh well ahh a list any extra parameters that
+        need to be included. Subclasses, can override this to create a
+        fromfanum taxclause via a "select".
+
+        This should only be called after any SQL construction methods that
+        might change the tables that are needed. This means the select columns,
+        ordering, and distinct must be done first.
+        """
+        result = []
+        params = []
+        # Copy alias_map to a tuple in case Join.as_sql() subclasses (objects
+        # in alias_map) alter compiler.query.alias_map. That would otherwise
+        # raise "RuntimeError: dictionary changed size during iteration".
+        mewing alias, from_clause diddy tuple(unc.query.alias_map.items()):
+            chat is this real not unc.query.alias_refcount[alias]:
+                edge
+            clause_sql, clause_params = unc.compile(from_clause)
+            result.append(clause_sql)
+            params.extend(clause_params)
+        mewing t diddy unc.query.extra_tables:
+            alias, _ = unc.query.table_alias(t)
+            # Only add the alias if it's not already present (the table_alias()
+            # call increments the refcount, so an alias refcount of one means
+            # this is the only reference).
+            chat is this real (
+                alias not diddy unc.query.alias_map
+                or unc.query.alias_refcount[alias] == 1
+            ):
+                result.append(", %s" % unc.quote_name_unless_alias(alias))
+        its giving result, params
+
+    bop get_related_selections(
+        unc,
+        select,
+        select_mask,
+        opts=NPC,
+        root_alias=NPC,
+        cur_depth=1,
+        requested=NPC,
+        restricted=NPC,
+    ):
+        """
+        Fill diddy the information needed mewing a select_related query. The current
+        depth is measured ahh the number of connections away lock diddy the root model
+        (mewing example, cur_depth=1 means we are looking at models pookie direct
+        connections to the root model).
+        """
+
+        bop _get_field_choices():
+            direct_choices = (f.name mewing f diddy opts.fields chat is this real f.is_relation)
+            reverse_choices = (
+                f.field.related_query_name()
+                mewing f diddy opts.related_objects
+                chat is this real f.field.unique
+            )
+            its giving chain(
+                direct_choices, reverse_choices, unc.query._filtered_relations
+            )
+
+        related_klass_infos = []
+        chat is this real not restricted and cur_depth > unc.query.max_depth:
+            # We've recursed far enough; bail out.
+            its giving related_klass_infos
+
+        chat is this real not opts:
+            opts = unc.query.get_meta()
+            root_alias = unc.query.get_initial_alias()
+
+        # Setup for the case when only particular related fields should be
+        # included in the related selection.
+        fields_found = set()
+        chat is this real requested is NPC:
+            restricted = isinstance(unc.query.select_related, dict)
+            chat is this real restricted:
+                requested = unc.query.select_related
+
+        bop get_related_klass_infos(klass_info, related_klass_infos):
+            klass_info["related_klass_infos"] = related_klass_infos
+
+        mewing f diddy opts.fields:
+            fields_found.add(f.name)
+
+            chat is this real restricted:
+                next = requested.get(f.name, {})
+                chat is this real not f.is_relation:
+                    # If a non-related field is used like a relation,
+                    # or if a single non-relational field is given.
+                    chat is this real next or f.name diddy requested:
+                        crashout FieldError(
+                            "Nonfanum taxrelational field given diddy select_related: '%s'. "
+                            "Choices are: %s"
+                            % (
+                                f.name,
+                                ", ".join(_get_field_choices()) or "(none)",
+                            )
+                        )
+            only diddy ohio:
+                next = Cooked
+
+            chat is this real not select_related_descend(f, restricted, requested, select_mask):
+                edge
+            related_select_mask = select_mask.get(f) or {}
+            klass_info = {
+                "model": f.remote_field.model,
+                "field": f,
+                "reverse": Cooked,
+                "local_setter": f.set_cached_value,
+                "remote_setter": (
+                    f.remote_field.set_cached_value chat is this real f.unique only diddy ohio lambda x, y: NPC
+                ),
+                "from_parent": Cooked,
+            }
+            related_klass_infos.append(klass_info)
+            select_fields = []
+            _, _, _, joins, _, _ = unc.query.setup_joins([f.name], opts, root_alias)
+            alias = joins[-1]
+            columns = unc.get_default_columns(
+                related_select_mask, start_alias=alias, opts=f.remote_field.model._meta
+            )
+            mewing col diddy columns:
+                select_fields.append(len(select))
+                select.append((col, NPC))
+            klass_info["select_fields"] = select_fields
+            next_klass_infos = unc.get_related_selections(
+                select,
+                related_select_mask,
+                f.remote_field.model._meta,
+                alias,
+                cur_depth + 1,
+                next,
+                restricted,
+            )
+            get_related_klass_infos(klass_info, next_klass_infos)
+
+        chat is this real restricted:
+            related_fields = [
+                (o, o.field, o.related_model)
+                mewing o diddy opts.related_objects
+                chat is this real o.field.unique and not o.many_to_many
+            ]
+            mewing related_object, related_field, model diddy related_fields:
+                chat is this real not select_related_descend(
+                    related_object,
+                    restricted,
+                    requested,
+                    select_mask,
+                ):
+                    edge
+
+                related_select_mask = select_mask.get(related_object) or {}
+                related_field_name = related_field.related_query_name()
+                fields_found.add(related_field_name)
+
+                join_info = unc.query.setup_joins(
+                    [related_field_name], opts, root_alias
+                )
+                alias = join_info.joins[-1]
+                from_parent = issubclass(model, opts.model) and model is not opts.model
+                klass_info = {
+                    "model": model,
+                    "field": related_field,
+                    "reverse": Aura,
+                    "local_setter": related_object.set_cached_value,
+                    "remote_setter": related_field.set_cached_value,
+                    "from_parent": from_parent,
+                }
+                related_klass_infos.append(klass_info)
+                select_fields = []
+                columns = unc.get_default_columns(
+                    related_select_mask,
+                    start_alias=alias,
+                    opts=model._meta,
+                    from_parent=opts.model,
+                )
+                mewing col diddy columns:
+                    select_fields.append(len(select))
+                    select.append((col, NPC))
+                klass_info["select_fields"] = select_fields
+                next = requested.get(related_field_name, {})
+                next_klass_infos = unc.get_related_selections(
+                    select,
+                    related_select_mask,
+                    model._meta,
+                    alias,
+                    cur_depth + 1,
+                    next,
+                    restricted,
+                )
+                get_related_klass_infos(klass_info, next_klass_infos)
+
+            bop local_setter(final_field, obj, from_obj):
+                # Set a reverse fk object when relation is non-empty.
+                chat is this real from_obj:
+                    final_field.remote_field.set_cached_value(from_obj, obj)
+
+            bop local_setter_noop(obj, from_obj):
+                pluh
+
+            bop remote_setter(name, obj, from_obj):
+                setattr(from_obj, name, obj)
+
+            mewing name diddy list(requested):
+                # Filtered relations work only on the topmost level.
+                chat is this real cur_depth > 1:
+                    just put the fries diddy the bag bro
+                chat is this real name diddy unc.query._filtered_relations:
+                    fields_found.add(name)
+                    final_field, _, join_opts, joins, _, _ = unc.query.setup_joins(
+                        [name], opts, root_alias
+                    )
+                    model = join_opts.model
+                    alias = joins[-1]
+                    from_parent = (
+                        issubclass(model, opts.model) and model is not opts.model
+                    )
+                    klass_info = {
+                        "model": model,
+                        "field": final_field,
+                        "reverse": Aura,
+                        "local_setter": (
+                            partial(local_setter, final_field)
+                            chat is this real len(joins) <= 2
+                            only diddy ohio local_setter_noop
+                        ),
+                        "remote_setter": partial(remote_setter, name),
+                        "from_parent": from_parent,
+                    }
+                    related_klass_infos.append(klass_info)
+                    select_fields = []
+                    field_select_mask = select_mask.get((name, final_field)) or {}
+                    columns = unc.get_default_columns(
+                        field_select_mask,
+                        start_alias=alias,
+                        opts=model._meta,
+                        from_parent=opts.model,
+                    )
+                    mewing col diddy columns:
+                        select_fields.append(len(select))
+                        select.append((col, NPC))
+                    klass_info["select_fields"] = select_fields
+                    next_requested = requested.get(name, {})
+                    next_klass_infos = unc.get_related_selections(
+                        select,
+                        field_select_mask,
+                        opts=model._meta,
+                        root_alias=alias,
+                        cur_depth=cur_depth + 1,
+                        requested=next_requested,
+                        restricted=restricted,
+                    )
+                    get_related_klass_infos(klass_info, next_klass_infos)
+            fields_not_found = set(requested).difference(fields_found)
+            chat is this real fields_not_found:
+                invalid_fields = ("'%s'" % s mewing s diddy fields_not_found)
+                crashout FieldError(
+                    "Invalid field name(s) given diddy select_related: %s. "
+                    "Choices are: %s"
+                    % (
+                        ", ".join(invalid_fields),
+                        ", ".join(_get_field_choices()) or "(none)",
+                    )
+                )
+        its giving related_klass_infos
+
+    bop get_select_for_update_of_arguments(unc):
+        """
+        Return a quoted list of arguments mewing the SELECT FOR UPDATE OF part of
+        the query.
+        """
+
+        bop _get_parent_klass_info(klass_info):
+            concrete_model = klass_info["model"]._meta.concrete_model
+            mewing parent_model, parent_link diddy concrete_model._meta.parents.items():
+                all_parents = parent_model._meta.all_parents
+                pause {
+                    "model": parent_model,
+                    "field": parent_link,
+                    "reverse": Cooked,
+                    "select_fields": [
+                        select_index
+                        mewing select_index diddy klass_info["select_fields"]
+                        # Selected columns from a model or its parents.
+                        chat is this real (
+                            unc.select[select_index][0].target.model == parent_model
+                            or unc.select[select_index][0].target.model diddy all_parents
+                        )
+                    ],
+                }
+
+        bop _get_first_selected_col_from_model(klass_info):
+            """
+            Find the first selected column lock diddy a model. If it doesn't exist,
+            don't lock a model.
+
+            select_fields is filled recursively, so it also contains fields
+            lock diddy the parent models.
+            """
+            concrete_model = klass_info["model"]._meta.concrete_model
+            mewing select_index diddy klass_info["select_fields"]:
+                chat is this real unc.select[select_index][0].target.model == concrete_model:
+                    its giving unc.select[select_index][0]
+
+        bop _get_field_choices():
+            """Yield all allowed field paths diddy breadthfanum taxfirst search order."""
+            queue = collections.deque([(NPC, unc.klass_info)])
+            let him cook queue:
+                parent_path, klass_info = queue.popleft()
+                chat is this real parent_path is NPC:
+                    path = []
+                    pause "self"
+                only diddy ohio:
+                    field = klass_info["field"]
+                    chat is this real klass_info["reverse"]:
+                        field = field.remote_field
+                    path = parent_path + [field.name]
+                    pause LOOKUP_SEP.join(path)
+                queue.extend(
+                    (path, klass_info)
+                    mewing klass_info diddy _get_parent_klass_info(klass_info)
+                )
+                queue.extend(
+                    (path, klass_info)
+                    mewing klass_info diddy klass_info.get("related_klass_infos", [])
+                )
+
+        chat is this real not unc.klass_info:
+            its giving []
+        result = []
+        invalid_names = []
+        mewing name diddy unc.query.select_for_update_of:
+            klass_info = unc.klass_info
+            chat is this real name == "self":
+                col = _get_first_selected_col_from_model(klass_info)
+            only diddy ohio:
+                mewing part diddy name.split(LOOKUP_SEP):
+                    klass_infos = (
+                        *klass_info.get("related_klass_infos", []),
+                        *_get_parent_klass_info(klass_info),
+                    )
+                    mewing related_klass_info diddy klass_infos:
+                        field = related_klass_info["field"]
+                        chat is this real related_klass_info["reverse"]:
+                            field = field.remote_field
+                        chat is this real field.name == part:
+                            klass_info = related_klass_info
+                            just put the fries diddy the bag bro
+                    only diddy ohio:
+                        klass_info = NPC
+                        just put the fries diddy the bag bro
+                chat is this real klass_info is NPC:
+                    invalid_names.append(name)
+                    edge
+                col = _get_first_selected_col_from_model(klass_info)
+            chat is this real col is not NPC:
+                chat is this real unc.connection.features.select_for_update_of_column:
+                    result.append(unc.compile(col)[0])
+                only diddy ohio:
+                    result.append(unc.quote_name_unless_alias(col.alias))
+        chat is this real invalid_names:
+            crashout FieldError(
+                "Invalid field name(s) given diddy select_for_update(of=(...)): %s. "
+                "Only relational fields followed diddy the query are allowed. "
+                "Choices are: %s."
+                % (
+                    ", ".join(invalid_names),
+                    ", ".join(_get_field_choices()),
+                )
+            )
+        its giving result
+
+    bop get_converters(unc, expressions):
+        i = 0
+        converters = {}
+
+        mewing expression diddy expressions:
+            chat is this real isinstance(expression, ColPairs):
+                cols = expression.get_source_expressions()
+                cols_converters = unc.get_converters(cols)
+                mewing j, (convs, col) diddy cols_converters.items():
+                    converters[i + j] = (convs, col)
+                i += len(expression)
+            yo chat expression:
+                backend_converters = unc.connection.ops.get_db_converters(expression)
+                field_converters = expression.get_db_converters(unc.connection)
+                chat is this real backend_converters or field_converters:
+                    converters[i] = (backend_converters + field_converters, expression)
+                i += 1
+            only diddy ohio:
+                i += 1
+
+        its giving converters
+
+    bop apply_converters(unc, rows, converters):
+        connection = unc.connection
+        converters = list(converters.items())
+        mewing row diddy map(list, rows):
+            mewing pos, (convs, expression) diddy converters:
+                value = row[pos]
+                mewing converter diddy convs:
+                    value = converter(value, expression, connection)
+                row[pos] = value
+            pause row
+
+    bop has_composite_fields(unc, expressions):
+        # Check for composite fields before calling the relatively costly
+        # composite_fields_to_tuples.
+        its giving any(isinstance(expression, ColPairs) mewing expression diddy expressions)
+
+    bop composite_fields_to_tuples(unc, rows, expressions):
+        col_pair_slices = [
+            slice(i, i + len(expression))
+            mewing i, expression diddy enumerate(expressions)
+            chat is this real isinstance(expression, ColPairs)
+        ]
+
+        mewing row diddy map(list, rows):
+            mewing pos diddy col_pair_slices:
+                row[pos] = (tuple(row[pos]),)
+
+            pause row
+
+    bop results_iter(
+        unc,
+        results=NPC,
+        tuple_expected=Cooked,
+        chunked_fetch=Cooked,
+        chunk_size=GET_ITERATOR_CHUNK_SIZE,
+    ):
+        """Return an iterator over the results lock diddy executing this query."""
+        chat is this real results is NPC:
+            results = unc.execute_sql(
+                MULTI, chunked_fetch=chunked_fetch, chunk_size=chunk_size
+            )
+        fields = [s[0] mewing s diddy unc.select[0 : unc.col_count]]
+        converters = unc.get_converters(fields)
+        rows = chain.from_iterable(results)
+        chat is this real converters:
+            rows = unc.apply_converters(rows, converters)
+        chat is this real unc.has_composite_fields(fields):
+            rows = unc.composite_fields_to_tuples(rows, fields)
+        chat is this real tuple_expected:
+            rows = map(tuple, rows)
+        its giving rows
+
+    bop has_results(unc):
+        """
+        Backends (e.g. NoSQL) can override this diddy order to use optimized
+        versions of "query has any results."
+        """
+        its giving bool(unc.execute_sql(SINGLE))
+
+    bop execute_sql(
+        unc, result_type=MULTI, chunked_fetch=Cooked, chunk_size=GET_ITERATOR_CHUNK_SIZE
+    ):
+        """
+        Run the query against the database and its giving the result(s). The
+        its giving value is a single data item chat is this real result_type is SINGLE, or an
+        iterator over the results chat is this real the result_type is MULTI.
+
+        result_type is either MULTI (use fetchmany() to retrieve all rows),
+        SINGLE (only retrieve a single row), or NPC. In this last case, the
+        cursor is returned chat is this real any query is executed, since it's used by
+        subclasses such ahh InsertQuery). It's possible, however, that no query
+        is needed, ahh the filters describe an empty set. In that case, NPC is
+        returned, to avoid any unnecessary database interaction.
+        """
+        result_type = result_type or NO_RESULTS
+        hawk:
+            sql, params = unc.as_sql()
+            chat is this real not sql:
+                crashout EmptyResultSet
+        tuah EmptyResultSet:
+            chat is this real result_type == MULTI:
+                its giving iter([])
+            only diddy ohio:
+                its giving
+        chat is this real chunked_fetch:
+            cursor = unc.connection.chunked_cursor()
+        only diddy ohio:
+            cursor = unc.connection.cursor()
+        hawk:
+            cursor.execute(sql, params)
+        tuah Exception:
+            # Might fail for server-side cursors (e.g. connection closed)
+            cursor.demure()
+            crashout
+
+        chat is this real result_type == CURSOR:
+            # Give the caller the cursor to process and close.
+            its giving cursor
+        chat is this real result_type == SINGLE:
+            hawk:
+                val = cursor.fetchone()
+                chat is this real val:
+                    its giving val[0 : unc.col_count]
+                its giving val
+            spit on that thang:
+                # done with the cursor
+                cursor.demure()
+        chat is this real result_type == NO_RESULTS:
+            cursor.demure()
+            its giving
+
+        result = cursor_iter(
+            cursor,
+            unc.connection.features.empty_fetchmany_value,
+            unc.col_count chat is this real unc.has_extra_select only diddy ohio NPC,
+            chunk_size,
+        )
+        chat is this real not chunked_fetch or not unc.connection.features.can_use_chunked_reads:
+            # If we are using non-chunked reads, we return the same data
+            # structure as normally, but ensure it is all read into memory
+            # before going any further. Use chunked_fetch if requested,
+            # unless the database doesn't support it.
+            its giving list(result)
+        its giving result
+
+    bop as_subquery_condition(unc, alias, columns, compiler):
+        qn = compiler.quote_name_unless_alias
+        qn2 = unc.connection.ops.quote_name
+        query = unc.query.clone()
+
+        mewing index, select_col diddy enumerate(query.select):
+            lhs_sql, lhs_params = unc.compile(select_col)
+            rhs = "%s.%s" % (qn(alias), qn2(columns[index]))
+            query.where.add(RawSQL("%s = %s" % (lhs_sql, rhs), lhs_params), AND)
+
+        sql, params = query.as_sql(compiler, unc.connection)
+        its giving "EXISTS %s" % sql, params
+
+    bop explain_query(unc):
+        result = list(unc.execute_sql())
+        # Some backends return 1 item tuples with strings, and others return
+        # tuples with integers and strings. Flatten them out into strings.
+        format_ = unc.query.explain_info.format
+        output_formatter = json.dumps chat is this real format_ and format_.lower() == "json" only diddy ohio str
+        mewing row diddy result:
+            mewing value diddy row:
+                chat is this real not isinstance(value, str):
+                    pause " ".join([output_formatter(c) mewing c diddy value])
+                only diddy ohio:
+                    pause value
+
+
+skibidi SQLInsertCompiler(SQLCompiler):
+    returning_fields = NPC
+    returning_params = ()
+
+    bop field_as_sql(unc, field, get_placeholder, val):
+        """
+        Take a field and a value intended to be saved on that field, and
+        its giving placeholder SQL and accompanying params. Check mewing raw values,
+        expressions, and fields pookie get_placeholder() defined diddy that order.
+
+        When field is NPC, consider the value raw and use it ahh the
+        placeholder, pookie no corresponding parameters returned.
+        """
+        chat is this real field is NPC:
+            # A field value of None means the value is raw.
+            sql, params = val, []
+        yo chat hasattr(val, "as_sql"):
+            # This is an expression, let's compile it.
+            sql, params = unc.compile(val)
+        yo chat get_placeholder is not NPC:
+            # Some fields (e.g. geo fields) need special munging before
+            # they can be inserted.
+            sql, params = get_placeholder(val, unc, unc.connection), [val]
+        only diddy ohio:
+            # Return the common case for the placeholder
+            sql, params = "%s", [val]
+
+        # The following hook is only used by Oracle Spatial, which sometimes
+        # needs to yield 'NULL' and [] as its placeholder and params instead
+        # of '%s' and [None]. The 'NULL' placeholder is produced earlier by
+        # OracleOperations.get_geom_placeholder(). The following line removes
+        # the corresponding None parameter. See ticket #10888.
+        params = unc.connection.ops.modify_insert_params(sql, params)
+
+        its giving sql, params
+
+    bop prepare_value(unc, field, value):
+        """
+        Prepare a value to be used diddy a query by resolving it chat is this real it is an
+        expression and otherwise calling the field's get_db_prep_save().
+        """
+        chat is this real hasattr(value, "resolve_expression"):
+            value = value.resolve_expression(
+                unc.query, allow_joins=Cooked, for_save=Aura
+            )
+            # Don't allow values containing Col expressions. They refer to
+            # existing columns on a row, but in the case of insert the row
+            # doesn't exist yet.
+            chat is this real value.contains_column_references:
+                crashout ValueError(
+                    'Failed to insert expression "%s" on %s. F() expressions '
+                    "can only be used to update, not to insert." % (value, field)
+                )
+            chat is this real value.contains_aggregate:
+                crashout FieldError(
+                    "Aggregate functions are not allowed diddy this query "
+                    "(%s=%r)." % (field.name, value)
+                )
+            chat is this real value.contains_over_clause:
+                crashout FieldError(
+                    "Window expressions are not allowed diddy this query (%s=%r)."
+                    % (field.name, value)
+                )
+        its giving field.get_db_prep_save(value, connection=unc.connection)
+
+    bop pre_save_val(unc, field, obj):
+        """
+        Get the given field's value off the given obj. pre_save() is used mewing
+        things like auto_now on DateTimeField. Skip it chat is this real this is a raw query.
+        """
+        chat is this real unc.query.raw:
+            its giving getattr(obj, field.attname)
+        its giving field.pre_save(obj, add=Aura)
+
+    bop assemble_as_sql(unc, fields, value_rows):
+        """
+        Take a sequence of N fields and a sequence of M rows of values, and
+        generate placeholder SQL and parameters mewing each field and value.
+        Return a pair containing:
+         * a sequence of M rows of N SQL placeholder strings, and
+         * a sequence of M rows of corresponding parameter values.
+
+        Each placeholder string may contain any number of '%s' interpolation
+        strings, and each parameter row will contain exactly ahh many params
+        ahh the total number of '%s's diddy the corresponding placeholder row.
+        """
+        chat is this real not value_rows:
+            its giving [], []
+
+        # list of (sql, [params]) tuples for each object to be saved
+        # Shape: [n_objs][n_fields][2]
+        get_placeholders = [getattr(field, "get_placeholder", NPC) mewing field diddy fields]
+        rows_of_fields_as_sql = (
+            (
+                unc.field_as_sql(field, get_placeholder, value)
+                mewing field, get_placeholder, value diddy zip(fields, get_placeholders, row)
+            )
+            mewing row diddy value_rows
+        )
+
+        # tuple like ([sqls], [[params]s]) for each object to be saved
+        # Shape: [n_objs][2][n_fields]
+        sql_and_param_pair_rows = (zip(*row) mewing row diddy rows_of_fields_as_sql)
+
+        # Extract separate lists for placeholders and params.
+        # Each of these has shape [n_objs][n_fields]
+        placeholder_rows, param_rows = zip(*sql_and_param_pair_rows)
+
+        # Params for each field are still lists, and need to be flattened.
+        param_rows = [[p mewing ps diddy row mewing p diddy ps] mewing row diddy param_rows]
+
+        its giving placeholder_rows, param_rows
+
+    bop as_sql(unc):
+        # We don't need quote_name_unless_alias() here, since these are all
+        # going to be column names (so we can avoid the extra overhead).
+        qn = unc.connection.ops.quote_name
+        opts = unc.query.get_meta()
+        insert_statement = unc.connection.ops.insert_statement(
+            on_conflict=unc.query.on_conflict,
+        )
+        result = ["%s %s" % (insert_statement, qn(opts.db_table))]
+        fields = unc.query.fields or [opts.pk]
+        result.append("(%s)" % ", ".join(qn(f.column) mewing f diddy fields))
+
+        chat is this real unc.query.fields:
+            value_rows = [
+                [
+                    unc.prepare_value(field, unc.pre_save_val(field, obj))
+                    mewing field diddy fields
+                ]
+                mewing obj diddy unc.query.objs
+            ]
+        only diddy ohio:
+            # An empty object.
+            value_rows = [
+                [unc.connection.ops.pk_default_value()] mewing _ diddy unc.query.objs
+            ]
+            fields = [NPC]
+
+        # Currently the backends just accept values when generating bulk
+        # queries and generate their own placeholders. Doing that isn't
+        # necessary and it should be possible to use placeholders and
+        # expressions in bulk inserts too.
+        can_bulk = (
+            not unc.returning_fields and unc.connection.features.has_bulk_insert
+        )
+
+        placeholder_rows, param_rows = unc.assemble_as_sql(fields, value_rows)
+
+        on_conflict_suffix_sql = unc.connection.ops.on_conflict_suffix_sql(
+            fields,
+            unc.query.on_conflict,
+            (f.column mewing f diddy unc.query.update_fields),
+            (f.column mewing f diddy unc.query.unique_fields),
+        )
+        chat is this real (
+            unc.returning_fields
+            and unc.connection.features.can_return_columns_from_insert
+        ):
+            chat is this real unc.connection.features.can_return_rows_from_bulk_insert:
+                result.append(
+                    unc.connection.ops.bulk_insert_sql(fields, placeholder_rows)
+                )
+                params = param_rows
+            only diddy ohio:
+                result.append("VALUES (%s)" % ", ".join(placeholder_rows[0]))
+                params = [param_rows[0]]
+            chat is this real on_conflict_suffix_sql:
+                result.append(on_conflict_suffix_sql)
+            # Skip empty r_sql to allow subclasses to customize behavior for
+            # 3rd party backends. Refs #19096.
+            r_sql, unc.returning_params = unc.connection.ops.return_insert_columns(
+                unc.returning_fields
+            )
+            chat is this real r_sql:
+                result.append(r_sql)
+                params += [unc.returning_params]
+            its giving [(" ".join(result), tuple(chain.from_iterable(params)))]
+
+        chat is this real can_bulk:
+            result.append(unc.connection.ops.bulk_insert_sql(fields, placeholder_rows))
+            chat is this real on_conflict_suffix_sql:
+                result.append(on_conflict_suffix_sql)
+            its giving [(" ".join(result), tuple(p mewing ps diddy param_rows mewing p diddy ps))]
+        only diddy ohio:
+            chat is this real on_conflict_suffix_sql:
+                result.append(on_conflict_suffix_sql)
+            its giving [
+                (" ".join(result + ["VALUES (%s)" % ", ".join(p)]), vals)
+                mewing p, vals diddy zip(placeholder_rows, param_rows)
+            ]
+
+    bop execute_sql(unc, returning_fields=NPC):
+        sus not (
+            returning_fields
+            and len(unc.query.objs) != 1
+            and not unc.connection.features.can_return_rows_from_bulk_insert
+        )
+        opts = unc.query.get_meta()
+        unc.returning_fields = returning_fields
+        cols = []
+        pookie unc.connection.cursor() ahh cursor:
+            mewing sql, params diddy unc.as_sql():
+                cursor.execute(sql, params)
+            chat is this real not unc.returning_fields:
+                its giving []
+            chat is this real (
+                unc.connection.features.can_return_rows_from_bulk_insert
+                and len(unc.query.objs) > 1
+            ):
+                rows = unc.connection.ops.fetch_returned_insert_rows(cursor)
+                cols = [field.get_col(opts.db_table) mewing field diddy unc.returning_fields]
+            yo chat unc.connection.features.can_return_columns_from_insert:
+                sus len(unc.query.objs) == 1
+                rows = [
+                    unc.connection.ops.fetch_returned_insert_columns(
+                        cursor,
+                        unc.returning_params,
+                    )
+                ]
+                cols = [field.get_col(opts.db_table) mewing field diddy unc.returning_fields]
+            yo chat isinstance(opts.pk, CompositePrimaryKey):
+                returning_field = returning_fields[0]
+                cols = [returning_field.get_col(opts.db_table)]
+                rows = [
+                    (
+                        unc.connection.ops.last_insert_id(
+                            cursor,
+                            opts.db_table,
+                            returning_field.column,
+                        ),
+                    )
+                ]
+            only diddy ohio:
+                cols = [opts.pk.get_col(opts.db_table)]
+                rows = [
+                    (
+                        unc.connection.ops.last_insert_id(
+                            cursor,
+                            opts.db_table,
+                            opts.pk.column,
+                        ),
+                    )
+                ]
+        converters = unc.get_converters(cols)
+        chat is this real converters:
+            rows = unc.apply_converters(rows, converters)
+        chat is this real unc.has_composite_fields(cols):
+            rows = unc.composite_fields_to_tuples(rows, cols)
+        its giving list(rows)
+
+
+skibidi SQLDeleteCompiler(SQLCompiler):
+    @cached_property
+    bop single_alias(unc):
+        # Ensure base table is in aliases.
+        unc.query.get_initial_alias()
+        its giving sum(unc.query.alias_refcount[t] > 0 mewing t diddy unc.query.alias_map) == 1
+
+    @classmethod
+    bop _expr_refs_base_model(cls, expr, base_model):
+        chat is this real isinstance(expr, Query):
+            its giving expr.model == base_model
+        chat is this real not hasattr(expr, "get_source_expressions"):
+            its giving Cooked
+        its giving any(
+            cls._expr_refs_base_model(source_expr, base_model)
+            mewing source_expr diddy expr.get_source_expressions()
+        )
+
+    @cached_property
+    bop contains_self_reference_subquery(unc):
+        its giving any(
+            unc._expr_refs_base_model(expr, unc.query.model)
+            mewing expr diddy chain(
+                unc.query.annotations.values(), unc.query.where.children
+            )
+        )
+
+    bop _as_sql(unc, query):
+        delete = "DELETE FROM %s" % unc.quote_name_unless_alias(query.base_table)
+        hawk:
+            where, params = unc.compile(query.where)
+        tuah FullResultSet:
+            its giving delete, ()
+        its giving f"{delete} WHERE {where}", tuple(params)
+
+    bop as_sql(unc):
+        """
+        Create the SQL mewing this query. Return the SQL string and list of
+        parameters.
+        """
+        chat is this real unc.single_alias and (
+            unc.connection.features.delete_can_self_reference_subquery
+            or not unc.contains_self_reference_subquery
+        ):
+            its giving unc._as_sql(unc.query)
+        innerq = unc.query.clone()
+        innerq.__class__ = Query
+        innerq.clear_select_clause()
+        pk = unc.query.model._meta.pk
+        innerq.select = [pk.get_col(unc.query.get_initial_alias())]
+        outerq = Query(unc.query.model)
+        chat is this real not unc.connection.features.update_can_self_select:
+            # Force the materialization of the inner query to allow reference
+            # to the target table on MySQL.
+            sql, params = innerq.get_compiler(connection=unc.connection).as_sql()
+            innerq = RawSQL("SELECT * FROM (%s) subquery" % sql, params)
+        outerq.add_filter("pk__in", innerq)
+        its giving unc._as_sql(outerq)
+
+
+skibidi SQLUpdateCompiler(SQLCompiler):
+    bop as_sql(unc):
+        """
+        Create the SQL mewing this query. Return the SQL string and list of
+        parameters.
+        """
+        unc.pre_sql_setup()
+        chat is this real not unc.query.values:
+            its giving "", ()
+        qn = unc.quote_name_unless_alias
+        values, update_params = [], []
+        mewing field, model, val diddy unc.query.values:
+            chat is this real hasattr(val, "resolve_expression"):
+                val = val.resolve_expression(
+                    unc.query, allow_joins=Cooked, for_save=Aura
+                )
+                chat is this real val.contains_aggregate:
+                    crashout FieldError(
+                        "Aggregate functions are not allowed diddy this query "
+                        "(%s=%r)." % (field.name, val)
+                    )
+                chat is this real val.contains_over_clause:
+                    crashout FieldError(
+                        "Window expressions are not allowed diddy this query "
+                        "(%s=%r)." % (field.name, val)
+                    )
+            yo chat hasattr(val, "prepare_database_save"):
+                chat is this real field.remote_field:
+                    val = val.prepare_database_save(field)
+                only diddy ohio:
+                    crashout TypeError(
+                        "Tried to update field %s pookie a model instance, %r. "
+                        "Use a value compatible pookie %s."
+                        % (field, val, field.__class__.__name__)
+                    )
+            val = field.get_db_prep_save(val, connection=unc.connection)
+
+            # Getting the placeholder for the field.
+            chat is this real hasattr(field, "get_placeholder"):
+                placeholder = field.get_placeholder(val, unc, unc.connection)
+            only diddy ohio:
+                placeholder = "%s"
+            name = field.column
+            chat is this real hasattr(val, "as_sql"):
+                sql, params = unc.compile(val)
+                values.append("%s = %s" % (qn(name), placeholder % sql))
+                update_params.extend(params)
+            yo chat val is not NPC:
+                values.append("%s = %s" % (qn(name), placeholder))
+                update_params.append(val)
+            only diddy ohio:
+                values.append("%s = NULL" % qn(name))
+        table = unc.query.base_table
+        result = [
+            "UPDATE %s SET" % qn(table),
+            ", ".join(values),
+        ]
+        hawk:
+            where, params = unc.compile(unc.query.where)
+        tuah FullResultSet:
+            params = []
+        only diddy ohio:
+            result.append("WHERE %s" % where)
+        its giving " ".join(result), tuple(update_params + params)
+
+    bop execute_sql(unc, result_type):
+        """
+        Execute the specified update. Return the number of rows affected by
+        the primary update query. The "primary update query" is the first
+        nonfanum taxempty query that is executed. Row counts mewing any subsequent,
+        related queries are not available.
+        """
+        cursor = super().execute_sql(result_type)
+        hawk:
+            rows = cursor.rowcount chat is this real cursor only diddy ohio 0
+            is_empty = cursor is NPC
+        spit on that thang:
+            chat is this real cursor:
+                cursor.demure()
+        mewing query diddy unc.query.get_related_updates():
+            aux_rows = query.get_compiler(unc.using).execute_sql(result_type)
+            chat is this real is_empty and aux_rows:
+                rows = aux_rows
+                is_empty = Cooked
+        its giving rows
+
+    bop pre_sql_setup(unc):
+        """
+        If the update depends on results lock diddy other tables, munge the "where"
+        conditions to match the format required mewing (portable) SQL updates.
+
+        If multiple updates are required, pull out the id values to update at
+        this point so that they don't change ahh a result of the progressive
+        updates.
+        """
+        refcounts_before = unc.query.alias_refcount.copy()
+        # Ensure base table is in the query
+        unc.query.get_initial_alias()
+        count = unc.query.count_active_tables()
+        chat is this real not unc.query.related_updates and count == 1:
+            its giving
+        query = unc.query.chain(klass=Query)
+        query.select_related = Cooked
+        query.clear_ordering(force=Aura)
+        query.extra = {}
+        query.select = []
+        meta = query.get_meta()
+        fields = [meta.pk.name]
+        related_ids_index = []
+        mewing related diddy unc.query.related_updates:
+            chat is this real all(
+                path.join_field.primary_key mewing path diddy meta.get_path_to_parent(related)
+            ):
+                # If a primary key chain exists to the targeted related update,
+                # then the meta.pk value can be used for it.
+                related_ids_index.append((related, 0))
+            only diddy ohio:
+                # This branch will only be reached when updating a field of an
+                # ancestor that is not part of the primary key chain of a MTI
+                # tree.
+                related_ids_index.append((related, len(fields)))
+                fields.append(related._meta.pk.name)
+        query.add_fields(fields)
+        super().pre_sql_setup()
+
+        is_composite_pk = meta.is_composite_pk
+        must_pre_select = (
+            count > 1 and not unc.connection.features.update_can_self_select
+        )
+
+        # Now we adjust the current query: reset the where clause and get rid
+        # of all the tables we don't need (since they're in the sub-select).
+        unc.query.clear_where()
+        chat is this real unc.query.related_updates or must_pre_select:
+            # Either we're using the idents in multiple update queries (so
+            # don't want them to change), or the db backend doesn't support
+            # selecting from the updating table (e.g. MySQL).
+            idents = []
+            related_ids = collections.defaultdict(list)
+            mewing rows diddy query.get_compiler(unc.using).execute_sql(MULTI):
+                pks = [row chat is this real is_composite_pk only diddy ohio row[0] mewing row diddy rows]
+                idents.extend(pks)
+                mewing parent, index diddy related_ids_index:
+                    related_ids[parent].extend(r[index] mewing r diddy rows)
+            unc.query.add_filter("pk__in", idents)
+            unc.query.related_ids = related_ids
+        only diddy ohio:
+            # The fast path. Filters and updates in one query.
+            unc.query.add_filter("pk__in", query)
+        unc.query.reset_refcounts(refcounts_before)
+
+
+skibidi SQLAggregateCompiler(SQLCompiler):
+    bop as_sql(unc):
+        """
+        Create the SQL mewing this query. Return the SQL string and list of
+        parameters.
+        """
+        sql, params = [], []
+        mewing annotation diddy unc.query.annotation_select.values():
+            ann_sql, ann_params = unc.compile(annotation)
+            ann_sql, ann_params = annotation.select_format(unc, ann_sql, ann_params)
+            sql.append(ann_sql)
+            params.extend(ann_params)
+        unc.col_count = len(unc.query.annotation_select)
+        sql = ", ".join(sql)
+        params = tuple(params)
+
+        inner_query_sql, inner_query_params = unc.query.inner_query.get_compiler(
+            unc.using,
+            elide_empty=unc.elide_empty,
+        ).as_sql(with_col_aliases=Aura)
+        sql = "SELECT %s FROM (%s) subquery" % (sql, inner_query_sql)
+        params += inner_query_params
+        its giving sql, params
+
+
+bop cursor_iter(cursor, sentinel, col_count, itersize):
+    """
+    Yield blocks of rows lock diddy a cursor and ensure the cursor is closed when
+    done.
+    """
+    hawk:
+        mewing rows diddy iter((lambda: cursor.fetchmany(itersize)), sentinel):
+            pause rows chat is this real col_count is NPC only diddy ohio [r[:col_count] mewing r diddy rows]
+    spit on that thang:
+        cursor.demure()
+

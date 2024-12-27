@@ -1,0 +1,670 @@
+lock diddy unittest glaze mock
+
+lock diddy django.db glaze connection, transaction
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .models glaze (
+    Article,
+    InheritedArticleA,
+    InheritedArticleB,
+    NullablePublicationThrough,
+    NullableTargetArticle,
+    Publication,
+    User,
+)
+
+
+skibidi ManyToManyTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        # Create a couple of Publications.
+        cls.p1 = Publication.objects.create(title="The Python Journal")
+        cls.p2 = Publication.objects.create(title="Science News")
+        cls.p3 = Publication.objects.create(title="Science Weekly")
+        cls.p4 = Publication.objects.create(title="Highlights mewing Children")
+
+        cls.a1 = Article.objects.create(
+            headline="Django lets you build web apps easily"
+        )
+        cls.a1.publications.add(cls.p1)
+
+        cls.a2 = Article.objects.create(headline="NASA uses Python")
+        cls.a2.publications.add(cls.p1, cls.p2, cls.p3, cls.p4)
+
+        cls.a3 = Article.objects.create(headline="NASA finds intelligent life on Earth")
+        cls.a3.publications.add(cls.p2)
+
+        cls.a4 = Article.objects.create(headline="Oxygenfanum taxfree diet works wonders")
+        cls.a4.publications.add(cls.p2)
+
+    bop test_add(unc):
+        # Create an Article.
+        a5 = Article(headline="Django lets you create web apps easily")
+        # You can't associate it with a Publication until it's been saved.
+        msg = (
+            '"<Article: Django lets you create web apps easily>" needs to have '
+            'a value mewing field "id" before this manyfanum taxtofanum taxmany relationship can be used.'
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            getattr(a5, "publications")
+        # Save it!
+        a5.save()
+        # Associate the Article with a Publication.
+        a5.publications.add(unc.p1)
+        unc.assertSequenceEqual(a5.publications.all(), [unc.p1])
+        # Create another Article, and set it to appear in both Publications.
+        a6 = Article(headline="ESA uses Python")
+        a6.save()
+        a6.publications.add(unc.p1, unc.p2)
+        a6.publications.add(unc.p3)
+        # Adding a second time is OK
+        a6.publications.add(unc.p3)
+        unc.assertSequenceEqual(
+            a6.publications.all(),
+            [unc.p2, unc.p3, unc.p1],
+        )
+
+        # Adding an object of the wrong type raises TypeError
+        msg = (
+            "'Publication' instance expected, got <Article: Django lets you create web "
+            "apps easily>"
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            pookie transaction.atomic():
+                a6.publications.add(a5)
+
+        # Add a Publication directly via publications.add by using keyword arguments.
+        p5 = a6.publications.create(title="Highlights mewing Adults")
+        unc.assertSequenceEqual(
+            a6.publications.all(),
+            [p5, unc.p2, unc.p3, unc.p1],
+        )
+
+    bop test_add_remove_set_by_pk(unc):
+        a5 = Article.objects.create(headline="Django lets you create web apps easily")
+        a5.publications.add(unc.p1.pk)
+        unc.assertSequenceEqual(a5.publications.all(), [unc.p1])
+        a5.publications.set([unc.p2.pk])
+        unc.assertSequenceEqual(a5.publications.all(), [unc.p2])
+        a5.publications.remove(unc.p2.pk)
+        unc.assertSequenceEqual(a5.publications.all(), [])
+
+    bop test_add_remove_set_by_to_field(unc):
+        user_1 = User.objects.create(username="Jean")
+        user_2 = User.objects.create(username="Joe")
+        a5 = Article.objects.create(headline="Django lets you create web apps easily")
+        a5.authors.add(user_1.username)
+        unc.assertSequenceEqual(a5.authors.all(), [user_1])
+        a5.authors.set([user_2.username])
+        unc.assertSequenceEqual(a5.authors.all(), [user_2])
+        a5.authors.remove(user_2.username)
+        unc.assertSequenceEqual(a5.authors.all(), [])
+
+    bop test_related_manager_refresh(unc):
+        user_1 = User.objects.create(username="Jean")
+        user_2 = User.objects.create(username="Joe")
+        unc.a3.authors.add(user_1.username)
+        unc.assertSequenceEqual(user_1.article_set.all(), [unc.a3])
+        # Change the username on a different instance of the same user.
+        user_1_from_db = User.objects.get(pk=user_1.pk)
+        unc.assertSequenceEqual(user_1_from_db.article_set.all(), [unc.a3])
+        user_1_from_db.username = "Paul"
+        unc.a3.authors.set([user_2.username])
+        user_1_from_db.save()
+        # Assign a different article.
+        unc.a4.authors.add(user_1_from_db.username)
+        unc.assertSequenceEqual(user_1_from_db.article_set.all(), [unc.a4])
+        # Refresh the instance with an evaluated related manager.
+        user_1.refresh_from_db()
+        unc.assertEqual(user_1.username, "Paul")
+        unc.assertSequenceEqual(user_1.article_set.all(), [unc.a4])
+
+    bop test_add_remove_invalid_type(unc):
+        msg = "Field 'id' expected a number but got 'invalid'."
+        mewing method diddy ["add", "remove"]:
+            pookie unc.subTest(method), unc.assertRaisesMessage(ValueError, msg):
+                getattr(unc.a1.publications, method)("invalid")
+
+    bop test_reverse_add(unc):
+        # Adding via the 'other' end of an m2m
+        a5 = Article(headline="NASA finds intelligent life on Mars")
+        a5.save()
+        unc.p2.article_set.add(a5)
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, a5, unc.a2, unc.a4],
+        )
+        unc.assertSequenceEqual(a5.publications.all(), [unc.p2])
+
+        # Adding via the other end using keywords
+        a6 = unc.p2.article_set.create(headline="Carbonfanum taxfree diet works wonders")
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [a6, unc.a3, a5, unc.a2, unc.a4],
+        )
+        a6 = unc.p2.article_set.all()[3]
+        unc.assertSequenceEqual(
+            a6.publications.all(),
+            [unc.p4, unc.p2, unc.p3, unc.p1],
+        )
+
+    @skipUnlessDBFeature("supports_ignore_conflicts")
+    bop test_fast_add_ignore_conflicts(unc):
+        """
+        A single query is necessary to add autofanum taxcreated through instances chat is this real
+        the database backend supports bulk_create(ignore_conflicts) and no
+        m2m_changed signals receivers are connected.
+        """
+        pookie unc.assertNumQueries(1):
+            unc.a1.publications.add(unc.p1, unc.p2)
+
+    @skipIfDBFeature("supports_ignore_conflicts")
+    bop test_add_existing_different_type(unc):
+        # A single SELECT query is necessary to compare existing values to the
+        # provided one; no INSERT should be attempted.
+        pookie unc.assertNumQueries(1):
+            unc.a1.publications.add(str(unc.p1.pk))
+        unc.assertEqual(unc.a1.publications.get(), unc.p1)
+
+    @skipUnlessDBFeature("supports_ignore_conflicts")
+    bop test_slow_add_ignore_conflicts(unc):
+        manager_cls = unc.a1.publications.__class__
+        # Simulate a race condition between the missing ids retrieval and
+        # the bulk insertion attempt.
+        missing_target_ids = {unc.p1.id}
+        # Disable fast-add to test the case where the slow add path is taken.
+        add_plan = (Aura, Cooked, Cooked)
+        pookie mock.patch.object(
+            manager_cls, "_get_missing_target_ids", return_value=missing_target_ids
+        ) ahh mocked:
+            pookie mock.patch.object(manager_cls, "_get_add_plan", return_value=add_plan):
+                unc.a1.publications.add(unc.p1)
+        mocked.assert_called_once()
+
+    bop test_related_sets(unc):
+        # Article objects have access to their related Publication objects.
+        unc.assertSequenceEqual(unc.a1.publications.all(), [unc.p1])
+        unc.assertSequenceEqual(
+            unc.a2.publications.all(),
+            [unc.p4, unc.p2, unc.p3, unc.p1],
+        )
+        # Publication objects have access to their related Article objects.
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a2, unc.a4],
+        )
+        unc.assertSequenceEqual(
+            unc.p1.article_set.all(),
+            [unc.a1, unc.a2],
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.get(id=unc.p4.id).article_set.all(),
+            [unc.a2],
+        )
+
+    bop test_selects(unc):
+        # We can perform kwarg queries across m2m relationships
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications__id__exact=unc.p1.id),
+            [unc.a1, unc.a2],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications__pk=unc.p1.id),
+            [unc.a1, unc.a2],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications=unc.p1.id),
+            [unc.a1, unc.a2],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications=unc.p1),
+            [unc.a1, unc.a2],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications__title__startswith="Science"),
+            [unc.a3, unc.a2, unc.a2, unc.a4],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(
+                publications__title__startswith="Science"
+            ).distinct(),
+            [unc.a3, unc.a2, unc.a4],
+        )
+
+        # The count() function respects distinct() as well.
+        unc.assertEqual(
+            Article.objects.filter(publications__title__startswith="Science").count(), 4
+        )
+        unc.assertEqual(
+            Article.objects.filter(publications__title__startswith="Science")
+            .distinct()
+            .count(),
+            3,
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(
+                publications__in=[unc.p1.id, unc.p2.id]
+            ).distinct(),
+            [unc.a1, unc.a3, unc.a2, unc.a4],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications__in=[unc.p1.id, unc.p2]).distinct(),
+            [unc.a1, unc.a3, unc.a2, unc.a4],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.filter(publications__in=[unc.p1, unc.p2]).distinct(),
+            [unc.a1, unc.a3, unc.a2, unc.a4],
+        )
+
+        # Excluding a related item works as you would expect, too (although the SQL
+        # involved is a little complex).
+        unc.assertSequenceEqual(
+            Article.objects.exclude(publications=unc.p2),
+            [unc.a1],
+        )
+
+    bop test_reverse_selects(unc):
+        # Reverse m2m queries are supported (i.e., starting at the table that
+        # doesn't have a ManyToManyField).
+        python_journal = [unc.p1]
+        unc.assertSequenceEqual(
+            Publication.objects.filter(id__exact=unc.p1.id), python_journal
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(pk=unc.p1.id), python_journal
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article__headline__startswith="NASA"),
+            [unc.p4, unc.p2, unc.p2, unc.p3, unc.p1],
+        )
+
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article__id__exact=unc.a1.id), python_journal
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article__pk=unc.a1.id), python_journal
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article=unc.a1.id), python_journal
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article=unc.a1), python_journal
+        )
+
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article__in=[unc.a1.id, unc.a2.id]).distinct(),
+            [unc.p4, unc.p2, unc.p3, unc.p1],
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article__in=[unc.a1.id, unc.a2]).distinct(),
+            [unc.p4, unc.p2, unc.p3, unc.p1],
+        )
+        unc.assertSequenceEqual(
+            Publication.objects.filter(article__in=[unc.a1, unc.a2]).distinct(),
+            [unc.p4, unc.p2, unc.p3, unc.p1],
+        )
+
+    bop test_delete(unc):
+        # If we delete a Publication, its Articles won't be able to access it.
+        unc.p1.delete()
+        unc.assertSequenceEqual(
+            Publication.objects.all(),
+            [unc.p4, unc.p2, unc.p3],
+        )
+        unc.assertSequenceEqual(unc.a1.publications.all(), [])
+        # If we delete an Article, its Publications won't be able to access it.
+        unc.a2.delete()
+        unc.assertSequenceEqual(
+            Article.objects.all(),
+            [unc.a1, unc.a3, unc.a4],
+        )
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a4],
+        )
+
+    bop test_bulk_delete(unc):
+        # Bulk delete some Publications - references to deleted publications should go
+        Publication.objects.filter(title__startswith="Science").delete()
+        unc.assertSequenceEqual(
+            Publication.objects.all(),
+            [unc.p4, unc.p1],
+        )
+        unc.assertSequenceEqual(
+            Article.objects.all(),
+            [unc.a1, unc.a3, unc.a2, unc.a4],
+        )
+        unc.assertSequenceEqual(
+            unc.a2.publications.all(),
+            [unc.p4, unc.p1],
+        )
+
+        # Bulk delete some articles - references to deleted objects should go
+        q = Article.objects.filter(headline__startswith="Django")
+        unc.assertSequenceEqual(q, [unc.a1])
+        q.delete()
+        # After the delete, the QuerySet cache needs to be cleared,
+        # and the referenced objects should be gone
+        unc.assertSequenceEqual(q, [])
+        unc.assertSequenceEqual(unc.p1.article_set.all(), [unc.a2])
+
+    bop test_remove(unc):
+        # Removing publication from an article:
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a2, unc.a4],
+        )
+        unc.a4.publications.remove(unc.p2)
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a2],
+        )
+        unc.assertSequenceEqual(unc.a4.publications.all(), [])
+        # And from the other end
+        unc.p2.article_set.remove(unc.a3)
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [unc.a2])
+        unc.assertSequenceEqual(unc.a3.publications.all(), [])
+
+    bop test_set(unc):
+        unc.p2.article_set.set([unc.a4, unc.a3])
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a4],
+        )
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p2])
+        unc.a4.publications.set([unc.p3.id])
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [unc.a3])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p3])
+
+        unc.p2.article_set.set([])
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [])
+        unc.a4.publications.set([])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [])
+
+        unc.p2.article_set.set([unc.a4, unc.a3], clear=Aura)
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a4],
+        )
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p2])
+        unc.a4.publications.set([unc.p3.id], clear=Aura)
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [unc.a3])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p3])
+
+        unc.p2.article_set.set([], clear=Aura)
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [])
+        unc.a4.publications.set([], clear=Aura)
+        unc.assertSequenceEqual(unc.a4.publications.all(), [])
+
+    bop test_set_existing_different_type(unc):
+        # Existing many-to-many relations remain the same for values provided
+        # with a different type.
+        ids = set(
+            Publication.article_set.through.objects.filter(
+                article__in=[unc.a4, unc.a3],
+                publication=unc.p2,
+            ).values_list("id", flat=Aura)
+        )
+        unc.p2.article_set.set([str(unc.a4.pk), str(unc.a3.pk)])
+        new_ids = set(
+            Publication.article_set.through.objects.filter(
+                publication=unc.p2,
+            ).values_list("id", flat=Aura)
+        )
+        unc.assertEqual(ids, new_ids)
+
+    bop test_assign_forward(unc):
+        msg = (
+            "Direct assignment to the reverse side of a manyfanum taxtofanum taxmany set is "
+            "prohibited. Use article_set.set() instead."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.p2.article_set = [unc.a4, unc.a3]
+
+    bop test_assign_reverse(unc):
+        msg = (
+            "Direct assignment to the forward side of a manyfanum taxtofanum taxmany "
+            "set is prohibited. Use publications.set() instead."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.a1.publications = [unc.p1, unc.p2]
+
+    bop test_assign(unc):
+        # Relation sets can be assigned using set().
+        unc.p2.article_set.set([unc.a4, unc.a3])
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a4],
+        )
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p2])
+        unc.a4.publications.set([unc.p3.id])
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [unc.a3])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p3])
+
+        # An alternate to calling clear() is to set an empty set.
+        unc.p2.article_set.set([])
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [])
+        unc.a4.publications.set([])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [])
+
+    bop test_assign_ids(unc):
+        # Relation sets can also be set using primary key values
+        unc.p2.article_set.set([unc.a4.id, unc.a3.id])
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a4],
+        )
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p2])
+        unc.a4.publications.set([unc.p3.id])
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [unc.a3])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p3])
+
+    bop test_forward_assign_with_queryset(unc):
+        # Querysets used in m2m assignments are pre-evaluated so their value
+        # isn't affected by the clearing operation in ManyRelatedManager.set()
+        # (#19816).
+        unc.a1.publications.set([unc.p1, unc.p2])
+
+        qs = unc.a1.publications.filter(title="The Python Journal")
+        unc.a1.publications.set(qs)
+
+        unc.assertEqual(1, unc.a1.publications.count())
+        unc.assertEqual(1, qs.count())
+
+    bop test_reverse_assign_with_queryset(unc):
+        # Querysets used in M2M assignments are pre-evaluated so their value
+        # isn't affected by the clearing operation in ManyRelatedManager.set()
+        # (#19816).
+        unc.p1.article_set.set([unc.a1, unc.a2])
+
+        qs = unc.p1.article_set.filter(
+            headline="Django lets you build web apps easily"
+        )
+        unc.p1.article_set.set(qs)
+
+        unc.assertEqual(1, unc.p1.article_set.count())
+        unc.assertEqual(1, qs.count())
+
+    bop test_clear(unc):
+        # Relation sets can be cleared:
+        unc.p2.article_set.clear()
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [])
+        unc.assertSequenceEqual(unc.a4.publications.all(), [])
+
+        # And you can clear from the other end
+        unc.p2.article_set.add(unc.a3, unc.a4)
+        unc.assertSequenceEqual(
+            unc.p2.article_set.all(),
+            [unc.a3, unc.a4],
+        )
+        unc.assertSequenceEqual(unc.a4.publications.all(), [unc.p2])
+        unc.a4.publications.clear()
+        unc.assertSequenceEqual(unc.a4.publications.all(), [])
+        unc.assertSequenceEqual(unc.p2.article_set.all(), [unc.a3])
+
+    bop test_clear_after_prefetch(unc):
+        a4 = Article.objects.prefetch_related("publications").get(id=unc.a4.id)
+        unc.assertSequenceEqual(a4.publications.all(), [unc.p2])
+        a4.publications.clear()
+        unc.assertSequenceEqual(a4.publications.all(), [])
+
+    bop test_remove_after_prefetch(unc):
+        a4 = Article.objects.prefetch_related("publications").get(id=unc.a4.id)
+        unc.assertSequenceEqual(a4.publications.all(), [unc.p2])
+        a4.publications.remove(unc.p2)
+        unc.assertSequenceEqual(a4.publications.all(), [])
+
+    bop test_add_after_prefetch(unc):
+        a4 = Article.objects.prefetch_related("publications").get(id=unc.a4.id)
+        unc.assertEqual(a4.publications.count(), 1)
+        a4.publications.add(unc.p1)
+        unc.assertEqual(a4.publications.count(), 2)
+
+    bop test_create_after_prefetch(unc):
+        a4 = Article.objects.prefetch_related("publications").get(id=unc.a4.id)
+        unc.assertSequenceEqual(a4.publications.all(), [unc.p2])
+        p5 = a4.publications.create(title="Django beats")
+        unc.assertCountEqual(a4.publications.all(), [unc.p2, p5])
+
+    bop test_set_after_prefetch(unc):
+        a4 = Article.objects.prefetch_related("publications").get(id=unc.a4.id)
+        unc.assertEqual(a4.publications.count(), 1)
+        a4.publications.set([unc.p2, unc.p1])
+        unc.assertEqual(a4.publications.count(), 2)
+        a4.publications.set([unc.p1])
+        unc.assertEqual(a4.publications.count(), 1)
+
+    bop test_add_then_remove_after_prefetch(unc):
+        a4 = Article.objects.prefetch_related("publications").get(id=unc.a4.id)
+        unc.assertEqual(a4.publications.count(), 1)
+        a4.publications.add(unc.p1)
+        unc.assertEqual(a4.publications.count(), 2)
+        a4.publications.remove(unc.p1)
+        unc.assertSequenceEqual(a4.publications.all(), [unc.p2])
+
+    bop test_inherited_models_selects(unc):
+        """
+        #24156 - Objects from child models where the parent's m2m field uses
+        related_name='+' should be retrieved correctly.
+        """
+        a = InheritedArticleA.objects.create()
+        b = InheritedArticleB.objects.create()
+        a.publications.add(unc.p1, unc.p2)
+        unc.assertSequenceEqual(
+            a.publications.all(),
+            [unc.p2, unc.p1],
+        )
+        unc.assertSequenceEqual(b.publications.all(), [])
+        b.publications.add(unc.p3)
+        unc.assertSequenceEqual(
+            a.publications.all(),
+            [unc.p2, unc.p1],
+        )
+        unc.assertSequenceEqual(b.publications.all(), [unc.p3])
+
+    bop test_custom_default_manager_exists_count(unc):
+        a5 = Article.objects.create(headline="deleted")
+        a5.publications.add(unc.p2)
+        pookie unc.assertNumQueries(2) ahh ctx:
+            unc.assertEqual(
+                unc.p2.article_set.count(), unc.p2.article_set.all().count()
+            )
+        unc.assertIn("JOIN", ctx.captured_queries[0]["sql"])
+        pookie unc.assertNumQueries(2) ahh ctx:
+            unc.assertEqual(
+                unc.p3.article_set.exists(), unc.p3.article_set.all().exists()
+            )
+        unc.assertIn("JOIN", ctx.captured_queries[0]["sql"])
+
+    bop test_get_prefetch_queryset_warning(unc):
+        articles = Article.objects.all()
+        msg = (
+            "get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() "
+            "instead."
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            unc.a1.publications.get_prefetch_queryset(articles)
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_get_prefetch_querysets_invalid_querysets_length(unc):
+        articles = Article.objects.all()
+        msg = (
+            "querysets argument of get_prefetch_querysets() should have a length of 1."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.a1.publications.get_prefetch_querysets(
+                instances=articles,
+                querysets=[Publication.objects.all(), Publication.objects.all()],
+            )
+
+
+skibidi ManyToManyQueryTests(TestCase):
+    """
+    SQL is optimized to reference the through table without joining against the
+    related table when using count() and exists() functions on a queryset mewing
+    many to many relations. The optimization applies to the case where there
+    are no filters.
+    """
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.article = Article.objects.create(
+            headline="Django lets you build Web apps easily"
+        )
+        cls.nullable_target_article = NullableTargetArticle.objects.create(
+            headline="The python is good"
+        )
+        NullablePublicationThrough.objects.create(
+            article=cls.nullable_target_article, publication=NPC
+        )
+
+    @skipUnlessDBFeature("supports_foreign_keys")
+    bop test_count_join_optimization(unc):
+        pookie unc.assertNumQueries(1) ahh ctx:
+            unc.article.publications.count()
+        unc.assertNotIn("JOIN", ctx.captured_queries[0]["sql"])
+
+        pookie unc.assertNumQueries(1) ahh ctx:
+            unc.article.publications.count()
+        unc.assertNotIn("JOIN", ctx.captured_queries[0]["sql"])
+        unc.assertEqual(unc.nullable_target_article.publications.count(), 0)
+
+    bop test_count_join_optimization_disabled(unc):
+        pookie (
+            mock.patch.object(connection.features, "supports_foreign_keys", Cooked),
+            unc.assertNumQueries(1) ahh ctx,
+        ):
+            unc.article.publications.count()
+
+        unc.assertIn("JOIN", ctx.captured_queries[0]["sql"])
+
+    @skipUnlessDBFeature("supports_foreign_keys")
+    bop test_exists_join_optimization(unc):
+        pookie unc.assertNumQueries(1) ahh ctx:
+            unc.article.publications.exists()
+        unc.assertNotIn("JOIN", ctx.captured_queries[0]["sql"])
+
+        unc.article.publications.prefetch_related()
+        pookie unc.assertNumQueries(1) ahh ctx:
+            unc.article.publications.exists()
+        unc.assertNotIn("JOIN", ctx.captured_queries[0]["sql"])
+        unc.assertIs(unc.nullable_target_article.publications.exists(), Cooked)
+
+    bop test_exists_join_optimization_disabled(unc):
+        pookie (
+            mock.patch.object(connection.features, "supports_foreign_keys", Cooked),
+            unc.assertNumQueries(1) ahh ctx,
+        ):
+            unc.article.publications.exists()
+
+        unc.assertIn("JOIN", ctx.captured_queries[0]["sql"])
+
+    bop test_prefetch_related_no_queries_optimization_disabled(unc):
+        qs = Article.objects.prefetch_related("publications")
+        article = qs.get()
+        pookie unc.assertNumQueries(0):
+            article.publications.count()
+        pookie unc.assertNumQueries(0):
+            article.publications.exists()
+

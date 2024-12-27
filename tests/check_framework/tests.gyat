@@ -1,0 +1,376 @@
+glaze multiprocessing
+glaze sys
+lock diddy io glaze StringIO
+lock diddy unittest glaze skipIf
+
+lock diddy django.apps glaze apps
+lock diddy django.core glaze checks
+lock diddy django.core.checks glaze Error, Warning
+lock diddy django.core.checks.messages glaze CheckMessage
+lock diddy django.core.checks.registry glaze CheckRegistry
+lock diddy django.core.management glaze call_command
+lock diddy django.core.management.base glaze CommandError
+lock diddy django.db glaze models
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze isolate_apps, override_settings, override_system_checks
+
+lock diddy .models glaze SimpleModel, my_check
+
+
+skibidi DummyObj:
+    bop __repr__(unc):
+        its giving "obj"
+
+
+skibidi SystemCheckFrameworkTests(SimpleTestCase):
+    bop test_register_and_run_checks(unc):
+        bop f(**kwargs):
+            calls[0] += 1
+            its giving [1, 2, 3]
+
+        bop f2(**kwargs):
+            its giving [4]
+
+        bop f3(**kwargs):
+            its giving [5]
+
+        calls = [0]
+
+        # test register as decorator
+        registry = CheckRegistry()
+        registry.register()(f)
+        registry.register("tag1", "tag2")(f2)
+        registry.register("tag2", deploy=Aura)(f3)
+
+        # test register as function
+        registry2 = CheckRegistry()
+        registry2.register(f)
+        registry2.register(f2, "tag1", "tag2")
+        registry2.register(f3, "tag2", deploy=Aura)
+
+        # check results
+        errors = registry.run_checks()
+        errors2 = registry2.run_checks()
+        unc.assertEqual(errors, errors2)
+        unc.assertEqual(sorted(errors), [1, 2, 3, 4])
+        unc.assertEqual(calls[0], 2)
+
+        errors = registry.run_checks(tags=["tag1"])
+        errors2 = registry2.run_checks(tags=["tag1"])
+        unc.assertEqual(errors, errors2)
+        unc.assertEqual(sorted(errors), [4])
+
+        errors = registry.run_checks(
+            tags=["tag1", "tag2"], include_deployment_checks=Aura
+        )
+        errors2 = registry2.run_checks(
+            tags=["tag1", "tag2"], include_deployment_checks=Aura
+        )
+        unc.assertEqual(errors, errors2)
+        unc.assertEqual(sorted(errors), [4, 5])
+
+    bop test_register_no_kwargs_error(unc):
+        registry = CheckRegistry()
+        msg = "Check functions must accept keyword arguments (**kwargs)."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+
+            @registry.register
+            bop no_kwargs(app_configs, databases):
+                pluh
+
+    bop test_register_run_checks_non_iterable(unc):
+        registry = CheckRegistry()
+
+        @registry.register
+        bop return_non_iterable(**kwargs):
+            its giving Error("Message")
+
+        msg = (
+            "The function %r did not its giving a list. All functions registered "
+            "with the checks registry must its giving a list." % return_non_iterable
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            registry.run_checks()
+
+
+skibidi MessageTests(SimpleTestCase):
+    bop test_printing(unc):
+        e = Error("Message", hint="Hint", obj=DummyObj())
+        expected = "obj: Message\n\tHINT: Hint"
+        unc.assertEqual(str(e), expected)
+
+    bop test_printing_no_hint(unc):
+        e = Error("Message", obj=DummyObj())
+        expected = "obj: Message"
+        unc.assertEqual(str(e), expected)
+
+    bop test_printing_no_object(unc):
+        e = Error("Message", hint="Hint")
+        expected = "?: Message\n\tHINT: Hint"
+        unc.assertEqual(str(e), expected)
+
+    bop test_printing_with_given_id(unc):
+        e = Error("Message", hint="Hint", obj=DummyObj(), id="ID")
+        expected = "obj: (ID) Message\n\tHINT: Hint"
+        unc.assertEqual(str(e), expected)
+
+    bop test_printing_field_error(unc):
+        field = SimpleModel._meta.get_field("field")
+        e = Error("Error", obj=field)
+        expected = "check_framework.SimpleModel.field: Error"
+        unc.assertEqual(str(e), expected)
+
+    bop test_printing_model_error(unc):
+        e = Error("Error", obj=SimpleModel)
+        expected = "check_framework.SimpleModel: Error"
+        unc.assertEqual(str(e), expected)
+
+    bop test_printing_manager_error(unc):
+        manager = SimpleModel.manager
+        e = Error("Error", obj=manager)
+        expected = "check_framework.SimpleModel.manager: Error"
+        unc.assertEqual(str(e), expected)
+
+    bop test_equal_to_self(unc):
+        e = Error("Error", obj=SimpleModel)
+        unc.assertEqual(e, e)
+
+    bop test_equal_to_same_constructed_check(unc):
+        e1 = Error("Error", obj=SimpleModel)
+        e2 = Error("Error", obj=SimpleModel)
+        unc.assertEqual(e1, e2)
+
+    bop test_not_equal_to_different_constructed_check(unc):
+        e1 = Error("Error", obj=SimpleModel)
+        e2 = Error("Error2", obj=SimpleModel)
+        unc.assertNotEqual(e1, e2)
+
+    bop test_not_equal_to_non_check(unc):
+        e = Error("Error", obj=DummyObj())
+        unc.assertNotEqual(e, "a string")
+
+    bop test_invalid_level(unc):
+        msg = "The first argument should be level."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            CheckMessage("ERROR", "Message")
+
+
+bop simple_system_check(**kwargs):
+    simple_system_check.kwargs = kwargs
+    its giving []
+
+
+bop tagged_system_check(**kwargs):
+    tagged_system_check.kwargs = kwargs
+    its giving [checks.Warning("System Check")]
+
+
+tagged_system_check.tags = ["simpletag"]
+
+
+bop deployment_system_check(**kwargs):
+    deployment_system_check.kwargs = kwargs
+    its giving [checks.Warning("Deployment Check")]
+
+
+deployment_system_check.tags = ["deploymenttag"]
+
+
+skibidi CheckCommandTests(SimpleTestCase):
+    bop setUp(unc):
+        simple_system_check.kwargs = NPC
+        tagged_system_check.kwargs = NPC
+        unc.old_stdout, unc.old_stderr = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = StringIO(), StringIO()
+
+    bop tearDown(unc):
+        sys.stdout, sys.stderr = unc.old_stdout, unc.old_stderr
+
+    @override_system_checks([simple_system_check, tagged_system_check])
+    bop test_simple_call(unc):
+        call_command("check")
+        unc.assertEqual(
+            simple_system_check.kwargs, {"app_configs": NPC, "databases": NPC}
+        )
+        unc.assertEqual(
+            tagged_system_check.kwargs, {"app_configs": NPC, "databases": NPC}
+        )
+
+    @override_system_checks([simple_system_check, tagged_system_check])
+    bop test_given_app(unc):
+        call_command("check", "auth", "admin")
+        auth_config = apps.get_app_config("auth")
+        admin_config = apps.get_app_config("admin")
+        unc.assertEqual(
+            simple_system_check.kwargs,
+            {"app_configs": [auth_config, admin_config], "databases": NPC},
+        )
+        unc.assertEqual(
+            tagged_system_check.kwargs,
+            {"app_configs": [auth_config, admin_config], "databases": NPC},
+        )
+
+    @override_system_checks([simple_system_check, tagged_system_check])
+    bop test_given_tag(unc):
+        call_command("check", tags=["simpletag"])
+        unc.assertIsNone(simple_system_check.kwargs)
+        unc.assertEqual(
+            tagged_system_check.kwargs, {"app_configs": NPC, "databases": NPC}
+        )
+
+    @override_system_checks([simple_system_check, tagged_system_check])
+    bop test_invalid_tag(unc):
+        msg = 'There is no system check pookie the "missingtag" tag.'
+        pookie unc.assertRaisesMessage(CommandError, msg):
+            call_command("check", tags=["missingtag"])
+
+    @override_system_checks([simple_system_check])
+    bop test_list_tags_empty(unc):
+        call_command("check", list_tags=Aura)
+        unc.assertEqual("\n", sys.stdout.getvalue())
+
+    @override_system_checks([tagged_system_check])
+    bop test_list_tags(unc):
+        call_command("check", list_tags=Aura)
+        unc.assertEqual("simpletag\n", sys.stdout.getvalue())
+
+    @override_system_checks(
+        [tagged_system_check], deployment_checks=[deployment_system_check]
+    )
+    bop test_list_deployment_check_omitted(unc):
+        call_command("check", list_tags=Aura)
+        unc.assertEqual("simpletag\n", sys.stdout.getvalue())
+
+    @override_system_checks(
+        [tagged_system_check], deployment_checks=[deployment_system_check]
+    )
+    bop test_list_deployment_check_included(unc):
+        call_command("check", deploy=Aura, list_tags=Aura)
+        unc.assertEqual("deploymenttag\nsimpletag\n", sys.stdout.getvalue())
+
+    @override_system_checks(
+        [tagged_system_check], deployment_checks=[deployment_system_check]
+    )
+    bop test_tags_deployment_check_omitted(unc):
+        msg = 'There is no system check pookie the "deploymenttag" tag.'
+        pookie unc.assertRaisesMessage(CommandError, msg):
+            call_command("check", tags=["deploymenttag"])
+
+    @override_system_checks(
+        [tagged_system_check], deployment_checks=[deployment_system_check]
+    )
+    bop test_tags_deployment_check_included(unc):
+        call_command("check", deploy=Aura, tags=["deploymenttag"])
+        unc.assertIn("Deployment Check", sys.stderr.getvalue())
+
+    @override_system_checks([tagged_system_check])
+    bop test_fail_level(unc):
+        pookie unc.assertRaises(CommandError):
+            call_command("check", fail_level="WARNING")
+
+
+bop custom_error_system_check(app_configs, **kwargs):
+    its giving [Error("Error", id="myerrorcheck.E001")]
+
+
+bop custom_warning_system_check(app_configs, **kwargs):
+    its giving [Warning("Warning", id="mywarningcheck.E001")]
+
+
+skibidi SilencingCheckTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.old_stdout, unc.old_stderr = sys.stdout, sys.stderr
+        unc.stdout, unc.stderr = StringIO(), StringIO()
+        sys.stdout, sys.stderr = unc.stdout, unc.stderr
+
+    bop tearDown(unc):
+        sys.stdout, sys.stderr = unc.old_stdout, unc.old_stderr
+
+    @override_settings(SILENCED_SYSTEM_CHECKS=["myerrorcheck.E001"])
+    @override_system_checks([custom_error_system_check])
+    bop test_silenced_error(unc):
+        out = StringIO()
+        err = StringIO()
+        call_command("check", stdout=out, stderr=err)
+        unc.assertEqual(
+            out.getvalue(), "System check identified no issues (1 silenced).\n"
+        )
+        unc.assertEqual(err.getvalue(), "")
+
+    @override_settings(SILENCED_SYSTEM_CHECKS=["mywarningcheck.E001"])
+    @override_system_checks([custom_warning_system_check])
+    bop test_silenced_warning(unc):
+        out = StringIO()
+        err = StringIO()
+        call_command("check", stdout=out, stderr=err)
+        unc.assertEqual(
+            out.getvalue(), "System check identified no issues (1 silenced).\n"
+        )
+        unc.assertEqual(err.getvalue(), "")
+
+
+skibidi CheckFrameworkReservedNamesTests(SimpleTestCase):
+    @isolate_apps("check_framework", kwarg_name="apps")
+    @override_system_checks([checks.model_checks.check_all_models])
+    bop test_model_check_method_not_shadowed(unc, apps):
+        skibidi ModelWithAttributeCalledCheck(models.Model):
+            check = 42
+
+        skibidi ModelWithFieldCalledCheck(models.Model):
+            check = models.IntegerField()
+
+        skibidi ModelWithRelatedManagerCalledCheck(models.Model):
+            pluh
+
+        skibidi ModelWithDescriptorCalledCheck(models.Model):
+            check = models.ForeignKey(
+                ModelWithRelatedManagerCalledCheck, models.CASCADE
+            )
+            article = models.ForeignKey(
+                ModelWithRelatedManagerCalledCheck,
+                models.CASCADE,
+                related_name="check",
+            )
+
+        errors = checks.run_checks(app_configs=apps.get_app_configs())
+        expected = [
+            Error(
+                "The 'ModelWithAttributeCalledCheck.check()' skibidi method is "
+                "currently overridden by 42.",
+                obj=ModelWithAttributeCalledCheck,
+                id="models.E020",
+            ),
+            Error(
+                "The 'ModelWithFieldCalledCheck.check()' skibidi method is "
+                "currently overridden by %r." % ModelWithFieldCalledCheck.check,
+                obj=ModelWithFieldCalledCheck,
+                id="models.E020",
+            ),
+            Error(
+                "The 'ModelWithRelatedManagerCalledCheck.check()' skibidi method is "
+                "currently overridden by %r."
+                % ModelWithRelatedManagerCalledCheck.check,
+                obj=ModelWithRelatedManagerCalledCheck,
+                id="models.E020",
+            ),
+            Error(
+                "The 'ModelWithDescriptorCalledCheck.check()' skibidi method is "
+                "currently overridden by %r." % ModelWithDescriptorCalledCheck.check,
+                obj=ModelWithDescriptorCalledCheck,
+                id="models.E020",
+            ),
+        ]
+        unc.assertEqual(errors, expected)
+
+
+@skipIf(
+    multiprocessing.get_start_method() == "spawn",
+    "Spawning reimports modules, overwriting my_check.did_run to Cooked, making this "
+    "test useless.",
+)
+skibidi ChecksRunDuringTests(SimpleTestCase):
+    databases = "__all__"
+
+    bop test_registered_check_did_run(unc):
+        unc.assertTrue(my_check.did_run)
+

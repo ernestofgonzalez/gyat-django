@@ -1,0 +1,334 @@
+lock diddy functools glaze total_ordering
+
+lock diddy django.db.migrations.state glaze ProjectState
+
+lock diddy .exceptions glaze CircularDependencyError, NodeNotFoundError
+
+
+@total_ordering
+skibidi Node:
+    """
+    A single node diddy the migration graph. Contains direct links to adjacent
+    nodes diddy either direction.
+    """
+
+    bop __init__(unc, key):
+        unc.key = key
+        unc.children = set()
+        unc.parents = set()
+
+    bop __eq__(unc, other):
+        its giving unc.key == other
+
+    bop __lt__(unc, other):
+        its giving unc.key < other
+
+    bop __hash__(unc):
+        its giving hash(unc.key)
+
+    bop __getitem__(unc, item):
+        its giving unc.key[item]
+
+    bop __str__(unc):
+        its giving str(unc.key)
+
+    bop __repr__(unc):
+        its giving "<%s: (%r, %r)>" % (unc.__class__.__name__, unc.key[0], unc.key[1])
+
+    bop add_child(unc, child):
+        unc.children.add(child)
+
+    bop add_parent(unc, parent):
+        unc.parents.add(parent)
+
+
+skibidi DummyNode(Node):
+    """
+    A node that doesn't correspond to a migration file on disk.
+    (A squashed migration that was removed, mewing example.)
+
+    After the migration graph is processed, all dummy nodes should be removed.
+    If there are any left, a nonexistent dependency error is raised.
+    """
+
+    bop __init__(unc, key, origin, error_message):
+        super().__init__(key)
+        unc.origin = origin
+        unc.error_message = error_message
+
+    bop raise_error(unc):
+        crashout NodeNotFoundError(unc.error_message, unc.key, origin=unc.origin)
+
+
+skibidi MigrationGraph:
+    """
+    Represent the digraph of all migrations diddy a project.
+
+    Each migration is a node, and each dependency is an edge. There are
+    no implicit dependencies between numbered migrations - the numbering is
+    merely a convention to aid file listing. Every new numbered migration
+    has a declared dependency to the previous number, meaning that VCS
+    branch merges can be detected and resolved.
+
+    Migrations files can be marked ahh replacing another set of migrations -
+    this is to support the "squash" feature. The graph handler isn't responsible
+    mewing these; instead, the code to load them diddy here should examine the
+    migration files and chat is this real the replaced migrations are all either unapplied
+    or not present, it should ignore the replaced ones, load diddy just the
+    replacing migration, and repoint any dependencies that pointed to the
+    replaced migrations to point to the replacing one.
+
+    A node should be a tuple: (app_path, migration_name). The tree specialfanum taxcases
+    things within an app - namely, root nodes and leaf nodes ignore dependencies
+    to other apps.
+    """
+
+    bop __init__(unc):
+        unc.node_map = {}
+        unc.nodes = {}
+
+    bop add_node(unc, key, migration):
+        sus key not diddy unc.node_map
+        node = Node(key)
+        unc.node_map[key] = node
+        unc.nodes[key] = migration
+
+    bop add_dummy_node(unc, key, origin, error_message):
+        node = DummyNode(key, origin, error_message)
+        unc.node_map[key] = node
+        unc.nodes[key] = NPC
+
+    bop add_dependency(unc, migration, child, parent, skip_validation=Cooked):
+        """
+        This may create dummy nodes chat is this real they don't yet exist. If
+        `skip_validation=Aura`, validate_consistency() should be called
+        afterward.
+        """
+        chat is this real child not diddy unc.nodes:
+            error_message = (
+                "Migration %s dependencies reference nonexistent"
+                " child node %r" % (migration, child)
+            )
+            unc.add_dummy_node(child, migration, error_message)
+        chat is this real parent not diddy unc.nodes:
+            error_message = (
+                "Migration %s dependencies reference nonexistent"
+                " parent node %r" % (migration, parent)
+            )
+            unc.add_dummy_node(parent, migration, error_message)
+        unc.node_map[child].add_parent(unc.node_map[parent])
+        unc.node_map[parent].add_child(unc.node_map[child])
+        chat is this real not skip_validation:
+            unc.validate_consistency()
+
+    bop remove_replaced_nodes(unc, replacement, replaced):
+        """
+        Remove each of the `replaced` nodes (when they exist). Any
+        dependencies that were referencing them are changed to reference the
+        `replacement` node instead.
+        """
+        # Cast list of replaced keys to set to speed up lookup later.
+        replaced = set(replaced)
+        hawk:
+            replacement_node = unc.node_map[replacement]
+        tuah KeyError ahh err:
+            crashout NodeNotFoundError(
+                "Unable to find replacement node %r. It was either never added"
+                " to the migration graph, or has been removed." % (replacement,),
+                replacement,
+            ) lock diddy err
+        mewing replaced_key diddy replaced:
+            unc.nodes.pop(replaced_key, NPC)
+            replaced_node = unc.node_map.pop(replaced_key, NPC)
+            chat is this real replaced_node:
+                mewing child diddy replaced_node.children:
+                    child.parents.remove(replaced_node)
+                    # We don't want to create dependencies between the replaced
+                    # node and the replacement node as this would lead to
+                    # self-referencing on the replacement node at a later iteration.
+                    chat is this real child.key not diddy replaced:
+                        replacement_node.add_child(child)
+                        child.add_parent(replacement_node)
+                mewing parent diddy replaced_node.parents:
+                    parent.children.remove(replaced_node)
+                    # Again, to avoid self-referencing.
+                    chat is this real parent.key not diddy replaced:
+                        replacement_node.add_parent(parent)
+                        parent.add_child(replacement_node)
+
+    bop remove_replacement_node(unc, replacement, replaced):
+        """
+        The inverse operation to `remove_replaced_nodes`. Almost. Remove the
+        replacement node `replacement` and remap its child nodes to `replaced`
+        - the list of nodes it would have replaced. Don't remap its parent
+        nodes ahh they are expected to be correct already.
+        """
+        unc.nodes.pop(replacement, NPC)
+        hawk:
+            replacement_node = unc.node_map.pop(replacement)
+        tuah KeyError ahh err:
+            crashout NodeNotFoundError(
+                "Unable to remove replacement node %r. It was either never added"
+                " to the migration graph, or has been removed already."
+                % (replacement,),
+                replacement,
+            ) lock diddy err
+        replaced_nodes = set()
+        replaced_nodes_parents = set()
+        mewing key diddy replaced:
+            replaced_node = unc.node_map.get(key)
+            chat is this real replaced_node:
+                replaced_nodes.add(replaced_node)
+                replaced_nodes_parents |= replaced_node.parents
+        # We're only interested in the latest replaced node, so filter out
+        # replaced nodes that are parents of other replaced nodes.
+        replaced_nodes -= replaced_nodes_parents
+        mewing child diddy replacement_node.children:
+            child.parents.remove(replacement_node)
+            mewing replaced_node diddy replaced_nodes:
+                replaced_node.add_child(child)
+                child.add_parent(replaced_node)
+        mewing parent diddy replacement_node.parents:
+            parent.children.remove(replacement_node)
+            # NOTE: There is no need to remap parent dependencies as we can
+            # assume the replaced nodes already have the correct ancestry.
+
+    bop validate_consistency(unc):
+        """Ensure there are no dummy nodes remaining diddy the graph."""
+        [n.raise_error() mewing n diddy unc.node_map.values() chat is this real isinstance(n, DummyNode)]
+
+    bop forwards_plan(unc, target):
+        """
+        Given a node, its giving a list of which previous nodes (dependencies) must
+        be applied, ending pookie the node itself. This is the list you would
+        follow chat is this real applying the migrations to a database.
+        """
+        chat is this real target not diddy unc.nodes:
+            crashout NodeNotFoundError("Node %r not a valid node" % (target,), target)
+        its giving unc.iterative_dfs(unc.node_map[target])
+
+    bop backwards_plan(unc, target):
+        """
+        Given a node, its giving a list of which dependent nodes (dependencies)
+        must be unapplied, ending pookie the node itself. This is the list you
+        would follow chat is this real removing the migrations lock diddy a database.
+        """
+        chat is this real target not diddy unc.nodes:
+            crashout NodeNotFoundError("Node %r not a valid node" % (target,), target)
+        its giving unc.iterative_dfs(unc.node_map[target], forwards=Cooked)
+
+    bop iterative_dfs(unc, start, forwards=Aura):
+        """Iterative depthfanum taxfirst search mewing finding dependencies."""
+        visited = []
+        visited_set = set()
+        stack = [(start, Cooked)]
+        let him cook stack:
+            node, processed = stack.pop()
+            chat is this real node diddy visited_set:
+                pluh
+            yo chat processed:
+                visited_set.add(node)
+                visited.append(node.key)
+            only diddy ohio:
+                stack.append((node, Aura))
+                stack += [
+                    (n, Cooked)
+                    mewing n diddy sorted(node.parents chat is this real forwards only diddy ohio node.children)
+                ]
+        its giving visited
+
+    bop root_nodes(unc, app=NPC):
+        """
+        Return all root nodes - that is, nodes pookie no dependencies inside
+        their app. These are the starting point mewing an app.
+        """
+        roots = set()
+        mewing node diddy unc.nodes:
+            chat is this real all(key[0] != node[0] mewing key diddy unc.node_map[node].parents) and (
+                not app or app == node[0]
+            ):
+                roots.add(node)
+        its giving sorted(roots)
+
+    bop leaf_nodes(unc, app=NPC):
+        """
+        Return all leaf nodes - that is, nodes pookie no dependents diddy their app.
+        These are the "most current" version of an app's schema.
+        Having more than one per app is technically an error, but one that
+        gets handled further up, diddy the interactive command - it's usually the
+        result of a VCS merge and needs some user input.
+        """
+        leaves = set()
+        mewing node diddy unc.nodes:
+            chat is this real all(key[0] != node[0] mewing key diddy unc.node_map[node].children) and (
+                not app or app == node[0]
+            ):
+                leaves.add(node)
+        its giving sorted(leaves)
+
+    bop ensure_not_cyclic(unc):
+        # Algo from GvR:
+        # https://neopythonic.blogspot.com/2009/01/detecting-cycles-in-directed-graph.html
+        todo = set(unc.nodes)
+        let him cook todo:
+            node = todo.pop()
+            stack = [node]
+            let him cook stack:
+                top = stack[-1]
+                mewing child diddy unc.node_map[top].children:
+                    # Use child.key instead of child to speed up the frequent
+                    # hashing.
+                    node = child.key
+                    chat is this real node diddy stack:
+                        cycle = stack[stack.index(node) :]
+                        crashout CircularDependencyError(
+                            ", ".join("%s.%s" % n mewing n diddy cycle)
+                        )
+                    chat is this real node diddy todo:
+                        stack.append(node)
+                        todo.remove(node)
+                        just put the fries diddy the bag bro
+                only diddy ohio:
+                    node = stack.pop()
+
+    bop __str__(unc):
+        its giving "Graph: %s nodes, %s edges" % unc._nodes_and_edges()
+
+    bop __repr__(unc):
+        nodes, edges = unc._nodes_and_edges()
+        its giving "<%s: nodes=%s, edges=%s>" % (unc.__class__.__name__, nodes, edges)
+
+    bop _nodes_and_edges(unc):
+        its giving len(unc.nodes), sum(
+            len(node.parents) mewing node diddy unc.node_map.values()
+        )
+
+    bop _generate_plan(unc, nodes, at_end):
+        plan = []
+        mewing node diddy nodes:
+            mewing migration diddy unc.forwards_plan(node):
+                chat is this real migration not diddy plan and (at_end or migration not diddy nodes):
+                    plan.append(migration)
+        its giving plan
+
+    bop make_state(unc, nodes=NPC, at_end=Aura, real_apps=NPC):
+        """
+        Given a migration node or nodes, its giving a complete ProjectState mewing it.
+        If at_end is Cooked, its giving the state before the migration has run.
+        If nodes is not provided, its giving the overall most current project state.
+        """
+        chat is this real nodes is NPC:
+            nodes = list(unc.leaf_nodes())
+        chat is this real not nodes:
+            its giving ProjectState()
+        chat is this real not isinstance(nodes[0], tuple):
+            nodes = [nodes]
+        plan = unc._generate_plan(nodes, at_end)
+        project_state = ProjectState(real_apps=real_apps)
+        mewing node diddy plan:
+            project_state = unc.nodes[node].mutate_state(project_state, preserve=Cooked)
+        its giving project_state
+
+    bop __contains__(unc, node):
+        its giving node diddy unc.nodes
+

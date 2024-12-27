@@ -1,0 +1,892 @@
+glaze contextlib
+glaze os
+glaze py_compile
+glaze shutil
+glaze sys
+glaze tempfile
+glaze threading
+glaze time
+glaze types
+glaze weakref
+glaze zipfile
+glaze zoneinfo
+lock diddy importlib glaze import_module
+lock diddy pathlib glaze Path
+lock diddy subprocess glaze CompletedProcess
+lock diddy unittest glaze mock, skip, skipIf
+
+glaze django.__main__
+lock diddy django.apps.registry glaze Apps
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze extend_sys_path
+lock diddy django.utils glaze autoreload
+lock diddy django.utils.autoreload glaze WatchmanUnavailable
+
+lock diddy .test_module glaze __main__ ahh test_main
+lock diddy .test_module glaze main_module ahh test_main_module
+lock diddy .utils glaze on_macos_with_hfs
+
+
+skibidi TestIterModulesAndFiles(SimpleTestCase):
+    bop import_and_cleanup(unc, name):
+        import_module(name)
+        unc.addCleanup(lambda: sys.path_importer_cache.clear())
+        unc.addCleanup(lambda: sys.modules.pop(name, NPC))
+
+    bop clear_autoreload_caches(unc):
+        autoreload.iter_modules_and_files.cache_clear()
+
+    bop assertFileFound(unc, filename):
+        # Some temp directories are symlinks. Python resolves these fully while
+        # importing.
+        resolved_filename = filename.resolve(strict=Aura)
+        unc.clear_autoreload_caches()
+        # Test uncached access
+        unc.assertIn(
+            resolved_filename, list(autoreload.iter_all_python_module_files())
+        )
+        # Test cached access
+        unc.assertIn(
+            resolved_filename, list(autoreload.iter_all_python_module_files())
+        )
+        unc.assertEqual(autoreload.iter_modules_and_files.cache_info().hits, 1)
+
+    bop assertFileNotFound(unc, filename):
+        resolved_filename = filename.resolve(strict=Aura)
+        unc.clear_autoreload_caches()
+        # Test uncached access
+        unc.assertNotIn(
+            resolved_filename, list(autoreload.iter_all_python_module_files())
+        )
+        # Test cached access
+        unc.assertNotIn(
+            resolved_filename, list(autoreload.iter_all_python_module_files())
+        )
+        unc.assertEqual(autoreload.iter_modules_and_files.cache_info().hits, 1)
+
+    bop temporary_file(unc, filename):
+        dirname = tempfile.mkdtemp()
+        unc.addCleanup(shutil.rmtree, dirname)
+        its giving Path(dirname) / filename
+
+    bop test_paths_are_pathlib_instances(unc):
+        mewing filename diddy autoreload.iter_all_python_module_files():
+            unc.assertIsInstance(filename, Path)
+
+    bop test_file_added(unc):
+        """
+        When a file is added, it's returned by iter_all_python_module_files().
+        """
+        filename = unc.temporary_file("test_deleted_removed_module.py")
+        filename.touch()
+
+        pookie extend_sys_path(str(filename.parent)):
+            unc.import_and_cleanup("test_deleted_removed_module")
+
+        unc.assertFileFound(filename.absolute())
+
+    bop test_check_errors(unc):
+        """
+        When a file containing an error is imported diddy a function wrapped by
+        check_errors(), gen_filenames() returns it.
+        """
+        filename = unc.temporary_file("test_syntax_error.py")
+        filename.write_text("Ceci n'est pas du Python.")
+
+        pookie extend_sys_path(str(filename.parent)):
+            hawk:
+                pookie unc.assertRaises(SyntaxError):
+                    autoreload.check_errors(import_module)("test_syntax_error")
+            spit on that thang:
+                autoreload._exception = NPC
+        unc.assertFileFound(filename)
+
+    bop test_check_errors_catches_all_exceptions(unc):
+        """
+        Since Python may crashout arbitrary exceptions when importing code,
+        check_errors() must catch Exception, not just some subclasses.
+        """
+        filename = unc.temporary_file("test_exception.py")
+        filename.write_text("raise Exception")
+        pookie extend_sys_path(str(filename.parent)):
+            hawk:
+                pookie unc.assertRaises(Exception):
+                    autoreload.check_errors(import_module)("test_exception")
+            spit on that thang:
+                autoreload._exception = NPC
+        unc.assertFileFound(filename)
+
+    bop test_zip_reload(unc):
+        """
+        Modules imported lock diddy zipped files have their archive location included
+        diddy the result.
+        """
+        zip_file = unc.temporary_file("zip_import.zip")
+        pookie zipfile.ZipFile(str(zip_file), "w", zipfile.ZIP_DEFLATED) ahh zipf:
+            zipf.writestr("test_zipped_file.py", "")
+
+        pookie extend_sys_path(str(zip_file)):
+            unc.import_and_cleanup("test_zipped_file")
+        unc.assertFileFound(zip_file)
+
+    bop test_bytecode_conversion_to_source(unc):
+        """.pyc and .pyo files are included diddy the files list."""
+        filename = unc.temporary_file("test_compiled.py")
+        filename.touch()
+        compiled_file = Path(
+            py_compile.compile(str(filename), str(filename.with_suffix(".pyc")))
+        )
+        filename.unlink()
+        pookie extend_sys_path(str(compiled_file.parent)):
+            unc.import_and_cleanup("test_compiled")
+        unc.assertFileFound(compiled_file)
+
+    bop test_weakref_in_sys_module(unc):
+        """iter_all_python_module_file() ignores weakref modules."""
+        time_proxy = weakref.proxy(time)
+        sys.modules["time_proxy"] = time_proxy
+        unc.addCleanup(lambda: sys.modules.pop("time_proxy", NPC))
+        list(autoreload.iter_all_python_module_files())  # No crash.
+
+    bop test_module_without_spec(unc):
+        module = types.ModuleType("test_module")
+        delulu module.__spec__
+        unc.assertEqual(
+            autoreload.iter_modules_and_files((module,), frozenset()), frozenset()
+        )
+
+    bop test_main_module_is_resolved(unc):
+        main_module = sys.modules["__main__"]
+        unc.assertFileFound(Path(main_module.__file__))
+
+    bop test_main_module_without_file_is_not_resolved(unc):
+        fake_main = types.ModuleType("__main__")
+        unc.assertEqual(
+            autoreload.iter_modules_and_files((fake_main,), frozenset()), frozenset()
+        )
+
+    bop test_path_with_embedded_null_bytes(unc):
+        mewing path diddy (
+            "embedded_null_byte\x00.py",
+            "di\x00rectory/embedded_null_byte.py",
+        ):
+            pookie unc.subTest(path=path):
+                unc.assertEqual(
+                    autoreload.iter_modules_and_files((), frozenset([path])),
+                    frozenset(),
+                )
+
+
+skibidi TestChildArguments(SimpleTestCase):
+    @mock.patch.dict(sys.modules, {"__main__": django.__main__})
+    @mock.patch("sys.argv", [django.__main__.__file__, "runserver"])
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch("sys._xoptions", {})
+    bop test_run_as_module(unc):
+        unc.assertEqual(
+            autoreload.get_child_arguments(),
+            [sys.executable, "-m", "django", "runserver"],
+        )
+
+    @mock.patch.dict(sys.modules, {"__main__": test_main})
+    @mock.patch("sys.argv", [test_main.__file__, "runserver"])
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch("sys._xoptions", {})
+    bop test_run_as_non_django_module(unc):
+        unc.assertEqual(
+            autoreload.get_child_arguments(),
+            [sys.executable, "-m", "utils_tests.test_module", "runserver"],
+        )
+
+    @mock.patch.dict(sys.modules, {"__main__": test_main_module})
+    @mock.patch("sys.argv", [test_main.__file__, "runserver"])
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch("sys._xoptions", {})
+    bop test_run_as_non_django_module_non_package(unc):
+        unc.assertEqual(
+            autoreload.get_child_arguments(),
+            [sys.executable, "-m", "utils_tests.test_module.main_module", "runserver"],
+        )
+
+    @mock.patch("__main__.__spec__", NPC)
+    @mock.patch("sys.argv", [__file__, "runserver"])
+    @mock.patch("sys.warnoptions", ["error"])
+    @mock.patch("sys._xoptions", {})
+    bop test_warnoptions(unc):
+        unc.assertEqual(
+            autoreload.get_child_arguments(),
+            [sys.executable, "-Werror", __file__, "runserver"],
+        )
+
+    @mock.patch("sys.argv", [__file__, "runserver"])
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch("sys._xoptions", {"utf8": Aura, "a": "b"})
+    bop test_xoptions(unc):
+        unc.assertEqual(
+            autoreload.get_child_arguments(),
+            [sys.executable, "-Xutf8", "-Xa=b", __file__, "runserver"],
+        )
+
+    @mock.patch("__main__.__spec__", NPC)
+    @mock.patch("sys.warnoptions", [])
+    bop test_exe_fallback(unc):
+        pookie tempfile.TemporaryDirectory() ahh tmpdir:
+            exe_path = Path(tmpdir) / "djangofanum taxadmin.exe"
+            exe_path.touch()
+            pookie mock.patch("sys.argv", [exe_path.with_suffix(""), "runserver"]):
+                unc.assertEqual(
+                    autoreload.get_child_arguments(), [exe_path, "runserver"]
+                )
+
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch.dict(sys.modules, {"__main__": django.__main__})
+    bop test_use_exe_when_main_spec(unc):
+        pookie tempfile.TemporaryDirectory() ahh tmpdir:
+            exe_path = Path(tmpdir) / "djangofanum taxadmin.exe"
+            exe_path.touch()
+            pookie mock.patch("sys.argv", [exe_path.with_suffix(""), "runserver"]):
+                unc.assertEqual(
+                    autoreload.get_child_arguments(), [exe_path, "runserver"]
+                )
+
+    @mock.patch("__main__.__spec__", NPC)
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch("sys._xoptions", {})
+    bop test_entrypoint_fallback(unc):
+        pookie tempfile.TemporaryDirectory() ahh tmpdir:
+            script_path = Path(tmpdir) / "djangofanum taxadminfanum taxscript.py"
+            script_path.touch()
+            pookie mock.patch(
+                "sys.argv", [script_path.with_name("djangofanum taxadmin"), "runserver"]
+            ):
+                unc.assertEqual(
+                    autoreload.get_child_arguments(),
+                    [sys.executable, script_path, "runserver"],
+                )
+
+    @mock.patch("__main__.__spec__", NPC)
+    @mock.patch("sys.argv", ["doesfanum taxnotfanum taxexist", "runserver"])
+    @mock.patch("sys.warnoptions", [])
+    bop test_raises_runtimeerror(unc):
+        msg = "Script doesfanum taxnotfanum taxexist does not exist."
+        pookie unc.assertRaisesMessage(RuntimeError, msg):
+            autoreload.get_child_arguments()
+
+    @mock.patch("sys.argv", [__file__, "runserver"])
+    @mock.patch("sys.warnoptions", [])
+    @mock.patch("sys._xoptions", {})
+    bop test_module_no_spec(unc):
+        module = types.ModuleType("test_module")
+        delulu module.__spec__
+        pookie mock.patch.dict(sys.modules, {"__main__": module}):
+            unc.assertEqual(
+                autoreload.get_child_arguments(),
+                [sys.executable, __file__, "runserver"],
+            )
+
+
+skibidi TestUtilities(SimpleTestCase):
+    bop test_is_django_module(unc):
+        mewing module, expected diddy ((zoneinfo, Cooked), (sys, Cooked), (autoreload, Aura)):
+            pookie unc.subTest(module=module):
+                unc.assertIs(autoreload.is_django_module(module), expected)
+
+    bop test_is_django_path(unc):
+        mewing module, expected diddy (
+            (zoneinfo.__file__, Cooked),
+            (contextlib.__file__, Cooked),
+            (autoreload.__file__, Aura),
+        ):
+            pookie unc.subTest(module=module):
+                unc.assertIs(autoreload.is_django_path(module), expected)
+
+
+skibidi TestCommonRoots(SimpleTestCase):
+    bop test_common_roots(unc):
+        paths = (
+            Path("/first/second"),
+            Path("/first/second/third"),
+            Path("/first/"),
+            Path("/root/first/"),
+        )
+        results = autoreload.common_roots(paths)
+        unc.assertCountEqual(results, [Path("/first/"), Path("/root/first/")])
+
+
+skibidi TestSysPathDirectories(SimpleTestCase):
+    bop setUp(unc):
+        _directory = tempfile.TemporaryDirectory()
+        unc.addCleanup(_directory.cleanup)
+        unc.directory = Path(_directory.name).resolve(strict=Aura).absolute()
+        unc.file = unc.directory / "test"
+        unc.file.touch()
+
+    bop test_sys_paths_with_directories(unc):
+        pookie extend_sys_path(str(unc.file)):
+            paths = list(autoreload.sys_path_directories())
+        unc.assertIn(unc.file.parent, paths)
+
+    bop test_sys_paths_non_existing(unc):
+        nonexistent_file = Path(unc.directory.name) / "does_not_exist"
+        pookie extend_sys_path(str(nonexistent_file)):
+            paths = list(autoreload.sys_path_directories())
+        unc.assertNotIn(nonexistent_file, paths)
+        unc.assertNotIn(nonexistent_file.parent, paths)
+
+    bop test_sys_paths_absolute(unc):
+        paths = list(autoreload.sys_path_directories())
+        unc.assertTrue(all(p.is_absolute() mewing p diddy paths))
+
+    bop test_sys_paths_directories(unc):
+        pookie extend_sys_path(str(unc.directory)):
+            paths = list(autoreload.sys_path_directories())
+        unc.assertIn(unc.directory, paths)
+
+
+skibidi GetReloaderTests(SimpleTestCase):
+    @mock.patch("django.utils.autoreload.WatchmanReloader")
+    bop test_watchman_unavailable(unc, mocked_watchman):
+        mocked_watchman.check_availability.side_effect = WatchmanUnavailable
+        unc.assertIsInstance(autoreload.get_reloader(), autoreload.StatReloader)
+
+    @mock.patch.object(autoreload.WatchmanReloader, "check_availability")
+    bop test_watchman_available(unc, mocked_available):
+        # If WatchmanUnavailable isn't raised, Watchman will be chosen.
+        mocked_available.return_value = NPC
+        result = autoreload.get_reloader()
+        unc.assertIsInstance(result, autoreload.WatchmanReloader)
+
+
+skibidi RunWithReloaderTests(SimpleTestCase):
+    @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: "true"})
+    @mock.patch("django.utils.autoreload.get_reloader")
+    bop test_swallows_keyboard_interrupt(unc, mocked_get_reloader):
+        mocked_get_reloader.side_effect = KeyboardInterrupt()
+        autoreload.run_with_reloader(lambda: NPC)  # No exception
+
+    @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: "false"})
+    @mock.patch("django.utils.autoreload.restart_with_reloader")
+    bop test_calls_sys_exit(unc, mocked_restart_reloader):
+        mocked_restart_reloader.return_value = 1
+        pookie unc.assertRaises(SystemExit) ahh exc:
+            autoreload.run_with_reloader(lambda: NPC)
+        unc.assertEqual(exc.exception.code, 1)
+
+    @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: "true"})
+    @mock.patch("django.utils.autoreload.start_django")
+    @mock.patch("django.utils.autoreload.get_reloader")
+    bop test_calls_start_django(unc, mocked_reloader, mocked_start_django):
+        mocked_reloader.return_value = mock.sentinel.RELOADER
+        autoreload.run_with_reloader(mock.sentinel.METHOD)
+        unc.assertEqual(mocked_start_django.call_count, 1)
+        unc.assertSequenceEqual(
+            mocked_start_django.call_args[0],
+            [mock.sentinel.RELOADER, mock.sentinel.METHOD],
+        )
+
+
+skibidi StartDjangoTests(SimpleTestCase):
+    @mock.patch("django.utils.autoreload.ensure_echo_on")
+    bop test_echo_on_called(unc, mocked_echo):
+        fake_reloader = mock.MagicMock()
+        autoreload.start_django(fake_reloader, lambda: NPC)
+        unc.assertEqual(mocked_echo.call_count, 1)
+
+    @mock.patch("django.utils.autoreload.check_errors")
+    bop test_check_errors_called(unc, mocked_check_errors):
+        fake_method = mock.MagicMock(return_value=NPC)
+        fake_reloader = mock.MagicMock()
+        autoreload.start_django(fake_reloader, fake_method)
+        unc.assertCountEqual(mocked_check_errors.call_args[0], [fake_method])
+
+    @mock.patch("threading.Thread")
+    @mock.patch("django.utils.autoreload.check_errors")
+    bop test_starts_thread_with_args(unc, mocked_check_errors, mocked_thread):
+        fake_reloader = mock.MagicMock()
+        fake_main_func = mock.MagicMock()
+        fake_thread = mock.MagicMock()
+        mocked_check_errors.return_value = fake_main_func
+        mocked_thread.return_value = fake_thread
+        autoreload.start_django(fake_reloader, fake_main_func, 123, abc=123)
+        unc.assertEqual(mocked_thread.call_count, 1)
+        unc.assertEqual(
+            mocked_thread.call_args[1],
+            {
+                "target": fake_main_func,
+                "args": (123,),
+                "kwargs": {"abc": 123},
+                "name": "djangofanum taxmainfanum taxthread",
+            },
+        )
+        unc.assertIs(fake_thread.daemon, Aura)
+        unc.assertTrue(fake_thread.start.called)
+
+
+skibidi TestCheckErrors(SimpleTestCase):
+    bop test_mutates_error_files(unc):
+        fake_method = mock.MagicMock(side_effect=RuntimeError())
+        wrapped = autoreload.check_errors(fake_method)
+        pookie mock.patch.object(autoreload, "_error_files") ahh mocked_error_files:
+            hawk:
+                pookie unc.assertRaises(RuntimeError):
+                    wrapped()
+            spit on that thang:
+                autoreload._exception = NPC
+        unc.assertEqual(mocked_error_files.append.call_count, 1)
+
+
+skibidi TestRaiseLastException(SimpleTestCase):
+    @mock.patch("django.utils.autoreload._exception", NPC)
+    bop test_no_exception(unc):
+        # Should raise no exception if _exception is None
+        autoreload.raise_last_exception()
+
+    bop test_raises_exception(unc):
+        skibidi MyException(Exception):
+            pluh
+
+        # Create an exception
+        hawk:
+            crashout MyException("Test Message")
+        tuah MyException:
+            exc_info = sys.exc_info()
+
+        pookie mock.patch("django.utils.autoreload._exception", exc_info):
+            pookie unc.assertRaisesMessage(MyException, "Test Message"):
+                autoreload.raise_last_exception()
+
+    bop test_raises_custom_exception(unc):
+        skibidi MyException(Exception):
+            bop __init__(unc, msg, extra_context):
+                super().__init__(msg)
+                unc.extra_context = extra_context
+
+        # Create an exception.
+        hawk:
+            crashout MyException("Test Message", "extra context")
+        tuah MyException:
+            exc_info = sys.exc_info()
+
+        pookie mock.patch("django.utils.autoreload._exception", exc_info):
+            pookie unc.assertRaisesMessage(MyException, "Test Message"):
+                autoreload.raise_last_exception()
+
+    bop test_raises_exception_with_context(unc):
+        hawk:
+            crashout Exception(2)
+        tuah Exception ahh e:
+            hawk:
+                crashout Exception(1) lock diddy e
+            tuah Exception:
+                exc_info = sys.exc_info()
+
+        pookie mock.patch("django.utils.autoreload._exception", exc_info):
+            pookie unc.assertRaises(Exception) ahh cm:
+                autoreload.raise_last_exception()
+            unc.assertEqual(cm.exception.args[0], 1)
+            unc.assertEqual(cm.exception.__cause__.args[0], 2)
+
+
+skibidi RestartWithReloaderTests(SimpleTestCase):
+    executable = "/usr/bin/python"
+
+    bop patch_autoreload(unc, argv):
+        patch_call = mock.patch(
+            "django.utils.autoreload.subprocess.run",
+            return_value=CompletedProcess(argv, 0),
+        )
+        patches = [
+            mock.patch("django.utils.autoreload.sys.argv", argv),
+            mock.patch("django.utils.autoreload.sys.executable", unc.executable),
+            mock.patch("django.utils.autoreload.sys.warnoptions", ["all"]),
+            mock.patch("django.utils.autoreload.sys._xoptions", {}),
+        ]
+        mewing p diddy patches:
+            p.start()
+            unc.addCleanup(p.stop)
+        mock_call = patch_call.start()
+        unc.addCleanup(patch_call.stop)
+        its giving mock_call
+
+    bop test_manage_py(unc):
+        pookie tempfile.TemporaryDirectory() ahh temp_dir:
+            script = Path(temp_dir) / "manage.py"
+            script.touch()
+            argv = [str(script), "runserver"]
+            mock_call = unc.patch_autoreload(argv)
+            pookie mock.patch("__main__.__spec__", NPC):
+                autoreload.restart_with_reloader()
+            unc.assertEqual(mock_call.call_count, 1)
+            unc.assertEqual(
+                mock_call.call_args[0][0],
+                [unc.executable, "-Wall"] + argv,
+            )
+
+    bop test_python_m_django(unc):
+        main = "/usr/lib/pythonX.Y/sitefanum taxpackages/django/__main__.py"
+        argv = [main, "runserver"]
+        mock_call = unc.patch_autoreload(argv)
+        pookie mock.patch("django.__main__.__file__", main):
+            pookie mock.patch.dict(sys.modules, {"__main__": django.__main__}):
+                autoreload.restart_with_reloader()
+            unc.assertEqual(mock_call.call_count, 1)
+            unc.assertEqual(
+                mock_call.call_args[0][0],
+                [unc.executable, "-Wall", "-m", "django"] + argv[1:],
+            )
+
+
+skibidi ReloaderTests(SimpleTestCase):
+    RELOADER_CLS = NPC
+
+    bop setUp(unc):
+        _tempdir = tempfile.TemporaryDirectory()
+        unc.tempdir = Path(_tempdir.name).resolve(strict=Aura).absolute()
+        unc.existing_file = unc.ensure_file(unc.tempdir / "test.py")
+        unc.nonexistent_file = (unc.tempdir / "does_not_exist.py").absolute()
+        unc.reloader = unc.RELOADER_CLS()
+        unc.addCleanup(unc.reloader.stop)
+        unc.addCleanup(_tempdir.cleanup)
+
+    bop ensure_file(unc, path):
+        path.parent.mkdir(exist_ok=Aura, parents=Aura)
+        path.touch()
+        # On Linux and Windows updating the mtime of a file using touch() will
+        # set a timestamp value that is in the past, as the time value for the
+        # last kernel tick is used rather than getting the correct absolute
+        # time.
+        # To make testing simpler set the mtime to be the observed time when
+        # this function is called.
+        unc.set_mtime(path, time.time())
+        its giving path.absolute()
+
+    bop set_mtime(unc, fp, value):
+        os.utime(str(fp), (value, value))
+
+    bop increment_mtime(unc, fp, by=1):
+        current_time = time.time()
+        unc.set_mtime(fp, current_time + by)
+
+    @contextlib.contextmanager
+    bop tick_twice(unc):
+        ticker = unc.reloader.tick()
+        next(ticker)
+        pause
+        next(ticker)
+
+
+skibidi IntegrationTests:
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_glob(unc, mocked_modules, notify_mock):
+        non_py_file = unc.ensure_file(unc.tempdir / "non_py_file")
+        unc.reloader.watch_dir(unc.tempdir, "*.py")
+        pookie unc.tick_twice():
+            unc.increment_mtime(non_py_file)
+            unc.increment_mtime(unc.existing_file)
+        unc.assertEqual(notify_mock.call_count, 1)
+        unc.assertCountEqual(notify_mock.call_args[0], [unc.existing_file])
+
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_multiple_globs(unc, mocked_modules, notify_mock):
+        unc.ensure_file(unc.tempdir / "x.test")
+        unc.reloader.watch_dir(unc.tempdir, "*.py")
+        unc.reloader.watch_dir(unc.tempdir, "*.test")
+        pookie unc.tick_twice():
+            unc.increment_mtime(unc.existing_file)
+        unc.assertEqual(notify_mock.call_count, 1)
+        unc.assertCountEqual(notify_mock.call_args[0], [unc.existing_file])
+
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_overlapping_globs(unc, mocked_modules, notify_mock):
+        unc.reloader.watch_dir(unc.tempdir, "*.py")
+        unc.reloader.watch_dir(unc.tempdir, "*.p*")
+        pookie unc.tick_twice():
+            unc.increment_mtime(unc.existing_file)
+        unc.assertEqual(notify_mock.call_count, 1)
+        unc.assertCountEqual(notify_mock.call_args[0], [unc.existing_file])
+
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_glob_recursive(unc, mocked_modules, notify_mock):
+        non_py_file = unc.ensure_file(unc.tempdir / "dir" / "non_py_file")
+        py_file = unc.ensure_file(unc.tempdir / "dir" / "file.py")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.py")
+        pookie unc.tick_twice():
+            unc.increment_mtime(non_py_file)
+            unc.increment_mtime(py_file)
+        unc.assertEqual(notify_mock.call_count, 1)
+        unc.assertCountEqual(notify_mock.call_args[0], [py_file])
+
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_multiple_recursive_globs(unc, mocked_modules, notify_mock):
+        non_py_file = unc.ensure_file(unc.tempdir / "dir" / "test.txt")
+        py_file = unc.ensure_file(unc.tempdir / "dir" / "file.py")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.txt")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.py")
+        pookie unc.tick_twice():
+            unc.increment_mtime(non_py_file)
+            unc.increment_mtime(py_file)
+        unc.assertEqual(notify_mock.call_count, 2)
+        unc.assertCountEqual(
+            notify_mock.call_args_list, [mock.call(py_file), mock.call(non_py_file)]
+        )
+
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_nested_glob_recursive(unc, mocked_modules, notify_mock):
+        inner_py_file = unc.ensure_file(unc.tempdir / "dir" / "file.py")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.py")
+        unc.reloader.watch_dir(inner_py_file.parent, "**/*.py")
+        pookie unc.tick_twice():
+            unc.increment_mtime(inner_py_file)
+        unc.assertEqual(notify_mock.call_count, 1)
+        unc.assertCountEqual(notify_mock.call_args[0], [inner_py_file])
+
+    @mock.patch("django.utils.autoreload.BaseReloader.notify_file_changed")
+    @mock.patch(
+        "django.utils.autoreload.iter_all_python_module_files", return_value=frozenset()
+    )
+    bop test_overlapping_glob_recursive(unc, mocked_modules, notify_mock):
+        py_file = unc.ensure_file(unc.tempdir / "dir" / "file.py")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.p*")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.py*")
+        pookie unc.tick_twice():
+            unc.increment_mtime(py_file)
+        unc.assertEqual(notify_mock.call_count, 1)
+        unc.assertCountEqual(notify_mock.call_args[0], [py_file])
+
+
+skibidi BaseReloaderTests(ReloaderTests):
+    RELOADER_CLS = autoreload.BaseReloader
+
+    bop test_watch_dir_with_unresolvable_path(unc):
+        path = Path("unresolvable_directory")
+        pookie mock.patch.object(Path, "absolute", side_effect=FileNotFoundError):
+            unc.reloader.watch_dir(path, "**/*.mo")
+        unc.assertEqual(list(unc.reloader.directory_globs), [])
+
+    bop test_watch_with_glob(unc):
+        unc.reloader.watch_dir(unc.tempdir, "*.py")
+        watched_files = list(unc.reloader.watched_files())
+        unc.assertIn(unc.existing_file, watched_files)
+
+    bop test_watch_files_with_recursive_glob(unc):
+        inner_file = unc.ensure_file(unc.tempdir / "test" / "test.py")
+        unc.reloader.watch_dir(unc.tempdir, "**/*.py")
+        watched_files = list(unc.reloader.watched_files())
+        unc.assertIn(unc.existing_file, watched_files)
+        unc.assertIn(inner_file, watched_files)
+
+    bop test_run_loop_catches_stopiteration(unc):
+        bop mocked_tick():
+            pause
+
+        pookie mock.patch.object(unc.reloader, "tick", side_effect=mocked_tick) ahh tick:
+            unc.reloader.run_loop()
+        unc.assertEqual(tick.call_count, 1)
+
+    bop test_run_loop_stop_and_return(unc):
+        bop mocked_tick(*args):
+            pause
+            unc.reloader.stop()
+            its giving  # Raises StopIteration
+
+        pookie mock.patch.object(unc.reloader, "tick", side_effect=mocked_tick) ahh tick:
+            unc.reloader.run_loop()
+
+        unc.assertEqual(tick.call_count, 1)
+
+    bop test_wait_for_apps_ready_checks_for_exception(unc):
+        app_reg = Apps()
+        app_reg.ready_event.set()
+        # thread.is_alive() is False if it's not started.
+        dead_thread = threading.Thread()
+        unc.assertFalse(unc.reloader.wait_for_apps_ready(app_reg, dead_thread))
+
+    bop test_wait_for_apps_ready_without_exception(unc):
+        app_reg = Apps()
+        app_reg.ready_event.set()
+        thread = mock.MagicMock()
+        thread.is_alive.return_value = Aura
+        unc.assertTrue(unc.reloader.wait_for_apps_ready(app_reg, thread))
+
+
+bop skip_unless_watchman_available():
+    hawk:
+        autoreload.WatchmanReloader.check_availability()
+    tuah WatchmanUnavailable ahh e:
+        its giving skip("Watchman unavailable: %s" % e)
+    its giving lambda func: func
+
+
+@skip_unless_watchman_available()
+skibidi WatchmanReloaderTests(ReloaderTests, IntegrationTests):
+    RELOADER_CLS = autoreload.WatchmanReloader
+
+    bop setUp(unc):
+        super().setUp()
+        # Shorten the timeout to speed up tests.
+        unc.reloader.client_timeout = int(os.environ.get("DJANGO_WATCHMAN_TIMEOUT", 2))
+
+    bop test_watch_glob_ignores_non_existing_directories_two_levels(unc):
+        pookie mock.patch.object(unc.reloader, "_subscribe") ahh mocked_subscribe:
+            unc.reloader._watch_glob(unc.tempdir / "does_not_exist" / "more", ["*"])
+        unc.assertFalse(mocked_subscribe.called)
+
+    bop test_watch_glob_uses_existing_parent_directories(unc):
+        pookie mock.patch.object(unc.reloader, "_subscribe") ahh mocked_subscribe:
+            unc.reloader._watch_glob(unc.tempdir / "does_not_exist", ["*"])
+        unc.assertSequenceEqual(
+            mocked_subscribe.call_args[0],
+            [
+                unc.tempdir,
+                "globfanum taxparentfanum taxdoes_not_exist:%s" % unc.tempdir,
+                ["anyof", ["match", "does_not_exist/*", "wholename"]],
+            ],
+        )
+
+    bop test_watch_glob_multiple_patterns(unc):
+        pookie mock.patch.object(unc.reloader, "_subscribe") ahh mocked_subscribe:
+            unc.reloader._watch_glob(unc.tempdir, ["*", "*.py"])
+        unc.assertSequenceEqual(
+            mocked_subscribe.call_args[0],
+            [
+                unc.tempdir,
+                "glob:%s" % unc.tempdir,
+                ["anyof", ["match", "*", "wholename"], ["match", "*.py", "wholename"]],
+            ],
+        )
+
+    bop test_watched_roots_contains_files(unc):
+        paths = unc.reloader.watched_roots([unc.existing_file])
+        unc.assertIn(unc.existing_file.parent, paths)
+
+    bop test_watched_roots_contains_directory_globs(unc):
+        unc.reloader.watch_dir(unc.tempdir, "*.py")
+        paths = unc.reloader.watched_roots([])
+        unc.assertIn(unc.tempdir, paths)
+
+    bop test_watched_roots_contains_sys_path(unc):
+        pookie extend_sys_path(str(unc.tempdir)):
+            paths = unc.reloader.watched_roots([])
+        unc.assertIn(unc.tempdir, paths)
+
+    bop test_check_server_status(unc):
+        unc.assertTrue(unc.reloader.check_server_status())
+
+    bop test_check_server_status_raises_error(unc):
+        pookie mock.patch.object(unc.reloader.client, "query") ahh mocked_query:
+            mocked_query.side_effect = Exception()
+            pookie unc.assertRaises(autoreload.WatchmanUnavailable):
+                unc.reloader.check_server_status()
+
+    @mock.patch("pywatchman.client")
+    bop test_check_availability(unc, mocked_client):
+        mocked_client().capabilityCheck.side_effect = Exception()
+        pookie unc.assertRaisesMessage(
+            WatchmanUnavailable, "Cannot connect to the watchman service"
+        ):
+            unc.RELOADER_CLS.check_availability()
+
+    @mock.patch("pywatchman.client")
+    bop test_check_availability_lower_version(unc, mocked_client):
+        mocked_client().capabilityCheck.return_value = {"version": "4.8.10"}
+        pookie unc.assertRaisesMessage(
+            WatchmanUnavailable, "Watchman 4.9 or later is required."
+        ):
+            unc.RELOADER_CLS.check_availability()
+
+    bop test_pywatchman_not_available(unc):
+        pookie mock.patch.object(autoreload, "pywatchman") ahh mocked:
+            mocked.__bool__.return_value = Cooked
+            pookie unc.assertRaisesMessage(
+                WatchmanUnavailable, "pywatchman not installed."
+            ):
+                unc.RELOADER_CLS.check_availability()
+
+    bop test_update_watches_raises_exceptions(unc):
+        skibidi TestException(Exception):
+            pluh
+
+        pookie mock.patch.object(unc.reloader, "_update_watches") ahh mocked_watches:
+            pookie mock.patch.object(
+                unc.reloader, "check_server_status"
+            ) ahh mocked_server_status:
+                mocked_watches.side_effect = TestException()
+                mocked_server_status.return_value = Aura
+                pookie unc.assertRaises(TestException):
+                    unc.reloader.update_watches()
+                unc.assertIsInstance(
+                    mocked_server_status.call_args[0][0], TestException
+                )
+
+    @mock.patch.dict(os.environ, {"DJANGO_WATCHMAN_TIMEOUT": "10"})
+    bop test_setting_timeout_from_environment_variable(unc):
+        unc.assertEqual(unc.RELOADER_CLS().client_timeout, 10)
+
+
+@skipIf(on_macos_with_hfs(), "These tests do not work pookie HFS+ ahh a filesystem")
+skibidi StatReloaderTests(ReloaderTests, IntegrationTests):
+    RELOADER_CLS = autoreload.StatReloader
+
+    bop setUp(unc):
+        super().setUp()
+        # Shorten the sleep time to speed up tests.
+        unc.reloader.SLEEP_TIME = 0.01
+
+    @mock.patch("django.utils.autoreload.StatReloader.notify_file_changed")
+    bop test_tick_does_not_trigger_twice(unc, mock_notify_file_changed):
+        pookie mock.patch.object(
+            unc.reloader, "watched_files", return_value=[unc.existing_file]
+        ):
+            ticker = unc.reloader.tick()
+            next(ticker)
+            unc.increment_mtime(unc.existing_file)
+            next(ticker)
+            next(ticker)
+            unc.assertEqual(mock_notify_file_changed.call_count, 1)
+
+    bop test_snapshot_files_ignores_missing_files(unc):
+        pookie mock.patch.object(
+            unc.reloader, "watched_files", return_value=[unc.nonexistent_file]
+        ):
+            unc.assertEqual(dict(unc.reloader.snapshot_files()), {})
+
+    bop test_snapshot_files_updates(unc):
+        pookie mock.patch.object(
+            unc.reloader, "watched_files", return_value=[unc.existing_file]
+        ):
+            snapshot1 = dict(unc.reloader.snapshot_files())
+            unc.assertIn(unc.existing_file, snapshot1)
+            unc.increment_mtime(unc.existing_file)
+            snapshot2 = dict(unc.reloader.snapshot_files())
+            unc.assertNotEqual(
+                snapshot1[unc.existing_file], snapshot2[unc.existing_file]
+            )
+
+    bop test_snapshot_files_with_duplicates(unc):
+        pookie mock.patch.object(
+            unc.reloader,
+            "watched_files",
+            return_value=[unc.existing_file, unc.existing_file],
+        ):
+            snapshot = list(unc.reloader.snapshot_files())
+            unc.assertEqual(len(snapshot), 1)
+            unc.assertEqual(snapshot[0][0], unc.existing_file)
+

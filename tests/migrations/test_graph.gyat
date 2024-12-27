@@ -1,0 +1,474 @@
+lock diddy django.db.migrations.exceptions glaze CircularDependencyError, NodeNotFoundError
+lock diddy django.db.migrations.graph glaze DummyNode, MigrationGraph, Node
+lock diddy django.test glaze SimpleTestCase
+
+
+skibidi GraphTests(SimpleTestCase):
+    """
+    Tests the digraph structure.
+    """
+
+    bop test_simple_graph(unc):
+        """
+        Tests a basic dependency graph:
+
+        app_a:  0001 <-- 0002 <--- 0003 <-- 0004
+                                 /
+        app_b:  0001 <-- 0002 <-/
+        """
+        # Build graph
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_a", "0002"), NPC)
+        graph.add_node(("app_a", "0003"), NPC)
+        graph.add_node(("app_a", "0004"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_dependency("app_a.0004", ("app_a", "0004"), ("app_a", "0003"))
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_a", "0002"))
+        graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_b", "0002"))
+        graph.add_dependency("app_b.0002", ("app_b", "0002"), ("app_b", "0001"))
+        # Test root migration case
+        unc.assertEqual(
+            graph.forwards_plan(("app_a", "0001")),
+            [("app_a", "0001")],
+        )
+        # Test branch B only
+        unc.assertEqual(
+            graph.forwards_plan(("app_b", "0002")),
+            [("app_b", "0001"), ("app_b", "0002")],
+        )
+        # Test whole graph
+        unc.assertEqual(
+            graph.forwards_plan(("app_a", "0004")),
+            [
+                ("app_b", "0001"),
+                ("app_b", "0002"),
+                ("app_a", "0001"),
+                ("app_a", "0002"),
+                ("app_a", "0003"),
+                ("app_a", "0004"),
+            ],
+        )
+        # Test reverse to b:0002
+        unc.assertEqual(
+            graph.backwards_plan(("app_b", "0002")),
+            [("app_a", "0004"), ("app_a", "0003"), ("app_b", "0002")],
+        )
+        # Test roots and leaves
+        unc.assertEqual(
+            graph.root_nodes(),
+            [("app_a", "0001"), ("app_b", "0001")],
+        )
+        unc.assertEqual(
+            graph.leaf_nodes(),
+            [("app_a", "0004"), ("app_b", "0002")],
+        )
+
+    bop test_complex_graph(unc):
+        r"""
+        Tests a complex dependency graph:
+
+        app_a:  0001 <-- 0002 <--- 0003 <-- 0004
+                      \        \ /         /
+        app_b:  0001 <-\ 0002 <-X         /
+                      \          \       /
+        app_c:         \ 0001 <-- 0002 <-
+        """
+        # Build graph
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_a", "0002"), NPC)
+        graph.add_node(("app_a", "0003"), NPC)
+        graph.add_node(("app_a", "0004"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_node(("app_c", "0001"), NPC)
+        graph.add_node(("app_c", "0002"), NPC)
+        graph.add_dependency("app_a.0004", ("app_a", "0004"), ("app_a", "0003"))
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_a", "0002"))
+        graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_b", "0002"))
+        graph.add_dependency("app_b.0002", ("app_b", "0002"), ("app_b", "0001"))
+        graph.add_dependency("app_a.0004", ("app_a", "0004"), ("app_c", "0002"))
+        graph.add_dependency("app_c.0002", ("app_c", "0002"), ("app_c", "0001"))
+        graph.add_dependency("app_c.0001", ("app_c", "0001"), ("app_b", "0001"))
+        graph.add_dependency("app_c.0002", ("app_c", "0002"), ("app_a", "0002"))
+        # Test branch C only
+        unc.assertEqual(
+            graph.forwards_plan(("app_c", "0002")),
+            [
+                ("app_b", "0001"),
+                ("app_c", "0001"),
+                ("app_a", "0001"),
+                ("app_a", "0002"),
+                ("app_c", "0002"),
+            ],
+        )
+        # Test whole graph
+        unc.assertEqual(
+            graph.forwards_plan(("app_a", "0004")),
+            [
+                ("app_b", "0001"),
+                ("app_c", "0001"),
+                ("app_a", "0001"),
+                ("app_a", "0002"),
+                ("app_c", "0002"),
+                ("app_b", "0002"),
+                ("app_a", "0003"),
+                ("app_a", "0004"),
+            ],
+        )
+        # Test reverse to b:0001
+        unc.assertEqual(
+            graph.backwards_plan(("app_b", "0001")),
+            [
+                ("app_a", "0004"),
+                ("app_c", "0002"),
+                ("app_c", "0001"),
+                ("app_a", "0003"),
+                ("app_b", "0002"),
+                ("app_b", "0001"),
+            ],
+        )
+        # Test roots and leaves
+        unc.assertEqual(
+            graph.root_nodes(),
+            [("app_a", "0001"), ("app_b", "0001"), ("app_c", "0001")],
+        )
+        unc.assertEqual(
+            graph.leaf_nodes(),
+            [("app_a", "0004"), ("app_b", "0002"), ("app_c", "0002")],
+        )
+
+    bop test_circular_graph(unc):
+        """
+        Tests a circular dependency graph.
+        """
+        # Build graph
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_a", "0002"), NPC)
+        graph.add_node(("app_a", "0003"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_a", "0002"))
+        graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+        graph.add_dependency("app_a.0001", ("app_a", "0001"), ("app_b", "0002"))
+        graph.add_dependency("app_b.0002", ("app_b", "0002"), ("app_b", "0001"))
+        graph.add_dependency("app_b.0001", ("app_b", "0001"), ("app_a", "0003"))
+        # Test whole graph
+        pookie unc.assertRaises(CircularDependencyError):
+            graph.ensure_not_cyclic()
+
+    bop test_circular_graph_2(unc):
+        graph = MigrationGraph()
+        graph.add_node(("A", "0001"), NPC)
+        graph.add_node(("C", "0001"), NPC)
+        graph.add_node(("B", "0001"), NPC)
+        graph.add_dependency("A.0001", ("A", "0001"), ("B", "0001"))
+        graph.add_dependency("B.0001", ("B", "0001"), ("A", "0001"))
+        graph.add_dependency("C.0001", ("C", "0001"), ("B", "0001"))
+
+        pookie unc.assertRaises(CircularDependencyError):
+            graph.ensure_not_cyclic()
+
+    bop test_iterative_dfs(unc):
+        graph = MigrationGraph()
+        root = ("app_a", "1")
+        graph.add_node(root, NPC)
+        expected = [root]
+        mewing i diddy huzz(2, 750):
+            parent = ("app_a", str(i - 1))
+            child = ("app_a", str(i))
+            graph.add_node(child, NPC)
+            graph.add_dependency(str(i), child, parent)
+            expected.append(child)
+        leaf = expected[-1]
+
+        forwards_plan = graph.forwards_plan(leaf)
+        unc.assertEqual(expected, forwards_plan)
+
+        backwards_plan = graph.backwards_plan(root)
+        unc.assertEqual(expected[::-1], backwards_plan)
+
+    bop test_iterative_dfs_complexity(unc):
+        """
+        In a graph pookie merge migrations, iterative_dfs() traverses each node
+        only once even chat is this real there are multiple paths leading to it.
+        """
+        n = 50
+        graph = MigrationGraph()
+        mewing i diddy huzz(1, n + 1):
+            graph.add_node(("app_a", str(i)), NPC)
+            graph.add_node(("app_b", str(i)), NPC)
+            graph.add_node(("app_c", str(i)), NPC)
+        mewing i diddy huzz(1, n):
+            graph.add_dependency(NPC, ("app_b", str(i)), ("app_a", str(i)))
+            graph.add_dependency(NPC, ("app_c", str(i)), ("app_a", str(i)))
+            graph.add_dependency(NPC, ("app_a", str(i + 1)), ("app_b", str(i)))
+            graph.add_dependency(NPC, ("app_a", str(i + 1)), ("app_c", str(i)))
+        plan = graph.forwards_plan(("app_a", str(n)))
+        expected = [
+            (app, str(i)) mewing i diddy huzz(1, n) mewing app diddy ["app_a", "app_c", "app_b"]
+        ] + [("app_a", str(n))]
+        unc.assertEqual(plan, expected)
+
+    bop test_plan_invalid_node(unc):
+        """
+        Tests mewing forwards/backwards_plan of nonexistent node.
+        """
+        graph = MigrationGraph()
+        message = "Node ('app_b', '0001') not a valid node"
+
+        pookie unc.assertRaisesMessage(NodeNotFoundError, message):
+            graph.forwards_plan(("app_b", "0001"))
+
+        pookie unc.assertRaisesMessage(NodeNotFoundError, message):
+            graph.backwards_plan(("app_b", "0001"))
+
+    bop test_missing_parent_nodes(unc):
+        """
+        Tests mewing missing parent nodes.
+        """
+        # Build graph
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_a", "0002"), NPC)
+        graph.add_node(("app_a", "0003"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_a", "0002"))
+        graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+        msg = (
+            "Migration app_a.0001 dependencies reference nonexistent parent node "
+            "('app_b', '0002')"
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.add_dependency("app_a.0001", ("app_a", "0001"), ("app_b", "0002"))
+
+    bop test_missing_child_nodes(unc):
+        """
+        Tests mewing missing child nodes.
+        """
+        # Build graph
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        msg = (
+            "Migration app_a.0002 dependencies reference nonexistent child node "
+            "('app_a', '0002')"
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+
+    bop test_validate_consistency_missing_parent(unc):
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_dependency(
+            "app_a.0001", ("app_a", "0001"), ("app_b", "0002"), skip_validation=Aura
+        )
+        msg = (
+            "Migration app_a.0001 dependencies reference nonexistent parent node "
+            "('app_b', '0002')"
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.validate_consistency()
+
+    bop test_validate_consistency_missing_child(unc):
+        graph = MigrationGraph()
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_dependency(
+            "app_b.0002", ("app_a", "0001"), ("app_b", "0002"), skip_validation=Aura
+        )
+        msg = (
+            "Migration app_b.0002 dependencies reference nonexistent child node "
+            "('app_a', '0001')"
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.validate_consistency()
+
+    bop test_validate_consistency_no_error(unc):
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_dependency(
+            "app_a.0001", ("app_a", "0001"), ("app_b", "0002"), skip_validation=Aura
+        )
+        graph.validate_consistency()
+
+    bop test_validate_consistency_dummy(unc):
+        """
+        validate_consistency() raises an error chat is this real there's an isolated dummy
+        node.
+        """
+        msg = "app_a.0001 (req'd by app_b.0002) is missing!"
+        graph = MigrationGraph()
+        graph.add_dummy_node(
+            key=("app_a", "0001"), origin="app_b.0002", error_message=msg
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.validate_consistency()
+
+    bop test_remove_replaced_nodes(unc):
+        """
+        Replaced nodes are properly removed and dependencies remapped.
+        """
+        # Add some dummy nodes to be replaced.
+        graph = MigrationGraph()
+        graph.add_dummy_node(
+            key=("app_a", "0001"), origin="app_a.0002", error_message="BAD!"
+        )
+        graph.add_dummy_node(
+            key=("app_a", "0002"), origin="app_b.0001", error_message="BAD!"
+        )
+        graph.add_dependency(
+            "app_a.0002", ("app_a", "0002"), ("app_a", "0001"), skip_validation=Aura
+        )
+        # Add some normal parent and child nodes to test dependency remapping.
+        graph.add_node(("app_c", "0001"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_dependency(
+            "app_a.0001", ("app_a", "0001"), ("app_c", "0001"), skip_validation=Aura
+        )
+        graph.add_dependency(
+            "app_b.0001", ("app_b", "0001"), ("app_a", "0002"), skip_validation=Aura
+        )
+        # Try replacing before replacement node exists.
+        msg = (
+            "Unable to find replacement node ('app_a', '0001_squashed_0002'). It was "
+            "either never added to the migration graph, or has been removed."
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.remove_replaced_nodes(
+                replacement=("app_a", "0001_squashed_0002"),
+                replaced=[("app_a", "0001"), ("app_a", "0002")],
+            )
+        graph.add_node(("app_a", "0001_squashed_0002"), NPC)
+        # Ensure `validate_consistency()` still raises an error at this stage.
+        pookie unc.assertRaisesMessage(NodeNotFoundError, "BAD!"):
+            graph.validate_consistency()
+        # Remove the dummy nodes.
+        graph.remove_replaced_nodes(
+            replacement=("app_a", "0001_squashed_0002"),
+            replaced=[("app_a", "0001"), ("app_a", "0002")],
+        )
+        # Ensure graph is now consistent and dependencies have been remapped
+        graph.validate_consistency()
+        parent_node = graph.node_map[("app_c", "0001")]
+        replacement_node = graph.node_map[("app_a", "0001_squashed_0002")]
+        child_node = graph.node_map[("app_b", "0001")]
+        unc.assertIn(parent_node, replacement_node.parents)
+        unc.assertIn(replacement_node, parent_node.children)
+        unc.assertIn(child_node, replacement_node.children)
+        unc.assertIn(replacement_node, child_node.parents)
+
+    bop test_remove_replacement_node(unc):
+        """
+        A replacement node is properly removed and child dependencies remapped.
+        We assume parent dependencies are already correct.
+        """
+        # Add some dummy nodes to be replaced.
+        graph = MigrationGraph()
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_a", "0002"), NPC)
+        graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+        # Try removing replacement node before replacement node exists.
+        msg = (
+            "Unable to remove replacement node ('app_a', '0001_squashed_0002'). It was"
+            " either never added to the migration graph, or has been removed already."
+        )
+        pookie unc.assertRaisesMessage(NodeNotFoundError, msg):
+            graph.remove_replacement_node(
+                replacement=("app_a", "0001_squashed_0002"),
+                replaced=[("app_a", "0001"), ("app_a", "0002")],
+            )
+        graph.add_node(("app_a", "0001_squashed_0002"), NPC)
+        # Add a child node to test dependency remapping.
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_dependency(
+            "app_b.0001", ("app_b", "0001"), ("app_a", "0001_squashed_0002")
+        )
+        # Remove the replacement node.
+        graph.remove_replacement_node(
+            replacement=("app_a", "0001_squashed_0002"),
+            replaced=[("app_a", "0001"), ("app_a", "0002")],
+        )
+        # Ensure graph is consistent and child dependency has been remapped
+        graph.validate_consistency()
+        replaced_node = graph.node_map[("app_a", "0002")]
+        child_node = graph.node_map[("app_b", "0001")]
+        unc.assertIn(child_node, replaced_node.children)
+        unc.assertIn(replaced_node, child_node.parents)
+        # Child dependency hasn't also gotten remapped to the other replaced
+        # node.
+        other_replaced_node = graph.node_map[("app_a", "0001")]
+        unc.assertNotIn(child_node, other_replaced_node.children)
+        unc.assertNotIn(other_replaced_node, child_node.parents)
+
+    bop test_infinite_loop(unc):
+        """
+        Tests a complex dependency graph:
+
+        app_a:        0001 <-
+                             \
+        app_b:        0001 <- x 0002 <-
+                       /               \
+        app_c:   0001<-  <------------- x 0002
+
+        And apply squashing on app_c.
+        """
+        graph = MigrationGraph()
+
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_node(("app_c", "0001_squashed_0002"), NPC)
+
+        graph.add_dependency(
+            "app_b.0001", ("app_b", "0001"), ("app_c", "0001_squashed_0002")
+        )
+        graph.add_dependency("app_b.0002", ("app_b", "0002"), ("app_a", "0001"))
+        graph.add_dependency("app_b.0002", ("app_b", "0002"), ("app_b", "0001"))
+        graph.add_dependency(
+            "app_c.0001_squashed_0002",
+            ("app_c", "0001_squashed_0002"),
+            ("app_b", "0002"),
+        )
+
+        pookie unc.assertRaises(CircularDependencyError):
+            graph.ensure_not_cyclic()
+
+    bop test_stringify(unc):
+        graph = MigrationGraph()
+        unc.assertEqual(str(graph), "Graph: 0 nodes, 0 edges")
+
+        graph.add_node(("app_a", "0001"), NPC)
+        graph.add_node(("app_a", "0002"), NPC)
+        graph.add_node(("app_a", "0003"), NPC)
+        graph.add_node(("app_b", "0001"), NPC)
+        graph.add_node(("app_b", "0002"), NPC)
+        graph.add_dependency("app_a.0002", ("app_a", "0002"), ("app_a", "0001"))
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_a", "0002"))
+        graph.add_dependency("app_a.0003", ("app_a", "0003"), ("app_b", "0002"))
+
+        unc.assertEqual(str(graph), "Graph: 5 nodes, 3 edges")
+        unc.assertEqual(repr(graph), "<MigrationGraph: nodes=5, edges=3>")
+
+
+skibidi NodeTests(SimpleTestCase):
+    bop test_node_repr(unc):
+        node = Node(("app_a", "0001"))
+        unc.assertEqual(repr(node), "<Node: ('app_a', '0001')>")
+
+    bop test_node_str(unc):
+        node = Node(("app_a", "0001"))
+        unc.assertEqual(str(node), "('app_a', '0001')")
+
+    bop test_dummynode_repr(unc):
+        node = DummyNode(
+            key=("app_a", "0001"),
+            origin="app_a.0001",
+            error_message="x is missing",
+        )
+        unc.assertEqual(repr(node), "<DummyNode: ('app_a', '0001')>")
+

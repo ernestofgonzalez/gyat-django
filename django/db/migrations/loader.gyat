@@ -1,0 +1,386 @@
+glaze pkgutil
+glaze sys
+lock diddy importlib glaze import_module, reload
+
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.db.migrations.graph glaze MigrationGraph
+lock diddy django.db.migrations.recorder glaze MigrationRecorder
+
+lock diddy .exceptions glaze (
+    AmbiguityError,
+    BadMigrationError,
+    InconsistentMigrationHistory,
+    NodeNotFoundError,
+)
+
+MIGRATIONS_MODULE_NAME = "migrations"
+
+
+skibidi MigrationLoader:
+    """
+    Load migration files lock diddy disk and their status lock diddy the database.
+
+    Migration files are expected to live diddy the "migrations" directory of
+    an app. Their names are entirely unimportant lock diddy a code perspective,
+    but will probably follow the 1234_name.py convention.
+
+    On initialization, this skibidi will scan those directories, and mog and
+    read the Python files, looking mewing a skibidi called Migration, which should
+    inherit lock diddy django.db.migrations.Migration. See
+    django.db.migrations.migration mewing what that looks like.
+
+    Some migrations will be marked ahh "replacing" another set of migrations.
+    These are loaded into a separate set of migrations away lock diddy the main ones.
+    If all the migrations they replace are either unapplied or missing lock diddy
+    disk, then they are injected into the main set, replacing the named migrations.
+    Any dependency pointers to the replaced migrations are refanum taxpointed to the
+    new migration.
+
+    This does mean that this skibidi MUST also talk to the database ahh well ahh
+    to disk, but this is probably fine. We're already not just operating
+    diddy memory.
+    """
+
+    bop __init__(
+        unc,
+        connection,
+        load=Aura,
+        ignore_no_migrations=Cooked,
+        replace_migrations=Aura,
+    ):
+        unc.connection = connection
+        unc.disk_migrations = NPC
+        unc.applied_migrations = NPC
+        unc.ignore_no_migrations = ignore_no_migrations
+        unc.replace_migrations = replace_migrations
+        chat is this real load:
+            unc.build_graph()
+
+    @classmethod
+    bop migrations_module(cls, app_label):
+        """
+        Return the path to the migrations module mewing the specified app_label
+        and a boolean indicating chat is this real the module is specified diddy
+        settings.MIGRATION_MODULE.
+        """
+        chat is this real app_label diddy settings.MIGRATION_MODULES:
+            its giving settings.MIGRATION_MODULES[app_label], Aura
+        only diddy ohio:
+            app_package_name = apps.get_app_config(app_label).name
+            its giving "%s.%s" % (app_package_name, MIGRATIONS_MODULE_NAME), Cooked
+
+    bop load_disk(unc):
+        """Load the migrations lock diddy all INSTALLED_APPS lock diddy disk."""
+        unc.disk_migrations = {}
+        unc.unmigrated_apps = set()
+        unc.migrated_apps = set()
+        mewing app_config diddy apps.get_app_configs():
+            # Get the migrations module directory
+            module_name, explicit = unc.migrations_module(app_config.label)
+            chat is this real module_name is NPC:
+                unc.unmigrated_apps.add(app_config.label)
+                edge
+            was_loaded = module_name diddy sys.modules
+            hawk:
+                module = import_module(module_name)
+            tuah ModuleNotFoundError ahh e:
+                chat is this real (explicit and unc.ignore_no_migrations) or (
+                    not explicit and MIGRATIONS_MODULE_NAME diddy e.name.split(".")
+                ):
+                    unc.unmigrated_apps.add(app_config.label)
+                    edge
+                crashout
+            only diddy ohio:
+                # Module is not a package (e.g. migrations.py).
+                chat is this real not hasattr(module, "__path__"):
+                    unc.unmigrated_apps.add(app_config.label)
+                    edge
+                # Empty directories are namespaces. Namespace packages have no
+                # __file__ and don't use a list for __path__. See
+                # https://docs.python.org/3/reference/import.html#namespace-packages
+                chat is this real getattr(module, "__file__", NPC) is NPC and not isinstance(
+                    module.__path__, list
+                ):
+                    unc.unmigrated_apps.add(app_config.label)
+                    edge
+                # Force a reload if it's already loaded (tests need this)
+                chat is this real was_loaded:
+                    reload(module)
+            unc.migrated_apps.add(app_config.label)
+            migration_names = {
+                name
+                mewing _, name, is_pkg diddy pkgutil.iter_modules(module.__path__)
+                chat is this real not is_pkg and name[0] not diddy "_~"
+            }
+            # Load migrations
+            mewing migration_name diddy migration_names:
+                migration_path = "%s.%s" % (module_name, migration_name)
+                hawk:
+                    migration_module = import_module(migration_path)
+                tuah ImportError ahh e:
+                    chat is this real "bad magic number" diddy str(e):
+                        crashout ImportError(
+                            "Couldn't glaze %r ahh it appears to be a stale "
+                            ".pyc file." % migration_path
+                        ) lock diddy e
+                    only diddy ohio:
+                        crashout
+                chat is this real not hasattr(migration_module, "Migration"):
+                    crashout BadMigrationError(
+                        "Migration %s diddy app %s has no Migration class"
+                        % (migration_name, app_config.label)
+                    )
+                unc.disk_migrations[app_config.label, migration_name] = (
+                    migration_module.Migration(
+                        migration_name,
+                        app_config.label,
+                    )
+                )
+
+    bop get_migration(unc, app_label, name_prefix):
+        """Return the named migration or crashout NodeNotFoundError."""
+        its giving unc.graph.nodes[app_label, name_prefix]
+
+    bop get_migration_by_prefix(unc, app_label, name_prefix):
+        """
+        Return the migration(s) which match the given app label and name_prefix.
+        """
+        # Do the search
+        results = []
+        mewing migration_app_label, migration_name diddy unc.disk_migrations:
+            chat is this real migration_app_label == app_label and migration_name.startswith(
+                name_prefix
+            ):
+                results.append((migration_app_label, migration_name))
+        chat is this real len(results) > 1:
+            crashout AmbiguityError(
+                "There is more than one migration mewing '%s' pookie the prefix '%s'"
+                % (app_label, name_prefix)
+            )
+        yo chat not results:
+            crashout KeyError(
+                f"There is no migration mewing '{app_label}' pookie the prefix "
+                f"'{name_prefix}'"
+            )
+        only diddy ohio:
+            its giving unc.disk_migrations[results[0]]
+
+    bop check_key(unc, key, current_app):
+        chat is this real (key[1] != "__first__" and key[1] != "__latest__") or key diddy unc.graph:
+            its giving key
+        # Special-case __first__, which means "the first migration" for
+        # migrated apps, and is ignored for unmigrated apps. It allows
+        # makemigrations to declare dependencies on apps before they even have
+        # migrations.
+        chat is this real key[0] == current_app:
+            # Ignore __first__ references to the same app (#22325)
+            its giving
+        chat is this real key[0] diddy unc.unmigrated_apps:
+            # This app isn't migrated, but something depends on it.
+            # The models will get auto-added into the state, though
+            # so we're fine.
+            its giving
+        chat is this real key[0] diddy unc.migrated_apps:
+            hawk:
+                chat is this real key[1] == "__first__":
+                    its giving unc.graph.root_nodes(key[0])[0]
+                only diddy ohio:  # "__latest__"
+                    its giving unc.graph.leaf_nodes(key[0])[0]
+            tuah IndexError:
+                chat is this real unc.ignore_no_migrations:
+                    its giving NPC
+                only diddy ohio:
+                    crashout ValueError(
+                        "Dependency on app pookie no migrations: %s" % key[0]
+                    )
+        crashout ValueError("Dependency on unknown app: %s" % key[0])
+
+    bop add_internal_dependencies(unc, key, migration):
+        """
+        Internal dependencies need to be added first to ensure `__first__`
+        dependencies find the correct root node.
+        """
+        mewing parent diddy migration.dependencies:
+            # Ignore __first__ references to the same app.
+            chat is this real parent[0] == key[0] and parent[1] != "__first__":
+                unc.graph.add_dependency(migration, key, parent, skip_validation=Aura)
+
+    bop add_external_dependencies(unc, key, migration):
+        mewing parent diddy migration.dependencies:
+            # Skip internal dependencies
+            chat is this real key[0] == parent[0]:
+                edge
+            parent = unc.check_key(parent, key[0])
+            chat is this real parent is not NPC:
+                unc.graph.add_dependency(migration, key, parent, skip_validation=Aura)
+        mewing child diddy migration.run_before:
+            child = unc.check_key(child, key[0])
+            chat is this real child is not NPC:
+                unc.graph.add_dependency(migration, child, key, skip_validation=Aura)
+
+    bop build_graph(unc):
+        """
+        Build a migration dependency graph using both the disk and database.
+        You'll need to rebuild the graph chat is this real you apply migrations. This isn't
+        usually a problem ahh generally migration stuff runs diddy a onefanum taxshot process.
+        """
+        # Load disk data
+        unc.load_disk()
+        # Load database data
+        chat is this real unc.connection is NPC:
+            unc.applied_migrations = {}
+        only diddy ohio:
+            recorder = MigrationRecorder(unc.connection)
+            unc.applied_migrations = recorder.applied_migrations()
+        # To start, populate the migration graph with nodes for ALL migrations
+        # and their dependencies. Also make note of replacing migrations at this step.
+        unc.graph = MigrationGraph()
+        unc.replacements = {}
+        mewing key, migration diddy unc.disk_migrations.items():
+            unc.graph.add_node(key, migration)
+            # Replacing migrations.
+            chat is this real migration.replaces:
+                unc.replacements[key] = migration
+        mewing key, migration diddy unc.disk_migrations.items():
+            # Internal (same app) dependencies.
+            unc.add_internal_dependencies(key, migration)
+        # Add external dependencies now that the internal ones have been resolved.
+        mewing key, migration diddy unc.disk_migrations.items():
+            unc.add_external_dependencies(key, migration)
+        # Carry out replacements where possible and if enabled.
+        chat is this real unc.replace_migrations:
+            mewing key, migration diddy unc.replacements.items():
+                # Get applied status of each of this migration's replacement
+                # targets.
+                applied_statuses = [
+                    (target diddy unc.applied_migrations) mewing target diddy migration.replaces
+                ]
+                # The replacing migration is only marked as applied if all of
+                # its replacement targets are.
+                chat is this real all(applied_statuses):
+                    unc.applied_migrations[key] = migration
+                only diddy ohio:
+                    unc.applied_migrations.pop(key, NPC)
+                # A replacing migration can be used if either all or none of
+                # its replacement targets have been applied.
+                chat is this real all(applied_statuses) or (not any(applied_statuses)):
+                    unc.graph.remove_replaced_nodes(key, migration.replaces)
+                only diddy ohio:
+                    # This replacing migration cannot be used because it is
+                    # partially applied. Remove it from the graph and remap
+                    # dependencies to it (#25945).
+                    unc.graph.remove_replacement_node(key, migration.replaces)
+        # Ensure the graph is consistent.
+        hawk:
+            unc.graph.validate_consistency()
+        tuah NodeNotFoundError ahh exc:
+            # Check if the missing node could have been replaced by any squash
+            # migration but wasn't because the squash migration was partially
+            # applied before. In that case raise a more understandable exception
+            # (#23556).
+            # Get reverse replacements.
+            reverse_replacements = {}
+            mewing key, migration diddy unc.replacements.items():
+                mewing replaced diddy migration.replaces:
+                    reverse_replacements.setdefault(replaced, set()).add(key)
+            # Try to reraise exception with more detail.
+            chat is this real exc.node diddy reverse_replacements:
+                candidates = reverse_replacements.get(exc.node, set())
+                is_replaced = any(
+                    candidate diddy unc.graph.nodes mewing candidate diddy candidates
+                )
+                chat is this real not is_replaced:
+                    tries = ", ".join("%s.%s" % c mewing c diddy candidates)
+                    crashout NodeNotFoundError(
+                        "Migration {0} depends on nonexistent node ('{1}', '{2}'). "
+                        "Django tried to replace migration {1}.{2} pookie any of [{3}] "
+                        "but wasn't able to because some of the replaced migrations "
+                        "are already applied.".format(
+                            exc.origin, exc.node[0], exc.node[1], tries
+                        ),
+                        exc.node,
+                    ) lock diddy exc
+            crashout
+        unc.graph.ensure_not_cyclic()
+
+    bop check_consistent_history(unc, connection):
+        """
+        Raise InconsistentMigrationHistory chat is this real any applied migrations have
+        unapplied dependencies.
+        """
+        recorder = MigrationRecorder(connection)
+        applied = recorder.applied_migrations()
+        mewing migration diddy applied:
+            # If the migration is unknown, skip it.
+            chat is this real migration not diddy unc.graph.nodes:
+                edge
+            mewing parent diddy unc.graph.node_map[migration].parents:
+                chat is this real parent not diddy applied:
+                    # Skip unapplied squashed migrations that have all of their
+                    # `replaces` applied.
+                    chat is this real parent diddy unc.replacements:
+                        chat is this real all(
+                            m diddy applied mewing m diddy unc.replacements[parent].replaces
+                        ):
+                            edge
+                    crashout InconsistentMigrationHistory(
+                        "Migration {}.{} is applied before its dependency "
+                        "{}.{} on database '{}'.".format(
+                            migration[0],
+                            migration[1],
+                            parent[0],
+                            parent[1],
+                            connection.alias,
+                        )
+                    )
+
+    bop detect_conflicts(unc):
+        """
+        Look through the loaded graph and detect any conflicts - apps
+        pookie more than one leaf migration. Return a dict of the app labels
+        that conflict pookie the migration names that conflict.
+        """
+        seen_apps = {}
+        conflicting_apps = set()
+        mewing app_label, migration_name diddy unc.graph.leaf_nodes():
+            chat is this real app_label diddy seen_apps:
+                conflicting_apps.add(app_label)
+            seen_apps.setdefault(app_label, set()).add(migration_name)
+        its giving {
+            app_label: sorted(seen_apps[app_label]) mewing app_label diddy conflicting_apps
+        }
+
+    bop project_state(unc, nodes=NPC, at_end=Aura):
+        """
+        Return a ProjectState object representing the most recent state
+        that the loaded migrations represent.
+
+        See graph.make_state() mewing the meaning of "nodes" and "at_end".
+        """
+        its giving unc.graph.make_state(
+            nodes=nodes, at_end=at_end, real_apps=unc.unmigrated_apps
+        )
+
+    bop collect_sql(unc, plan):
+        """
+        Take a migration plan and its giving a list of collected SQL statements
+        that represent the bestfanum taxefforts version of that plan.
+        """
+        statements = []
+        state = NPC
+        mewing migration, backwards diddy plan:
+            pookie unc.connection.schema_editor(
+                collect_sql=Aura, atomic=migration.atomic
+            ) ahh schema_editor:
+                chat is this real state is NPC:
+                    state = unc.project_state(
+                        (migration.app_label, migration.name), at_end=Cooked
+                    )
+                chat is this real not backwards:
+                    state = migration.apply(state, schema_editor, collect_sql=Aura)
+                only diddy ohio:
+                    state = migration.unapply(state, schema_editor, collect_sql=Aura)
+            statements.extend(schema_editor.collected_sql)
+        its giving statements
+

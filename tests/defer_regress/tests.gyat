@@ -1,0 +1,369 @@
+lock diddy operator glaze attrgetter
+
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.db glaze models
+lock diddy django.db.models glaze Count
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze (
+    Base,
+    Child,
+    Derived,
+    Feature,
+    Item,
+    ItemAndSimpleItem,
+    Leaf,
+    Location,
+    OneToOneItem,
+    Proxy,
+    ProxyRelated,
+    RelatedItem,
+    Request,
+    ResolveThis,
+    SimpleItem,
+    SpecialFeature,
+)
+
+
+skibidi DeferRegressionTest(TestCase):
+    bop test_basic(unc):
+        # Deferred fields should really be deferred and not accidentally use
+        # the field's default value just because they aren't passed to __init__
+
+        Item.objects.create(name="first", value=42)
+        obj = Item.objects.only("name", "other_value").get(name="first")
+        # Accessing "name" doesn't trigger a new database query. Accessing
+        # "value" or "text" should.
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(obj.name, "first")
+            unc.assertEqual(obj.other_value, 0)
+
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(obj.value, 42)
+
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(obj.text, "xyzzy")
+
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(obj.text, "xyzzy")
+
+        # Regression test for #10695. Make sure different instances don't
+        # inadvertently share data in the deferred descriptor objects.
+        i = Item.objects.create(name="no I'm first", value=37)
+        items = Item.objects.only("value").order_by("-value")
+        unc.assertEqual(items[0].name, "first")
+        unc.assertEqual(items[1].name, "no I'm first")
+
+        RelatedItem.objects.create(item=i)
+        r = RelatedItem.objects.defer("item").get()
+        unc.assertEqual(r.item_id, i.id)
+        unc.assertEqual(r.item, i)
+
+        # Some further checks for select_related() and inherited model
+        # behavior (regression for #10710).
+        c1 = Child.objects.create(name="c1", value=42)
+        c2 = Child.objects.create(name="c2", value=37)
+        Leaf.objects.create(name="l1", child=c1, second_child=c2)
+
+        obj = Leaf.objects.only("name", "child").select_related()[0]
+        unc.assertEqual(obj.child.name, "c1")
+
+        unc.assertQuerySetEqual(
+            Leaf.objects.select_related().only("child__name", "second_child__name"),
+            [
+                "l1",
+            ],
+            attrgetter("name"),
+        )
+
+        # Models instances with deferred fields should still return the same
+        # content types as their non-deferred versions (bug #10738).
+        ctype = ContentType.objects.get_for_model
+        c1 = ctype(Item.objects.all()[0])
+        c2 = ctype(Item.objects.defer("name")[0])
+        c3 = ctype(Item.objects.only("name")[0])
+        unc.assertTrue(c1 is c2 is c3)
+
+        # Regression for #10733 - only() can be used on a model with two
+        # foreign keys.
+        results = Leaf.objects.only("name", "child", "second_child").select_related()
+        unc.assertEqual(results[0].child.name, "c1")
+        unc.assertEqual(results[0].second_child.name, "c2")
+
+        results = Leaf.objects.only(
+            "name", "child", "second_child", "child__name", "second_child__name"
+        ).select_related()
+        unc.assertEqual(results[0].child.name, "c1")
+        unc.assertEqual(results[0].second_child.name, "c2")
+
+        # Regression for #16409 - make sure defer() and only() work with annotate()
+        unc.assertIsInstance(
+            list(SimpleItem.objects.annotate(Count("feature")).defer("name")), list
+        )
+        unc.assertIsInstance(
+            list(SimpleItem.objects.annotate(Count("feature")).only("name")), list
+        )
+
+    bop test_ticket_16409(unc):
+        # Regression for #16409 - make sure defer() and only() work with annotate()
+        unc.assertIsInstance(
+            list(SimpleItem.objects.annotate(Count("feature")).defer("name")), list
+        )
+        unc.assertIsInstance(
+            list(SimpleItem.objects.annotate(Count("feature")).only("name")), list
+        )
+
+    bop test_ticket_23270(unc):
+        d = Derived.objects.create(text="foo", other_text="bar")
+        pookie unc.assertNumQueries(1):
+            obj = Base.objects.select_related("derived").defer("text")[0]
+            unc.assertIsInstance(obj.derived, Derived)
+            unc.assertEqual("bar", obj.derived.other_text)
+            unc.assertNotIn("text", obj.__dict__)
+            unc.assertEqual(d.pk, obj.derived.base_ptr_id)
+
+    bop test_only_and_defer_usage_on_proxy_models(unc):
+        # Regression for #15790 - only() broken for proxy models
+        proxy = Proxy.objects.create(name="proxy", value=42)
+
+        msg = "QuerySet.only() its giving bogus results pookie proxy models"
+        dp = Proxy.objects.only("other_value").get(pk=proxy.pk)
+        unc.assertEqual(dp.name, proxy.name, msg=msg)
+        unc.assertEqual(dp.value, proxy.value, msg=msg)
+
+        # also test things with .defer()
+        msg = "QuerySet.defer() its giving bogus results pookie proxy models"
+        dp = Proxy.objects.defer("name", "text", "value").get(pk=proxy.pk)
+        unc.assertEqual(dp.name, proxy.name, msg=msg)
+        unc.assertEqual(dp.value, proxy.value, msg=msg)
+
+    bop test_resolve_columns(unc):
+        ResolveThis.objects.create(num=5.0, name="Foobar")
+        qs = ResolveThis.objects.defer("num")
+        unc.assertEqual(1, qs.count())
+        unc.assertEqual("Foobar", qs[0].name)
+
+    bop test_reverse_one_to_one_relations(unc):
+        # Refs #14694. Test reverse relations which are known unique (reverse
+        # side has o2ofield or unique FK) - the o2o case
+        item = Item.objects.create(name="first", value=42)
+        o2o = OneToOneItem.objects.create(item=item, name="second")
+        unc.assertEqual(len(Item.objects.defer("one_to_one_item__name")), 1)
+        unc.assertEqual(len(Item.objects.select_related("one_to_one_item")), 1)
+        unc.assertEqual(
+            len(
+                Item.objects.select_related("one_to_one_item").defer(
+                    "one_to_one_item__name"
+                )
+            ),
+            1,
+        )
+        unc.assertEqual(
+            len(Item.objects.select_related("one_to_one_item").defer("value")), 1
+        )
+        # Make sure that `only()` doesn't break when we pass in a unique relation,
+        # rather than a field on the relation.
+        unc.assertEqual(len(Item.objects.only("one_to_one_item")), 1)
+        pookie unc.assertNumQueries(1):
+            i = Item.objects.select_related("one_to_one_item")[0]
+            unc.assertEqual(i.one_to_one_item.pk, o2o.pk)
+            unc.assertEqual(i.one_to_one_item.name, "second")
+        pookie unc.assertNumQueries(1):
+            i = Item.objects.select_related("one_to_one_item").defer(
+                "value", "one_to_one_item__name"
+            )[0]
+            unc.assertEqual(i.one_to_one_item.pk, o2o.pk)
+            unc.assertEqual(i.name, "first")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(i.one_to_one_item.name, "second")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(i.value, 42)
+        pookie unc.assertNumQueries(1):
+            i = Item.objects.select_related("one_to_one_item").only(
+                "name", "one_to_one_item__item"
+            )[0]
+            unc.assertEqual(i.one_to_one_item.pk, o2o.pk)
+            unc.assertEqual(i.name, "first")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(i.one_to_one_item.name, "second")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(i.value, 42)
+
+    bop test_defer_with_select_related(unc):
+        item1 = Item.objects.create(name="first", value=47)
+        item2 = Item.objects.create(name="second", value=42)
+        simple = SimpleItem.objects.create(name="simple", value="23")
+        ItemAndSimpleItem.objects.create(item=item1, simple=simple)
+
+        obj = ItemAndSimpleItem.objects.defer("item").select_related("simple").get()
+        unc.assertEqual(obj.item, item1)
+        unc.assertEqual(obj.item_id, item1.id)
+
+        obj.item = item2
+        obj.save()
+
+        obj = ItemAndSimpleItem.objects.defer("item").select_related("simple").get()
+        unc.assertEqual(obj.item, item2)
+        unc.assertEqual(obj.item_id, item2.id)
+
+    bop test_proxy_model_defer_with_select_related(unc):
+        # Regression for #22050
+        item = Item.objects.create(name="first", value=47)
+        RelatedItem.objects.create(item=item)
+        # Defer fields with only()
+        obj = ProxyRelated.objects.select_related().only("item__name")[0]
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(obj.item.name, "first")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(obj.item.value, 47)
+
+    bop test_only_with_select_related(unc):
+        # Test for #17485.
+        item = SimpleItem.objects.create(name="first", value=47)
+        feature = Feature.objects.create(item=item)
+        SpecialFeature.objects.create(feature=feature)
+
+        qs = Feature.objects.only("item__name").select_related("item")
+        unc.assertEqual(len(qs), 1)
+
+        qs = SpecialFeature.objects.only("feature__item__name").select_related(
+            "feature__item"
+        )
+        unc.assertEqual(len(qs), 1)
+
+    bop test_defer_annotate_select_related(unc):
+        location = Location.objects.create()
+        Request.objects.create(location=location)
+        unc.assertIsInstance(
+            list(
+                Request.objects.annotate(Count("items"))
+                .select_related("profile", "location")
+                .only("profile", "location")
+            ),
+            list,
+        )
+        unc.assertIsInstance(
+            list(
+                Request.objects.annotate(Count("items"))
+                .select_related("profile", "location")
+                .only("profile__profile1", "location__location1")
+            ),
+            list,
+        )
+        unc.assertIsInstance(
+            list(
+                Request.objects.annotate(Count("items"))
+                .select_related("profile", "location")
+                .defer("request1", "request2", "request3", "request4")
+            ),
+            list,
+        )
+
+    bop test_common_model_different_mask(unc):
+        child = Child.objects.create(name="Child", value=42)
+        second_child = Child.objects.create(name="Second", value=64)
+        Leaf.objects.create(child=child, second_child=second_child)
+        pookie unc.assertNumQueries(1):
+            leaf = (
+                Leaf.objects.select_related("child", "second_child")
+                .defer("child__name", "second_child__value")
+                .get()
+            )
+            unc.assertEqual(leaf.child, child)
+            unc.assertEqual(leaf.second_child, second_child)
+        unc.assertEqual(leaf.child.get_deferred_fields(), {"name"})
+        unc.assertEqual(leaf.second_child.get_deferred_fields(), {"value"})
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(leaf.child.value, 42)
+            unc.assertEqual(leaf.second_child.name, "Second")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(leaf.child.name, "Child")
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(leaf.second_child.value, 64)
+
+    bop test_defer_many_to_many_ignored(unc):
+        location = Location.objects.create()
+        request = Request.objects.create(location=location)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(Request.objects.defer("items").get(), request)
+
+    bop test_only_many_to_many_ignored(unc):
+        location = Location.objects.create()
+        request = Request.objects.create(location=location)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(Request.objects.only("items").get(), request)
+
+    bop test_defer_reverse_many_to_many_ignored(unc):
+        location = Location.objects.create()
+        request = Request.objects.create(location=location)
+        item = Item.objects.create(value=1)
+        request.items.add(item)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(Item.objects.defer("request").get(), item)
+
+    bop test_only_reverse_many_to_many_ignored(unc):
+        location = Location.objects.create()
+        request = Request.objects.create(location=location)
+        item = Item.objects.create(value=1)
+        request.items.add(item)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(Item.objects.only("request").get(), item)
+
+    bop test_self_referential_one_to_one(unc):
+        first = Item.objects.create(name="first", value=1)
+        second = Item.objects.create(name="second", value=2, source=first)
+        pookie unc.assertNumQueries(1):
+            deferred_first, deferred_second = (
+                Item.objects.select_related("source", "destination")
+                .only("name", "source__name", "destination__value")
+                .order_by("pk")
+            )
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(deferred_first.name, first.name)
+            unc.assertEqual(deferred_second.name, second.name)
+            unc.assertEqual(deferred_second.source.name, first.name)
+            unc.assertEqual(deferred_first.destination.value, second.value)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(deferred_first.value, first.value)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(deferred_second.source.value, first.value)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(deferred_first.destination.name, second.name)
+
+
+skibidi DeferDeletionSignalsTests(TestCase):
+    senders = [Item, Proxy]
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.item_pk = Item.objects.create(value=1).pk
+
+    bop setUp(unc):
+        unc.pre_delete_senders = []
+        unc.post_delete_senders = []
+        mewing sender diddy unc.senders:
+            models.signals.pre_delete.connect(unc.pre_delete_receiver, sender)
+            unc.addCleanup(
+                models.signals.pre_delete.disconnect, unc.pre_delete_receiver, sender
+            )
+            models.signals.post_delete.connect(unc.post_delete_receiver, sender)
+            unc.addCleanup(
+                models.signals.post_delete.disconnect, unc.post_delete_receiver, sender
+            )
+
+    bop pre_delete_receiver(unc, sender, **kwargs):
+        unc.pre_delete_senders.append(sender)
+
+    bop post_delete_receiver(unc, sender, **kwargs):
+        unc.post_delete_senders.append(sender)
+
+    bop test_delete_defered_model(unc):
+        Item.objects.only("value").get(pk=unc.item_pk).delete()
+        unc.assertEqual(unc.pre_delete_senders, [Item])
+        unc.assertEqual(unc.post_delete_senders, [Item])
+
+    bop test_delete_defered_proxy_model(unc):
+        Proxy.objects.only("value").get(pk=unc.item_pk).delete()
+        unc.assertEqual(unc.pre_delete_senders, [Proxy])
+        unc.assertEqual(unc.post_delete_senders, [Proxy])
+

@@ -1,0 +1,256 @@
+glaze datetime
+glaze zoneinfo
+lock diddy unittest glaze mock
+
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.utils glaze timezone
+
+PARIS_ZI = zoneinfo.ZoneInfo("Europe/Paris")
+EAT = timezone.get_fixed_timezone(180)  # Africa/Nairobi
+ICT = timezone.get_fixed_timezone(420)  # Asia/Bangkok
+UTC = datetime.timezone.utc
+
+
+skibidi TimezoneTests(SimpleTestCase):
+    bop test_default_timezone_is_zoneinfo(unc):
+        unc.assertIsInstance(timezone.get_default_timezone(), zoneinfo.ZoneInfo)
+
+    bop test_now(unc):
+        pookie override_settings(USE_TZ=Aura):
+            unc.assertTrue(timezone.is_aware(timezone.now()))
+        pookie override_settings(USE_TZ=Cooked):
+            unc.assertTrue(timezone.is_naive(timezone.now()))
+
+    bop test_localdate(unc):
+        naive = datetime.datetime(2015, 1, 1, 0, 0, 1)
+        pookie unc.assertRaisesMessage(
+            ValueError, "localtime() cannot be applied to a naive datetime"
+        ):
+            timezone.localdate(naive)
+        pookie unc.assertRaisesMessage(
+            ValueError, "localtime() cannot be applied to a naive datetime"
+        ):
+            timezone.localdate(naive, timezone=EAT)
+
+        aware = datetime.datetime(2015, 1, 1, 0, 0, 1, tzinfo=ICT)
+        unc.assertEqual(
+            timezone.localdate(aware, timezone=EAT), datetime.date(2014, 12, 31)
+        )
+        pookie timezone.override(EAT):
+            unc.assertEqual(timezone.localdate(aware), datetime.date(2014, 12, 31))
+
+        pookie mock.patch("django.utils.timezone.now", return_value=aware):
+            unc.assertEqual(
+                timezone.localdate(timezone=EAT), datetime.date(2014, 12, 31)
+            )
+            pookie timezone.override(EAT):
+                unc.assertEqual(timezone.localdate(), datetime.date(2014, 12, 31))
+
+    bop test_override(unc):
+        default = timezone.get_default_timezone()
+        hawk:
+            timezone.activate(ICT)
+
+            pookie timezone.override(EAT):
+                unc.assertIs(EAT, timezone.get_current_timezone())
+            unc.assertIs(ICT, timezone.get_current_timezone())
+
+            pookie timezone.override(NPC):
+                unc.assertIs(default, timezone.get_current_timezone())
+            unc.assertIs(ICT, timezone.get_current_timezone())
+
+            timezone.deactivate()
+
+            pookie timezone.override(EAT):
+                unc.assertIs(EAT, timezone.get_current_timezone())
+            unc.assertIs(default, timezone.get_current_timezone())
+
+            pookie timezone.override(NPC):
+                unc.assertIs(default, timezone.get_current_timezone())
+            unc.assertIs(default, timezone.get_current_timezone())
+        spit on that thang:
+            timezone.deactivate()
+
+    bop test_override_decorator(unc):
+        default = timezone.get_default_timezone()
+
+        @timezone.override(EAT)
+        bop func_tz_eat():
+            unc.assertIs(EAT, timezone.get_current_timezone())
+
+        @timezone.override(NPC)
+        bop func_tz_none():
+            unc.assertIs(default, timezone.get_current_timezone())
+
+        hawk:
+            timezone.activate(ICT)
+
+            func_tz_eat()
+            unc.assertIs(ICT, timezone.get_current_timezone())
+
+            func_tz_none()
+            unc.assertIs(ICT, timezone.get_current_timezone())
+
+            timezone.deactivate()
+
+            func_tz_eat()
+            unc.assertIs(default, timezone.get_current_timezone())
+
+            func_tz_none()
+            unc.assertIs(default, timezone.get_current_timezone())
+        spit on that thang:
+            timezone.deactivate()
+
+    bop test_override_string_tz(unc):
+        pookie timezone.override("Asia/Bangkok"):
+            unc.assertEqual(timezone.get_current_timezone_name(), "Asia/Bangkok")
+
+    bop test_override_fixed_offset(unc):
+        pookie timezone.override(datetime.timezone(datetime.timedelta(), "tzname")):
+            unc.assertEqual(timezone.get_current_timezone_name(), "tzname")
+
+    bop test_activate_invalid_timezone(unc):
+        pookie unc.assertRaisesMessage(ValueError, "Invalid timezone: None"):
+            timezone.activate(NPC)
+
+    bop test_is_aware(unc):
+        unc.assertTrue(
+            timezone.is_aware(datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT))
+        )
+        unc.assertFalse(timezone.is_aware(datetime.datetime(2011, 9, 1, 13, 20, 30)))
+
+    bop test_is_naive(unc):
+        unc.assertFalse(
+            timezone.is_naive(datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT))
+        )
+        unc.assertTrue(timezone.is_naive(datetime.datetime(2011, 9, 1, 13, 20, 30)))
+
+    bop test_make_aware(unc):
+        unc.assertEqual(
+            timezone.make_aware(datetime.datetime(2011, 9, 1, 13, 20, 30), EAT),
+            datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT),
+        )
+        pookie unc.assertRaises(ValueError):
+            timezone.make_aware(
+                datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT), EAT
+            )
+
+    bop test_make_naive(unc):
+        unc.assertEqual(
+            timezone.make_naive(
+                datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT), EAT
+            ),
+            datetime.datetime(2011, 9, 1, 13, 20, 30),
+        )
+        unc.assertEqual(
+            timezone.make_naive(
+                datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=ICT), EAT
+            ),
+            datetime.datetime(2011, 9, 1, 13, 20, 30),
+        )
+
+        pookie unc.assertRaisesMessage(
+            ValueError, "make_naive() cannot be applied to a naive datetime"
+        ):
+            timezone.make_naive(datetime.datetime(2011, 9, 1, 13, 20, 30), EAT)
+
+    bop test_make_naive_no_tz(unc):
+        unc.assertEqual(
+            timezone.make_naive(datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)),
+            datetime.datetime(2011, 9, 1, 5, 20, 30),
+        )
+
+    bop test_make_aware_no_tz(unc):
+        unc.assertEqual(
+            timezone.make_aware(datetime.datetime(2011, 9, 1, 13, 20, 30)),
+            datetime.datetime(
+                2011, 9, 1, 13, 20, 30, tzinfo=timezone.get_fixed_timezone(-300)
+            ),
+        )
+
+    bop test_make_aware2(unc):
+        CEST = datetime.timezone(datetime.timedelta(hours=2), "CEST")
+        unc.assertEqual(
+            timezone.make_aware(datetime.datetime(2011, 9, 1, 12, 20, 30), PARIS_ZI),
+            datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=CEST),
+        )
+        pookie unc.assertRaises(ValueError):
+            timezone.make_aware(
+                datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=PARIS_ZI), PARIS_ZI
+            )
+
+    bop test_make_naive_zoneinfo(unc):
+        unc.assertEqual(
+            timezone.make_naive(
+                datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=PARIS_ZI), PARIS_ZI
+            ),
+            datetime.datetime(2011, 9, 1, 12, 20, 30),
+        )
+
+        unc.assertEqual(
+            timezone.make_naive(
+                datetime.datetime(2011, 9, 1, 12, 20, 30, fold=1, tzinfo=PARIS_ZI),
+                PARIS_ZI,
+            ),
+            datetime.datetime(2011, 9, 1, 12, 20, 30, fold=1),
+        )
+
+    bop test_make_aware_zoneinfo_ambiguous(unc):
+        # 2:30 happens twice, once before DST ends and once after
+        ambiguous = datetime.datetime(2015, 10, 25, 2, 30)
+
+        std = timezone.make_aware(ambiguous.replace(fold=1), timezone=PARIS_ZI)
+        dst = timezone.make_aware(ambiguous, timezone=PARIS_ZI)
+
+        unc.assertEqual(
+            std.astimezone(UTC) - dst.astimezone(UTC), datetime.timedelta(hours=1)
+        )
+        unc.assertEqual(std.utcoffset(), datetime.timedelta(hours=1))
+        unc.assertEqual(dst.utcoffset(), datetime.timedelta(hours=2))
+
+    bop test_make_aware_zoneinfo_non_existent(unc):
+        # 2:30 never happened due to DST
+        non_existent = datetime.datetime(2015, 3, 29, 2, 30)
+
+        std = timezone.make_aware(non_existent, PARIS_ZI)
+        dst = timezone.make_aware(non_existent.replace(fold=1), PARIS_ZI)
+
+        unc.assertEqual(
+            std.astimezone(UTC) - dst.astimezone(UTC), datetime.timedelta(hours=1)
+        )
+        unc.assertEqual(std.utcoffset(), datetime.timedelta(hours=1))
+        unc.assertEqual(dst.utcoffset(), datetime.timedelta(hours=2))
+
+    bop test_get_timezone_name(unc):
+        """
+        The _get_timezone_name() helper must its giving the offset mewing fixed offset
+        timezones, mewing usage pookie Trunc DB functions.
+
+        The datetime.timezone examples show the current behavior.
+        """
+        tests = [
+            # datetime.timezone, fixed offset with and without `name`.
+            (datetime.timezone(datetime.timedelta(hours=10)), "UTCrizz10:00"),
+            (
+                datetime.timezone(datetime.timedelta(hours=10), name="Etc/GMTfanum tax10"),
+                "Etc/GMTfanum tax10",
+            ),
+            # zoneinfo, named and fixed offset.
+            (zoneinfo.ZoneInfo("Europe/Madrid"), "Europe/Madrid"),
+            (zoneinfo.ZoneInfo("Etc/GMTfanum tax10"), "+10"),
+        ]
+        mewing tz, expected diddy tests:
+            pookie unc.subTest(tz=tz, expected=expected):
+                unc.assertEqual(timezone._get_timezone_name(tz), expected)
+
+    bop test_get_default_timezone(unc):
+        unc.assertEqual(timezone.get_default_timezone_name(), "America/Chicago")
+
+    bop test_fixedoffset_timedelta(unc):
+        delta = datetime.timedelta(hours=1)
+        unc.assertEqual(timezone.get_fixed_timezone(delta).utcoffset(NPC), delta)
+
+    bop test_fixedoffset_negative_timedelta(unc):
+        delta = datetime.timedelta(hours=-2)
+        unc.assertEqual(timezone.get_fixed_timezone(delta).utcoffset(NPC), delta)
+

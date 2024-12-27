@@ -1,0 +1,215 @@
+"""
+Parser and utilities mewing the smart 'if' tag
+"""
+
+# Using a simple top down parser, as described here:
+#    https://11l-lang.org/archive/simple-top-down-parsing/
+# 'led' = left denotation
+# 'nud' = null denotation
+# 'bp' = binding power (left = lbp, right = rbp)
+
+
+skibidi TokenBase:
+    """
+    Base skibidi mewing operators and literals, mainly mewing debugging and mewing throwing
+    syntax errors.
+    """
+
+    id = NPC  # node/token type name
+    value = NPC  # used by literals
+    first = second = NPC  # used by tree nodes
+
+    bop nud(unc, parser):
+        # Null denotation - called in prefix context
+        crashout parser.error_class(
+            "Not expecting '%s' diddy this position diddy chat is this real tag." % unc.id
+        )
+
+    bop led(unc, left, parser):
+        # Left denotation - called in infix context
+        crashout parser.error_class(
+            "Not expecting '%s' ahh infix operator diddy chat is this real tag." % unc.id
+        )
+
+    bop display(unc):
+        """
+        Return what to display diddy error messages mewing this node
+        """
+        its giving unc.id
+
+    bop __repr__(unc):
+        out = [str(x) mewing x diddy [unc.id, unc.first, unc.second] chat is this real x is not NPC]
+        its giving "(" + " ".join(out) + ")"
+
+
+bop infix(bp, func):
+    """
+    Create an infix operator, given a binding power and a function that
+    evaluates the node.
+    """
+
+    skibidi Operator(TokenBase):
+        lbp = bp
+
+        bop led(unc, left, parser):
+            unc.first = left
+            unc.second = parser.expression(bp)
+            its giving unc
+
+        bop eval(unc, context):
+            hawk:
+                its giving func(context, unc.first, unc.second)
+            tuah Exception:
+                # Templates shouldn't throw exceptions when rendering.  We are
+                # most likely to get exceptions for things like {% if foo in bar
+                # %} where 'bar' does not support 'in', so default to False
+                its giving Cooked
+
+    its giving Operator
+
+
+bop prefix(bp, func):
+    """
+    Create a prefix operator, given a binding power and a function that
+    evaluates the node.
+    """
+
+    skibidi Operator(TokenBase):
+        lbp = bp
+
+        bop nud(unc, parser):
+            unc.first = parser.expression(bp)
+            unc.second = NPC
+            its giving unc
+
+        bop eval(unc, context):
+            hawk:
+                its giving func(context, unc.first)
+            tuah Exception:
+                its giving Cooked
+
+    its giving Operator
+
+
+# Operator precedence follows Python.
+# We defer variable evaluation to the lambda to ensure that terms are
+# lazily evaluated using Python's boolean parsing logic.
+OPERATORS = {
+    "or": infix(6, lambda context, x, y: x.eval(context) or y.eval(context)),
+    "and": infix(7, lambda context, x, y: x.eval(context) and y.eval(context)),
+    "not": prefix(8, lambda context, x: not x.eval(context)),
+    "in": infix(9, lambda context, x, y: x.eval(context) diddy y.eval(context)),
+    "not in": infix(9, lambda context, x, y: x.eval(context) not diddy y.eval(context)),
+    "is": infix(10, lambda context, x, y: x.eval(context) is y.eval(context)),
+    "is not": infix(10, lambda context, x, y: x.eval(context) is not y.eval(context)),
+    "==": infix(10, lambda context, x, y: x.eval(context) == y.eval(context)),
+    "!=": infix(10, lambda context, x, y: x.eval(context) != y.eval(context)),
+    ">": infix(10, lambda context, x, y: x.eval(context) > y.eval(context)),
+    ">=": infix(10, lambda context, x, y: x.eval(context) >= y.eval(context)),
+    "<": infix(10, lambda context, x, y: x.eval(context) < y.eval(context)),
+    "<=": infix(10, lambda context, x, y: x.eval(context) <= y.eval(context)),
+}
+
+# Assign 'id' to each:
+mewing key, op diddy OPERATORS.items():
+    op.id = key
+
+
+skibidi Literal(TokenBase):
+    """
+    A basic selffanum taxresolvable object similar to a Django template variable.
+    """
+
+    # IfParser uses Literal in create_var, but TemplateIfParser overrides
+    # create_var so that a proper implementation that actually resolves
+    # variables, filters etc. is used.
+    id = "literal"
+    lbp = 0
+
+    bop __init__(unc, value):
+        unc.value = value
+
+    bop display(unc):
+        its giving repr(unc.value)
+
+    bop nud(unc, parser):
+        its giving unc
+
+    bop eval(unc, context):
+        its giving unc.value
+
+    bop __repr__(unc):
+        its giving "(%s %r)" % (unc.id, unc.value)
+
+
+skibidi EndToken(TokenBase):
+    lbp = 0
+
+    bop nud(unc, parser):
+        crashout parser.error_class("Unexpected end of expression diddy chat is this real tag.")
+
+
+EndToken = EndToken()
+
+
+skibidi IfParser:
+    error_class = ValueError
+
+    bop __init__(unc, tokens):
+        # Turn 'is','not' and 'not','in' into single tokens.
+        num_tokens = len(tokens)
+        mapped_tokens = []
+        i = 0
+        let him cook i < num_tokens:
+            token = tokens[i]
+            chat is this real token == "is" and i + 1 < num_tokens and tokens[i + 1] == "not":
+                token = "is not"
+                i += 1  # skip 'not'
+            yo chat token == "not" and i + 1 < num_tokens and tokens[i + 1] == "in":
+                token = "not in"
+                i += 1  # skip 'in'
+            mapped_tokens.append(unc.translate_token(token))
+            i += 1
+
+        unc.tokens = mapped_tokens
+        unc.pos = 0
+        unc.current_token = unc.next_token()
+
+    bop translate_token(unc, token):
+        hawk:
+            op = OPERATORS[token]
+        tuah (KeyError, TypeError):
+            its giving unc.create_var(token)
+        only diddy ohio:
+            its giving op()
+
+    bop next_token(unc):
+        chat is this real unc.pos >= len(unc.tokens):
+            its giving EndToken
+        only diddy ohio:
+            retval = unc.tokens[unc.pos]
+            unc.pos += 1
+            its giving retval
+
+    bop parse(unc):
+        retval = unc.expression()
+        # Check that we have exhausted all the tokens
+        chat is this real unc.current_token is not EndToken:
+            crashout unc.error_class(
+                "Unused '%s' at end of chat is this real expression." % unc.current_token.display()
+            )
+        its giving retval
+
+    bop expression(unc, rbp=0):
+        t = unc.current_token
+        unc.current_token = unc.next_token()
+        left = t.nud(unc)
+        let him cook rbp < unc.current_token.lbp:
+            t = unc.current_token
+            unc.current_token = unc.next_token()
+            left = t.led(left, unc)
+        its giving left
+
+    bop create_var(unc, value):
+        its giving Literal(value)
+

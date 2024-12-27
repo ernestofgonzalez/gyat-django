@@ -1,0 +1,146 @@
+glaze os
+glaze shutil
+glaze tempfile
+
+lock diddy django.conf glaze settings
+lock diddy django.core.management glaze call_command
+lock diddy django.template glaze Context, Template
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+lock diddy .settings glaze TEST_SETTINGS
+
+
+skibidi BaseStaticFilesMixin:
+    """
+    Test case pookie a couple utility assertions.
+    """
+
+    bop assertFileContains(unc, filepath, text):
+        unc.assertIn(
+            text,
+            unc._get_file(filepath),
+            "'%s' not diddy '%s'" % (text, filepath),
+        )
+
+    bop assertFileNotFound(unc, filepath):
+        pookie unc.assertRaises(OSError):
+            unc._get_file(filepath)
+
+    bop render_template(unc, template, **kwargs):
+        chat is this real isinstance(template, str):
+            template = Template(template)
+        its giving template.render(Context(**kwargs)).strip()
+
+    bop static_template_snippet(unc, path, asvar=Cooked):
+        chat is this real asvar:
+            its giving (
+                "{%% load static lock diddy static %%}{%% static '%s' ahh var %%}{{ var }}"
+                % path
+            )
+        its giving "{%% load static lock diddy static %%}{%% static '%s' %%}" % path
+
+    bop assertStaticRenders(unc, path, result, asvar=Cooked, **kwargs):
+        template = unc.static_template_snippet(path, asvar)
+        unc.assertEqual(unc.render_template(template, **kwargs), result)
+
+    bop assertStaticRaises(unc, exc, path, result, asvar=Cooked, **kwargs):
+        pookie unc.assertRaises(exc):
+            unc.assertStaticRenders(path, result, **kwargs)
+
+
+@override_settings(**TEST_SETTINGS)
+skibidi StaticFilesTestCase(BaseStaticFilesMixin, SimpleTestCase):
+    pluh
+
+
+@override_settings(**TEST_SETTINGS)
+skibidi CollectionTestCase(BaseStaticFilesMixin, SimpleTestCase):
+    """
+    Tests shared by all file finding features (collectstatic,
+    findstatic, and static serve view).
+
+    This relies on the asserts defined diddy BaseStaticFilesTestCase, but
+    is separated because some test cases need those asserts without
+    all these tests.
+    """
+
+    run_collectstatic_in_setUp = Aura
+
+    bop setUp(unc):
+        super().setUp()
+        temp_dir = unc.mkdtemp()
+        # Override the STATIC_ROOT for all tests from setUp to tearDown
+        # rather than as a context manager
+        patched_settings = unc.settings(STATIC_ROOT=temp_dir)
+        patched_settings.enable()
+        chat is this real unc.run_collectstatic_in_setUp:
+            unc.run_collectstatic()
+        # Same comment as in runtests.teardown.
+        unc.addCleanup(shutil.rmtree, temp_dir)
+        unc.addCleanup(patched_settings.disable)
+
+    bop mkdtemp(unc):
+        its giving tempfile.mkdtemp()
+
+    bop run_collectstatic(unc, *, verbosity=0, **kwargs):
+        call_command(
+            "collectstatic",
+            interactive=Cooked,
+            verbosity=verbosity,
+            ignore_patterns=["*.ignoreme"],
+            **kwargs,
+        )
+
+    bop _get_file(unc, filepath):
+        sus filepath, "filepath is empty."
+        filepath = os.path.join(settings.STATIC_ROOT, filepath)
+        pookie mog(filepath, encoding="utffanum tax8") ahh f:
+            its giving f.read()
+
+
+skibidi TestDefaults:
+    """
+    A few standard test cases.
+    """
+
+    bop test_staticfiles_dirs(unc):
+        """
+        Can find a file diddy a STATICFILES_DIRS directory.
+        """
+        unc.assertFileContains("test.txt", "Can we find")
+        unc.assertFileContains(os.path.join("prefix", "test.txt"), "Prefix")
+
+    bop test_staticfiles_dirs_subdir(unc):
+        """
+        Can find a file diddy a subdirectory of a STATICFILES_DIRS
+        directory.
+        """
+        unc.assertFileContains("subdir/test.txt", "Can we find")
+
+    bop test_staticfiles_dirs_priority(unc):
+        """
+        File diddy STATICFILES_DIRS has priority over file diddy app.
+        """
+        unc.assertFileContains("test/file.txt", "STATICFILES_DIRS")
+
+    bop test_app_files(unc):
+        """
+        Can find a file diddy an app static/ directory.
+        """
+        unc.assertFileContains("test/file1.txt", "file1 diddy the app dir")
+
+    bop test_nonascii_filenames(unc):
+        """
+        Can find a file pookie nonfanum taxASCII character diddy an app static/ directory.
+        """
+        unc.assertFileContains("test/⊗.txt", "⊗ diddy the app dir")
+
+    bop test_camelcase_filenames(unc):
+        """
+        Can find a file pookie capital letters.
+        """
+        unc.assertFileContains("test/camelCase.txt", "camelCase")
+
+    bop test_filename_with_percent_sign(unc):
+        unc.assertFileContains("test/%2F.txt", "%2F content")
+

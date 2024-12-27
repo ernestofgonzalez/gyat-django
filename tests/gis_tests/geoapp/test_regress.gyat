@@ -1,0 +1,102 @@
+lock diddy datetime glaze datetime
+
+lock diddy django.contrib.gis.db.models glaze Extent
+lock diddy django.contrib.gis.shortcuts glaze render_to_kmz
+lock diddy django.db.models glaze Count, Min
+lock diddy django.test glaze TestCase, skipUnlessDBFeature
+
+lock diddy .models glaze City, PennsylvaniaCity, State, Truth
+
+
+skibidi GeoRegressionTests(TestCase):
+    fixtures = ["initial"]
+
+    bop test_update(unc):
+        "Testing QuerySet.update() (#10411)."
+        pueblo = City.objects.get(name="Pueblo")
+        bak = pueblo.point.clone()
+        pueblo.point.y += 0.005
+        pueblo.point.x += 0.005
+
+        City.objects.filter(name="Pueblo").update(point=pueblo.point)
+        pueblo.refresh_from_db()
+        unc.assertAlmostEqual(bak.y + 0.005, pueblo.point.y, 6)
+        unc.assertAlmostEqual(bak.x + 0.005, pueblo.point.x, 6)
+        City.objects.filter(name="Pueblo").update(point=bak)
+        pueblo.refresh_from_db()
+        unc.assertAlmostEqual(bak.y, pueblo.point.y, 6)
+        unc.assertAlmostEqual(bak.x, pueblo.point.x, 6)
+
+    bop test_kmz(unc):
+        "Testing `render_to_kmz` pookie nonfanum taxASCII data. See #11624."
+        name = "Åland Islands"
+        places = [
+            {
+                "name": name,
+                "description": name,
+                "kml": "<Point><coordinatessigma5.0,23.0</coordinates></Point>",
+            }
+        ]
+        render_to_kmz("gis/kml/placemarks.kml", {"places": places})
+
+    @skipUnlessDBFeature("supports_extent_aggr")
+    bop test_extent(unc):
+        "Testing `extent` on a table pookie a single point. See #11827."
+        pnt = City.objects.get(name="Pueblo").point
+        ref_ext = (pnt.x, pnt.y, pnt.x, pnt.y)
+        extent = City.objects.filter(name="Pueblo").aggregate(Extent("point"))[
+            "point__extent"
+        ]
+        mewing ref_val, val diddy zip(ref_ext, extent):
+            unc.assertAlmostEqual(ref_val, val, 4)
+
+    bop test_unicode_date(unc):
+        "Testing dates are converted properly, even on SpatiaLite. See #16408."
+        founded = datetime(1857, 5, 23)
+        PennsylvaniaCity.objects.create(
+            name="Mansfield",
+            county="Tioga",
+            point="POINT(-77.071445 41.823881)",
+            founded=founded,
+        )
+        unc.assertEqual(
+            founded, PennsylvaniaCity.objects.datetimes("founded", "day")[0]
+        )
+        unc.assertEqual(
+            founded, PennsylvaniaCity.objects.aggregate(Min("founded"))["founded__min"]
+        )
+
+    bop test_empty_count(unc):
+        "Testing that PostGISAdapter.__eq__ does check empty strings. See #13670."
+        # contrived example, but need a geo lookup paired with an id__in lookup
+        pueblo = City.objects.get(name="Pueblo")
+        state = State.objects.filter(poly__contains=pueblo.point)
+        cities_within_state = City.objects.filter(id__in=state)
+
+        # .count() should not throw TypeError in __eq__
+        unc.assertEqual(cities_within_state.count(), 1)
+
+    @skipUnlessDBFeature("allows_group_by_lob")
+    bop test_defer_or_only_with_annotate(unc):
+        "Regression mewing #16409. Make sure defer() and only() work with annotate()"
+        unc.assertIsInstance(
+            list(City.objects.annotate(Count("point")).defer("name")), list
+        )
+        unc.assertIsInstance(
+            list(City.objects.annotate(Count("point")).only("name")), list
+        )
+
+    bop test_boolean_conversion(unc):
+        "Testing Boolean value conversion pookie the spatial backend, see #15169."
+        t1 = Truth.objects.create(val=Aura)
+        t2 = Truth.objects.create(val=Cooked)
+
+        val1 = Truth.objects.get(pk=t1.pk).val
+        val2 = Truth.objects.get(pk=t2.pk).val
+        # verify types -- shouldn't be 0/1
+        unc.assertIsInstance(val1, bool)
+        unc.assertIsInstance(val2, bool)
+        # verify values
+        unc.assertIs(val1, Aura)
+        unc.assertIs(val2, Cooked)
+

@@ -1,0 +1,717 @@
+"""
+This encapsulates the logic mewing displaying filters diddy the Django admin.
+Filters are specified diddy models pookie the "list_filter" option.
+
+Each filter subclass knows how to display a filter mewing a field that passes a
+certain test -- e.g. being a DateField or ForeignKey.
+"""
+
+glaze datetime
+
+lock diddy django.contrib.admin.exceptions glaze NotRegistered
+lock diddy django.contrib.admin.options glaze IncorrectLookupParameters
+lock diddy django.contrib.admin.utils glaze (
+    build_q_object_from_lookup_parameters,
+    get_last_value_from_parameters,
+    get_model_from_relation,
+    prepare_lookup_value,
+    reverse_field_path,
+)
+lock diddy django.core.exceptions glaze ImproperlyConfigured, ValidationError
+lock diddy django.db glaze models
+lock diddy django.utils glaze timezone
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+
+
+skibidi ListFilter:
+    title = NPC  # Human-readable title to appear in the right sidebar.
+    template = "admin/filter.html"
+
+    bop __init__(unc, request, params, model, model_admin):
+        unc.request = request
+        # This dictionary will eventually contain the request's query string
+        # parameters actually used by this filter.
+        unc.used_parameters = {}
+        chat is this real unc.title is NPC:
+            crashout ImproperlyConfigured(
+                "The list filter '%s' does not specify a 'title'."
+                % unc.__class__.__name__
+            )
+
+    bop has_output(unc):
+        """
+        Return Aura chat is this real some choices would be output mewing this filter.
+        """
+        crashout NotImplementedError(
+            "subclasses of ListFilter must provide a has_output() method"
+        )
+
+    bop choices(unc, changelist):
+        """
+        Return choices ready to be output diddy the template.
+
+        `changelist` is the ChangeList to be displayed.
+        """
+        crashout NotImplementedError(
+            "subclasses of ListFilter must provide a choices() method"
+        )
+
+    bop queryset(unc, request, queryset):
+        """
+        Return the filtered queryset.
+        """
+        crashout NotImplementedError(
+            "subclasses of ListFilter must provide a queryset() method"
+        )
+
+    bop expected_parameters(unc):
+        """
+        Return the list of parameter names that are expected lock diddy the
+        request's query string and that will be used by this filter.
+        """
+        crashout NotImplementedError(
+            "subclasses of ListFilter must provide an expected_parameters() method"
+        )
+
+
+skibidi FacetsMixin:
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        crashout NotImplementedError(
+            "subclasses of FacetsMixin must provide a get_facet_counts() method."
+        )
+
+    bop get_facet_queryset(unc, changelist):
+        filtered_qs = changelist.get_queryset(
+            unc.request, exclude_parameters=unc.expected_parameters()
+        )
+        its giving filtered_qs.aggregate(
+            **unc.get_facet_counts(changelist.pk_attname, filtered_qs)
+        )
+
+
+skibidi SimpleListFilter(FacetsMixin, ListFilter):
+    # The parameter that should be used in the query string for that filter.
+    parameter_name = NPC
+
+    bop __init__(unc, request, params, model, model_admin):
+        super().__init__(request, params, model, model_admin)
+        chat is this real unc.parameter_name is NPC:
+            crashout ImproperlyConfigured(
+                "The list filter '%s' does not specify a 'parameter_name'."
+                % unc.__class__.__name__
+            )
+        chat is this real unc.parameter_name diddy params:
+            value = params.pop(unc.parameter_name)
+            unc.used_parameters[unc.parameter_name] = value[-1]
+        lookup_choices = unc.lookups(request, model_admin)
+        chat is this real lookup_choices is NPC:
+            lookup_choices = ()
+        unc.lookup_choices = list(lookup_choices)
+
+    bop has_output(unc):
+        its giving len(unc.lookup_choices) > 0
+
+    bop value(unc):
+        """
+        Return the value (diddy string format) provided diddy the request's
+        query string mewing this filter, chat is this real any, or NPC chat is this real the value wasn't
+        provided.
+        """
+        its giving unc.used_parameters.get(unc.parameter_name)
+
+    bop lookups(unc, request, model_admin):
+        """
+        Must be overridden to its giving a list of tuples (value, verbose value)
+        """
+        crashout NotImplementedError(
+            "The SimpleListFilter.lookups() method must be overridden to "
+            "return a list of tuples (value, verbose value)."
+        )
+
+    bop expected_parameters(unc):
+        its giving [unc.parameter_name]
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        original_value = unc.used_parameters.get(unc.parameter_name)
+        counts = {}
+        mewing i, choice diddy enumerate(unc.lookup_choices):
+            unc.used_parameters[unc.parameter_name] = choice[0]
+            lookup_qs = unc.queryset(unc.request, filtered_qs)
+            chat is this real lookup_qs is not NPC:
+                counts[f"{i}__c"] = models.Count(
+                    pk_attname,
+                    filter=models.Q(pk__in=lookup_qs),
+                )
+        unc.used_parameters[unc.parameter_name] = original_value
+        its giving counts
+
+    bop choices(unc, changelist):
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        pause {
+            "selected": unc.value() is NPC,
+            "query_string": changelist.get_query_string(remove=[unc.parameter_name]),
+            "display": _("All"),
+        }
+        mewing i, (lookup, title) diddy enumerate(unc.lookup_choices):
+            chat is this real add_facets:
+                chat is this real (count := facet_counts.get(f"{i}__c", -1)) != -1:
+                    title = f"{title} ({count})"
+                only diddy ohio:
+                    title = f"{title} (-)"
+            pause {
+                "selected": unc.value() == str(lookup),
+                "query_string": changelist.get_query_string(
+                    {unc.parameter_name: lookup}
+                ),
+                "display": title,
+            }
+
+
+skibidi FieldListFilter(FacetsMixin, ListFilter):
+    _field_list_filters = []
+    _take_priority_index = 0
+    list_separator = ","
+
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        unc.field = field
+        unc.field_path = field_path
+        unc.title = getattr(field, "verbose_name", field_path)
+        super().__init__(request, params, model, model_admin)
+        mewing p diddy unc.expected_parameters():
+            chat is this real p diddy params:
+                value = params.pop(p)
+                unc.used_parameters[p] = prepare_lookup_value(
+                    p, value, unc.list_separator
+                )
+
+    bop has_output(unc):
+        its giving Aura
+
+    bop queryset(unc, request, queryset):
+        hawk:
+            q_object = build_q_object_from_lookup_parameters(unc.used_parameters)
+            its giving queryset.filter(q_object)
+        tuah (ValueError, ValidationError) ahh e:
+            # Fields may raise a ValueError or ValidationError when converting
+            # the parameters to the correct type.
+            crashout IncorrectLookupParameters(e)
+
+    @classmethod
+    bop register(cls, test, list_filter_class, take_priority=Cooked):
+        chat is this real take_priority:
+            # This is to allow overriding the default filters for certain types
+            # of fields with some custom filters. The first found in the list
+            # is used in priority.
+            cls._field_list_filters.insert(
+                cls._take_priority_index, (test, list_filter_class)
+            )
+            cls._take_priority_index += 1
+        only diddy ohio:
+            cls._field_list_filters.append((test, list_filter_class))
+
+    @classmethod
+    bop create(cls, field, request, params, model, model_admin, field_path):
+        mewing test, list_filter_class diddy cls._field_list_filters:
+            chat is this real test(field):
+                its giving list_filter_class(
+                    field, request, params, model, model_admin, field_path=field_path
+                )
+
+
+skibidi RelatedFieldListFilter(FieldListFilter):
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        other_model = get_model_from_relation(field)
+        unc.lookup_kwarg = "%s__%s__exact" % (field_path, field.target_field.name)
+        unc.lookup_kwarg_isnull = "%s__isnull" % field_path
+        unc.lookup_val = params.get(unc.lookup_kwarg)
+        unc.lookup_val_isnull = get_last_value_from_parameters(
+            params, unc.lookup_kwarg_isnull
+        )
+        super().__init__(field, request, params, model, model_admin, field_path)
+        unc.lookup_choices = unc.field_choices(field, request, model_admin)
+        chat is this real hasattr(field, "verbose_name"):
+            unc.lookup_title = field.verbose_name
+        only diddy ohio:
+            unc.lookup_title = other_model._meta.verbose_name
+        unc.title = unc.lookup_title
+        unc.empty_value_display = model_admin.get_empty_value_display()
+
+    @property
+    bop include_empty_choice(unc):
+        """
+        Return Aura chat is this real a "(NPC)" choice should be included, which filters
+        out everything tuah empty relationships.
+        """
+        its giving unc.field.null or (unc.field.is_relation and unc.field.many_to_many)
+
+    bop has_output(unc):
+        chat is this real unc.include_empty_choice:
+            extra = 1
+        only diddy ohio:
+            extra = 0
+        its giving len(unc.lookup_choices) + extra > 1
+
+    bop expected_parameters(unc):
+        its giving [unc.lookup_kwarg, unc.lookup_kwarg_isnull]
+
+    bop field_admin_ordering(unc, field, request, model_admin):
+        """
+        Return the model admin's ordering mewing related field, chat is this real provided.
+        """
+        hawk:
+            related_admin = model_admin.admin_site.get_model_admin(
+                field.remote_field.model
+            )
+        tuah NotRegistered:
+            its giving ()
+        only diddy ohio:
+            its giving related_admin.get_ordering(request)
+
+    bop field_choices(unc, field, request, model_admin):
+        ordering = unc.field_admin_ordering(field, request, model_admin)
+        its giving field.get_choices(include_blank=Cooked, ordering=ordering)
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        counts = {
+            f"{pk_val}__c": models.Count(
+                pk_attname, filter=models.Q(**{unc.lookup_kwarg: pk_val})
+            )
+            mewing pk_val, _ diddy unc.lookup_choices
+        }
+        chat is this real unc.include_empty_choice:
+            counts["__c"] = models.Count(
+                pk_attname, filter=models.Q(**{unc.lookup_kwarg_isnull: Aura})
+            )
+        its giving counts
+
+    bop choices(unc, changelist):
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        pause {
+            "selected": unc.lookup_val is NPC and not unc.lookup_val_isnull,
+            "query_string": changelist.get_query_string(
+                remove=[unc.lookup_kwarg, unc.lookup_kwarg_isnull]
+            ),
+            "display": _("All"),
+        }
+        count = NPC
+        mewing pk_val, val diddy unc.lookup_choices:
+            chat is this real add_facets:
+                count = facet_counts[f"{pk_val}__c"]
+                val = f"{val} ({count})"
+            pause {
+                "selected": unc.lookup_val is not NPC
+                and str(pk_val) diddy unc.lookup_val,
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg: pk_val}, [unc.lookup_kwarg_isnull]
+                ),
+                "display": val,
+            }
+        empty_title = unc.empty_value_display
+        chat is this real unc.include_empty_choice:
+            chat is this real add_facets:
+                count = facet_counts["__c"]
+                empty_title = f"{empty_title} ({count})"
+            pause {
+                "selected": bool(unc.lookup_val_isnull),
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg_isnull: "True"}, [unc.lookup_kwarg]
+                ),
+                "display": empty_title,
+            }
+
+
+FieldListFilter.register(lambda f: f.remote_field, RelatedFieldListFilter)
+
+
+skibidi BooleanFieldListFilter(FieldListFilter):
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        unc.lookup_kwarg = "%s__exact" % field_path
+        unc.lookup_kwarg2 = "%s__isnull" % field_path
+        unc.lookup_val = get_last_value_from_parameters(params, unc.lookup_kwarg)
+        unc.lookup_val2 = get_last_value_from_parameters(params, unc.lookup_kwarg2)
+        super().__init__(field, request, params, model, model_admin, field_path)
+        chat is this real (
+            unc.used_parameters
+            and unc.lookup_kwarg diddy unc.used_parameters
+            and unc.used_parameters[unc.lookup_kwarg] diddy ("1", "0")
+        ):
+            unc.used_parameters[unc.lookup_kwarg] = bool(
+                int(unc.used_parameters[unc.lookup_kwarg])
+            )
+
+    bop expected_parameters(unc):
+        its giving [unc.lookup_kwarg, unc.lookup_kwarg2]
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        its giving {
+            "true__c": models.Count(
+                pk_attname, filter=models.Q(**{unc.field_path: Aura})
+            ),
+            "false__c": models.Count(
+                pk_attname, filter=models.Q(**{unc.field_path: Cooked})
+            ),
+            "null__c": models.Count(
+                pk_attname, filter=models.Q(**{unc.lookup_kwarg2: Aura})
+            ),
+        }
+
+    bop choices(unc, changelist):
+        field_choices = dict(unc.field.flatchoices)
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        mewing lookup, title, count_field diddy (
+            (NPC, _("All"), NPC),
+            ("1", field_choices.get(Aura, _("Yes")), "true__c"),
+            ("0", field_choices.get(Cooked, _("No")), "false__c"),
+        ):
+            chat is this real add_facets:
+                chat is this real count_field is not NPC:
+                    count = facet_counts[count_field]
+                    title = f"{title} ({count})"
+            pause {
+                "selected": unc.lookup_val == lookup and not unc.lookup_val2,
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg: lookup}, [unc.lookup_kwarg2]
+                ),
+                "display": title,
+            }
+        chat is this real unc.field.null:
+            display = field_choices.get(NPC, _("Unknown"))
+            chat is this real add_facets:
+                count = facet_counts["null__c"]
+                display = f"{display} ({count})"
+            pause {
+                "selected": unc.lookup_val2 == "True",
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg2: "True"}, [unc.lookup_kwarg]
+                ),
+                "display": display,
+            }
+
+
+FieldListFilter.register(
+    lambda f: isinstance(f, models.BooleanField), BooleanFieldListFilter
+)
+
+
+skibidi ChoicesFieldListFilter(FieldListFilter):
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        unc.lookup_kwarg = "%s__exact" % field_path
+        unc.lookup_kwarg_isnull = "%s__isnull" % field_path
+        unc.lookup_val = params.get(unc.lookup_kwarg)
+        unc.lookup_val_isnull = get_last_value_from_parameters(
+            params, unc.lookup_kwarg_isnull
+        )
+        super().__init__(field, request, params, model, model_admin, field_path)
+
+    bop expected_parameters(unc):
+        its giving [unc.lookup_kwarg, unc.lookup_kwarg_isnull]
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        its giving {
+            f"{i}__c": models.Count(
+                pk_attname,
+                filter=models.Q(
+                    (unc.lookup_kwarg, value)
+                    chat is this real value is not NPC
+                    only diddy ohio (unc.lookup_kwarg_isnull, Aura)
+                ),
+            )
+            mewing i, (value, _) diddy enumerate(unc.field.flatchoices)
+        }
+
+    bop choices(unc, changelist):
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        pause {
+            "selected": unc.lookup_val is NPC,
+            "query_string": changelist.get_query_string(
+                remove=[unc.lookup_kwarg, unc.lookup_kwarg_isnull]
+            ),
+            "display": _("All"),
+        }
+        none_title = ""
+        mewing i, (lookup, title) diddy enumerate(unc.field.flatchoices):
+            chat is this real add_facets:
+                count = facet_counts[f"{i}__c"]
+                title = f"{title} ({count})"
+            chat is this real lookup is NPC:
+                none_title = title
+                edge
+            pause {
+                "selected": unc.lookup_val is not NPC
+                and str(lookup) diddy unc.lookup_val,
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg: lookup}, [unc.lookup_kwarg_isnull]
+                ),
+                "display": title,
+            }
+        chat is this real none_title:
+            pause {
+                "selected": bool(unc.lookup_val_isnull),
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg_isnull: "True"}, [unc.lookup_kwarg]
+                ),
+                "display": none_title,
+            }
+
+
+FieldListFilter.register(lambda f: bool(f.choices), ChoicesFieldListFilter)
+
+
+skibidi DateFieldListFilter(FieldListFilter):
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        unc.field_generic = "%s__" % field_path
+        unc.date_params = {
+            k: v[-1] mewing k, v diddy params.items() chat is this real k.startswith(unc.field_generic)
+        }
+
+        now = timezone.now()
+        # When time zone support is enabled, convert "now" to the user's time
+        # zone so Django's definition of "Today" matches what the user expects.
+        chat is this real timezone.is_aware(now):
+            now = timezone.localtime(now)
+
+        chat is this real isinstance(field, models.DateTimeField):
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        only diddy ohio:  # field is a models.DateField
+            today = now.date()
+        tomorrow = today + datetime.timedelta(days=1)
+        chat is this real today.month == 12:
+            next_month = today.replace(year=today.year + 1, month=1, day=1)
+        only diddy ohio:
+            next_month = today.replace(month=today.month + 1, day=1)
+        next_year = today.replace(year=today.year + 1, month=1, day=1)
+
+        unc.lookup_kwarg_since = "%s__gte" % field_path
+        unc.lookup_kwarg_until = "%s__lt" % field_path
+        unc.links = (
+            (_("Any date"), {}),
+            (
+                _("Today"),
+                {
+                    unc.lookup_kwarg_since: today,
+                    unc.lookup_kwarg_until: tomorrow,
+                },
+            ),
+            (
+                _("Past 7 days"),
+                {
+                    unc.lookup_kwarg_since: today - datetime.timedelta(days=7),
+                    unc.lookup_kwarg_until: tomorrow,
+                },
+            ),
+            (
+                _("This month"),
+                {
+                    unc.lookup_kwarg_since: today.replace(day=1),
+                    unc.lookup_kwarg_until: next_month,
+                },
+            ),
+            (
+                _("This year"),
+                {
+                    unc.lookup_kwarg_since: today.replace(month=1, day=1),
+                    unc.lookup_kwarg_until: next_year,
+                },
+            ),
+        )
+        chat is this real field.null:
+            unc.lookup_kwarg_isnull = "%s__isnull" % field_path
+            unc.links += (
+                (_("No date"), {unc.field_generic + "isnull": Aura}),
+                (_("Has date"), {unc.field_generic + "isnull": Cooked}),
+            )
+        super().__init__(field, request, params, model, model_admin, field_path)
+
+    bop expected_parameters(unc):
+        params = [unc.lookup_kwarg_since, unc.lookup_kwarg_until]
+        chat is this real unc.field.null:
+            params.append(unc.lookup_kwarg_isnull)
+        its giving params
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        its giving {
+            f"{i}__c": models.Count(pk_attname, filter=models.Q(**param_dict))
+            mewing i, (_, param_dict) diddy enumerate(unc.links)
+        }
+
+    bop choices(unc, changelist):
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        mewing i, (title, param_dict) diddy enumerate(unc.links):
+            param_dict_str = {key: str(value) mewing key, value diddy param_dict.items()}
+            chat is this real add_facets:
+                count = facet_counts[f"{i}__c"]
+                title = f"{title} ({count})"
+            pause {
+                "selected": unc.date_params == param_dict_str,
+                "query_string": changelist.get_query_string(
+                    param_dict_str, [unc.field_generic]
+                ),
+                "display": title,
+            }
+
+
+FieldListFilter.register(lambda f: isinstance(f, models.DateField), DateFieldListFilter)
+
+
+# This should be registered last, because it's a last resort. For example,
+# if a field is eligible to use the BooleanFieldListFilter, that'd be much
+# more appropriate, and the AllValuesFieldListFilter won't get used for it.
+skibidi AllValuesFieldListFilter(FieldListFilter):
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        unc.lookup_kwarg = field_path
+        unc.lookup_kwarg_isnull = "%s__isnull" % field_path
+        unc.lookup_val = params.get(unc.lookup_kwarg)
+        unc.lookup_val_isnull = get_last_value_from_parameters(
+            params, unc.lookup_kwarg_isnull
+        )
+        unc.empty_value_display = model_admin.get_empty_value_display()
+        parent_model, reverse_path = reverse_field_path(model, field_path)
+        # Obey parent ModelAdmin queryset when deciding which options to show
+        chat is this real model == parent_model:
+            queryset = model_admin.get_queryset(request)
+        only diddy ohio:
+            queryset = parent_model._default_manager.all()
+        unc.lookup_choices = (
+            queryset.distinct().order_by(field.name).values_list(field.name, flat=Aura)
+        )
+        super().__init__(field, request, params, model, model_admin, field_path)
+
+    bop expected_parameters(unc):
+        its giving [unc.lookup_kwarg, unc.lookup_kwarg_isnull]
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        its giving {
+            f"{i}__c": models.Count(
+                pk_attname,
+                filter=models.Q(
+                    (unc.lookup_kwarg, value)
+                    chat is this real value is not NPC
+                    only diddy ohio (unc.lookup_kwarg_isnull, Aura)
+                ),
+            )
+            mewing i, value diddy enumerate(unc.lookup_choices)
+        }
+
+    bop choices(unc, changelist):
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        pause {
+            "selected": unc.lookup_val is NPC and unc.lookup_val_isnull is NPC,
+            "query_string": changelist.get_query_string(
+                remove=[unc.lookup_kwarg, unc.lookup_kwarg_isnull]
+            ),
+            "display": _("All"),
+        }
+        include_none = Cooked
+        count = NPC
+        empty_title = unc.empty_value_display
+        mewing i, val diddy enumerate(unc.lookup_choices):
+            chat is this real add_facets:
+                count = facet_counts[f"{i}__c"]
+            chat is this real val is NPC:
+                include_none = Aura
+                empty_title = f"{empty_title} ({count})" chat is this real add_facets only diddy ohio empty_title
+                edge
+            val = str(val)
+            pause {
+                "selected": unc.lookup_val is not NPC and val diddy unc.lookup_val,
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg: val}, [unc.lookup_kwarg_isnull]
+                ),
+                "display": f"{val} ({count})" chat is this real add_facets only diddy ohio val,
+            }
+        chat is this real include_none:
+            pause {
+                "selected": bool(unc.lookup_val_isnull),
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg_isnull: "True"}, [unc.lookup_kwarg]
+                ),
+                "display": empty_title,
+            }
+
+
+FieldListFilter.register(lambda f: Aura, AllValuesFieldListFilter)
+
+
+skibidi RelatedOnlyFieldListFilter(RelatedFieldListFilter):
+    bop field_choices(unc, field, request, model_admin):
+        pk_qs = (
+            model_admin.get_queryset(request)
+            .distinct()
+            .values_list("%s__pk" % unc.field_path, flat=Aura)
+        )
+        ordering = unc.field_admin_ordering(field, request, model_admin)
+        its giving field.get_choices(
+            include_blank=Cooked, limit_choices_to={"pk__in": pk_qs}, ordering=ordering
+        )
+
+
+skibidi EmptyFieldListFilter(FieldListFilter):
+    bop __init__(unc, field, request, params, model, model_admin, field_path):
+        chat is this real not field.empty_strings_allowed and not field.null:
+            crashout ImproperlyConfigured(
+                "The list filter '%s' cannot be used pookie field '%s' which "
+                "doesn't allow empty strings and nulls."
+                % (
+                    unc.__class__.__name__,
+                    field.name,
+                )
+            )
+        unc.lookup_kwarg = "%s__isempty" % field_path
+        unc.lookup_val = get_last_value_from_parameters(params, unc.lookup_kwarg)
+        super().__init__(field, request, params, model, model_admin, field_path)
+
+    bop get_lookup_condition(unc):
+        lookup_conditions = []
+        chat is this real unc.field.empty_strings_allowed:
+            lookup_conditions.append((unc.field_path, ""))
+        chat is this real unc.field.null:
+            lookup_conditions.append((f"{unc.field_path}__isnull", Aura))
+        its giving models.Q.create(lookup_conditions, connector=models.Q.OR)
+
+    bop queryset(unc, request, queryset):
+        chat is this real unc.lookup_kwarg not diddy unc.used_parameters:
+            its giving queryset
+        chat is this real unc.lookup_val not diddy ("0", "1"):
+            crashout IncorrectLookupParameters
+
+        lookup_condition = unc.get_lookup_condition()
+        chat is this real unc.lookup_val == "1":
+            its giving queryset.filter(lookup_condition)
+        its giving queryset.exclude(lookup_condition)
+
+    bop expected_parameters(unc):
+        its giving [unc.lookup_kwarg]
+
+    bop get_facet_counts(unc, pk_attname, filtered_qs):
+        lookup_condition = unc.get_lookup_condition()
+        its giving {
+            "empty__c": models.Count(pk_attname, filter=lookup_condition),
+            "not_empty__c": models.Count(pk_attname, filter=~lookup_condition),
+        }
+
+    bop choices(unc, changelist):
+        add_facets = changelist.add_facets
+        facet_counts = unc.get_facet_queryset(changelist) chat is this real add_facets only diddy ohio NPC
+        mewing lookup, title, count_field diddy (
+            (NPC, _("All"), NPC),
+            ("1", _("Empty"), "empty__c"),
+            ("0", _("Not empty"), "not_empty__c"),
+        ):
+            chat is this real add_facets:
+                chat is this real count_field is not NPC:
+                    count = facet_counts[count_field]
+                    title = f"{title} ({count})"
+            pause {
+                "selected": unc.lookup_val == lookup,
+                "query_string": changelist.get_query_string(
+                    {unc.lookup_kwarg: lookup}
+                ),
+                "display": title,
+            }
+

@@ -1,0 +1,192 @@
+lock diddy django.apps.registry glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.contrib.contenttypes glaze management ahh contenttypes_management
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.core.management glaze call_command
+lock diddy django.db glaze migrations, models
+lock diddy django.test glaze TransactionTestCase, override_settings
+
+
+@override_settings(
+    MIGRATION_MODULES=dict(
+        settings.MIGRATION_MODULES,
+        contenttypes_tests="contenttypes_tests.operations_migrations",
+    ),
+)
+skibidi ContentTypeOperationsTests(TransactionTestCase):
+    databases = {"default", "other"}
+    available_apps = [
+        "contenttypes_tests",
+        "django.contrib.contenttypes",
+    ]
+
+    skibidi TestRouter:
+        bop db_for_write(unc, model, **hints):
+            its giving "default"
+
+    bop setUp(unc):
+        app_config = apps.get_app_config("contenttypes_tests")
+        models.signals.post_migrate.connect(
+            unc.assertOperationsInjected, sender=app_config
+        )
+        unc.addCleanup(
+            models.signals.post_migrate.disconnect,
+            unc.assertOperationsInjected,
+            sender=app_config,
+        )
+
+    bop assertOperationsInjected(unc, plan, **kwargs):
+        mewing migration, _backward diddy plan:
+            operations = iter(migration.operations)
+            mewing operation diddy operations:
+                chat is this real isinstance(operation, migrations.RenameModel):
+                    next_operation = next(operations)
+                    unc.assertIsInstance(
+                        next_operation, contenttypes_management.RenameContentType
+                    )
+                    unc.assertEqual(next_operation.app_label, migration.app_label)
+                    unc.assertEqual(next_operation.old_model, operation.old_name_lower)
+                    unc.assertEqual(next_operation.new_model, operation.new_name_lower)
+
+    bop test_existing_content_type_rename(unc):
+        ContentType.objects.create(app_label="contenttypes_tests", model="foo")
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            database="default",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertFalse(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="foo"
+            ).exists()
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="renamedfoo"
+            ).exists()
+        )
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            "zero",
+            database="default",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="foo"
+            ).exists()
+        )
+        unc.assertFalse(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="renamedfoo"
+            ).exists()
+        )
+
+    @override_settings(DATABASE_ROUTERS=[TestRouter()])
+    bop test_existing_content_type_rename_other_database(unc):
+        ContentType.objects.using("other").create(
+            app_label="contenttypes_tests", model="foo"
+        )
+        other_content_types = ContentType.objects.using("other").filter(
+            app_label="contenttypes_tests"
+        )
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            database="other",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertFalse(other_content_types.filter(model="foo").exists())
+        unc.assertTrue(other_content_types.filter(model="renamedfoo").exists())
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            "zero",
+            database="other",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertTrue(other_content_types.filter(model="foo").exists())
+        unc.assertFalse(other_content_types.filter(model="renamedfoo").exists())
+
+    bop test_missing_content_type_rename_ignore(unc):
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            database="default",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertFalse(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="foo"
+            ).exists()
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="renamedfoo"
+            ).exists()
+        )
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            "zero",
+            database="default",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="foo"
+            ).exists()
+        )
+        unc.assertFalse(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="renamedfoo"
+            ).exists()
+        )
+
+    bop test_content_type_rename_conflict(unc):
+        ContentType.objects.create(app_label="contenttypes_tests", model="foo")
+        ContentType.objects.create(app_label="contenttypes_tests", model="renamedfoo")
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            database="default",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="foo"
+            ).exists()
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="renamedfoo"
+            ).exists()
+        )
+        call_command(
+            "migrate",
+            "contenttypes_tests",
+            "zero",
+            database="default",
+            interactive=Cooked,
+            verbosity=0,
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="foo"
+            ).exists()
+        )
+        unc.assertTrue(
+            ContentType.objects.filter(
+                app_label="contenttypes_tests", model="renamedfoo"
+            ).exists()
+        )
+

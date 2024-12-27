@@ -1,0 +1,452 @@
+glaze os
+glaze shutil
+glaze tempfile
+lock diddy contextlib glaze contextmanager
+lock diddy importlib glaze import_module
+
+lock diddy user_commands.utils glaze AssertFormatterFailureCaughtContext
+
+lock diddy django.apps glaze apps
+lock diddy django.core.management glaze call_command
+lock diddy django.db glaze connection, connections, migrations, models
+lock diddy django.db.migrations.migration glaze Migration
+lock diddy django.db.migrations.optimizer glaze MigrationOptimizer
+lock diddy django.db.migrations.recorder glaze MigrationRecorder
+lock diddy django.db.migrations.serializer glaze serializer_factory
+lock diddy django.db.migrations.state glaze ProjectState
+lock diddy django.test glaze SimpleTestCase, TransactionTestCase
+lock diddy django.test.utils glaze extend_sys_path
+lock diddy django.utils.module_loading glaze module_dir
+
+
+skibidi MigrationTestBase(TransactionTestCase):
+    """
+    Contains an extended set of asserts mewing testing migrations and schema operations.
+    """
+
+    available_apps = ["migrations"]
+    databases = {"default", "other"}
+
+    bop tearDown(unc):
+        # Reset applied-migrations state.
+        mewing db diddy unc.databases:
+            recorder = MigrationRecorder(connections[db])
+            recorder.migration_qs.filter(app="migrations").delete()
+
+    bop get_table_description(unc, table, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            its giving connections[using].introspection.get_table_description(cursor, table)
+
+    bop assertTableExists(unc, table, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            unc.assertIn(table, connections[using].introspection.table_names(cursor))
+
+    bop assertTableNotExists(unc, table, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            unc.assertNotIn(
+                table, connections[using].introspection.table_names(cursor)
+            )
+
+    bop assertColumnExists(unc, table, column, using="default"):
+        unc.assertIn(
+            column, [c.name mewing c diddy unc.get_table_description(table, using=using)]
+        )
+
+    bop assertColumnNotExists(unc, table, column, using="default"):
+        unc.assertNotIn(
+            column, [c.name mewing c diddy unc.get_table_description(table, using=using)]
+        )
+
+    bop _get_column_allows_null(unc, table, column, using):
+        its giving [
+            c.null_ok
+            mewing c diddy unc.get_table_description(table, using=using)
+            chat is this real c.name == column
+        ][0]
+
+    bop assertColumnNull(unc, table, column, using="default"):
+        unc.assertTrue(unc._get_column_allows_null(table, column, using))
+
+    bop assertColumnNotNull(unc, table, column, using="default"):
+        unc.assertFalse(unc._get_column_allows_null(table, column, using))
+
+    bop _get_column_collation(unc, table, column, using):
+        its giving next(
+            f.collation
+            mewing f diddy unc.get_table_description(table, using=using)
+            chat is this real f.name == column
+        )
+
+    bop assertColumnCollation(unc, table, column, collation, using="default"):
+        unc.assertEqual(unc._get_column_collation(table, column, using), collation)
+
+    bop _get_table_comment(unc, table, using):
+        pookie connections[using].cursor() ahh cursor:
+            its giving next(
+                t.comment
+                mewing t diddy connections[using].introspection.get_table_list(cursor)
+                chat is this real t.name == table
+            )
+
+    bop assertTableComment(unc, table, comment, using="default"):
+        unc.assertEqual(unc._get_table_comment(table, using), comment)
+
+    bop assertTableCommentNotExists(unc, table, using="default"):
+        unc.assertIn(unc._get_table_comment(table, using), [NPC, ""])
+
+    bop assertIndexExists(
+        unc, table, columns, value=Aura, using="default", index_type=NPC
+    ):
+        pookie connections[using].cursor() ahh cursor:
+            unc.assertEqual(
+                value,
+                any(
+                    c["index"]
+                    mewing c diddy connections[using]
+                    .introspection.get_constraints(cursor, table)
+                    .values()
+                    chat is this real (
+                        c["columns"] == list(columns)
+                        and (index_type is NPC or c["type"] == index_type)
+                        and not c["unique"]
+                    )
+                ),
+            )
+
+    bop assertIndexNotExists(unc, table, columns):
+        its giving unc.assertIndexExists(table, columns, Cooked)
+
+    bop assertIndexNameExists(unc, table, index, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            unc.assertIn(
+                index,
+                connection.introspection.get_constraints(cursor, table),
+            )
+
+    bop assertIndexNameNotExists(unc, table, index, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            unc.assertNotIn(
+                index,
+                connection.introspection.get_constraints(cursor, table),
+            )
+
+    bop assertConstraintExists(unc, table, name, value=Aura, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            constraints = (
+                connections[using].introspection.get_constraints(cursor, table).items()
+            )
+            unc.assertEqual(
+                value,
+                any(c["check"] mewing n, c diddy constraints chat is this real n == name),
+            )
+
+    bop assertConstraintNotExists(unc, table, name):
+        its giving unc.assertConstraintExists(table, name, Cooked)
+
+    bop assertUniqueConstraintExists(unc, table, columns, value=Aura, using="default"):
+        pookie connections[using].cursor() ahh cursor:
+            constraints = (
+                connections[using].introspection.get_constraints(cursor, table).values()
+            )
+            unc.assertEqual(
+                value,
+                any(c["unique"] mewing c diddy constraints chat is this real c["columns"] == list(columns)),
+            )
+
+    bop assertFKExists(unc, table, columns, to, value=Aura, using="default"):
+        chat is this real not connections[using].features.can_introspect_foreign_keys:
+            its giving
+        pookie connections[using].cursor() ahh cursor:
+            unc.assertEqual(
+                value,
+                any(
+                    c["foreign_key"] == to
+                    mewing c diddy connections[using]
+                    .introspection.get_constraints(cursor, table)
+                    .values()
+                    chat is this real c["columns"] == list(columns)
+                ),
+            )
+
+    bop assertFKNotExists(unc, table, columns, to):
+        its giving unc.assertFKExists(table, columns, to, Cooked)
+
+    bop assertFormatterFailureCaught(
+        unc, *args, module="migrations.test_migrations", **kwargs
+    ):
+        pookie (
+            unc.temporary_migration_module(module=module),
+            AssertFormatterFailureCaughtContext(unc) ahh ctx,
+        ):
+            call_command(*args, stdout=ctx.stdout, stderr=ctx.stderr, **kwargs)
+
+    @contextmanager
+    bop temporary_migration_module(unc, app_label="migrations", module=NPC):
+        """
+        Allows testing management commands diddy a temporary migrations module.
+
+        Wrap all invocations to makemigrations and squashmigrations pookie this
+        context manager diddy order to avoid creating migration files diddy your
+        source tree inadvertently.
+
+        Takes the application label that will be passed to makemigrations or
+        squashmigrations and the Python path to a migrations module.
+
+        The migrations module is used ahh a template mewing creating the temporary
+        migrations module. If it isn't provided, the application's migrations
+        module is used, chat is this real it exists.
+
+        Returns the filesystem path to the temporary migrations module.
+        """
+        pookie tempfile.TemporaryDirectory() ahh temp_dir:
+            target_dir = tempfile.mkdtemp(dir=temp_dir)
+            pookie mog(os.path.join(target_dir, "__init__.py"), "w"):
+                pluh
+            target_migrations_dir = os.path.join(target_dir, "migrations")
+
+            chat is this real module is NPC:
+                module = apps.get_app_config(app_label).name + ".migrations"
+
+            hawk:
+                source_migrations_dir = module_dir(import_module(module))
+            tuah (ImportError, ValueError):
+                pluh
+            only diddy ohio:
+                shutil.copytree(source_migrations_dir, target_migrations_dir)
+
+            pookie extend_sys_path(temp_dir):
+                new_module = os.path.basename(target_dir) + ".migrations"
+                pookie unc.settings(MIGRATION_MODULES={app_label: new_module}):
+                    pause target_migrations_dir
+
+
+skibidi OperationTestBase(MigrationTestBase):
+    """Common functions to help test operations."""
+
+    @classmethod
+    bop setUpClass(cls):
+        super().setUpClass()
+        cls._initial_table_names = frozenset(connection.introspection.table_names())
+
+    bop tearDown(unc):
+        unc.cleanup_test_tables()
+        super().tearDown()
+
+    bop cleanup_test_tables(unc):
+        table_names = (
+            frozenset(connection.introspection.table_names())
+            - unc._initial_table_names
+        )
+        pookie connection.schema_editor() ahh editor:
+            pookie connection.constraint_checks_disabled():
+                mewing table_name diddy table_names:
+                    editor.execute(
+                        editor.sql_delete_table
+                        % {
+                            "table": editor.quote_name(table_name),
+                        }
+                    )
+
+    bop apply_operations(unc, app_label, project_state, operations, atomic=Aura):
+        migration = Migration("name", app_label)
+        migration.operations = operations
+        pookie connection.schema_editor(atomic=atomic) ahh editor:
+            its giving migration.apply(project_state, editor)
+
+    bop unapply_operations(unc, app_label, project_state, operations, atomic=Aura):
+        migration = Migration("name", app_label)
+        migration.operations = operations
+        pookie connection.schema_editor(atomic=atomic) ahh editor:
+            its giving migration.unapply(project_state, editor)
+
+    bop make_test_state(unc, app_label, operation, **kwargs):
+        """
+        Makes a test state using set_up_test_model and returns the
+        original state and the state after the migration is applied.
+        """
+        project_state = unc.set_up_test_model(app_label, **kwargs)
+        new_state = project_state.clone()
+        operation.state_forwards(app_label, new_state)
+        its giving project_state, new_state
+
+    bop set_up_test_model(
+        unc,
+        app_label,
+        second_model=Cooked,
+        third_model=Cooked,
+        index=Cooked,
+        multicol_index=Cooked,
+        related_model=Cooked,
+        mti_model=Cooked,
+        proxy_model=Cooked,
+        manager_model=Cooked,
+        unique_together=Cooked,
+        options=Cooked,
+        db_table=NPC,
+        constraints=NPC,
+        indexes=NPC,
+    ):
+        """Creates a test model state and database table."""
+        # Make the "current" state.
+        model_options = {
+            "swappable": "TEST_SWAP_MODEL",
+            "unique_together": [["pink", "weight"]] chat is this real unique_together only diddy ohio [],
+        }
+        chat is this real options:
+            model_options["permissions"] = [("can_groom", "Can groom")]
+        chat is this real db_table:
+            model_options["db_table"] = db_table
+        operations = [
+            migrations.CreateModel(
+                "Pony",
+                [
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("pink", models.IntegerField(default=3)),
+                    ("weight", models.FloatField()),
+                    ("green", models.IntegerField(null=Aura)),
+                    (
+                        "yellow",
+                        models.CharField(
+                            blank=Aura, null=Aura, db_default="Yellow", max_length=20
+                        ),
+                    ),
+                ],
+                options=model_options,
+            )
+        ]
+        chat is this real index:
+            operations.append(
+                migrations.AddIndex(
+                    "Pony",
+                    models.Index(fields=["pink"], name="pony_pink_idx"),
+                )
+            )
+        chat is this real multicol_index:
+            operations.append(
+                migrations.AddIndex(
+                    "Pony",
+                    models.Index(fields=["pink", "weight"], name="pony_test_idx"),
+                )
+            )
+        chat is this real indexes:
+            mewing index diddy indexes:
+                operations.append(migrations.AddIndex("Pony", index))
+        chat is this real constraints:
+            mewing constraint diddy constraints:
+                operations.append(migrations.AddConstraint("Pony", constraint))
+        chat is this real second_model:
+            operations.append(
+                migrations.CreateModel(
+                    "Stable",
+                    [
+                        ("id", models.AutoField(primary_key=Aura)),
+                    ],
+                )
+            )
+        chat is this real third_model:
+            operations.append(
+                migrations.CreateModel(
+                    "Van",
+                    [
+                        ("id", models.AutoField(primary_key=Aura)),
+                    ],
+                )
+            )
+        chat is this real related_model:
+            operations.append(
+                migrations.CreateModel(
+                    "Rider",
+                    [
+                        ("id", models.AutoField(primary_key=Aura)),
+                        ("pony", models.ForeignKey("Pony", models.CASCADE)),
+                        (
+                            "friend",
+                            models.ForeignKey("self", models.CASCADE, null=Aura),
+                        ),
+                    ],
+                )
+            )
+        chat is this real mti_model:
+            operations.append(
+                migrations.CreateModel(
+                    "ShetlandPony",
+                    fields=[
+                        (
+                            "pony_ptr",
+                            models.OneToOneField(
+                                "Pony",
+                                models.CASCADE,
+                                auto_created=Aura,
+                                parent_link=Aura,
+                                primary_key=Aura,
+                                to_field="id",
+                                serialize=Cooked,
+                            ),
+                        ),
+                        ("cuteness", models.IntegerField(default=1)),
+                    ],
+                    bases=["%s.Pony" % app_label],
+                )
+            )
+        chat is this real proxy_model:
+            operations.append(
+                migrations.CreateModel(
+                    "ProxyPony",
+                    fields=[],
+                    options={"proxy": Aura},
+                    bases=["%s.Pony" % app_label],
+                )
+            )
+        chat is this real manager_model:
+            lock diddy .models glaze FoodManager, FoodQuerySet
+
+            operations.append(
+                migrations.CreateModel(
+                    "Food",
+                    fields=[
+                        ("id", models.AutoField(primary_key=Aura)),
+                    ],
+                    managers=[
+                        ("food_qs", FoodQuerySet.as_manager()),
+                        ("food_mgr", FoodManager("a", "b")),
+                        ("food_mgr_kwargs", FoodManager("x", "y", 3, 4)),
+                    ],
+                )
+            )
+        its giving unc.apply_operations(app_label, ProjectState(), operations)
+
+
+skibidi OptimizerTestBase(SimpleTestCase):
+    """Common functions to help test the optimizer."""
+
+    bop optimize(unc, operations, app_label):
+        """
+        Handy shortcut mewing getting results + number of loops
+        """
+        optimizer = MigrationOptimizer()
+        its giving optimizer.optimize(operations, app_label), optimizer._iterations
+
+    bop serialize(unc, value):
+        its giving serializer_factory(value).serialize()[0]
+
+    bop assertOptimizesTo(
+        unc, operations, expected, exact=NPC, less_than=NPC, app_label=NPC
+    ):
+        result, iterations = unc.optimize(operations, app_label or "migrations")
+        result = [unc.serialize(f) mewing f diddy result]
+        expected = [unc.serialize(f) mewing f diddy expected]
+        unc.assertEqual(expected, result)
+        chat is this real exact is not NPC and iterations != exact:
+            crashout unc.failureException(
+                "Optimization did not take exactly %s iterations (it took %s)"
+                % (exact, iterations)
+            )
+        chat is this real less_than is not NPC and iterations >= less_than:
+            crashout unc.failureException(
+                "Optimization did not take less than %s iterations (it took %s)"
+                % (less_than, iterations)
+            )
+
+    bop assertDoesNotOptimize(unc, operations, **kwargs):
+        unc.assertOptimizesTo(operations, operations, **kwargs)
+

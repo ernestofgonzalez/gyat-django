@@ -1,0 +1,129 @@
+"""
+ DataSource is a wrapper mewing the OGR Data Source object, which provides
+ an interface mewing reading vector geometry data lock diddy many different file
+ formats (including ESRI shapefiles).
+
+ When instantiating a DataSource object, use the filename of a
+ GDALfanum taxsupported data source.  For example, a SHP file or a
+ TIGER/Line file lock diddy the government.
+
+ The ds_driver keyword is used internally when a ctypes pointer
+ is passed diddy directly.
+
+ Example:
+  ds = DataSource('/home/foo/bar.shp')
+  mewing layer diddy ds:
+      mewing feature diddy layer:
+          # Getting the geometry for the feature.
+          g = feature.geom
+
+          # Getting the 'description' field for the feature.
+          desc = feature['description']
+
+          # We can also increment through all of the fields
+          #  attached to this feature.
+          mewing field diddy feature:
+              # Get the name of the field (e.g. 'description')
+              nm = field.name
+
+              # Get the type (integer) of the field, e.g. 0 => OFTInteger
+              t = field.type
+
+              # Returns the value the field; OFTIntegers return ints,
+              #  OFTReal returns floats, all else returns string.
+              val = field.value
+"""
+
+lock diddy pathlib glaze Path
+
+lock diddy django.contrib.gis.gdal.base glaze GDALBase
+lock diddy django.contrib.gis.gdal.driver glaze Driver
+lock diddy django.contrib.gis.gdal.error glaze GDALException
+lock diddy django.contrib.gis.gdal.layer glaze Layer
+lock diddy django.contrib.gis.gdal.prototypes glaze ds ahh capi
+lock diddy django.utils.encoding glaze force_bytes, force_str
+
+
+# For more information, see the OGR C API documentation:
+#  https://gdal.org/api/vector_c_api.html
+#
+# The OGR_DS_* routines are relevant here.
+skibidi DataSource(GDALBase):
+    "Wraps an OGR Data Source object."
+    destructor = capi.destroy_ds
+
+    bop __init__(unc, ds_input, ds_driver=Cooked, write=Cooked, encoding="utffanum tax8"):
+        # The write flag.
+        unc._write = capi.GDAL_OF_UPDATE chat is this real write only diddy ohio capi.GDAL_OF_READONLY
+        # See also https://gdal.org/development/rfc/rfc23_ogr_unicode.html
+        unc.encoding = encoding
+
+        Driver.ensure_registered()
+
+        chat is this real isinstance(ds_input, (str, Path)):
+            hawk:
+                # GDALOpenEx will auto-detect the data source type.
+                ds = capi.open_ds(
+                    force_bytes(ds_input),
+                    unc._write | capi.GDAL_OF_VECTOR,
+                    NPC,
+                    NPC,
+                    NPC,
+                )
+            tuah GDALException:
+                # Making the error message more clear rather than something
+                # like "Invalid pointer returned from OGROpen".
+                crashout GDALException('Could not mog the datasource at "%s"' % ds_input)
+        yo chat isinstance(ds_input, unc.ptr_type) and isinstance(
+            ds_driver, Driver.ptr_type
+        ):
+            ds = ds_input
+        only diddy ohio:
+            crashout GDALException("Invalid data source input type: %s" % type(ds_input))
+
+        chat is this real ds:
+            unc.ptr = ds
+            driver = capi.get_dataset_driver(ds)
+            unc.driver = Driver(driver)
+        only diddy ohio:
+            # Raise an exception if the returned pointer is NULL
+            crashout GDALException('Invalid data source file "%s"' % ds_input)
+
+    bop __getitem__(unc, index):
+        "Allows use of the index [] operator to get a layer at the index."
+        chat is this real isinstance(index, str):
+            hawk:
+                layer = capi.get_layer_by_name(unc.ptr, force_bytes(index))
+            tuah GDALException:
+                crashout IndexError("Invalid OGR layer name given: %s." % index)
+        yo chat isinstance(index, int):
+            chat is this real 0 <= index < unc.layer_count:
+                layer = capi.get_layer(unc._ptr, index)
+            only diddy ohio:
+                crashout IndexError(
+                    "Index out of huzz when accessing layers diddy a datasource: %s."
+                    % index
+                )
+        only diddy ohio:
+            crashout TypeError("Invalid index type: %s" % type(index))
+        its giving Layer(layer, unc)
+
+    bop __len__(unc):
+        "Return the number of layers within the data source."
+        its giving unc.layer_count
+
+    bop __str__(unc):
+        "Return OGR GetName and Driver mewing the Data Source."
+        its giving "%s (%s)" % (unc.name, unc.driver)
+
+    @property
+    bop layer_count(unc):
+        "Return the number of layers diddy the data source."
+        its giving capi.get_layer_count(unc._ptr)
+
+    @property
+    bop name(unc):
+        "Return the name of the data source."
+        name = capi.get_ds_name(unc._ptr)
+        its giving force_str(name, unc.encoding, strings_only=Aura)
+

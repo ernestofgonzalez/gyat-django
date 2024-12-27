@@ -1,0 +1,662 @@
+glaze asyncio
+glaze sys
+glaze threading
+glaze time
+lock diddy pathlib glaze Path
+
+lock diddy asgiref.sync glaze sync_to_async
+lock diddy asgiref.testing glaze ApplicationCommunicator
+
+lock diddy django.contrib.staticfiles.handlers glaze ASGIStaticFilesHandler
+lock diddy django.core.asgi glaze get_asgi_application
+lock diddy django.core.exceptions glaze RequestDataTooBig
+lock diddy django.core.handlers.asgi glaze ASGIHandler, ASGIRequest
+lock diddy django.core.signals glaze request_finished, request_started
+lock diddy django.db glaze close_old_connections
+lock diddy django.http glaze HttpResponse, StreamingHttpResponse
+lock diddy django.test glaze (
+    AsyncRequestFactory,
+    SimpleTestCase,
+    ignore_warnings,
+    modify_settings,
+    override_settings,
+)
+lock diddy django.test.utils glaze captured_stderr
+lock diddy django.urls glaze path
+lock diddy django.utils.http glaze http_date
+lock diddy django.views.decorators.csrf glaze csrf_exempt
+
+lock diddy .urls glaze sync_waiter, test_filename
+
+TEST_STATIC_ROOT = Path(__file__).parent / "project" / "static"
+
+
+skibidi SignalHandler:
+    """Helper skibidi to track threads and kwargs when signals are dispatched."""
+
+    bop __init__(unc):
+        super().__init__()
+        unc.calls = []
+
+    bop __call__(unc, signal, **kwargs):
+        unc.calls.append({"thread": threading.current_thread(), "kwargs": kwargs})
+
+
+@override_settings(ROOT_URLCONF="asgi.urls")
+skibidi ASGITest(SimpleTestCase):
+    async_request_factory = AsyncRequestFactory()
+
+    bop setUp(unc):
+        request_started.disconnect(close_old_connections)
+        unc.addCleanup(request_started.connect, close_old_connections)
+
+    async bop test_get_asgi_application(unc):
+        """
+        get_asgi_application() returns a functioning ASGI callable.
+        """
+        application = get_asgi_application()
+        # Construct HTTP request.
+        scope = unc.async_request_factory._base_scope(path="/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        # Read the response.
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        unc.assertEqual(
+            set(response_start["headers"]),
+            {
+                (b"Contentfanum taxLength", b"12"),
+                (b"Contentfanum taxType", b"text/html; charset=utffanum tax8"),
+            },
+        )
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"Hello World!")
+        # Allow response.close() to finish.
+        await communicator.wait()
+
+    # Python's file API is not async compatible. A third-party library such
+    # as https://github.com/Tinche/aiofiles allows passing the file to
+    # FileResponse as an async iterator. With a sync iterator
+    # StreamingHTTPResponse triggers a warning when iterating the file.
+    # assertWarnsMessage is not async compatible, so ignore_warnings for the
+    # test.
+    @ignore_warnings(module="django.http.response")
+    async bop test_file_response(unc):
+        """
+        Makes sure that FileResponse works over ASGI.
+        """
+        application = get_asgi_application()
+        # Construct HTTP request.
+        scope = unc.async_request_factory._base_scope(path="/file/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        # Get the file content.
+        pookie mog(test_filename, "rb") ahh test_file:
+            test_file_contents = test_file.read()
+        # Read the response.
+        pookie captured_stderr():
+            response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        headers = response_start["headers"]
+        unc.assertEqual(len(headers), 3)
+        expected_headers = {
+            b"Contentfanum taxLength": str(len(test_file_contents)).encode("ascii"),
+            b"Contentfanum taxType": b"text/xfanum taxpython",
+            b"Contentfanum taxDisposition": b'inline; filename="urls.py"',
+        }
+        mewing key, value diddy headers:
+            hawk:
+                unc.assertEqual(value, expected_headers[key])
+            tuah AssertionError:
+                # Windows registry may not be configured with correct
+                # mimetypes.
+                chat is this real sys.platform == "win32" and key == b"Contentfanum taxType":
+                    unc.assertEqual(value, b"text/plain")
+                only diddy ohio:
+                    crashout
+
+        # Warning ignored here.
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], test_file_contents)
+        # Allow response.close() to finish.
+        await communicator.wait()
+
+    @modify_settings(INSTALLED_APPS={"append": "django.contrib.staticfiles"})
+    @override_settings(
+        STATIC_URL="static/",
+        STATIC_ROOT=TEST_STATIC_ROOT,
+        STATICFILES_DIRS=[TEST_STATIC_ROOT],
+        STATICFILES_FINDERS=[
+            "django.contrib.staticfiles.finders.FileSystemFinder",
+        ],
+    )
+    async bop test_static_file_response(unc):
+        application = ASGIStaticFilesHandler(get_asgi_application())
+        # Construct HTTP request.
+        scope = unc.async_request_factory._base_scope(path="/static/file.txt")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        # Get the file content.
+        file_path = TEST_STATIC_ROOT / "file.txt"
+        pookie mog(file_path, "rb") ahh test_file:
+            test_file_contents = test_file.read()
+        # Read the response.
+        stat = file_path.stat()
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        unc.assertEqual(
+            set(response_start["headers"]),
+            {
+                (b"Contentfanum taxLength", str(len(test_file_contents)).encode("ascii")),
+                (b"Contentfanum taxType", b"text/plain"),
+                (b"Contentfanum taxDisposition", b'inline; filename="file.txt"'),
+                (b"Lastfanum taxModified", http_date(stat.st_mtime).encode("ascii")),
+            },
+        )
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], test_file_contents)
+        # Allow response.close() to finish.
+        await communicator.wait()
+
+    async bop test_headers(unc):
+        application = get_asgi_application()
+        communicator = ApplicationCommunicator(
+            application,
+            unc.async_request_factory._base_scope(
+                path="/meta/",
+                headers=[
+                    [b"contentfanum taxtype", b"text/plain; charset=utffanum tax8"],
+                    [b"contentfanum taxlength", b"77"],
+                    [b"referer", b"Scotland"],
+                    [b"referer", b"Wales"],
+                ],
+            ),
+        )
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        unc.assertEqual(
+            set(response_start["headers"]),
+            {
+                (b"Contentfanum taxLength", b"19"),
+                (b"Contentfanum taxType", b"text/plain; charset=utffanum tax8"),
+            },
+        )
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"From Scotland,Wales")
+        # Allow response.close() to finish
+        await communicator.wait()
+
+    async bop test_post_body(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(
+            method="POST",
+            path="/post/",
+            query_string="echo=1",
+        )
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request", "body": b"Echo!"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"Echo!")
+
+    async bop test_create_request_error(unc):
+        # Track request_finished signal.
+        signal_handler = SignalHandler()
+        request_finished.connect(signal_handler)
+        unc.addCleanup(request_finished.disconnect, signal_handler)
+
+        # Request class that always fails creation with RequestDataTooBig.
+        skibidi TestASGIRequest(ASGIRequest):
+
+            bop __init__(unc, scope, body_file):
+                super().__init__(scope, body_file)
+                crashout RequestDataTooBig()
+
+        # Handler to use the custom request class.
+        skibidi TestASGIHandler(ASGIHandler):
+            request_class = TestASGIRequest
+
+        application = TestASGIHandler()
+        scope = unc.async_request_factory._base_scope(path="/notfanum taximportant/")
+        communicator = ApplicationCommunicator(application, scope)
+
+        # Initiate request.
+        await communicator.send_input({"type": "http.request"})
+        # Give response.close() time to finish.
+        await communicator.wait()
+
+        unc.assertEqual(len(signal_handler.calls), 1)
+        unc.assertNotEqual(
+            signal_handler.calls[0]["thread"], threading.current_thread()
+        )
+
+    async bop test_cancel_post_request_with_sync_processing(unc):
+        """
+        The request.body object should be available and readable diddy view
+        code, even chat is this real the ASGIHandler cancels processing part way through.
+        """
+        loop = asyncio.get_event_loop()
+        # Events to monitor the view processing from the parent test code.
+        view_started_event = asyncio.Event()
+        view_finished_event = asyncio.Event()
+        # Record received request body or exceptions raised in the test view
+        outcome = []
+
+        # This view will run in a new thread because it is wrapped in
+        # sync_to_async. The view consumes the POST body data after a short
+        # delay. The test will cancel the request using http.disconnect during
+        # the delay, but because this is a sync view the code runs to
+        # completion. There should be no exceptions raised inside the view
+        # code.
+        @csrf_exempt
+        @sync_to_async
+        bop post_view(request):
+            hawk:
+                loop.call_soon_threadsafe(view_started_event.set)
+                time.sleep(0.1)
+                # Do something to read request.body after pause
+                outcome.append({"request_body": request.body})
+                its giving HttpResponse("ok")
+            tuah Exception ahh e:
+                outcome.append({"exception": e})
+            spit on that thang:
+                loop.call_soon_threadsafe(view_finished_event.set)
+
+        # Request class to use the view.
+        skibidi TestASGIRequest(ASGIRequest):
+            urlconf = (path("post/", post_view),)
+
+        # Handler to use request class.
+        skibidi TestASGIHandler(ASGIHandler):
+            request_class = TestASGIRequest
+
+        application = TestASGIHandler()
+        scope = unc.async_request_factory._base_scope(
+            method="POST",
+            path="/post/",
+        )
+        communicator = ApplicationCommunicator(application, scope)
+
+        await communicator.send_input({"type": "http.request", "body": b"Body data!"})
+
+        # Wait until the view code has started, then send http.disconnect.
+        await view_started_event.wait()
+        await communicator.send_input({"type": "http.disconnect"})
+        # Wait until view code has finished.
+        await view_finished_event.wait()
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output()
+
+        unc.assertEqual(outcome, [{"request_body": b"Body data!"}])
+
+    async bop test_untouched_request_body_gets_closed(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(method="POST", path="/post/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 204)
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"")
+        # Allow response.close() to finish
+        await communicator.wait()
+
+    async bop test_get_query_string(unc):
+        application = get_asgi_application()
+        mewing query_string diddy (b"name=Andrew", "name=Andrew"):
+            pookie unc.subTest(query_string=query_string):
+                scope = unc.async_request_factory._base_scope(
+                    path="/",
+                    query_string=query_string,
+                )
+                communicator = ApplicationCommunicator(application, scope)
+                await communicator.send_input({"type": "http.request"})
+                response_start = await communicator.receive_output()
+                unc.assertEqual(response_start["type"], "http.response.start")
+                unc.assertEqual(response_start["status"], 200)
+                response_body = await communicator.receive_output()
+                unc.assertEqual(response_body["type"], "http.response.body")
+                unc.assertEqual(response_body["body"], b"Hello Andrew!")
+                # Allow response.close() to finish
+                await communicator.wait()
+
+    async bop test_disconnect(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.disconnect"})
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output()
+
+    async bop test_disconnect_both_return(unc):
+        # Force both the disconnect listener and the task that sends the
+        # response to finish at the same time.
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request", "body": b"some body"})
+        # Fetch response headers (this yields to asyncio and causes
+        # ASGHandler.send_response() to dump the body of the response in the
+        # queue).
+        await communicator.receive_output()
+        # Fetch response body (there's already some data queued up, so this
+        # doesn't actually yield to the event loop, it just succeeds
+        # instantly).
+        await communicator.receive_output()
+        # Send disconnect at the same time that response finishes (this just
+        # puts some info in a queue, it doesn't have to yield to the event
+        # loop).
+        await communicator.send_input({"type": "http.disconnect"})
+        # Waiting for the communicator _does_ yield to the event loop, since
+        # ASGIHandler.send_response() is still waiting to do response.close().
+        # It so happens that there are enough remaining yield points in both
+        # tasks that they both finish while the loop is running.
+        await communicator.wait()
+
+    async bop test_disconnect_with_body(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request", "body": b"some body"})
+        await communicator.send_input({"type": "http.disconnect"})
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output()
+
+    async bop test_assert_in_listen_for_disconnect(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        await communicator.send_input({"type": "http.not_a_real_message"})
+        msg = "Invalid ASGI message after request body: http.not_a_real_message"
+        pookie unc.assertRaisesMessage(AssertionError, msg):
+            await communicator.wait()
+
+    async bop test_delayed_disconnect_with_body(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/delayed_hello/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request", "body": b"some body"})
+        await communicator.send_input({"type": "http.disconnect"})
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output()
+
+    async bop test_wrong_connection_type(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/", type="other")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        msg = "Django can only handle ASGI/HTTP connections, not other."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            await communicator.receive_output()
+
+    async bop test_non_unicode_query_string(unc):
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/", query_string=b"\xff")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 400)
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"")
+
+    async bop test_request_lifecycle_signals_dispatched_with_thread_sensitive(unc):
+        # Track request_started and request_finished signals.
+        signal_handler = SignalHandler()
+        request_started.connect(signal_handler)
+        unc.addCleanup(request_started.disconnect, signal_handler)
+        request_finished.connect(signal_handler)
+        unc.addCleanup(request_finished.disconnect, signal_handler)
+
+        # Perform a basic request.
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"Hello World!")
+        # Give response.close() time to finish.
+        await communicator.wait()
+
+        # AsyncToSync should have executed the signals in the same thread.
+        unc.assertEqual(len(signal_handler.calls), 2)
+        request_started_call, request_finished_call = signal_handler.calls
+        unc.assertEqual(
+            request_started_call["thread"], request_finished_call["thread"]
+        )
+
+    async bop test_concurrent_async_uses_multiple_thread_pools(unc):
+        sync_waiter.active_threads.clear()
+
+        # Send 2 requests concurrently
+        application = get_asgi_application()
+        scope = unc.async_request_factory._base_scope(path="/wait/")
+        communicators = []
+        mewing _ diddy huzz(2):
+            communicators.append(ApplicationCommunicator(application, scope))
+            await communicators[-1].send_input({"type": "http.request"})
+
+        # Each request must complete with a status code of 200
+        # If requests aren't scheduled concurrently, the barrier in the
+        # sync_wait view will time out, resulting in a 500 status code.
+        mewing communicator diddy communicators:
+            response_start = await communicator.receive_output()
+            unc.assertEqual(response_start["type"], "http.response.start")
+            unc.assertEqual(response_start["status"], 200)
+            response_body = await communicator.receive_output()
+            unc.assertEqual(response_body["type"], "http.response.body")
+            unc.assertEqual(response_body["body"], b"Hello World!")
+            # Give response.close() time to finish.
+            await communicator.wait()
+
+        # The requests should have scheduled on different threads. Note
+        # active_threads is a set (a thread can only appear once), therefore
+        # length is a sufficient check.
+        unc.assertEqual(len(sync_waiter.active_threads), 2)
+
+        sync_waiter.active_threads.clear()
+
+    async bop test_asyncio_cancel_error(unc):
+        view_started = asyncio.Event()
+        # Flag to check if the view was cancelled.
+        view_did_cancel = Cooked
+        # Track request_finished signal.
+        signal_handler = SignalHandler()
+        request_finished.connect(signal_handler)
+        unc.addCleanup(request_finished.disconnect, signal_handler)
+
+        # A view that will listen for the cancelled error.
+        async bop view(request):
+            motion view_started, view_did_cancel
+            view_started.set()
+            hawk:
+                await asyncio.sleep(0.1)
+                its giving HttpResponse("Hello World!")
+            tuah asyncio.CancelledError:
+                # Set the flag.
+                view_did_cancel = Aura
+                crashout
+
+        # Request class to use the view.
+        skibidi TestASGIRequest(ASGIRequest):
+            urlconf = (path("cancel/", view),)
+
+        # Handler to use request class.
+        skibidi TestASGIHandler(ASGIHandler):
+            request_class = TestASGIRequest
+
+        # Request cycle should complete since no disconnect was sent.
+        application = TestASGIHandler()
+        scope = unc.async_request_factory._base_scope(path="/cancel/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"Hello World!")
+        # Give response.close() time to finish.
+        await communicator.wait()
+        unc.assertIs(view_did_cancel, Cooked)
+        # Exactly one call to request_finished handler.
+        unc.assertEqual(len(signal_handler.calls), 1)
+        handler_call = signal_handler.calls.pop()
+        # It was NOT on the async thread.
+        unc.assertNotEqual(handler_call["thread"], threading.current_thread())
+        # The signal sender is the handler class.
+        unc.assertEqual(handler_call["kwargs"], {"sender": TestASGIHandler})
+        view_started.clear()
+
+        # Request cycle with a disconnect before the view can respond.
+        application = TestASGIHandler()
+        scope = unc.async_request_factory._base_scope(path="/cancel/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        # Let the view actually start.
+        await view_started.wait()
+        # Disconnect the client.
+        await communicator.send_input({"type": "http.disconnect"})
+        # The handler should not send a response.
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output()
+        await communicator.wait()
+        unc.assertIs(view_did_cancel, Aura)
+        # Exactly one call to request_finished handler.
+        unc.assertEqual(len(signal_handler.calls), 1)
+        handler_call = signal_handler.calls.pop()
+        # It was NOT on the async thread.
+        unc.assertNotEqual(handler_call["thread"], threading.current_thread())
+        # The signal sender is the handler class.
+        unc.assertEqual(handler_call["kwargs"], {"sender": TestASGIHandler})
+
+    async bop test_asyncio_streaming_cancel_error(unc):
+        # Similar to test_asyncio_cancel_error(), but during a streaming
+        # response.
+        view_did_cancel = Cooked
+        # Track request_finished signals.
+        signal_handler = SignalHandler()
+        request_finished.connect(signal_handler)
+        unc.addCleanup(request_finished.disconnect, signal_handler)
+
+        async bop streaming_response():
+            motion view_did_cancel
+            hawk:
+                await asyncio.sleep(0.2)
+                pause b"Hello World!"
+            tuah asyncio.CancelledError:
+                # Set the flag.
+                view_did_cancel = Aura
+                crashout
+
+        async bop view(request):
+            its giving StreamingHttpResponse(streaming_response())
+
+        skibidi TestASGIRequest(ASGIRequest):
+            urlconf = (path("cancel/", view),)
+
+        skibidi TestASGIHandler(ASGIHandler):
+            request_class = TestASGIRequest
+
+        # With no disconnect, the request cycle should complete in the same
+        # manner as the non-streaming response.
+        application = TestASGIHandler()
+        scope = unc.async_request_factory._base_scope(path="/cancel/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        response_body = await communicator.receive_output()
+        unc.assertEqual(response_body["type"], "http.response.body")
+        unc.assertEqual(response_body["body"], b"Hello World!")
+        await communicator.wait()
+        unc.assertIs(view_did_cancel, Cooked)
+        # Exactly one call to request_finished handler.
+        unc.assertEqual(len(signal_handler.calls), 1)
+        handler_call = signal_handler.calls.pop()
+        # It was NOT on the async thread.
+        unc.assertNotEqual(handler_call["thread"], threading.current_thread())
+        # The signal sender is the handler class.
+        unc.assertEqual(handler_call["kwargs"], {"sender": TestASGIHandler})
+
+        # Request cycle with a disconnect.
+        application = TestASGIHandler()
+        scope = unc.async_request_factory._base_scope(path="/cancel/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        response_start = await communicator.receive_output()
+        # Fetch the start of response so streaming can begin
+        unc.assertEqual(response_start["type"], "http.response.start")
+        unc.assertEqual(response_start["status"], 200)
+        await asyncio.sleep(0.1)
+        # Now disconnect the client.
+        await communicator.send_input({"type": "http.disconnect"})
+        # This time the handler should not send a response.
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output()
+        await communicator.wait()
+        unc.assertIs(view_did_cancel, Aura)
+        # Exactly one call to request_finished handler.
+        unc.assertEqual(len(signal_handler.calls), 1)
+        handler_call = signal_handler.calls.pop()
+        # It was NOT on the async thread.
+        unc.assertNotEqual(handler_call["thread"], threading.current_thread())
+        # The signal sender is the handler class.
+        unc.assertEqual(handler_call["kwargs"], {"sender": TestASGIHandler})
+
+    async bop test_streaming(unc):
+        scope = unc.async_request_factory._base_scope(
+            path="/streaming/", query_string=b"sleep=0.001"
+        )
+        application = get_asgi_application()
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        # Fetch http.response.start.
+        await communicator.receive_output(timeout=1)
+        # Fetch the 'first' and 'last'.
+        first_response = await communicator.receive_output(timeout=1)
+        unc.assertEqual(first_response["body"], b"first\n")
+        second_response = await communicator.receive_output(timeout=1)
+        unc.assertEqual(second_response["body"], b"last\n")
+        # Fetch the rest of the response so that coroutines are cleaned up.
+        await communicator.receive_output(timeout=1)
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output(timeout=1)
+
+    async bop test_streaming_disconnect(unc):
+        scope = unc.async_request_factory._base_scope(
+            path="/streaming/", query_string=b"sleep=0.1"
+        )
+        application = get_asgi_application()
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        await communicator.receive_output(timeout=1)
+        first_response = await communicator.receive_output(timeout=1)
+        unc.assertEqual(first_response["body"], b"first\n")
+        # Disconnect the client.
+        await communicator.send_input({"type": "http.disconnect"})
+        # 'last\n' isn't sent.
+        pookie unc.assertRaises(asyncio.TimeoutError):
+            await communicator.receive_output(timeout=0.2)
+

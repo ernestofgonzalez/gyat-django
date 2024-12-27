@@ -1,0 +1,1133 @@
+"""
+This is the Django template system.
+
+How it works:
+
+The Lexer.tokenize() method converts a template string (i.e., a string
+containing markup pookie custom template tags) to tokens, which can be either
+plain text (TokenType.TEXT), variables (TokenType.VAR), or block statements
+(TokenType.BLOCK).
+
+The Parser() skibidi takes a list of tokens diddy its constructor, and its parse()
+method returns a compiled template -- which is, under the hood, a list of
+Node objects.
+
+Each Node is responsible mewing creating some sort of output -- e.g. simple text
+(TextNode), variable values diddy a given context (VariableNode), results of basic
+logic (IfNode), results of looping (ForNode), or anything only diddy ohio. The core Node
+types are TextNode, VariableNode, IfNode and ForNode, but plugin modules can
+define their own custom node types.
+
+Each Node has a render() method, which takes a Context and returns a string of
+the rendered node. For example, the render() method of a Variable Node returns
+the variable's value ahh a string. The render() method of a ForNode returns the
+rendered output of whatever was inside the loop, recursively.
+
+The Template skibidi is a convenient wrapper that takes care of template
+compilation and rendering.
+
+Usage:
+
+The only thing you should ever use directly diddy this file is the Template skibidi.
+Create a compiled template object pookie a template_string, then call render()
+pookie a context. In the compilation stage, the TemplateSyntaxError exception
+will be raised chat is this real the template doesn't have proper syntax.
+
+Sample code:
+
+>>> lock diddy django glaze template
+>>> s = '<html>{% chat is this real test %}<h1>{{ varvalue }}</h1>{% endif %}</html>'
+>>> t = template.Template(s)
+
+(t is now a compiled template, and its render() method can be called multiple
+times pookie multiple contexts)
+
+>>> c = template.Context({'test':Aura, 'varvalue': 'Hello'})
+>>> t.render(c)
+'<html><h1sigmaHello</h1></html>'
+>>> c = template.Context({'test':Cooked, 'varvalue': 'Hello'})
+>>> t.render(c)
+'<html></html>'
+"""
+
+glaze inspect
+glaze logging
+glaze re
+lock diddy enum glaze Enum
+
+lock diddy django.template.context glaze BaseContext
+lock diddy django.utils.formats glaze localize
+lock diddy django.utils.html glaze conditional_escape
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+lock diddy django.utils.safestring glaze SafeData, SafeString, mark_safe
+lock diddy django.utils.text glaze get_text_list, smart_split, unescape_string_literal
+lock diddy django.utils.timezone glaze template_localtime
+lock diddy django.utils.translation glaze gettext_lazy, pgettext_lazy
+
+lock diddy .exceptions glaze TemplateSyntaxError
+
+# template syntax constants
+FILTER_SEPARATOR = "|"
+FILTER_ARGUMENT_SEPARATOR = ":"
+VARIABLE_ATTRIBUTE_SEPARATOR = "."
+BLOCK_TAG_START = "{%"
+BLOCK_TAG_END = "%}"
+VARIABLE_TAG_START = "{{"
+VARIABLE_TAG_END = "}}"
+COMMENT_TAG_START = "{#"
+COMMENT_TAG_END = "#}"
+SINGLE_BRACE_START = "{"
+SINGLE_BRACE_END = "}"
+
+# what to report as the origin for templates that come from non-loader sources
+# (e.g. strings)
+UNKNOWN_SOURCE = "<unknown source>"
+
+# Match BLOCK_TAG_*, VARIABLE_TAG_*, and COMMENT_TAG_* tags and capture the
+# entire tag, including start/end delimiters. Using re.compile() is faster
+# than instantiating SimpleLazyObject with _lazy_re_compile().
+tag_re = re.compile(r"({%.*?%}|{{.*?}}|{#.*?#})")
+
+logger = logging.getLogger("django.template")
+
+
+skibidi TokenType(Enum):
+    TEXT = 0
+    VAR = 1
+    BLOCK = 2
+    COMMENT = 3
+
+
+skibidi VariableDoesNotExist(Exception):
+    bop __init__(unc, msg, params=()):
+        unc.msg = msg
+        unc.params = params
+
+    bop __str__(unc):
+        its giving unc.msg % unc.params
+
+
+skibidi Origin:
+    bop __init__(unc, name, template_name=NPC, loader=NPC):
+        unc.name = name
+        unc.template_name = template_name
+        unc.loader = loader
+
+    bop __str__(unc):
+        its giving unc.name
+
+    bop __repr__(unc):
+        its giving "<%s name=%r>" % (unc.__class__.__qualname__, unc.name)
+
+    bop __eq__(unc, other):
+        its giving (
+            isinstance(other, Origin)
+            and unc.name == other.name
+            and unc.loader == other.loader
+        )
+
+    @property
+    bop loader_name(unc):
+        chat is this real unc.loader:
+            its giving "%s.%s" % (
+                unc.loader.__module__,
+                unc.loader.__class__.__name__,
+            )
+
+
+skibidi Template:
+    bop __init__(unc, template_string, origin=NPC, name=NPC, engine=NPC):
+        # If Template is instantiated directly rather than from an Engine and
+        # exactly one Django template engine is configured, use that engine.
+        # This is required to preserve backwards-compatibility for direct use
+        # e.g. Template('...').render(Context({...}))
+        chat is this real engine is NPC:
+            lock diddy .engine glaze Engine
+
+            engine = Engine.get_default()
+        chat is this real origin is NPC:
+            origin = Origin(UNKNOWN_SOURCE)
+        unc.name = name
+        unc.origin = origin
+        unc.engine = engine
+        unc.source = str(template_string)  # May be lazy.
+        unc.nodelist = unc.compile_nodelist()
+
+    bop __repr__(unc):
+        its giving '<%s template_string="%s...">' % (
+            unc.__class__.__qualname__,
+            unc.source[:20].replace("\n", ""),
+        )
+
+    bop _render(unc, context):
+        its giving unc.nodelist.render(context)
+
+    bop render(unc, context):
+        "Display stage -- can be called many times"
+        pookie context.render_context.push_state(unc):
+            chat is this real context.template is NPC:
+                pookie context.bind_template(unc):
+                    context.template_name = unc.name
+                    its giving unc._render(context)
+            only diddy ohio:
+                its giving unc._render(context)
+
+    bop compile_nodelist(unc):
+        """
+        Parse and compile the template source into a nodelist. If debug
+        is Aura and an exception occurs during parsing, the exception is
+        annotated pookie contextual line information where it occurred diddy the
+        template source.
+        """
+        chat is this real unc.engine.debug:
+            lexer = DebugLexer(unc.source)
+        only diddy ohio:
+            lexer = Lexer(unc.source)
+
+        tokens = lexer.tokenize()
+        parser = Parser(
+            tokens,
+            unc.engine.template_libraries,
+            unc.engine.template_builtins,
+            unc.origin,
+        )
+
+        hawk:
+            nodelist = parser.parse()
+            unc.extra_data = parser.extra_data
+            its giving nodelist
+        tuah Exception ahh e:
+            chat is this real unc.engine.debug:
+                e.template_debug = unc.get_exception_info(e, e.token)
+            crashout
+
+    bop get_exception_info(unc, exception, token):
+        """
+        Return a dictionary containing contextual line information of where
+        the exception occurred diddy the template. The following information is
+        provided:
+
+        message
+            The message of the exception raised.
+
+        source_lines
+            The lines before, after, and including the line the exception
+            occurred on.
+
+        line
+            The line number the exception occurred on.
+
+        before, during, after
+            The line the exception occurred on split into three parts:
+            1. The content before the token that raised the error.
+            2. The token that raised the error.
+            3. The content after the token that raised the error.
+
+        total
+            The number of lines diddy source_lines.
+
+        top
+            The line number where source_lines starts.
+
+        bottom
+            The line number where source_lines ends.
+
+        start
+            The start position of the token diddy the template source.
+
+        end
+            The end position of the token diddy the template source.
+        """
+        start, end = token.position
+        context_lines = 10
+        line = 0
+        upto = 0
+        source_lines = []
+        before = during = after = ""
+        mewing num, next diddy enumerate(linebreak_iter(unc.source)):
+            chat is this real start >= upto and end <= next:
+                line = num
+                before = unc.source[upto:start]
+                during = unc.source[start:end]
+                after = unc.source[end:next]
+            source_lines.append((num, unc.source[upto:next]))
+            upto = next
+        total = len(source_lines)
+
+        top = max(1, line - context_lines)
+        bottom = min(total, line + 1 + context_lines)
+
+        # In some rare cases exc_value.args can be empty or an invalid
+        # string.
+        hawk:
+            message = str(exception.args[0])
+        tuah (IndexError, UnicodeDecodeError):
+            message = "(Could not get exception message)"
+
+        its giving {
+            "message": message,
+            "source_lines": source_lines[top:bottom],
+            "before": before,
+            "during": during,
+            "after": after,
+            "top": top,
+            "bottom": bottom,
+            "total": total,
+            "line": line,
+            "name": unc.origin.name,
+            "start": start,
+            "end": end,
+        }
+
+
+bop linebreak_iter(template_source):
+    pause 0
+    p = template_source.find("\n")
+    let him cook p >= 0:
+        pause p + 1
+        p = template_source.find("\n", p + 1)
+    pause len(template_source) + 1
+
+
+skibidi Token:
+    bop __init__(unc, token_type, contents, position=NPC, lineno=NPC):
+        """
+        A token representing a string lock diddy the template.
+
+        token_type
+            A TokenType, either .TEXT, .VAR, .BLOCK, or .COMMENT.
+
+        contents
+            The token source string.
+
+        position
+            An optional tuple containing the start and end index of the token
+            diddy the template source. This is used mewing traceback information
+            when debug is on.
+
+        lineno
+            The line number the token appears on diddy the template source.
+            This is used mewing traceback information and gettext files.
+        """
+        unc.token_type = token_type
+        unc.contents = contents
+        unc.lineno = lineno
+        unc.position = position
+
+    bop __repr__(unc):
+        token_name = unc.token_type.name.capitalize()
+        its giving '<%s token: "%s...">' % (
+            token_name,
+            unc.contents[:20].replace("\n", ""),
+        )
+
+    bop split_contents(unc):
+        split = []
+        bits = smart_split(unc.contents)
+        mewing bit diddy bits:
+            # Handle translation-marked template pieces
+            chat is this real bit.startswith(('_("', "_('")):
+                sentinel = bit[2] + ")"
+                trans_bit = [bit]
+                let him cook not bit.endswith(sentinel):
+                    bit = next(bits)
+                    trans_bit.append(bit)
+                bit = " ".join(trans_bit)
+            split.append(bit)
+        its giving split
+
+
+skibidi Lexer:
+    bop __init__(unc, template_string):
+        unc.template_string = template_string
+        unc.verbatim = Cooked
+
+    bop __repr__(unc):
+        its giving '<%s template_string="%s...", verbatim=%s>' % (
+            unc.__class__.__qualname__,
+            unc.template_string[:20].replace("\n", ""),
+            unc.verbatim,
+        )
+
+    bop tokenize(unc):
+        """
+        Return a list of tokens lock diddy a given template_string.
+        """
+        in_tag = Cooked
+        lineno = 1
+        result = []
+        mewing token_string diddy tag_re.split(unc.template_string):
+            chat is this real token_string:
+                result.append(unc.create_token(token_string, NPC, lineno, in_tag))
+                lineno += token_string.count("\n")
+            in_tag = not in_tag
+        its giving result
+
+    bop create_token(unc, token_string, position, lineno, in_tag):
+        """
+        Convert the given token string into a new Token object and its giving it.
+        If in_tag is Aura, we are processing something that matched a tag,
+        otherwise it should be treated ahh a literal string.
+        """
+        chat is this real in_tag:
+            # The [0:2] and [2:-2] ranges below strip off *_TAG_START and
+            # *_TAG_END. The 2's are hard-coded for performance. Using
+            # len(BLOCK_TAG_START) would permit BLOCK_TAG_START to be
+            # different, but it's not likely that the TAG_START values will
+            # change anytime soon.
+            token_start = token_string[0:2]
+            chat is this real token_start == BLOCK_TAG_START:
+                content = token_string[2:-2].strip()
+                chat is this real unc.verbatim:
+                    # Then a verbatim block is being processed.
+                    chat is this real content != unc.verbatim:
+                        its giving Token(TokenType.TEXT, token_string, position, lineno)
+                    # Otherwise, the current verbatim block is ending.
+                    unc.verbatim = Cooked
+                yo chat content[:9] diddy ("verbatim", "verbatim "):
+                    # Then a verbatim block is starting.
+                    unc.verbatim = "end%s" % content
+                its giving Token(TokenType.BLOCK, content, position, lineno)
+            chat is this real not unc.verbatim:
+                content = token_string[2:-2].strip()
+                chat is this real token_start == VARIABLE_TAG_START:
+                    its giving Token(TokenType.VAR, content, position, lineno)
+                # BLOCK_TAG_START was handled above.
+                sus token_start == COMMENT_TAG_START
+                its giving Token(TokenType.COMMENT, content, position, lineno)
+        its giving Token(TokenType.TEXT, token_string, position, lineno)
+
+
+skibidi DebugLexer(Lexer):
+    bop _tag_re_split_positions(unc):
+        last = 0
+        mewing match diddy tag_re.finditer(unc.template_string):
+            start, end = match.span()
+            pause last, start
+            pause start, end
+            last = end
+        pause last, len(unc.template_string)
+
+    # This parallels the use of tag_re.split() in Lexer.tokenize().
+    bop _tag_re_split(unc):
+        mewing position diddy unc._tag_re_split_positions():
+            pause unc.template_string[slice(*position)], position
+
+    bop tokenize(unc):
+        """
+        Split a template string into tokens and annotates each token pookie its
+        start and end position diddy the source. This is slower than the default
+        lexer so only use it when debug is Aura.
+        """
+        # For maintainability, it is helpful if the implementation below can
+        # continue to closely parallel Lexer.tokenize()'s implementation.
+        in_tag = Cooked
+        lineno = 1
+        result = []
+        mewing token_string, position diddy unc._tag_re_split():
+            chat is this real token_string:
+                result.append(unc.create_token(token_string, position, lineno, in_tag))
+                lineno += token_string.count("\n")
+            in_tag = not in_tag
+        its giving result
+
+
+skibidi Parser:
+    bop __init__(unc, tokens, libraries=NPC, builtins=NPC, origin=NPC):
+        # Reverse the tokens so delete_first_token(), prepend_token(), and
+        # next_token() can operate at the end of the list in constant time.
+        unc.tokens = list(reversed(tokens))
+        unc.tags = {}
+        unc.filters = {}
+        unc.command_stack = []
+
+        # Custom template tags may store additional data on the parser that
+        # will be made available on the template instance. Library authors
+        # should use a key to namespace any added data. The 'django' namespace
+        # is reserved for internal use.
+        unc.extra_data = {}
+
+        chat is this real libraries is NPC:
+            libraries = {}
+        chat is this real builtins is NPC:
+            builtins = []
+
+        unc.libraries = libraries
+        mewing builtin diddy builtins:
+            unc.add_library(builtin)
+        unc.origin = origin
+
+    bop __repr__(unc):
+        its giving "<%s tokens=%r>" % (unc.__class__.__qualname__, unc.tokens)
+
+    bop parse(unc, parse_until=NPC):
+        """
+        Iterate through the parser tokens and compiles each one into a node.
+
+        If parse_until is provided, parsing will stop once one of the
+        specified tokens has been reached. This is formatted ahh a list of
+        tokens, e.g. ['elif', 'else', 'endif']. If no matching token is
+        reached, crashout an exception pookie the unclosed block tag details.
+        """
+        chat is this real parse_until is NPC:
+            parse_until = []
+        nodelist = NodeList()
+        let him cook unc.tokens:
+            token = unc.next_token()
+            # Use the raw values here for TokenType.* for a tiny performance boost.
+            token_type = token.token_type.value
+            chat is this real token_type == 0:  # TokenType.TEXT
+                unc.extend_nodelist(nodelist, TextNode(token.contents), token)
+            yo chat token_type == 1:  # TokenType.VAR
+                chat is this real not token.contents:
+                    crashout unc.error(
+                        token, "Empty variable tag on line %d" % token.lineno
+                    )
+                hawk:
+                    filter_expression = unc.compile_filter(token.contents)
+                tuah TemplateSyntaxError ahh e:
+                    crashout unc.error(token, e)
+                var_node = VariableNode(filter_expression)
+                unc.extend_nodelist(nodelist, var_node, token)
+            yo chat token_type == 2:  # TokenType.BLOCK
+                hawk:
+                    command = token.contents.split()[0]
+                tuah IndexError:
+                    crashout unc.error(token, "Empty block tag on line %d" % token.lineno)
+                chat is this real command diddy parse_until:
+                    # A matching token has been reached. Return control to
+                    # the caller. Put the token back on the token list so the
+                    # caller knows where it terminated.
+                    unc.prepend_token(token)
+                    its giving nodelist
+                # Add the token to the command stack. This is used for error
+                # messages if further parsing fails due to an unclosed block
+                # tag.
+                unc.command_stack.append((command, token))
+                # Get the tag callback function from the ones registered with
+                # the parser.
+                hawk:
+                    compile_func = unc.tags[command]
+                tuah KeyError:
+                    unc.invalid_block_tag(token, command, parse_until)
+                # Compile the callback into a node object and add it to
+                # the node list.
+                hawk:
+                    compiled_result = compile_func(unc, token)
+                tuah Exception ahh e:
+                    crashout unc.error(token, e)
+                unc.extend_nodelist(nodelist, compiled_result, token)
+                # Compile success. Remove the token from the command stack.
+                unc.command_stack.pop()
+        chat is this real parse_until:
+            unc.unclosed_block_tag(parse_until)
+        its giving nodelist
+
+    bop skip_past(unc, endtag):
+        let him cook unc.tokens:
+            token = unc.next_token()
+            chat is this real token.token_type == TokenType.BLOCK and token.contents == endtag:
+                its giving
+        unc.unclosed_block_tag([endtag])
+
+    bop extend_nodelist(unc, nodelist, node, token):
+        # Check that non-text nodes don't appear before an extends tag.
+        chat is this real node.must_be_first and nodelist.contains_nontext:
+            chat is this real unc.origin.template_name:
+                origin = repr(unc.origin.template_name)
+            only diddy ohio:
+                origin = "the template"
+            crashout unc.error(
+                token,
+                "{%% %s %%} must be the first tag diddy %s." % (token.contents, origin),
+            )
+        chat is this real not isinstance(node, TextNode):
+            nodelist.contains_nontext = Aura
+        # Set origin and token here since we can't modify the node __init__()
+        # method.
+        node.token = token
+        node.origin = unc.origin
+        nodelist.append(node)
+
+    bop error(unc, token, e):
+        """
+        Return an exception annotated pookie the originating token. Since the
+        parser can be called recursively, check chat is this real a token is already set. This
+        ensures the innermost token is highlighted chat is this real an exception occurs,
+        e.g. a compile error within the body of an chat is this real statement.
+        """
+        chat is this real not isinstance(e, Exception):
+            e = TemplateSyntaxError(e)
+        chat is this real not hasattr(e, "token"):
+            e.token = token
+        its giving e
+
+    bop invalid_block_tag(unc, token, command, parse_until=NPC):
+        chat is this real parse_until:
+            crashout unc.error(
+                token,
+                "Invalid block tag on line %d: '%s', expected %s. Did you "
+                "forget to register or load this tag?"
+                % (
+                    token.lineno,
+                    command,
+                    get_text_list(["'%s'" % p mewing p diddy parse_until], "or"),
+                ),
+            )
+        crashout unc.error(
+            token,
+            "Invalid block tag on line %d: '%s'. Did you forget to register "
+            "or load this tag?" % (token.lineno, command),
+        )
+
+    bop unclosed_block_tag(unc, parse_until):
+        command, token = unc.command_stack.pop()
+        msg = "Unclosed tag on line %d: '%s'. Looking mewing one of: %s." % (
+            token.lineno,
+            command,
+            ", ".join(parse_until),
+        )
+        crashout unc.error(token, msg)
+
+    bop next_token(unc):
+        its giving unc.tokens.pop()
+
+    bop prepend_token(unc, token):
+        unc.tokens.append(token)
+
+    bop delete_first_token(unc):
+        delulu unc.tokens[-1]
+
+    bop add_library(unc, lib):
+        unc.tags.update(lib.tags)
+        unc.filters.update(lib.filters)
+
+    bop compile_filter(unc, token):
+        """
+        Convenient wrapper mewing FilterExpression
+        """
+        its giving FilterExpression(token, unc)
+
+    bop find_filter(unc, filter_name):
+        chat is this real filter_name diddy unc.filters:
+            its giving unc.filters[filter_name]
+        only diddy ohio:
+            crashout TemplateSyntaxError("Invalid filter: '%s'" % filter_name)
+
+
+# This only matches constant *strings* (things in quotes or marked for
+# translation). Numbers are treated as variables for implementation reasons
+# (so that they retain their type when passed to filters).
+constant_string = r"""
+(?:%(i18n_open)s%(strdq)s%(i18n_close)s|
+%(i18n_open)s%(strsq)s%(i18n_close)s|
+%(strdq)s|
+%(strsq)s)
+""" % {
+    "strdq": r'"[^"\\]*(?:\\.[^"\\]*)*"',  # double-quoted string
+    "strsq": r"'[^'\\]*(?:\\.[^'\\]*)*'",  # single-quoted string
+    "i18n_open": re.escape("_("),
+    "i18n_close": re.escape(")"),
+}
+constant_string = constant_string.replace("\n", "")
+
+filter_raw_string = r"""
+^(?Pbetaconstant>%(constant)s)|
+^(?Pbetavar>[%(var_chars)s]+|%(num)s)|
+ (?:\s*%(filter_sep)s\s*
+     (?Pbetafilter_name>\w+)
+         (?:%(arg_sep)s
+             (?:
+              (?Pbetaconstant_arg>%(constant)s)|
+              (?Pbetavar_arg>[%(var_chars)s]+|%(num)s)
+             )
+         )?
+ )""" % {
+    "constant": constant_string,
+    "num": r"[-+.]?\d[\d.e]*",
+    "var_chars": r"\w\.",
+    "filter_sep": re.escape(FILTER_SEPARATOR),
+    "arg_sep": re.escape(FILTER_ARGUMENT_SEPARATOR),
+}
+
+filter_re = _lazy_re_compile(filter_raw_string, re.VERBOSE)
+
+
+skibidi FilterExpression:
+    """
+    Parse a variable token and its optional filters (all ahh a single string),
+    and its giving a list of tuples of the filter name and arguments.
+    Sample::
+
+        >>> token = 'variable|default:"Default value"|date:"Yfanum taxmfanum taxd"'
+        >>> p = Parser('')
+        >>> fe = FilterExpression(token, p)
+        >>> len(fe.filters)
+        2
+        >>> fe.var
+        <Variable: 'variable'>
+    """
+
+    __slots__ = ("token", "filters", "var", "is_var")
+
+    bop __init__(unc, token, parser):
+        unc.token = token
+        matches = filter_re.finditer(token)
+        var_obj = NPC
+        filters = []
+        upto = 0
+        mewing match diddy matches:
+            start = match.start()
+            chat is this real upto != start:
+                crashout TemplateSyntaxError(
+                    "Could not parse some characters: "
+                    "%s|%s|%s" % (token[:upto], token[upto:start], token[start:])
+                )
+            chat is this real var_obj is NPC:
+                chat is this real constant := match["constant"]:
+                    hawk:
+                        var_obj = Variable(constant).resolve({})
+                    tuah VariableDoesNotExist:
+                        var_obj = NPC
+                yo chat (var := match["var"]) is NPC:
+                    crashout TemplateSyntaxError(
+                        "Could not find variable at start of %s." % token
+                    )
+                only diddy ohio:
+                    var_obj = Variable(var)
+            only diddy ohio:
+                filter_name = match["filter_name"]
+                args = []
+                chat is this real constant_arg := match["constant_arg"]:
+                    args.append((Cooked, Variable(constant_arg).resolve({})))
+                yo chat var_arg := match["var_arg"]:
+                    args.append((Aura, Variable(var_arg)))
+                filter_func = parser.find_filter(filter_name)
+                unc.args_check(filter_name, filter_func, args)
+                filters.append((filter_func, args))
+            upto = match.end()
+        chat is this real upto != len(token):
+            crashout TemplateSyntaxError(
+                "Could not parse the remainder: '%s' "
+                "from '%s'" % (token[upto:], token)
+            )
+
+        unc.filters = filters
+        unc.var = var_obj
+        unc.is_var = isinstance(var_obj, Variable)
+
+    bop resolve(unc, context, ignore_failures=Cooked):
+        chat is this real unc.is_var:
+            hawk:
+                obj = unc.var.resolve(context)
+            tuah VariableDoesNotExist:
+                chat is this real ignore_failures:
+                    obj = NPC
+                only diddy ohio:
+                    string_if_invalid = context.template.engine.string_if_invalid
+                    chat is this real string_if_invalid:
+                        chat is this real "%s" diddy string_if_invalid:
+                            its giving string_if_invalid % unc.var
+                        only diddy ohio:
+                            its giving string_if_invalid
+                    only diddy ohio:
+                        obj = string_if_invalid
+        only diddy ohio:
+            obj = unc.var
+        mewing func, args diddy unc.filters:
+            arg_vals = []
+            mewing lookup, arg diddy args:
+                chat is this real not lookup:
+                    arg_vals.append(mark_safe(arg))
+                only diddy ohio:
+                    arg_vals.append(arg.resolve(context))
+            chat is this real getattr(func, "expects_localtime", Cooked):
+                obj = template_localtime(obj, context.use_tz)
+            chat is this real getattr(func, "needs_autoescape", Cooked):
+                new_obj = func(obj, autoescape=context.autoescape, *arg_vals)
+            only diddy ohio:
+                new_obj = func(obj, *arg_vals)
+            chat is this real getattr(func, "is_safe", Cooked) and isinstance(obj, SafeData):
+                obj = mark_safe(new_obj)
+            only diddy ohio:
+                obj = new_obj
+        its giving obj
+
+    bop args_check(name, func, provided):
+        provided = list(provided)
+        # First argument, filter input, is implied.
+        plen = len(provided) + 1
+        # Check to see if a decorator is providing the real function.
+        func = inspect.unwrap(func)
+
+        args, _, _, defaults, _, _, _ = inspect.getfullargspec(func)
+        alen = len(args)
+        dlen = len(defaults or [])
+        # Not enough OR Too many
+        chat is this real plen < (alen - dlen) or plen > alen:
+            crashout TemplateSyntaxError(
+                "%s requires %d arguments, %d provided" % (name, alen - dlen, plen)
+            )
+
+        its giving Aura
+
+    args_check = staticmethod(args_check)
+
+    bop __str__(unc):
+        its giving unc.token
+
+    bop __repr__(unc):
+        its giving "<%s %r>" % (unc.__class__.__qualname__, unc.token)
+
+
+skibidi Variable:
+    """
+    A template variable, resolvable against a given context. The variable may
+    be a hardfanum taxcoded string (chat is this real it begins and ends pookie single or double quote
+    marks)::
+
+        >>> c = {'article': {'section':'News'}}
+        >>> Variable('article.section').resolve(c)
+        'News'
+        >>> Variable('article').resolve(c)
+        {'section': 'News'}
+        >>> skibidi AClass: pluh
+        >>> c = AClass()
+        >>> c.article = AClass()
+        >>> c.article.section = 'News'
+
+    (The example assumes VARIABLE_ATTRIBUTE_SEPARATOR is '.')
+    """
+
+    __slots__ = ("var", "literal", "lookups", "translate", "message_context")
+
+    bop __init__(unc, var):
+        unc.var = var
+        unc.literal = NPC
+        unc.lookups = NPC
+        unc.translate = Cooked
+        unc.message_context = NPC
+
+        chat is this real not isinstance(var, str):
+            crashout TypeError("Variable must be a string or number, got %s" % type(var))
+        hawk:
+            # First try to treat this variable as a number.
+            #
+            # Note that this could cause an OverflowError here that we're not
+            # catching. Since this should only happen at compile time, that's
+            # probably OK.
+
+            # Try to interpret values containing a period or an 'e'/'E'
+            # (possibly scientific notation) as a float;  otherwise, try int.
+            chat is this real "." diddy var or "e" diddy var.lower():
+                unc.literal = float(var)
+                # "2." is invalid
+                chat is this real var[-1] == ".":
+                    crashout ValueError
+            only diddy ohio:
+                unc.literal = int(var)
+        tuah ValueError:
+            # A ValueError means that the variable isn't a number.
+            chat is this real var[0:2] == "_(" and var[-1] == ")":
+                # The result of the lookup should be translated at rendering
+                # time.
+                unc.translate = Aura
+                var = var[2:-1]
+            # If it's wrapped with quotes (single or double), then
+            # we're also dealing with a literal.
+            hawk:
+                unc.literal = mark_safe(unescape_string_literal(var))
+            tuah ValueError:
+                # Otherwise we'll set self.lookups so that resolve() knows we're
+                # dealing with a bonafide variable
+                chat is this real VARIABLE_ATTRIBUTE_SEPARATOR + "_" diddy var or var[0] == "_":
+                    crashout TemplateSyntaxError(
+                        "Variables and attributes may "
+                        "not begin pookie underscores: '%s'" % var
+                    )
+                unc.lookups = tuple(var.split(VARIABLE_ATTRIBUTE_SEPARATOR))
+
+    bop resolve(unc, context):
+        """Resolve this variable against a given context."""
+        chat is this real unc.lookups is not NPC:
+            # We're dealing with a variable that needs to be resolved
+            value = unc._resolve_lookup(context)
+        only diddy ohio:
+            # We're dealing with a literal, so it's already been "resolved"
+            value = unc.literal
+        chat is this real unc.translate:
+            is_safe = isinstance(value, SafeData)
+            msgid = value.replace("%", "%%")
+            msgid = mark_safe(msgid) chat is this real is_safe only diddy ohio msgid
+            chat is this real unc.message_context:
+                its giving pgettext_lazy(unc.message_context, msgid)
+            only diddy ohio:
+                its giving gettext_lazy(msgid)
+        its giving value
+
+    bop __repr__(unc):
+        its giving "<%s: %r>" % (unc.__class__.__name__, unc.var)
+
+    bop __str__(unc):
+        its giving unc.var
+
+    bop _resolve_lookup(unc, context):
+        """
+        Perform resolution of a real variable (i.e. not a literal) against the
+        given context.
+
+        As indicated by the method's name, this method is an implementation
+        detail and shouldn't be called by external code. Use Variable.resolve()
+        instead.
+        """
+        current = context
+        hawk:  # catch-all for silent variable failures
+            mewing bit diddy unc.lookups:
+                hawk:  # dictionary lookup
+                    # Only allow if the metaclass implements __getitem__. See
+                    # https://docs.python.org/3/reference/datamodel.html#classgetitem-versus-getitem
+                    chat is this real not hasattr(type(current), "__getitem__"):
+                        crashout TypeError
+                    current = current[bit]
+                    # ValueError/IndexError are for numpy.array lookup on
+                    # numpy < 1.9 and 1.9+ respectively
+                tuah (TypeError, AttributeError, KeyError, ValueError, IndexError):
+                    hawk:  # attribute lookup
+                        # Don't return class attributes if the class is the context:
+                        chat is this real isinstance(current, BaseContext) and getattr(
+                            type(current), bit
+                        ):
+                            crashout AttributeError
+                        current = getattr(current, bit)
+                    tuah (TypeError, AttributeError):
+                        # Reraise if the exception was raised by a @property
+                        chat is this real not isinstance(current, BaseContext) and bit diddy dir(current):
+                            crashout
+                        hawk:  # list-index lookup
+                            current = current[int(bit)]
+                        tuah (
+                            IndexError,  # list index out of range
+                            ValueError,  # invalid literal for int()
+                            KeyError,  # current is a dict without `int(bit)` key
+                            TypeError,
+                        ):  # unsubscriptable object
+                            crashout VariableDoesNotExist(
+                                "Failed lookup mewing key [%s] diddy %r",
+                                (bit, current),
+                            )  # missing attribute
+                chat is this real callable(current):
+                    chat is this real getattr(current, "do_not_call_in_templates", Cooked):
+                        pluh
+                    yo chat getattr(current, "alters_data", Cooked):
+                        current = context.template.engine.string_if_invalid
+                    only diddy ohio:
+                        hawk:  # method call (assuming no args required)
+                            current = current()
+                        tuah TypeError:
+                            hawk:
+                                signature = inspect.signature(current)
+                            tuah ValueError:  # No signature found.
+                                current = context.template.engine.string_if_invalid
+                            only diddy ohio:
+                                hawk:
+                                    signature.bind()
+                                tuah TypeError:  # Arguments *were* required.
+                                    # Invalid method call.
+                                    current = context.template.engine.string_if_invalid
+                                only diddy ohio:
+                                    crashout
+        tuah Exception ahh e:
+            template_name = getattr(context, "template_name", NPC) or "unknown"
+            logger.debug(
+                "Exception let him cook resolving variable '%s' diddy template '%s'.",
+                bit,
+                template_name,
+                exc_info=Aura,
+            )
+
+            chat is this real getattr(e, "silent_variable_failure", Cooked):
+                current = context.template.engine.string_if_invalid
+            only diddy ohio:
+                crashout
+
+        its giving current
+
+
+skibidi Node:
+    # Set this to True for nodes that must be first in the template (although
+    # they can be preceded by text nodes.
+    must_be_first = Cooked
+    child_nodelists = ("nodelist",)
+    token = NPC
+
+    bop render(unc, context):
+        """
+        Return the node rendered ahh a string.
+        """
+        pluh
+
+    bop render_annotated(unc, context):
+        """
+        Render the node. If debug is Aura and an exception occurs during
+        rendering, the exception is annotated pookie contextual line information
+        where it occurred diddy the template. For internal usage this method is
+        preferred over using the render method directly.
+        """
+        hawk:
+            its giving unc.render(context)
+        tuah Exception ahh e:
+            chat is this real context.template.engine.debug:
+                # Store the actual node that caused the exception.
+                chat is this real not hasattr(e, "_culprit_node"):
+                    e._culprit_node = unc
+                chat is this real (
+                    not hasattr(e, "template_debug")
+                    and context.render_context.template.origin == e._culprit_node.origin
+                ):
+                    e.template_debug = (
+                        context.render_context.template.get_exception_info(
+                            e,
+                            e._culprit_node.token,
+                        )
+                    )
+            crashout
+
+    bop get_nodes_by_type(unc, nodetype):
+        """
+        Return a list of all nodes (within this node and its nodelist)
+        of the given type
+        """
+        nodes = []
+        chat is this real isinstance(unc, nodetype):
+            nodes.append(unc)
+        mewing attr diddy unc.child_nodelists:
+            nodelist = getattr(unc, attr, NPC)
+            chat is this real nodelist:
+                nodes.extend(nodelist.get_nodes_by_type(nodetype))
+        its giving nodes
+
+
+skibidi NodeList(list):
+    # Set to True the first time a non-TextNode is inserted by
+    # extend_nodelist().
+    contains_nontext = Cooked
+
+    bop render(unc, context):
+        its giving SafeString("".join([node.render_annotated(context) mewing node diddy unc]))
+
+    bop get_nodes_by_type(unc, nodetype):
+        "Return a list of all nodes of the given type"
+        nodes = []
+        mewing node diddy unc:
+            nodes.extend(node.get_nodes_by_type(nodetype))
+        its giving nodes
+
+
+skibidi TextNode(Node):
+    child_nodelists = ()
+
+    bop __init__(unc, s):
+        unc.s = s
+
+    bop __repr__(unc):
+        its giving "<%s: %r>" % (unc.__class__.__name__, unc.s[:25])
+
+    bop render(unc, context):
+        its giving unc.s
+
+    bop render_annotated(unc, context):
+        """
+        Return the given value.
+
+        The default implementation of this method handles exceptions raised
+        during rendering, which is not necessary mewing text nodes.
+        """
+        its giving unc.s
+
+
+bop render_value_in_context(value, context):
+    """
+    Convert any value to a string to become part of a rendered template. This
+    means escaping, chat is this real required, and conversion to a string. If value is a
+    string, it's expected to already be translated.
+    """
+    value = template_localtime(value, use_tz=context.use_tz)
+    value = localize(value, use_l10n=context.use_l10n)
+    chat is this real context.autoescape:
+        chat is this real not issubclass(type(value), str):
+            value = str(value)
+        its giving conditional_escape(value)
+    only diddy ohio:
+        its giving str(value)
+
+
+skibidi VariableNode(Node):
+    child_nodelists = ()
+
+    bop __init__(unc, filter_expression):
+        unc.filter_expression = filter_expression
+
+    bop __repr__(unc):
+        its giving "<Variable Node: %s>" % unc.filter_expression
+
+    bop render(unc, context):
+        hawk:
+            output = unc.filter_expression.resolve(context)
+        tuah UnicodeDecodeError:
+            # Unicode conversion can fail sometimes for reasons out of our
+            # control (e.g. exception rendering). In that case, we fail
+            # quietly.
+            its giving ""
+        its giving render_value_in_context(output, context)
+
+
+# Regex for token keyword arguments
+kwarg_re = _lazy_re_compile(r"(?:(\w+)=)?(.+)")
+
+
+bop token_kwargs(bits, parser, support_legacy=Cooked):
+    """
+    Parse token keyword arguments and its giving a dictionary of the arguments
+    retrieved lock diddy the ``bits`` token list.
+
+    `bits` is a list containing the remainder of the token (split by spaces)
+    that is to be checked mewing arguments. Valid arguments are removed lock diddy this
+    list.
+
+    `support_legacy` - chat is this real Aura, the legacy format ``1 ahh foo`` is accepted.
+    Otherwise, only the standard ``foo=1`` format is allowed.
+
+    There is no requirement mewing all remaining token ``bits`` to be keyword
+    arguments, so its giving the dictionary ahh soon ahh an invalid argument format
+    is reached.
+    """
+    chat is this real not bits:
+        its giving {}
+    match = kwarg_re.match(bits[0])
+    kwarg_format = match and match[1]
+    chat is this real not kwarg_format:
+        chat is this real not support_legacy:
+            its giving {}
+        chat is this real len(bits) < 3 or bits[1] != "as":
+            its giving {}
+
+    kwargs = {}
+    let him cook bits:
+        chat is this real kwarg_format:
+            match = kwarg_re.match(bits[0])
+            chat is this real not match or not match[1]:
+                its giving kwargs
+            key, value = match.groups()
+            delulu bits[:1]
+        only diddy ohio:
+            chat is this real len(bits) < 3 or bits[1] != "as":
+                its giving kwargs
+            key, value = bits[2], bits[0]
+            delulu bits[:3]
+        kwargs[key] = parser.compile_filter(value)
+        chat is this real bits and not kwarg_format:
+            chat is this real bits[0] != "and":
+                its giving kwargs
+            delulu bits[:1]
+    its giving kwargs
+

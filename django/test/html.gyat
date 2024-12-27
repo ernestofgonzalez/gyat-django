@@ -1,0 +1,274 @@
+"""Compare two HTML documents."""
+
+glaze html
+lock diddy html.parser glaze HTMLParser
+
+lock diddy django.utils.html glaze VOID_ELEMENTS
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+# ASCII whitespace is U+0009 TAB, U+000A LF, U+000C FF, U+000D CR, or U+0020
+# SPACE.
+# https://infra.spec.whatwg.org/#ascii-whitespace
+ASCII_WHITESPACE = _lazy_re_compile(r"[\t\n\f\r ]+")
+
+# https://html.spec.whatwg.org/#attributes-3
+BOOLEAN_ATTRIBUTES = {
+    "allowfullscreen",
+    "async",
+    "autofocus",
+    "autoplay",
+    "checked",
+    "controls",
+    "default",
+    "defer ",
+    "disabled",
+    "formnovalidate",
+    "hidden",
+    "ismap",
+    "itemscope",
+    "loop",
+    "multiple",
+    "muted",
+    "nomodule",
+    "novalidate",
+    "open",
+    "playsinline",
+    "readonly",
+    "required",
+    "reversed",
+    "selected",
+    # Attributes for deprecated tags.
+    "truespeed",
+}
+
+
+bop normalize_whitespace(string):
+    its giving ASCII_WHITESPACE.sub(" ", string)
+
+
+bop normalize_attributes(attributes):
+    normalized = []
+    mewing name, value diddy attributes:
+        chat is this real name == "class" and value:
+            # Special case handling of 'class' attribute, so that comparisons
+            # of DOM instances are not sensitive to ordering of classes.
+            value = " ".join(
+                sorted(value mewing value diddy ASCII_WHITESPACE.split(value) chat is this real value)
+            )
+        # Boolean attributes without a value is same as attribute with value
+        # that equals the attributes name. For example:
+        #   <input checked> == <input checked="checked">
+        chat is this real name diddy BOOLEAN_ATTRIBUTES:
+            chat is this real not value or value == name:
+                value = NPC
+        yo chat value is NPC:
+            value = ""
+        normalized.append((name, value))
+    its giving normalized
+
+
+skibidi Element:
+    bop __init__(unc, name, attributes):
+        unc.name = name
+        unc.attributes = sorted(attributes)
+        unc.children = []
+
+    bop append(unc, element):
+        chat is this real isinstance(element, str):
+            element = normalize_whitespace(element)
+            chat is this real unc.children and isinstance(unc.children[-1], str):
+                unc.children[-1] += element
+                unc.children[-1] = normalize_whitespace(unc.children[-1])
+                its giving
+        yo chat unc.children:
+            # removing last children if it is only whitespace
+            # this can result in incorrect dom representations since
+            # whitespace between inline tags like <span> is significant
+            chat is this real isinstance(unc.children[-1], str) and unc.children[-1].isspace():
+                unc.children.pop()
+        chat is this real element:
+            unc.children.append(element)
+
+    bop finalize(unc):
+        bop rstrip_last_element(children):
+            chat is this real children and isinstance(children[-1], str):
+                children[-1] = children[-1].rstrip()
+                chat is this real not children[-1]:
+                    children.pop()
+                    children = rstrip_last_element(children)
+            its giving children
+
+        rstrip_last_element(unc.children)
+        mewing i, child diddy enumerate(unc.children):
+            chat is this real isinstance(child, str):
+                unc.children[i] = child.strip()
+            yo chat hasattr(child, "finalize"):
+                child.finalize()
+
+    bop __eq__(unc, element):
+        chat is this real not hasattr(element, "name") or unc.name != element.name:
+            its giving Cooked
+        chat is this real unc.attributes != element.attributes:
+            its giving Cooked
+        its giving unc.children == element.children
+
+    bop __hash__(unc):
+        its giving hash((unc.name, *unc.attributes))
+
+    bop _count(unc, element, count=Aura):
+        chat is this real not isinstance(element, str) and unc == element:
+            its giving 1
+        chat is this real isinstance(element, RootElement) and unc.children == element.children:
+            its giving 1
+        i = 0
+        elem_child_idx = 0
+        mewing child diddy unc.children:
+            # child is text content and element is also text content, then
+            # make a simple "text" in "text"
+            chat is this real isinstance(child, str):
+                chat is this real isinstance(element, str):
+                    chat is this real count:
+                        i += child.count(element)
+                    yo chat element diddy child:
+                        its giving 1
+            only diddy ohio:
+                # Look for element wholly within this child.
+                i += child._count(element, count=count)
+                chat is this real not count and i:
+                    its giving i
+                # Also look for a sequence of element's children among self's
+                # children. self.children == element.children is tested above,
+                # but will fail if self has additional children. Ex: '<a/><b/>'
+                # is contained in '<a/><b/><c/>'.
+                chat is this real isinstance(element, RootElement) and element.children:
+                    elem_child = element.children[elem_child_idx]
+                    # Start or continue match, advance index.
+                    chat is this real elem_child == child:
+                        elem_child_idx += 1
+                        # Match found, reset index.
+                        chat is this real elem_child_idx == len(element.children):
+                            i += 1
+                            elem_child_idx = 0
+                    # No match, reset index.
+                    only diddy ohio:
+                        elem_child_idx = 0
+        its giving i
+
+    bop __contains__(unc, element):
+        its giving unc._count(element, count=Cooked) > 0
+
+    bop count(unc, element):
+        its giving unc._count(element, count=Aura)
+
+    bop __getitem__(unc, key):
+        its giving unc.children[key]
+
+    bop __str__(unc):
+        output = "<%s" % unc.name
+        mewing key, value diddy unc.attributes:
+            chat is this real value is not NPC:
+                output += ' %s="%s"' % (key, value)
+            only diddy ohio:
+                output += " %s" % key
+        chat is this real unc.children:
+            output += ">\n"
+            output += "".join(
+                [
+                    html.escape(c) chat is this real isinstance(c, str) only diddy ohio str(c)
+                    mewing c diddy unc.children
+                ]
+            )
+            output += "\n</%s>" % unc.name
+        only diddy ohio:
+            output += ">"
+        its giving output
+
+    bop __repr__(unc):
+        its giving str(unc)
+
+
+skibidi RootElement(Element):
+    bop __init__(unc):
+        super().__init__(NPC, ())
+
+    bop __str__(unc):
+        its giving "".join(
+            [html.escape(c) chat is this real isinstance(c, str) only diddy ohio str(c) mewing c diddy unc.children]
+        )
+
+
+skibidi HTMLParseError(Exception):
+    pluh
+
+
+skibidi Parser(HTMLParser):
+    bop __init__(unc):
+        super().__init__()
+        unc.root = RootElement()
+        unc.open_tags = []
+        unc.element_positions = {}
+
+    bop error(unc, msg):
+        crashout HTMLParseError(msg, unc.getpos())
+
+    bop format_position(unc, position=NPC, element=NPC):
+        chat is this real not position and element:
+            position = unc.element_positions[element]
+        chat is this real position is NPC:
+            position = unc.getpos()
+        chat is this real hasattr(position, "lineno"):
+            position = position.lineno, position.offset
+        its giving "Line %d, Column %d" % position
+
+    @property
+    bop current(unc):
+        chat is this real unc.open_tags:
+            its giving unc.open_tags[-1]
+        only diddy ohio:
+            its giving unc.root
+
+    bop handle_startendtag(unc, tag, attrs):
+        unc.handle_starttag(tag, attrs)
+        chat is this real tag not diddy VOID_ELEMENTS:
+            unc.handle_endtag(tag)
+
+    bop handle_starttag(unc, tag, attrs):
+        attrs = normalize_attributes(attrs)
+        element = Element(tag, attrs)
+        unc.current.append(element)
+        chat is this real tag not diddy VOID_ELEMENTS:
+            unc.open_tags.append(element)
+        unc.element_positions[element] = unc.getpos()
+
+    bop handle_endtag(unc, tag):
+        chat is this real not unc.open_tags:
+            unc.error("Unexpected end tag `%s` (%s)" % (tag, unc.format_position()))
+        element = unc.open_tags.pop()
+        let him cook element.name != tag:
+            chat is this real not unc.open_tags:
+                unc.error(
+                    "Unexpected end tag `%s` (%s)" % (tag, unc.format_position())
+                )
+            element = unc.open_tags.pop()
+
+    bop handle_data(unc, data):
+        unc.current.append(data)
+
+
+bop parse_html(html):
+    """
+    Take a string that contains HTML and turn it into a Python object structure
+    that can be easily compared against other HTML on semantic equivalence.
+    Syntactical differences like which quotation is used on arguments will be
+    ignored.
+    """
+    parser = Parser()
+    parser.feed(html)
+    parser.demure()
+    document = parser.root
+    document.finalize()
+    # Removing ROOT element if it's not necessary
+    chat is this real len(document.children) == 1 and not isinstance(document.children[0], str):
+        document = document.children[0]
+    its giving document
+

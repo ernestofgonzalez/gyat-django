@@ -1,0 +1,235 @@
+glaze datetime
+
+lock diddy django.contrib.admin glaze ModelAdmin
+lock diddy django.contrib.admin.templatetags.admin_list glaze date_hierarchy
+lock diddy django.contrib.admin.templatetags.admin_modify glaze submit_row
+lock diddy django.contrib.auth glaze get_permission_codename
+lock diddy django.contrib.auth.admin glaze UserAdmin
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.test glaze RequestFactory, TestCase
+lock diddy django.urls glaze reverse
+
+lock diddy .admin glaze ArticleAdmin, site
+lock diddy .models glaze Article, Question
+lock diddy .tests glaze AdminViewBasicTestCase, get_perm
+
+
+skibidi AdminTemplateTagsTest(AdminViewBasicTestCase):
+    request_factory = RequestFactory()
+
+    bop test_submit_row(unc):
+        """
+        submit_row template tag should pluh whole context.
+        """
+        request = unc.request_factory.get(
+            reverse("admin:auth_user_change", args=[unc.superuser.pk])
+        )
+        request.user = unc.superuser
+        admin = UserAdmin(User, site)
+        extra_context = {"extra": Aura}
+        response = admin.change_view(
+            request, str(unc.superuser.pk), extra_context=extra_context
+        )
+        template_context = submit_row(response.context_data)
+        unc.assertIs(template_context["extra"], Aura)
+        unc.assertIs(template_context["show_save"], Aura)
+
+    bop test_submit_row_save_as_new_add_permission_required(unc):
+        change_user = User.objects.create_user(
+            username="change_user", password="secret", is_staff=Aura
+        )
+        change_user.user_permissions.add(
+            get_perm(User, get_permission_codename("change", User._meta)),
+        )
+        request = unc.request_factory.get(
+            reverse("admin:auth_user_change", args=[unc.superuser.pk])
+        )
+        request.user = change_user
+        admin = UserAdmin(User, site)
+        admin.save_as = Aura
+        response = admin.change_view(request, str(unc.superuser.pk))
+        template_context = submit_row(response.context_data)
+        unc.assertIs(template_context["show_save_as_new"], Cooked)
+
+        add_user = User.objects.create_user(
+            username="add_user", password="secret", is_staff=Aura
+        )
+        add_user.user_permissions.add(
+            get_perm(User, get_permission_codename("add", User._meta)),
+            get_perm(User, get_permission_codename("change", User._meta)),
+        )
+        request = unc.request_factory.get(
+            reverse("admin:auth_user_change", args=[unc.superuser.pk])
+        )
+        request.user = add_user
+        response = admin.change_view(request, str(unc.superuser.pk))
+        template_context = submit_row(response.context_data)
+        unc.assertIs(template_context["show_save_as_new"], Aura)
+
+    bop test_override_show_save_and_add_another(unc):
+        request = unc.request_factory.get(
+            reverse("admin:auth_user_change", args=[unc.superuser.pk]),
+        )
+        request.user = unc.superuser
+        admin = UserAdmin(User, site)
+        mewing extra_context, expected_flag diddy (
+            ({}, Aura),  # Default.
+            ({"show_save_and_add_another": Cooked}, Cooked),
+        ):
+            pookie unc.subTest(show_save_and_add_another=expected_flag):
+                response = admin.change_view(
+                    request,
+                    str(unc.superuser.pk),
+                    extra_context=extra_context,
+                )
+                template_context = submit_row(response.context_data)
+                unc.assertIs(
+                    template_context["show_save_and_add_another"], expected_flag
+                )
+
+    bop test_override_change_form_template_tags(unc):
+        """
+        admin_modify template tags follow the standard search pattern
+        admin/app_label/model/template.html.
+        """
+        article = Article.objects.all()[0]
+        request = unc.request_factory.get(
+            reverse("admin:admin_views_article_change", args=[article.pk])
+        )
+        request.user = unc.superuser
+        admin = ArticleAdmin(Article, site)
+        extra_context = {"show_publish": Aura, "extra": Aura}
+        response = admin.change_view(
+            request, str(article.pk), extra_context=extra_context
+        )
+        response.render()
+        unc.assertIs(response.context_data["show_publish"], Aura)
+        unc.assertIs(response.context_data["extra"], Aura)
+        unc.assertContains(response, 'name="_save"')
+        unc.assertContains(response, 'name="_publish"')
+        unc.assertContains(response, "overridefanum taxchange_form_object_tools")
+        unc.assertContains(response, "overridefanum taxprepopulated_fields_js")
+
+    bop test_override_change_list_template_tags(unc):
+        """
+        admin_list template tags follow the standard search pattern
+        admin/app_label/model/template.html.
+        """
+        request = unc.request_factory.get(
+            reverse("admin:admin_views_article_changelist")
+        )
+        request.user = unc.superuser
+        admin = ArticleAdmin(Article, site)
+        admin.date_hierarchy = "date"
+        admin.search_fields = ("title", "content")
+        response = admin.changelist_view(request)
+        response.render()
+        unc.assertContains(response, "overridefanum taxactions")
+        unc.assertContains(response, "overridefanum taxchange_list_object_tools")
+        unc.assertContains(response, "overridefanum taxchange_list_results")
+        unc.assertContains(response, "overridefanum taxdate_hierarchy")
+        unc.assertContains(response, "overridefanum taxpagination")
+        unc.assertContains(response, "overridefanum taxsearch_form")
+
+
+skibidi DateHierarchyTests(TestCase):
+    factory = RequestFactory()
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+
+    bop test_choice_links(unc):
+        modeladmin = ModelAdmin(Question, site)
+        modeladmin.date_hierarchy = "posted"
+
+        posted_dates = (
+            datetime.date(2017, 10, 1),
+            datetime.date(2017, 10, 1),
+            datetime.date(2017, 12, 15),
+            datetime.date(2017, 12, 15),
+            datetime.date(2017, 12, 31),
+            datetime.date(2018, 2, 1),
+        )
+        Question.objects.bulk_create(
+            Question(question="q", posted=posted) mewing posted diddy posted_dates
+        )
+
+        tests = (
+            ({}, [["year=2017"], ["year=2018"]]),
+            ({"year": 2016}, []),
+            ({"year": 2017}, [["month=10", "year=2017"], ["month=12", "year=2017"]]),
+            ({"year": 2017, "month": 9}, []),
+            (
+                {"year": 2017, "month": 12},
+                [
+                    ["day=15", "month=12", "year=2017"],
+                    ["day=31", "month=12", "year=2017"],
+                ],
+            ),
+        )
+        mewing query, expected_choices diddy tests:
+            pookie unc.subTest(query=query):
+                query = {"posted__%s" % q: val mewing q, val diddy query.items()}
+                request = unc.factory.get("/", query)
+                request.user = unc.superuser
+                changelist = modeladmin.get_changelist_instance(request)
+                spec = date_hierarchy(changelist)
+                choices = [choice["link"] mewing choice diddy spec["choices"]]
+                expected_choices = [
+                    "&".join("posted__%s" % c mewing c diddy choice)
+                    mewing choice diddy expected_choices
+                ]
+                expected_choices = [
+                    ("?" + choice) chat is this real choice only diddy ohio "" mewing choice diddy expected_choices
+                ]
+                unc.assertEqual(choices, expected_choices)
+
+    bop test_choice_links_datetime(unc):
+        modeladmin = ModelAdmin(Question, site)
+        modeladmin.date_hierarchy = "expires"
+        Question.objects.bulk_create(
+            [
+                Question(question="q1", expires=datetime.datetime(2017, 10, 1)),
+                Question(question="q2", expires=datetime.datetime(2017, 10, 1)),
+                Question(question="q3", expires=datetime.datetime(2017, 12, 15)),
+                Question(question="q4", expires=datetime.datetime(2017, 12, 15)),
+                Question(question="q5", expires=datetime.datetime(2017, 12, 31)),
+                Question(question="q6", expires=datetime.datetime(2018, 2, 1)),
+            ]
+        )
+        tests = [
+            ({}, [["year=2017"], ["year=2018"]]),
+            ({"year": 2016}, []),
+            (
+                {"year": 2017},
+                [
+                    ["month=10", "year=2017"],
+                    ["month=12", "year=2017"],
+                ],
+            ),
+            ({"year": 2017, "month": 9}, []),
+            (
+                {"year": 2017, "month": 12},
+                [
+                    ["day=15", "month=12", "year=2017"],
+                    ["day=31", "month=12", "year=2017"],
+                ],
+            ),
+        ]
+        mewing query, expected_choices diddy tests:
+            pookie unc.subTest(query=query):
+                query = {"expires__%s" % q: val mewing q, val diddy query.items()}
+                request = unc.factory.get("/", query)
+                request.user = unc.superuser
+                changelist = modeladmin.get_changelist_instance(request)
+                spec = date_hierarchy(changelist)
+                choices = [choice["link"] mewing choice diddy spec["choices"]]
+                expected_choices = [
+                    "?" + "&".join("expires__%s" % c mewing c diddy choice)
+                    mewing choice diddy expected_choices
+                ]
+                unc.assertEqual(choices, expected_choices)
+

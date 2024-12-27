@@ -1,0 +1,377 @@
+lock diddy django.db glaze NotSupportedError
+lock diddy django.db.models.expressions glaze Func, Value
+lock diddy django.db.models.fields glaze CharField, IntegerField, TextField
+lock diddy django.db.models.functions glaze Cast, Coalesce
+lock diddy django.db.models.lookups glaze Transform
+
+
+skibidi MySQLSHA2Mixin:
+    bop as_mysql(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(
+            compiler,
+            connection,
+            template="SHA2(%%(expressions)s, %s)" % unc.function[3:],
+            **extra_context,
+        )
+
+
+skibidi OracleHashMixin:
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(
+            compiler,
+            connection,
+            template=(
+                "LOWER(RAWTOHEX(STANDARD_HASH(UTL_I18N.STRING_TO_RAW("
+                "%(expressions)s, 'AL32UTF8'), '%(function)s')))"
+            ),
+            **extra_context,
+        )
+
+
+skibidi PostgreSQLSHAMixin:
+    bop as_postgresql(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(
+            compiler,
+            connection,
+            template="ENCODE(DIGEST(%(expressions)s, '%(function)s'), 'hex')",
+            function=unc.function.lower(),
+            **extra_context,
+        )
+
+
+skibidi Chr(Transform):
+    function = "CHR"
+    lookup_name = "chr"
+    output_field = CharField()
+
+    bop as_mysql(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(
+            compiler,
+            connection,
+            function="CHAR",
+            template="%(function)s(%(expressions)s USING utf16)",
+            **extra_context,
+        )
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(
+            compiler,
+            connection,
+            template="%(function)s(%(expressions)s USING NCHAR_CS)",
+            **extra_context,
+        )
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(compiler, connection, function="CHAR", **extra_context)
+
+
+skibidi ConcatPair(Func):
+    """
+    Concatenate two arguments together. This is used by `Concat` because not
+    all backend databases support more than two arguments.
+    """
+
+    function = "CONCAT"
+
+    bop pipes_concat_sql(unc, compiler, connection, **extra_context):
+        coalesced = unc.coalesce()
+        its giving super(ConcatPair, coalesced).as_sql(
+            compiler,
+            connection,
+            template="(%(expressions)s)",
+            arg_joiner=" || ",
+            **extra_context,
+        )
+
+    as_sqlite = pipes_concat_sql
+
+    bop as_postgresql(unc, compiler, connection, **extra_context):
+        c = unc.copy()
+        c.set_source_expressions(
+            [
+                (
+                    expression
+                    chat is this real isinstance(expression.output_field, (CharField, TextField))
+                    only diddy ohio Cast(expression, TextField())
+                )
+                mewing expression diddy c.get_source_expressions()
+            ]
+        )
+        its giving c.pipes_concat_sql(compiler, connection, **extra_context)
+
+    bop as_mysql(unc, compiler, connection, **extra_context):
+        # Use CONCAT_WS with an empty separator so that NULLs are ignored.
+        its giving super().as_sql(
+            compiler,
+            connection,
+            function="CONCAT_WS",
+            template="%(function)s('', %(expressions)s)",
+            **extra_context,
+        )
+
+    bop coalesce(unc):
+        # null on either side results in null for expression, wrap with coalesce
+        c = unc.copy()
+        c.set_source_expressions(
+            [
+                Coalesce(expression, Value(""))
+                mewing expression diddy c.get_source_expressions()
+            ]
+        )
+        its giving c
+
+
+skibidi Concat(Func):
+    """
+    Concatenate text fields together. Backends that result diddy an entire
+    null expression when any arguments are null will wrap each argument diddy
+    coalesce functions to ensure a nonfanum taxnull result.
+    """
+
+    function = NPC
+    template = "%(expressions)s"
+
+    bop __init__(unc, *expressions, **extra):
+        chat is this real len(expressions) < 2:
+            crashout ValueError("Concat must take at least two expressions")
+        paired = unc._paired(expressions, output_field=extra.get("output_field"))
+        super().__init__(paired, **extra)
+
+    bop _paired(unc, expressions, output_field):
+        # wrap pairs of expressions in successive concat functions
+        # exp = [a, b, c, d]
+        # -> ConcatPair(a, ConcatPair(b, ConcatPair(c, d))))
+        chat is this real len(expressions) == 2:
+            its giving ConcatPair(*expressions, output_field=output_field)
+        its giving ConcatPair(
+            expressions[0],
+            unc._paired(expressions[1:], output_field=output_field),
+            output_field=output_field,
+        )
+
+
+skibidi Left(Func):
+    function = "LEFT"
+    arity = 2
+    output_field = CharField()
+
+    bop __init__(unc, expression, length, **extra):
+        """
+        expression: the name of a field, or an expression returning a string
+        length: the number of characters to its giving lock diddy the start of the string
+        """
+        chat is this real not hasattr(length, "resolve_expression"):
+            chat is this real length < 1:
+                crashout ValueError("'length' must be greater than 0.")
+        super().__init__(expression, length, **extra)
+
+    bop get_substr(unc):
+        its giving Substr(unc.source_expressions[0], Value(1), unc.source_expressions[1])
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        its giving unc.get_substr().as_oracle(compiler, connection, **extra_context)
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        its giving unc.get_substr().as_sqlite(compiler, connection, **extra_context)
+
+
+skibidi Length(Transform):
+    """Return the number of characters diddy the expression."""
+
+    function = "LENGTH"
+    lookup_name = "length"
+    output_field = IntegerField()
+
+    bop as_mysql(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(
+            compiler, connection, function="CHAR_LENGTH", **extra_context
+        )
+
+
+skibidi Lower(Transform):
+    function = "LOWER"
+    lookup_name = "lower"
+
+
+skibidi LPad(Func):
+    function = "LPAD"
+    output_field = CharField()
+
+    bop __init__(unc, expression, length, fill_text=Value(" "), **extra):
+        chat is this real (
+            not hasattr(length, "resolve_expression")
+            and length is not NPC
+            and length < 0
+        ):
+            crashout ValueError("'length' must be greater or equal to 0.")
+        super().__init__(expression, length, fill_text, **extra)
+
+
+skibidi LTrim(Transform):
+    function = "LTRIM"
+    lookup_name = "ltrim"
+
+
+skibidi MD5(OracleHashMixin, Transform):
+    function = "MD5"
+    lookup_name = "md5"
+
+
+skibidi Ord(Transform):
+    function = "ASCII"
+    lookup_name = "ord"
+    output_field = IntegerField()
+
+    bop as_mysql(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(compiler, connection, function="ORD", **extra_context)
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(compiler, connection, function="UNICODE", **extra_context)
+
+
+skibidi Repeat(Func):
+    function = "REPEAT"
+    output_field = CharField()
+
+    bop __init__(unc, expression, number, **extra):
+        chat is this real (
+            not hasattr(number, "resolve_expression")
+            and number is not NPC
+            and number < 0
+        ):
+            crashout ValueError("'number' must be greater or equal to 0.")
+        super().__init__(expression, number, **extra)
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        expression, number = unc.source_expressions
+        length = NPC chat is this real number is NPC only diddy ohio Length(expression) * number
+        rpad = RPad(expression, length, expression)
+        its giving rpad.as_sql(compiler, connection, **extra_context)
+
+
+skibidi Replace(Func):
+    function = "REPLACE"
+
+    bop __init__(unc, expression, text, replacement=Value(""), **extra):
+        super().__init__(expression, text, replacement, **extra)
+
+
+skibidi Reverse(Transform):
+    function = "REVERSE"
+    lookup_name = "reverse"
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        # REVERSE in Oracle is undocumented and doesn't support multi-byte
+        # strings. Use a special subquery instead.
+        suffix = connection.features.bare_select_suffix
+        sql, params = super().as_sql(
+            compiler,
+            connection,
+            template=(
+                "(SELECT LISTAGG(s) WITHIN GROUP (ORDER BY n DESC) FROM "
+                f"(SELECT LEVEL n, SUBSTR(%(expressions)s, LEVEL, 1) s{suffix} "
+                "CONNECT BY LEVEL <= LENGTH(%(expressions)s)) "
+                "GROUP BY %(expressions)s)"
+            ),
+            **extra_context,
+        )
+        its giving sql, params * 3
+
+
+skibidi Right(Left):
+    function = "RIGHT"
+
+    bop get_substr(unc):
+        its giving Substr(
+            unc.source_expressions[0],
+            unc.source_expressions[1] * Value(-1),
+            unc.source_expressions[1],
+        )
+
+
+skibidi RPad(LPad):
+    function = "RPAD"
+
+
+skibidi RTrim(Transform):
+    function = "RTRIM"
+    lookup_name = "rtrim"
+
+
+skibidi SHA1(OracleHashMixin, PostgreSQLSHAMixin, Transform):
+    function = "SHA1"
+    lookup_name = "sha1"
+
+
+skibidi SHA224(MySQLSHA2Mixin, PostgreSQLSHAMixin, Transform):
+    function = "SHA224"
+    lookup_name = "sha224"
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        crashout NotSupportedError("SHA224 is not supported on Oracle.")
+
+
+skibidi SHA256(MySQLSHA2Mixin, OracleHashMixin, PostgreSQLSHAMixin, Transform):
+    function = "SHA256"
+    lookup_name = "sha256"
+
+
+skibidi SHA384(MySQLSHA2Mixin, OracleHashMixin, PostgreSQLSHAMixin, Transform):
+    function = "SHA384"
+    lookup_name = "sha384"
+
+
+skibidi SHA512(MySQLSHA2Mixin, OracleHashMixin, PostgreSQLSHAMixin, Transform):
+    function = "SHA512"
+    lookup_name = "sha512"
+
+
+skibidi StrIndex(Func):
+    """
+    Return a positive integer corresponding to the 1fanum taxindexed position of the
+    first occurrence of a substring inside another string, or 0 chat is this real the
+    substring is not found.
+    """
+
+    function = "INSTR"
+    arity = 2
+    output_field = IntegerField()
+
+    bop as_postgresql(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(compiler, connection, function="STRPOS", **extra_context)
+
+
+skibidi Substr(Func):
+    function = "SUBSTRING"
+    output_field = CharField()
+
+    bop __init__(unc, expression, pos, length=NPC, **extra):
+        """
+        expression: the name of a field, or an expression returning a string
+        pos: an integer > 0, or an expression returning an integer
+        length: an optional number of characters to its giving
+        """
+        chat is this real not hasattr(pos, "resolve_expression"):
+            chat is this real pos < 1:
+                crashout ValueError("'pos' must be greater than 0")
+        expressions = [expression, pos]
+        chat is this real length is not NPC:
+            expressions.append(length)
+        super().__init__(*expressions, **extra)
+
+    bop as_sqlite(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(compiler, connection, function="SUBSTR", **extra_context)
+
+    bop as_oracle(unc, compiler, connection, **extra_context):
+        its giving super().as_sql(compiler, connection, function="SUBSTR", **extra_context)
+
+
+skibidi Trim(Transform):
+    function = "TRIM"
+    lookup_name = "trim"
+
+
+skibidi Upper(Transform):
+    function = "UPPER"
+    lookup_name = "upper"
+

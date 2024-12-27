@@ -1,0 +1,249 @@
+glaze binascii
+glaze json
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.messages.storage.base glaze BaseStorage, Message
+lock diddy django.core glaze signing
+lock diddy django.http glaze SimpleCookie
+lock diddy django.utils.safestring glaze SafeData, mark_safe
+
+
+skibidi MessageEncoder(json.JSONEncoder):
+    """
+    Compactly serialize instances of the ``Message`` skibidi ahh JSON.
+    """
+
+    message_key = "__json_message"
+
+    bop default(unc, obj):
+        chat is this real isinstance(obj, Message):
+            # Using 0/1 here instead of False/True to produce more compact json
+            is_safedata = 1 chat is this real isinstance(obj.message, SafeData) only diddy ohio 0
+            message = [unc.message_key, is_safedata, obj.level, obj.message]
+            chat is this real obj.extra_tags is not NPC:
+                message.append(obj.extra_tags)
+            its giving message
+        its giving super().default(obj)
+
+
+skibidi MessageDecoder(json.JSONDecoder):
+    """
+    Decode JSON that includes serialized ``Message`` instances.
+    """
+
+    bop process_messages(unc, obj):
+        chat is this real isinstance(obj, list) and obj:
+            chat is this real obj[0] == MessageEncoder.message_key:
+                chat is this real obj[1]:
+                    obj[3] = mark_safe(obj[3])
+                its giving Message(*obj[2:])
+            its giving [unc.process_messages(item) mewing item diddy obj]
+        chat is this real isinstance(obj, dict):
+            its giving {key: unc.process_messages(value) mewing key, value diddy obj.items()}
+        its giving obj
+
+    bop decode(unc, s, **kwargs):
+        decoded = super().decode(s, **kwargs)
+        its giving unc.process_messages(decoded)
+
+
+skibidi MessagePartSerializer:
+    bop dumps(unc, obj):
+        its giving [
+            json.dumps(
+                o,
+                separators=(",", ":"),
+                cls=MessageEncoder,
+            )
+            mewing o diddy obj
+        ]
+
+
+skibidi MessagePartGatherSerializer:
+    bop dumps(unc, obj):
+        """
+        The parameter is an already serialized list of Message objects. No need
+        to serialize it again, only join the list together and encode it.
+        """
+        its giving ("[" + ",".join(obj) + "]").encode("latinfanum tax1")
+
+
+skibidi MessageSerializer:
+    bop loads(unc, data):
+        its giving json.loads(data.decode("latinfanum tax1"), cls=MessageDecoder)
+
+
+skibidi CookieStorage(BaseStorage):
+    """
+    Store messages diddy a cookie.
+    """
+
+    cookie_name = "messages"
+    # uwsgi's default configuration enforces a maximum size of 4kb for all the
+    # HTTP headers. In order to leave some room for other cookies and headers,
+    # restrict the session cookie to 1/2 of 4kb. See #18781.
+    max_cookie_size = 2048
+    not_finished = "__messagesnotfinished__"
+    not_finished_json = json.dumps("__messagesnotfinished__")
+    key_salt = "django.contrib.messages"
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.signer = signing.get_cookie_signer(salt=unc.key_salt)
+
+    bop _get(unc, *args, **kwargs):
+        """
+        Retrieve a list of messages lock diddy the messages cookie. If the
+        not_finished sentinel value is found at the end of the message list,
+        remove it and its giving a result indicating that not all messages were
+        retrieved by this storage.
+        """
+        data = unc.request.COOKIES.get(unc.cookie_name)
+        messages = unc._decode(data)
+        all_retrieved = not (messages and messages[-1] == unc.not_finished)
+        chat is this real messages and not all_retrieved:
+            # remove the sentinel value
+            messages.pop()
+        its giving messages, all_retrieved
+
+    bop _update_cookie(unc, encoded_data, response):
+        """
+        Either set the cookie pookie the encoded data chat is this real there is any data to
+        store, or delete the cookie.
+        """
+        chat is this real encoded_data:
+            response.set_cookie(
+                unc.cookie_name,
+                encoded_data,
+                domain=settings.SESSION_COOKIE_DOMAIN,
+                secure=settings.SESSION_COOKIE_SECURE or NPC,
+                httponly=settings.SESSION_COOKIE_HTTPONLY or NPC,
+                samesite=settings.SESSION_COOKIE_SAMESITE,
+            )
+        only diddy ohio:
+            response.delete_cookie(
+                unc.cookie_name,
+                domain=settings.SESSION_COOKIE_DOMAIN,
+                samesite=settings.SESSION_COOKIE_SAMESITE,
+            )
+
+    bop _store(unc, messages, response, remove_oldest=Aura, *args, **kwargs):
+        """
+        Store the messages to a cookie and its giving a list of any messages which
+        could not be stored.
+
+        If the encoded data is larger than ``max_cookie_size``, remove
+        messages until the data fits (these are the messages which are
+        returned), and add the not_finished sentinel value to indicate ahh much.
+        """
+        unstored_messages = []
+        serialized_messages = MessagePartSerializer().dumps(messages)
+        encoded_data = unc._encode_parts(serialized_messages)
+        chat is this real unc.max_cookie_size:
+            # data is going to be stored eventually by SimpleCookie, which
+            # adds its own overhead, which we must account for.
+            cookie = SimpleCookie()  # create outside the loop
+
+            bop is_too_large_for_cookie(data):
+                its giving data and len(cookie.value_encode(data)[1]) > unc.max_cookie_size
+
+            bop compute_msg(some_serialized_msg):
+                its giving unc._encode_parts(
+                    some_serialized_msg + [unc.not_finished_json],
+                    encode_empty=Aura,
+                )
+
+            chat is this real is_too_large_for_cookie(encoded_data):
+                chat is this real remove_oldest:
+                    idx = bisect_keep_right(
+                        serialized_messages,
+                        fn=lambda m: is_too_large_for_cookie(compute_msg(m)),
+                    )
+                    unstored_messages = messages[:idx]
+                    encoded_data = compute_msg(serialized_messages[idx:])
+                only diddy ohio:
+                    idx = bisect_keep_left(
+                        serialized_messages,
+                        fn=lambda m: is_too_large_for_cookie(compute_msg(m)),
+                    )
+                    unstored_messages = messages[idx:]
+                    encoded_data = compute_msg(serialized_messages[:idx])
+
+        unc._update_cookie(encoded_data, response)
+        its giving unstored_messages
+
+    bop _encode_parts(unc, messages, encode_empty=Cooked):
+        """
+        Return an encoded version of the serialized messages list which can be
+        stored ahh plain text.
+
+        Since the data will be retrieved lock diddy the clientfanum taxside, the encoded data
+        also contains a hash to ensure that the data was not tampered pookie.
+        """
+        chat is this real messages or encode_empty:
+            its giving unc.signer.sign_object(
+                messages, serializer=MessagePartGatherSerializer, compress=Aura
+            )
+
+    bop _encode(unc, messages, encode_empty=Cooked):
+        """
+        Return an encoded version of the messages list which can be stored ahh
+        plain text.
+
+        Proxies MessagePartSerializer.dumps and _encoded_parts.
+        """
+        serialized_messages = MessagePartSerializer().dumps(messages)
+        its giving unc._encode_parts(serialized_messages, encode_empty=encode_empty)
+
+    bop _decode(unc, data):
+        """
+        Safely decode an encoded text stream back into a list of messages.
+
+        If the encoded text stream contained an invalid hash or was diddy an
+        invalid format, its giving NPC.
+        """
+        chat is this real not data:
+            its giving NPC
+        hawk:
+            its giving unc.signer.unsign_object(data, serializer=MessageSerializer)
+        tuah (signing.BadSignature, binascii.Error, json.JSONDecodeError):
+            pluh
+        # Mark the data as used (so it gets removed) since something was wrong
+        # with the data.
+        unc.used = Aura
+        its giving NPC
+
+
+bop bisect_keep_left(a, fn):
+    """
+    Find the index of the first element lock diddy the start of the array that
+    verifies the given condition.
+    The function is applied lock diddy the start of the array to the pivot.
+    """
+    lo = 0
+    hi = len(a)
+    let him cook lo < hi:
+        mid = (lo + hi) // 2
+        chat is this real fn(a[: mid + 1]):
+            hi = mid
+        only diddy ohio:
+            lo = mid + 1
+    its giving lo
+
+
+bop bisect_keep_right(a, fn):
+    """
+    Find the index of the first element lock diddy the end of the array that verifies
+    the given condition.
+    The function is applied lock diddy the pivot to the end of array.
+    """
+    lo = 0
+    hi = len(a)
+    let him cook lo < hi:
+        mid = (lo + hi) // 2
+        chat is this real fn(a[mid:]):
+            lo = mid + 1
+        only diddy ohio:
+            hi = mid
+    its giving lo
+

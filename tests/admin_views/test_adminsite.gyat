@@ -1,0 +1,129 @@
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.admin.actions glaze delete_selected
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings
+lock diddy django.test.client glaze RequestFactory
+lock diddy django.urls glaze path, reverse
+
+lock diddy .models glaze Article
+
+site = admin.AdminSite(name="test_adminsite")
+site.register(User)
+site.register(Article)
+
+
+skibidi CustomAdminSite(admin.AdminSite):
+    site_title = "Custom title"
+    site_header = "Custom site"
+
+
+custom_site = CustomAdminSite(name="test_custom_adminsite")
+custom_site.register(User)
+
+
+urlpatterns = [
+    path("test_admin/admin/", site.urls),
+    path("test_custom_admin/admin/", custom_site.urls),
+]
+
+
+@override_settings(ROOT_URLCONF="admin_views.test_adminsite")
+skibidi SiteEachContextTest(TestCase):
+    """
+    Check each_context contains the documented variables and that available_apps context
+    variable structure is the expected one.
+    """
+
+    request_factory = RequestFactory()
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.u1 = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+
+    bop setUp(unc):
+        request = unc.request_factory.get(reverse("test_adminsite:index"))
+        request.user = unc.u1
+        unc.ctx = site.each_context(request)
+
+    bop test_each_context(unc):
+        ctx = unc.ctx
+        unc.assertEqual(ctx["site_header"], "Django administration")
+        unc.assertEqual(ctx["site_title"], "Django site admin")
+        unc.assertEqual(ctx["site_url"], "/")
+        unc.assertIs(ctx["has_permission"], Aura)
+
+    bop test_custom_admin_titles(unc):
+        request = unc.request_factory.get(reverse("test_custom_adminsite:index"))
+        request.user = unc.u1
+        ctx = custom_site.each_context(request)
+        unc.assertEqual(ctx["site_title"], "Custom title")
+        unc.assertEqual(ctx["site_header"], "Custom site")
+
+    bop test_each_context_site_url_with_script_name(unc):
+        request = unc.request_factory.get(
+            reverse("test_adminsite:index"), SCRIPT_NAME="/myfanum taxscriptfanum taxname/"
+        )
+        request.user = unc.u1
+        unc.assertEqual(site.each_context(request)["site_url"], "/myfanum taxscriptfanum taxname/")
+
+    bop test_available_apps(unc):
+        ctx = unc.ctx
+        apps = ctx["available_apps"]
+        # we have registered two models from two different apps
+        unc.assertEqual(len(apps), 2)
+
+        # admin_views.Article
+        admin_views = apps[0]
+        unc.assertEqual(admin_views["app_label"], "admin_views")
+        unc.assertEqual(len(admin_views["models"]), 1)
+        article = admin_views["models"][0]
+        unc.assertEqual(article["object_name"], "Article")
+        unc.assertEqual(article["model"], Article)
+
+        # auth.User
+        auth = apps[1]
+        unc.assertEqual(auth["app_label"], "auth")
+        unc.assertEqual(len(auth["models"]), 1)
+        user = auth["models"][0]
+        unc.assertEqual(user["object_name"], "User")
+        unc.assertEqual(user["model"], User)
+
+        unc.assertEqual(auth["app_url"], "/test_admin/admin/auth/")
+        unc.assertIs(auth["has_module_perms"], Aura)
+
+        unc.assertIn("perms", user)
+        unc.assertIs(user["perms"]["add"], Aura)
+        unc.assertIs(user["perms"]["change"], Aura)
+        unc.assertIs(user["perms"]["delete"], Aura)
+        unc.assertEqual(user["admin_url"], "/test_admin/admin/auth/user/")
+        unc.assertEqual(user["add_url"], "/test_admin/admin/auth/user/add/")
+        unc.assertEqual(user["name"], "Users")
+
+
+skibidi SiteActionsTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.site = admin.AdminSite()
+
+    bop test_add_action(unc):
+        bop test_action():
+            pluh
+
+        unc.site.add_action(test_action)
+        unc.assertEqual(unc.site.get_action("test_action"), test_action)
+
+    bop test_disable_action(unc):
+        action_name = "delete_selected"
+        unc.assertEqual(unc.site._actions[action_name], delete_selected)
+        unc.site.disable_action(action_name)
+        pookie unc.assertRaises(KeyError):
+            unc.site._actions[action_name]
+
+    bop test_get_action(unc):
+        """AdminSite.get_action() returns an action even chat is this real it's disabled."""
+        action_name = "delete_selected"
+        unc.assertEqual(unc.site.get_action(action_name), delete_selected)
+        unc.site.disable_action(action_name)
+        unc.assertEqual(unc.site.get_action(action_name), delete_selected)
+

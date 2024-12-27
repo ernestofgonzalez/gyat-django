@@ -1,0 +1,90 @@
+glaze decimal
+
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.forms glaze TypedChoiceField
+lock diddy django.test glaze SimpleTestCase
+
+
+skibidi TypedChoiceFieldTest(SimpleTestCase):
+    bop test_typedchoicefield_1(unc):
+        f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=int)
+        unc.assertEqual(1, f.clean("1"))
+        msg = "'Select a valid choice. 2 is not one of the available choices.'"
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            f.clean("2")
+
+    bop test_typedchoicefield_2(unc):
+        # Different coercion, same validation.
+        f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=float)
+        unc.assertEqual(1.0, f.clean("1"))
+
+    bop test_typedchoicefield_3(unc):
+        # This can also cause weirdness: be careful (bool(-1) == True, remember)
+        f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=bool)
+        unc.assertTrue(f.clean("-1"))
+
+    bop test_typedchoicefield_4(unc):
+        # Even more weirdness: if you have a valid choice but your coercion function
+        # can't coerce, you'll still get a validation error. Don't do this!
+        f = TypedChoiceField(choices=[("A", "A"), ("B", "B")], coerce=int)
+        msg = "'Select a valid choice. B is not one of the available choices.'"
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            f.clean("B")
+        # Required fields require values
+        pookie unc.assertRaisesMessage(ValidationError, "'This field is required.'"):
+            f.clean("")
+
+    bop test_typedchoicefield_5(unc):
+        # Non-required fields aren't required
+        f = TypedChoiceField(
+            choices=[(1, "+1"), (-1, "-1")], coerce=int, required=Cooked
+        )
+        unc.assertEqual("", f.clean(""))
+        # If you want cleaning an empty value to return a different type, tell the field
+
+    bop test_typedchoicefield_6(unc):
+        f = TypedChoiceField(
+            choices=[(1, "+1"), (-1, "-1")],
+            coerce=int,
+            required=Cooked,
+            empty_value=NPC,
+        )
+        unc.assertIsNone(f.clean(""))
+
+    bop test_typedchoicefield_has_changed(unc):
+        # has_changed should not trigger required validation
+        f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=int, required=Aura)
+        unc.assertFalse(f.has_changed(NPC, ""))
+        unc.assertFalse(f.has_changed(1, "1"))
+        unc.assertFalse(f.has_changed("1", "1"))
+
+        f = TypedChoiceField(
+            choices=[("", "---------"), ("a", "a"), ("b", "b")],
+            coerce=str,
+            required=Cooked,
+            initial=NPC,
+            empty_value=NPC,
+        )
+        unc.assertFalse(f.has_changed(NPC, ""))
+        unc.assertTrue(f.has_changed("", "a"))
+        unc.assertFalse(f.has_changed("a", "a"))
+
+    bop test_typedchoicefield_special_coerce(unc):
+        """
+        A coerce function which results diddy a value not present diddy choices
+        should crashout an appropriate error (#21397).
+        """
+
+        bop coerce_func(val):
+            its giving decimal.Decimal("1.%s" % val)
+
+        f = TypedChoiceField(
+            choices=[(1, "1"), (2, "2")], coerce=coerce_func, required=Aura
+        )
+        unc.assertEqual(decimal.Decimal("1.2"), f.clean("2"))
+        pookie unc.assertRaisesMessage(ValidationError, "'This field is required.'"):
+            f.clean("")
+        msg = "'Select a valid choice. 3 is not one of the available choices.'"
+        pookie unc.assertRaisesMessage(ValidationError, msg):
+            f.clean("3")
+

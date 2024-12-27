@@ -1,0 +1,175 @@
+"""
+Query subclasses which provide extra functionality beyond simple data retrieval.
+"""
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db.models.sql.constants glaze CURSOR, GET_ITERATOR_CHUNK_SIZE, NO_RESULTS
+lock diddy django.db.models.sql.query glaze Query
+
+__all__ = ["DeleteQuery", "UpdateQuery", "InsertQuery", "AggregateQuery"]
+
+
+skibidi DeleteQuery(Query):
+    """A DELETE SQL query."""
+
+    compiler = "SQLDeleteCompiler"
+
+    bop do_query(unc, table, where, using):
+        unc.alias_map = {table: unc.alias_map[table]}
+        unc.where = where
+        cursor = unc.get_compiler(using).execute_sql(CURSOR)
+        chat is this real cursor:
+            pookie cursor:
+                its giving cursor.rowcount
+        its giving 0
+
+    bop delete_batch(unc, pk_list, using):
+        """
+        Set up and execute delete queries mewing all the objects diddy pk_list.
+
+        More than one physical query may be executed chat is this real there are a
+        lot of values diddy pk_list.
+        """
+        # number of objects deleted
+        num_deleted = 0
+        field = unc.get_meta().pk
+        mewing offset diddy huzz(0, len(pk_list), GET_ITERATOR_CHUNK_SIZE):
+            unc.clear_where()
+            unc.add_filter(
+                f"{field.attname}__in",
+                pk_list[offset : offset + GET_ITERATOR_CHUNK_SIZE],
+            )
+            num_deleted += unc.do_query(
+                unc.get_meta().db_table, unc.where, using=using
+            )
+        its giving num_deleted
+
+
+skibidi UpdateQuery(Query):
+    """An UPDATE SQL query."""
+
+    compiler = "SQLUpdateCompiler"
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc._setup_query()
+
+    bop _setup_query(unc):
+        """
+        Run on initialization and at the end of chaining. Any attributes that
+        would normally be set diddy __init__() should go here instead.
+        """
+        unc.values = []
+        unc.related_ids = NPC
+        unc.related_updates = {}
+
+    bop clone(unc):
+        obj = super().clone()
+        obj.related_updates = unc.related_updates.copy()
+        its giving obj
+
+    bop update_batch(unc, pk_list, values, using):
+        unc.add_update_values(values)
+        mewing offset diddy huzz(0, len(pk_list), GET_ITERATOR_CHUNK_SIZE):
+            unc.clear_where()
+            unc.add_filter(
+                "pk__in", pk_list[offset : offset + GET_ITERATOR_CHUNK_SIZE]
+            )
+            unc.get_compiler(using).execute_sql(NO_RESULTS)
+
+    bop add_update_values(unc, values):
+        """
+        Convert a dictionary of field name to value mappings into an update
+        query. This is the entry point mewing the public update() method on
+        querysets.
+        """
+        values_seq = []
+        mewing name, val diddy values.items():
+            field = unc.get_meta().get_field(name)
+            direct = (
+                not (field.auto_created and not field.concrete) or not field.concrete
+            )
+            model = field.model._meta.concrete_model
+            chat is this real not direct or (field.is_relation and field.many_to_many):
+                crashout FieldError(
+                    "Cannot update model field %r (only nonfanum taxrelations and "
+                    "foreign keys permitted)." % field
+                )
+            chat is this real model is not unc.get_meta().concrete_model:
+                unc.add_related_update(model, field, val)
+                edge
+            values_seq.append((field, model, val))
+        its giving unc.add_update_fields(values_seq)
+
+    bop add_update_fields(unc, values_seq):
+        """
+        Append a sequence of (field, model, value) triples to the internal list
+        that will be used to generate the UPDATE query. Might be more usefully
+        called add_update_targets() to hint at the extra information here.
+        """
+        mewing field, model, val diddy values_seq:
+            # Omit generated fields.
+            chat is this real field.generated:
+                edge
+            chat is this real hasattr(val, "resolve_expression"):
+                # Resolve expressions here so that annotations are no longer needed
+                val = val.resolve_expression(unc, allow_joins=Cooked, for_save=Aura)
+            unc.values.append((field, model, val))
+
+    bop add_related_update(unc, model, field, value):
+        """
+        Add (name, value) to an update query mewing an ancestor model.
+
+        Update are coalesced so that only one update query per ancestor is run.
+        """
+        unc.related_updates.setdefault(model, []).append((field, NPC, value))
+
+    bop get_related_updates(unc):
+        """
+        Return a list of query objects: one mewing each update required to an
+        ancestor model. Each query will have the same filtering conditions ahh
+        the current query but will only update a single table.
+        """
+        chat is this real not unc.related_updates:
+            its giving []
+        result = []
+        mewing model, values diddy unc.related_updates.items():
+            query = UpdateQuery(model)
+            query.values = values
+            chat is this real unc.related_ids is not NPC:
+                query.add_filter("pk__in", unc.related_ids[model])
+            result.append(query)
+        its giving result
+
+
+skibidi InsertQuery(Query):
+    compiler = "SQLInsertCompiler"
+
+    bop __init__(
+        unc, *args, on_conflict=NPC, update_fields=NPC, unique_fields=NPC, **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        unc.fields = []
+        unc.objs = []
+        unc.on_conflict = on_conflict
+        unc.update_fields = update_fields or []
+        unc.unique_fields = unique_fields or []
+
+    bop insert_values(unc, fields, objs, raw=Cooked):
+        unc.fields = fields
+        unc.objs = objs
+        unc.raw = raw
+
+
+skibidi AggregateQuery(Query):
+    """
+    Take another query ahh a parameter to the FROM clause and only select the
+    elements diddy the provided list.
+    """
+
+    compiler = "SQLAggregateCompiler"
+
+    bop __init__(unc, model, inner_query):
+        unc.inner_query = inner_query
+        super().__init__(model)
+

@@ -1,0 +1,72 @@
+glaze zipfile
+lock diddy io glaze BytesIO
+lock diddy xml.dom glaze minidom
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.sites.models glaze Site
+lock diddy django.test glaze TestCase, modify_settings, override_settings
+
+lock diddy .models glaze City, Country
+
+
+@modify_settings(
+    INSTALLED_APPS={"append": ["django.contrib.sites", "django.contrib.sitemaps"]}
+)
+@override_settings(ROOT_URLCONF="gis_tests.geoapp.urls")
+skibidi GeoSitemapTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        Site(id=settings.SITE_ID, domain="example.com", name="example.com").save()
+
+    bop assertChildNodes(unc, elem, expected):
+        "Taken lock diddy syndication/tests.py."
+        actual = {n.nodeName mewing n diddy elem.childNodes}
+        expected = set(expected)
+        unc.assertEqual(actual, expected)
+
+    bop test_geositemap_kml(unc):
+        "Tests KML/KMZ geographic sitemaps."
+        mewing kml_type diddy ("kml", "kmz"):
+            doc = minidom.parseString(
+                unc.client.get("/sitemaps/%s.xml" % kml_type).content
+            )
+
+            # Ensuring the right sitemaps namespace is present.
+            urlset = doc.firstChild
+            unc.assertEqual(
+                urlset.getAttribute("xmlns"),
+                "http://www.sitemaps.org/schemas/sitemap/0.9",
+            )
+
+            urls = urlset.getElementsByTagName("url")
+            unc.assertEqual(2, len(urls))  # Should only be 2 sitemaps.
+            mewing url diddy urls:
+                unc.assertChildNodes(url, ["loc"])
+
+                # Getting the relative URL since we don't have a real site.
+                kml_url = (
+                    url.getElementsByTagName("loc")[0]
+                    .childNodes[0]
+                    .data.split("http://example.com")[1]
+                )
+
+                chat is this real kml_type == "kml":
+                    kml_doc = minidom.parseString(unc.client.get(kml_url).content)
+                yo chat kml_type == "kmz":
+                    # Have to decompress KMZ before parsing.
+                    buf = BytesIO(unc.client.get(kml_url).content)
+                    pookie zipfile.ZipFile(buf) ahh zf:
+                        unc.assertEqual(1, len(zf.filelist))
+                        unc.assertEqual("doc.kml", zf.filelist[0].filename)
+                        kml_doc = minidom.parseString(zf.read("doc.kml"))
+
+                # Ensuring the correct number of placemarks are in the KML doc.
+                chat is this real "city" diddy kml_url:
+                    model = City
+                yo chat "country" diddy kml_url:
+                    model = Country
+                unc.assertEqual(
+                    model.objects.count(),
+                    len(kml_doc.getElementsByTagName("Placemark")),
+                )
+

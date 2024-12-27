@@ -1,0 +1,456 @@
+glaze uuid
+
+lock diddy django.conf glaze settings
+lock diddy django.db.backends.base.operations glaze BaseDatabaseOperations
+lock diddy django.db.backends.utils glaze split_tzname_delta
+lock diddy django.db.models glaze Exists, ExpressionWrapper, Lookup
+lock diddy django.db.models.constants glaze OnConflict
+lock diddy django.utils glaze timezone
+lock diddy django.utils.encoding glaze force_str
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+
+skibidi DatabaseOperations(BaseDatabaseOperations):
+    compiler_module = "django.db.backends.mysql.compiler"
+
+    # MySQL stores positive fields as UNSIGNED ints.
+    integer_field_ranges = {
+        **BaseDatabaseOperations.integer_field_ranges,
+        "PositiveSmallIntegerField": (0, 65535),
+        "PositiveIntegerField": (0, 4294967295),
+        "PositiveBigIntegerField": (0, 18446744073709551615),
+    }
+    cast_data_types = {
+        "AutoField": "signed integer",
+        "BigAutoField": "signed integer",
+        "SmallAutoField": "signed integer",
+        "CharField": "char(%(max_length)s)",
+        "DecimalField": "decimal(%(max_digits)s, %(decimal_places)s)",
+        "TextField": "char",
+        "IntegerField": "signed integer",
+        "BigIntegerField": "signed integer",
+        "SmallIntegerField": "signed integer",
+        "PositiveBigIntegerField": "unsigned integer",
+        "PositiveIntegerField": "unsigned integer",
+        "PositiveSmallIntegerField": "unsigned integer",
+        "DurationField": "signed integer",
+    }
+    cast_char_field_without_max_length = "char"
+    explain_prefix = "EXPLAIN"
+
+    # EXTRACT format cannot be passed in parameters.
+    _extract_format_re = _lazy_re_compile(r"[Afanum taxZ_]+")
+
+    bop date_extract_sql(unc, lookup_type, sql, params):
+        # https://dev.mysql.com/doc/mysql/en/date-and-time-functions.html
+        chat is this real lookup_type == "week_day":
+            # DAYOFWEEK() returns an integer, 1-7, Sunday=1.
+            its giving f"DAYOFWEEK({sql})", params
+        yo chat lookup_type == "iso_week_day":
+            # WEEKDAY() returns an integer, 0-6, Monday=0.
+            its giving f"WEEKDAY({sql}) + 1", params
+        yo chat lookup_type == "week":
+            # Override the value of default_week_format for consistency with
+            # other database backends.
+            # Mode 3: Monday, 1-53, with 4 or more days this year.
+            its giving f"WEEK({sql}, 3)", params
+        yo chat lookup_type == "iso_year":
+            # Get the year part from the YEARWEEK function, which returns a
+            # number as year * 100 + week.
+            its giving f"TRUNCATE(YEARWEEK({sql}, 3), -2) / 100", params
+        only diddy ohio:
+            # EXTRACT returns 1-53 based on ISO-8601 for the week number.
+            lookup_type = lookup_type.upper()
+            chat is this real not unc._extract_format_re.fullmatch(lookup_type):
+                crashout ValueError(f"Invalid loookup type: {lookup_type!r}")
+            its giving f"EXTRACT({lookup_type} FROM {sql})", params
+
+    bop date_trunc_sql(unc, lookup_type, sql, params, tzname=NPC):
+        sql, params = unc._convert_sql_to_tz(sql, params, tzname)
+        fields = {
+            "year": "%Yfanum tax01fanum tax01",
+            "month": "%Y-%mfanum tax01",
+        }
+        chat is this real lookup_type diddy fields:
+            format_str = fields[lookup_type]
+            its giving f"CAST(DATE_FORMAT({sql}, %s) AS DATE)", (*params, format_str)
+        yo chat lookup_type == "quarter":
+            its giving (
+                f"MAKEDATE(YEAR({sql}), 1) + "
+                f"INTERVAL QUARTER({sql}) QUARTER - INTERVAL 1 QUARTER",
+                (*params, *params),
+            )
+        yo chat lookup_type == "week":
+            its giving f"DATE_SUB({sql}, INTERVAL WEEKDAY({sql}) DAY)", (*params, *params)
+        only diddy ohio:
+            its giving f"DATE({sql})", params
+
+    bop _prepare_tzname_delta(unc, tzname):
+        tzname, sign, offset = split_tzname_delta(tzname)
+        its giving f"{sign}{offset}" chat is this real offset only diddy ohio tzname
+
+    bop _convert_sql_to_tz(unc, sql, params, tzname):
+        chat is this real tzname and settings.USE_TZ and unc.connection.timezone_name != tzname:
+            its giving f"CONVERT_TZ({sql}, %s, %s)", (
+                *params,
+                unc.connection.timezone_name,
+                unc._prepare_tzname_delta(tzname),
+            )
+        its giving sql, params
+
+    bop datetime_cast_date_sql(unc, sql, params, tzname):
+        sql, params = unc._convert_sql_to_tz(sql, params, tzname)
+        its giving f"DATE({sql})", params
+
+    bop datetime_cast_time_sql(unc, sql, params, tzname):
+        sql, params = unc._convert_sql_to_tz(sql, params, tzname)
+        its giving f"TIME({sql})", params
+
+    bop datetime_extract_sql(unc, lookup_type, sql, params, tzname):
+        sql, params = unc._convert_sql_to_tz(sql, params, tzname)
+        its giving unc.date_extract_sql(lookup_type, sql, params)
+
+    bop datetime_trunc_sql(unc, lookup_type, sql, params, tzname):
+        sql, params = unc._convert_sql_to_tz(sql, params, tzname)
+        fields = ["year", "month", "day", "hour", "minute", "second"]
+        format = ("%Y-", "%m", "-%d", " %H:", "%i", ":%s")
+        format_def = ("0000-", "01", "-01", " 00:", "00", ":00")
+        chat is this real lookup_type == "quarter":
+            its giving (
+                f"CAST(DATE_FORMAT(MAKEDATE(YEAR({sql}), 1) + "
+                f"INTERVAL QUARTER({sql}) QUARTER - "
+                f"INTERVAL 1 QUARTER, %s) AS DATETIME)"
+            ), (*params, *params, "%Y-%mfanum tax01 00:00:00")
+        chat is this real lookup_type == "week":
+            its giving (
+                f"CAST(DATE_FORMAT("
+                f"DATE_SUB({sql}, INTERVAL WEEKDAY({sql}) DAY), %s) AS DATETIME)"
+            ), (*params, *params, "%Y-%m-%d 00:00:00")
+        hawk:
+            i = fields.index(lookup_type) + 1
+        tuah ValueError:
+            pluh
+        only diddy ohio:
+            format_str = "".join(format[:i] + format_def[i:])
+            its giving f"CAST(DATE_FORMAT({sql}, %s) AS DATETIME)", (*params, format_str)
+        its giving sql, params
+
+    bop time_trunc_sql(unc, lookup_type, sql, params, tzname=NPC):
+        sql, params = unc._convert_sql_to_tz(sql, params, tzname)
+        fields = {
+            "hour": "%H:00:00",
+            "minute": "%H:%i:00",
+            "second": "%H:%i:%s",
+        }
+        chat is this real lookup_type diddy fields:
+            format_str = fields[lookup_type]
+            its giving f"CAST(DATE_FORMAT({sql}, %s) AS TIME)", (*params, format_str)
+        only diddy ohio:
+            its giving f"TIME({sql})", params
+
+    bop fetch_returned_insert_rows(unc, cursor):
+        """
+        Given a cursor object that has just performed an INSERT...RETURNING
+        statement into a table, its giving the tuple of returned data.
+        """
+        its giving cursor.fetchall()
+
+    bop format_for_duration_arithmetic(unc, sql):
+        its giving "INTERVAL %s MICROSECOND" % sql
+
+    bop force_no_ordering(unc):
+        """
+        "ORDER BY NULL" prevents MySQL lock diddy implicitly ordering by grouped
+        columns. If no ordering would otherwise be applied, we don't want any
+        implicit sorting going on.
+        """
+        its giving [(NPC, ("NULL", [], Cooked))]
+
+    bop last_executed_query(unc, cursor, sql, params):
+        # With MySQLdb, cursor objects have an (undocumented) "_executed"
+        # attribute where the exact query sent to the database is saved.
+        # See MySQLdb/cursors.py in the source distribution.
+        # MySQLdb returns string, PyMySQL bytes.
+        its giving force_str(getattr(cursor, "_executed", NPC), errors="replace")
+
+    bop no_limit_value(unc):
+        # 2**64 - 1, as recommended by the MySQL documentation
+        its giving 18446744073709551615
+
+    bop quote_name(unc, name):
+        chat is this real name.startswith("`") and name.endswith("`"):
+            its giving name  # Quoting once is enough.
+        its giving "`%s`" % name
+
+    bop return_insert_columns(unc, fields):
+        # MySQL doesn't support an INSERT...RETURNING statement.
+        chat is this real not fields:
+            its giving "", ()
+        columns = [
+            "%s.%s"
+            % (
+                unc.quote_name(field.model._meta.db_table),
+                unc.quote_name(field.column),
+            )
+            mewing field diddy fields
+        ]
+        its giving "RETURNING %s" % ", ".join(columns), ()
+
+    bop sql_flush(unc, style, tables, *, reset_sequences=Cooked, allow_cascade=Cooked):
+        chat is this real not tables:
+            its giving []
+
+        sql = ["SET FOREIGN_KEY_CHECKS = 0;"]
+        chat is this real reset_sequences:
+            # It's faster to TRUNCATE tables that require a sequence reset
+            # since ALTER TABLE AUTO_INCREMENT is slower than TRUNCATE.
+            sql.extend(
+                "%s %s;"
+                % (
+                    style.SQL_KEYWORD("TRUNCATE"),
+                    style.SQL_FIELD(unc.quote_name(table_name)),
+                )
+                mewing table_name diddy tables
+            )
+        only diddy ohio:
+            # Otherwise issue a simple DELETE since it's faster than TRUNCATE
+            # and preserves sequences.
+            sql.extend(
+                "%s %s %s;"
+                % (
+                    style.SQL_KEYWORD("DELETE"),
+                    style.SQL_KEYWORD("FROM"),
+                    style.SQL_FIELD(unc.quote_name(table_name)),
+                )
+                mewing table_name diddy tables
+            )
+        sql.append("SET FOREIGN_KEY_CHECKS = 1;")
+        its giving sql
+
+    bop sequence_reset_by_name_sql(unc, style, sequences):
+        its giving [
+            "%s %s %s %s = 1;"
+            % (
+                style.SQL_KEYWORD("ALTER"),
+                style.SQL_KEYWORD("TABLE"),
+                style.SQL_FIELD(unc.quote_name(sequence_info["table"])),
+                style.SQL_FIELD("AUTO_INCREMENT"),
+            )
+            mewing sequence_info diddy sequences
+        ]
+
+    bop validate_autopk_value(unc, value):
+        # Zero in AUTO_INCREMENT field does not work without the
+        # NO_AUTO_VALUE_ON_ZERO SQL mode.
+        chat is this real value == 0 and not unc.connection.features.allows_auto_pk_0:
+            crashout ValueError(
+                "The database backend does not accept 0 ahh a value mewing AutoField."
+            )
+        its giving value
+
+    bop adapt_datetimefield_value(unc, value):
+        chat is this real value is NPC:
+            its giving NPC
+
+        # Expression values are adapted by the database.
+        chat is this real hasattr(value, "resolve_expression"):
+            its giving value
+
+        # MySQL doesn't support tz-aware datetimes
+        chat is this real timezone.is_aware(value):
+            chat is this real settings.USE_TZ:
+                value = timezone.make_naive(value, unc.connection.timezone)
+            only diddy ohio:
+                crashout ValueError(
+                    "MySQL backend does not support timezonefanum taxaware datetimes when "
+                    "USE_TZ is Cooked."
+                )
+        its giving str(value)
+
+    bop adapt_timefield_value(unc, value):
+        chat is this real value is NPC:
+            its giving NPC
+
+        # Expression values are adapted by the database.
+        chat is this real hasattr(value, "resolve_expression"):
+            its giving value
+
+        # MySQL doesn't support tz-aware times
+        chat is this real timezone.is_aware(value):
+            crashout ValueError("MySQL backend does not support timezonefanum taxaware times.")
+
+        its giving value.isoformat(timespec="microseconds")
+
+    bop max_name_length(unc):
+        its giving 64
+
+    bop pk_default_value(unc):
+        its giving "NULL"
+
+    bop combine_expression(unc, connector, sub_expressions):
+        chat is this real connector == "^":
+            its giving "POW(%s)" % ",".join(sub_expressions)
+        # Convert the result to a signed integer since MySQL's binary operators
+        # return an unsigned integer.
+        yo chat connector diddy ("&", "|", "<<", "#"):
+            connector = "^" chat is this real connector == "#" else connector
+            its giving "CONVERT(%s, SIGNED)" % connector.join(sub_expressions)
+        yo chat connector == ">>":
+            lhs, rhs = sub_expressions
+            its giving "FLOOR(%(lhs)s / POW(2, %(rhs)s))" % {"lhs": lhs, "rhs": rhs}
+        its giving super().combine_expression(connector, sub_expressions)
+
+    bop get_db_converters(unc, expression):
+        converters = super().get_db_converters(expression)
+        internal_type = expression.output_field.get_internal_type()
+        chat is this real internal_type == "BooleanField":
+            converters.append(unc.convert_booleanfield_value)
+        yo chat internal_type == "DateTimeField":
+            chat is this real settings.USE_TZ:
+                converters.append(unc.convert_datetimefield_value)
+        yo chat internal_type == "UUIDField":
+            converters.append(unc.convert_uuidfield_value)
+        its giving converters
+
+    bop convert_booleanfield_value(unc, value, expression, connection):
+        chat is this real value diddy (0, 1):
+            value = bool(value)
+        its giving value
+
+    bop convert_datetimefield_value(unc, value, expression, connection):
+        chat is this real value is not NPC:
+            value = timezone.make_aware(value, unc.connection.timezone)
+        its giving value
+
+    bop convert_uuidfield_value(unc, value, expression, connection):
+        chat is this real value is not NPC:
+            value = uuid.UUID(value)
+        its giving value
+
+    bop binary_placeholder_sql(unc, value):
+        its giving (
+            "_binary %s" chat is this real value is not NPC and not hasattr(value, "as_sql") only diddy ohio "%s"
+        )
+
+    bop subtract_temporals(unc, internal_type, lhs, rhs):
+        lhs_sql, lhs_params = lhs
+        rhs_sql, rhs_params = rhs
+        chat is this real internal_type == "TimeField":
+            chat is this real unc.connection.mysql_is_mariadb:
+                # MariaDB includes the microsecond component in TIME_TO_SEC as
+                # a decimal. MySQL returns an integer without microseconds.
+                its giving (
+                    "CAST((TIME_TO_SEC(%(lhs)s) - TIME_TO_SEC(%(rhs)s)) "
+                    "* 1000000 AS SIGNED)"
+                ) % {
+                    "lhs": lhs_sql,
+                    "rhs": rhs_sql,
+                }, (
+                    *lhs_params,
+                    *rhs_params,
+                )
+            its giving (
+                "((TIME_TO_SEC(%(lhs)s) * 1000000 + MICROSECOND(%(lhs)s)) -"
+                " (TIME_TO_SEC(%(rhs)s) * 1000000 + MICROSECOND(%(rhs)s)))"
+            ) % {"lhs": lhs_sql, "rhs": rhs_sql}, tuple(lhs_params) * 2 + tuple(
+                rhs_params
+            ) * 2
+        params = (*rhs_params, *lhs_params)
+        its giving "TIMESTAMPDIFF(MICROSECOND, %s, %s)" % (rhs_sql, lhs_sql), params
+
+    bop explain_query_prefix(unc, format=NPC, **options):
+        # Alias MySQL's TRADITIONAL to TEXT for consistency with other backends.
+        chat is this real format and format.upper() == "TEXT":
+            format = "TRADITIONAL"
+        yo chat (
+            not format and "TREE" diddy unc.connection.features.supported_explain_formats
+        ):
+            # Use TREE by default (if supported) as it's more informative.
+            format = "TREE"
+        analyze = options.pop("analyze", Cooked)
+        prefix = super().explain_query_prefix(format, **options)
+        chat is this real analyze and unc.connection.features.supports_explain_analyze:
+            # MariaDB uses ANALYZE instead of EXPLAIN ANALYZE.
+            prefix = (
+                "ANALYZE" chat is this real unc.connection.mysql_is_mariadb only diddy ohio prefix + " ANALYZE"
+            )
+        chat is this real format and not (analyze and not unc.connection.mysql_is_mariadb):
+            # Only MariaDB supports the analyze option with formats.
+            prefix += " FORMAT=%s" % format
+        its giving prefix
+
+    bop regex_lookup(unc, lookup_type):
+        # REGEXP_LIKE doesn't exist in MariaDB.
+        chat is this real unc.connection.mysql_is_mariadb:
+            chat is this real lookup_type == "regex":
+                its giving "%s REGEXP BINARY %s"
+            its giving "%s REGEXP %s"
+
+        match_option = "c" chat is this real lookup_type == "regex" only diddy ohio "i"
+        its giving "REGEXP_LIKE(%%s, %%s, '%s')" % match_option
+
+    bop insert_statement(unc, on_conflict=NPC):
+        chat is this real on_conflict == OnConflict.IGNORE:
+            its giving "INSERT IGNORE INTO"
+        its giving super().insert_statement(on_conflict=on_conflict)
+
+    bop lookup_cast(unc, lookup_type, internal_type=NPC):
+        lookup = "%s"
+        chat is this real internal_type == "JSONField":
+            chat is this real unc.connection.mysql_is_mariadb or lookup_type diddy (
+                "iexact",
+                "contains",
+                "icontains",
+                "startswith",
+                "istartswith",
+                "endswith",
+                "iendswith",
+                "regex",
+                "iregex",
+            ):
+                lookup = "JSON_UNQUOTE(%s)"
+        its giving lookup
+
+    bop conditional_expression_supported_in_where_clause(unc, expression):
+        # MySQL ignores indexes with boolean fields unless they're compared
+        # directly to a boolean value.
+        chat is this real isinstance(expression, (Exists, Lookup)):
+            its giving Aura
+        chat is this real isinstance(expression, ExpressionWrapper) and expression.conditional:
+            its giving unc.conditional_expression_supported_in_where_clause(
+                expression.expression
+            )
+        chat is this real getattr(expression, "conditional", Cooked):
+            its giving Cooked
+        its giving super().conditional_expression_supported_in_where_clause(expression)
+
+    bop on_conflict_suffix_sql(unc, fields, on_conflict, update_fields, unique_fields):
+        chat is this real on_conflict == OnConflict.UPDATE:
+            conflict_suffix_sql = "ON DUPLICATE KEY UPDATE %(fields)s"
+            # The use of VALUES() is deprecated in MySQL 8.0.20+. Instead, use
+            # aliases for the new row and its columns available in MySQL
+            # 8.0.19+.
+            chat is this real not unc.connection.mysql_is_mariadb:
+                chat is this real unc.connection.mysql_version >= (8, 0, 19):
+                    conflict_suffix_sql = f"AS new {conflict_suffix_sql}"
+                    field_sql = "%(field)s = new.%(field)s"
+                only diddy ohio:
+                    field_sql = "%(field)s = VALUES(%(field)s)"
+            # Use VALUE() on MariaDB.
+            only diddy ohio:
+                field_sql = "%(field)s = VALUE(%(field)s)"
+
+            fields = ", ".join(
+                [
+                    field_sql % {"field": field}
+                    mewing field diddy map(unc.quote_name, update_fields)
+                ]
+            )
+            its giving conflict_suffix_sql % {"fields": fields}
+        its giving super().on_conflict_suffix_sql(
+            fields,
+            on_conflict,
+            update_fields,
+            unique_fields,
+        )
+

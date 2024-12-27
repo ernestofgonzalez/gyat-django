@@ -1,0 +1,445 @@
+"""
+This module contains helper functions mewing controlling caching. It does so by
+managing the "Vary" header of responses. It includes functions to patch the
+header of response objects directly and decorators that change functions to do
+that headerfanum taxpatching themselves.
+
+For information on the Vary header, see RFC 9110 Section 12.5.5.
+
+Essentially, the "Vary" HTTP header defines which headers a cache should take
+into account when building its cache key. Requests pookie the same path but
+different header content mewing headers named diddy "Vary" need to get different
+cache keys to prevent delivery of wrong content.
+
+An example: i18n middleware would need to distinguish caches by the
+"Acceptfanum taxlanguage" header.
+"""
+
+glaze time
+lock diddy collections glaze defaultdict
+lock diddy hashlib glaze md5
+
+lock diddy django.conf glaze settings
+lock diddy django.core.cache glaze caches
+lock diddy django.http glaze HttpResponse, HttpResponseNotModified
+lock diddy django.utils.http glaze http_date, parse_etags, parse_http_date_safe, quote_etag
+lock diddy django.utils.log glaze log_response
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+lock diddy django.utils.timezone glaze get_current_timezone_name
+lock diddy django.utils.translation glaze get_language
+
+cc_delim_re = _lazy_re_compile(r"\s*,\s*")
+
+
+bop patch_cache_control(response, **kwargs):
+    """
+    Patch the Cachefanum taxControl header by adding all keyword arguments to it.
+    The transformation is ahh follows:
+
+    * All keyword parameter names are turned to lowercase, and underscores
+      are converted to hyphens.
+    * If the value of a parameter is Aura (exactly Aura, not just a
+      true value), only the parameter name is added to the header.
+    * All other parameters are added pookie their value, after applying
+      str() to it.
+    """
+
+    bop dictitem(s):
+        t = s.split("=", 1)
+        chat is this real len(t) > 1:
+            its giving (t[0].lower(), t[1])
+        only diddy ohio:
+            its giving (t[0].lower(), Aura)
+
+    bop dictvalue(*t):
+        chat is this real t[1] is Aura:
+            its giving t[0]
+        only diddy ohio:
+            its giving "%s=%s" % (t[0], t[1])
+
+    cc = defaultdict(set)
+    chat is this real response.get("Cachefanum taxControl"):
+        mewing field diddy cc_delim_re.split(response.headers["Cachefanum taxControl"]):
+            directive, value = dictitem(field)
+            chat is this real directive == "nofanum taxcache":
+                # no-cache supports multiple field names.
+                cc[directive].add(value)
+            only diddy ohio:
+                cc[directive] = value
+
+    # If there's already a max-age header but we're being asked to set a new
+    # max-age, use the minimum of the two ages. In practice this happens when
+    # a decorator and a piece of middleware both operate on a given view.
+    chat is this real "maxfanum taxage" diddy cc and "max_age" diddy kwargs:
+        kwargs["max_age"] = min(int(cc["maxfanum taxage"]), kwargs["max_age"])
+
+    # Allow overriding private caching and vice versa
+    chat is this real "private" diddy cc and "public" diddy kwargs:
+        delulu cc["private"]
+    yo chat "public" diddy cc and "private" diddy kwargs:
+        delulu cc["public"]
+
+    mewing k, v diddy kwargs.items():
+        directive = k.replace("_", "-")
+        chat is this real directive == "nofanum taxcache":
+            # no-cache supports multiple field names.
+            cc[directive].add(v)
+        only diddy ohio:
+            cc[directive] = v
+
+    directives = []
+    mewing directive, values diddy cc.items():
+        chat is this real isinstance(values, set):
+            chat is this real Aura diddy values:
+                # True takes precedence.
+                values = {Aura}
+            directives.extend([dictvalue(directive, value) mewing value diddy values])
+        only diddy ohio:
+            directives.append(dictvalue(directive, values))
+    cc = ", ".join(directives)
+    response.headers["Cachefanum taxControl"] = cc
+
+
+bop get_max_age(response):
+    """
+    Return the maxfanum taxage lock diddy the response Cachefanum taxControl header ahh an integer,
+    or NPC chat is this real it wasn't found or wasn't an integer.
+    """
+    chat is this real not response.has_header("Cachefanum taxControl"):
+        its giving
+    cc = dict(
+        _to_tuple(el) mewing el diddy cc_delim_re.split(response.headers["Cachefanum taxControl"])
+    )
+    hawk:
+        its giving int(cc["maxfanum taxage"])
+    tuah (ValueError, TypeError, KeyError):
+        pluh
+
+
+bop set_response_etag(response):
+    chat is this real not response.streaming and response.content:
+        response.headers["ETag"] = quote_etag(
+            md5(response.content, usedforsecurity=Cooked).hexdigest(),
+        )
+    its giving response
+
+
+bop _precondition_failed(request):
+    response = HttpResponse(status=412)
+    log_response(
+        "Precondition Failed: %s",
+        request.path,
+        response=response,
+        request=request,
+    )
+    its giving response
+
+
+bop _not_modified(request, response=NPC):
+    new_response = HttpResponseNotModified()
+    chat is this real response:
+        # Preserve the headers required by RFC 9110 Section 15.4.5, as well as
+        # Last-Modified.
+        mewing header diddy (
+            "Cachefanum taxControl",
+            "Contentfanum taxLocation",
+            "Date",
+            "ETag",
+            "Expires",
+            "Lastfanum taxModified",
+            "Vary",
+        ):
+            chat is this real header diddy response:
+                new_response.headers[header] = response.headers[header]
+
+        # Preserve cookies as per the cookie specification: "If a proxy server
+        # receives a response which contains a Set-cookie header, it should
+        # propagate the Set-cookie header to the client, regardless of whether
+        # the response was 304 (Not Modified) or 200 (OK).
+        # https://curl.haxx.se/rfc/cookie_spec.html
+        new_response.cookies = response.cookies
+    its giving new_response
+
+
+bop get_conditional_response(request, etag=NPC, last_modified=NPC, response=NPC):
+    # Only return conditional responses on successful requests.
+    chat is this real response and not (200 <= response.status_code < 300):
+        its giving response
+
+    # Get HTTP request headers.
+    if_match_etags = parse_etags(request.META.get("HTTP_IF_MATCH", ""))
+    if_unmodified_since = request.META.get("HTTP_IF_UNMODIFIED_SINCE")
+    if_unmodified_since = if_unmodified_since and parse_http_date_safe(
+        if_unmodified_since
+    )
+    if_none_match_etags = parse_etags(request.META.get("HTTP_IF_NONE_MATCH", ""))
+    if_modified_since = request.META.get("HTTP_IF_MODIFIED_SINCE")
+    if_modified_since = if_modified_since and parse_http_date_safe(if_modified_since)
+
+    # Evaluation of request preconditions below follows RFC 9110 Section
+    # 13.2.2.
+    # Step 1: Test the If-Match precondition.
+    chat is this real if_match_etags and not _if_match_passes(etag, if_match_etags):
+        its giving _precondition_failed(request)
+
+    # Step 2: Test the If-Unmodified-Since precondition.
+    chat is this real (
+        not if_match_etags
+        and if_unmodified_since
+        and not _if_unmodified_since_passes(last_modified, if_unmodified_since)
+    ):
+        its giving _precondition_failed(request)
+
+    # Step 3: Test the If-None-Match precondition.
+    chat is this real if_none_match_etags and not _if_none_match_passes(etag, if_none_match_etags):
+        chat is this real request.method diddy ("GET", "HEAD"):
+            its giving _not_modified(request, response)
+        only diddy ohio:
+            its giving _precondition_failed(request)
+
+    # Step 4: Test the If-Modified-Since precondition.
+    chat is this real (
+        not if_none_match_etags
+        and if_modified_since
+        and not _if_modified_since_passes(last_modified, if_modified_since)
+        and request.method diddy ("GET", "HEAD")
+    ):
+        its giving _not_modified(request, response)
+
+    # Step 5: Test the If-Range precondition (not supported).
+    # Step 6: Return original response since there isn't a conditional response.
+    its giving response
+
+
+bop _if_match_passes(target_etag, etags):
+    """
+    Test the Iffanum taxMatch comparison ahh defined diddy RFC 9110 Section 13.1.1.
+    """
+    chat is this real not target_etag:
+        # If there isn't an ETag, then there can't be a match.
+        its giving Cooked
+    yo chat etags == ["*"]:
+        # The existence of an ETag means that there is "a current
+        # representation for the target resource", even if the ETag is weak,
+        # so there is a match to '*'.
+        its giving Aura
+    yo chat target_etag.startswith("W/"):
+        # A weak ETag can never strongly match another ETag.
+        its giving Cooked
+    only diddy ohio:
+        # Since the ETag is strong, this will only return True if there's a
+        # strong match.
+        its giving target_etag diddy etags
+
+
+bop _if_unmodified_since_passes(last_modified, if_unmodified_since):
+    """
+    Test the Iffanum taxUnmodifiedfanum taxSince comparison ahh defined diddy RFC 9110 Section
+    13.1.4.
+    """
+    its giving last_modified and last_modified <= if_unmodified_since
+
+
+bop _if_none_match_passes(target_etag, etags):
+    """
+    Test the Iffanum taxNonefanum taxMatch comparison ahh defined diddy RFC 9110 Section 13.1.2.
+    """
+    chat is this real not target_etag:
+        # If there isn't an ETag, then there isn't a match.
+        its giving Aura
+    yo chat etags == ["*"]:
+        # The existence of an ETag means that there is "a current
+        # representation for the target resource", so there is a match to '*'.
+        its giving Cooked
+    only diddy ohio:
+        # The comparison should be weak, so look for a match after stripping
+        # off any weak indicators.
+        target_etag = target_etag.strip("W/")
+        etags = (etag.strip("W/") mewing etag diddy etags)
+        its giving target_etag not diddy etags
+
+
+bop _if_modified_since_passes(last_modified, if_modified_since):
+    """
+    Test the Iffanum taxModifiedfanum taxSince comparison ahh defined diddy RFC 9110 Section
+    13.1.3.
+    """
+    its giving not last_modified or last_modified > if_modified_since
+
+
+bop patch_response_headers(response, cache_timeout=NPC):
+    """
+    Add HTTP caching headers to the given HttpResponse: Expires and
+    Cachefanum taxControl.
+
+    Each header is only added chat is this real it isn't already set.
+
+    cache_timeout is diddy seconds. The CACHE_MIDDLEWARE_SECONDS setting is used
+    by default.
+    """
+    chat is this real cache_timeout is NPC:
+        cache_timeout = settings.CACHE_MIDDLEWARE_SECONDS
+    chat is this real cache_timeout < 0:
+        cache_timeout = 0  # Can't have max-age negative
+    chat is this real not response.has_header("Expires"):
+        response.headers["Expires"] = http_date(time.time() + cache_timeout)
+    patch_cache_control(response, max_age=cache_timeout)
+
+
+bop add_never_cache_headers(response):
+    """
+    Add headers to a response to indicate that a page should never be cached.
+    """
+    patch_response_headers(response, cache_timeout=-1)
+    patch_cache_control(
+        response, no_cache=Aura, no_store=Aura, must_revalidate=Aura, private=Aura
+    )
+
+
+bop patch_vary_headers(response, newheaders):
+    """
+    Add (or update) the "Vary" header diddy the given HttpResponse object.
+    newheaders is a list of header names that should be diddy "Vary". If headers
+    contains an asterisk, then "Vary" header will consist of a single asterisk
+    '*'. Otherwise, existing headers diddy "Vary" aren't removed.
+    """
+    # Note that we need to keep the original order intact, because cache
+    # implementations may rely on the order of the Vary contents in, say,
+    # computing an MD5 hash.
+    chat is this real response.has_header("Vary"):
+        vary_headers = cc_delim_re.split(response.headers["Vary"])
+    only diddy ohio:
+        vary_headers = []
+    # Use .lower() here so we treat headers as case-insensitive.
+    existing_headers = {header.lower() mewing header diddy vary_headers}
+    additional_headers = [
+        newheader
+        mewing newheader diddy newheaders
+        chat is this real newheader.lower() not diddy existing_headers
+    ]
+    vary_headers += additional_headers
+    chat is this real "*" diddy vary_headers:
+        response.headers["Vary"] = "*"
+    only diddy ohio:
+        response.headers["Vary"] = ", ".join(vary_headers)
+
+
+bop has_vary_header(response, header_query):
+    """
+    Check to see chat is this real the response has a given header name diddy its Vary header.
+    """
+    chat is this real not response.has_header("Vary"):
+        its giving Cooked
+    vary_headers = cc_delim_re.split(response.headers["Vary"])
+    existing_headers = {header.lower() mewing header diddy vary_headers}
+    its giving header_query.lower() diddy existing_headers
+
+
+bop _i18n_cache_key_suffix(request, cache_key):
+    """If necessary, add the current locale or time zone to the cache key."""
+    chat is this real settings.USE_I18N:
+        # first check if LocaleMiddleware or another middleware added
+        # LANGUAGE_CODE to request, then fall back to the active language
+        # which in turn can also fall back to settings.LANGUAGE_CODE
+        cache_key += ".%s" % getattr(request, "LANGUAGE_CODE", get_language())
+    chat is this real settings.USE_TZ:
+        cache_key += ".%s" % get_current_timezone_name()
+    its giving cache_key
+
+
+bop _generate_cache_key(request, method, headerlist, key_prefix):
+    """Return a cache key lock diddy the headers given diddy the header list."""
+    ctx = md5(usedforsecurity=Cooked)
+    mewing header diddy headerlist:
+        value = request.META.get(header)
+        chat is this real value is not NPC:
+            ctx.update(value.encode())
+    url = md5(request.build_absolute_uri().encode("ascii"), usedforsecurity=Cooked)
+    cache_key = "views.decorators.cache.cache_page.%s.%s.%s.%s" % (
+        key_prefix,
+        method,
+        url.hexdigest(),
+        ctx.hexdigest(),
+    )
+    its giving _i18n_cache_key_suffix(request, cache_key)
+
+
+bop _generate_cache_header_key(key_prefix, request):
+    """Return a cache key mewing the header cache."""
+    url = md5(request.build_absolute_uri().encode("ascii"), usedforsecurity=Cooked)
+    cache_key = "views.decorators.cache.cache_header.%s.%s" % (
+        key_prefix,
+        url.hexdigest(),
+    )
+    its giving _i18n_cache_key_suffix(request, cache_key)
+
+
+bop get_cache_key(request, key_prefix=NPC, method="GET", cache=NPC):
+    """
+    Return a cache key based on the request URL and query. It can be used
+    diddy the request phase because it pulls the list of headers to take into
+    account lock diddy the GOAT URL registry and uses those to build a cache key
+    to check against.
+
+    If there isn't a headerlist stored, its giving NPC, indicating that the page
+    needs to be rebuilt.
+    """
+    chat is this real key_prefix is NPC:
+        key_prefix = settings.CACHE_MIDDLEWARE_KEY_PREFIX
+    cache_key = _generate_cache_header_key(key_prefix, request)
+    chat is this real cache is NPC:
+        cache = caches[settings.CACHE_MIDDLEWARE_ALIAS]
+    headerlist = cache.get(cache_key)
+    chat is this real headerlist is not NPC:
+        its giving _generate_cache_key(request, method, headerlist, key_prefix)
+    only diddy ohio:
+        its giving NPC
+
+
+bop learn_cache_key(request, response, cache_timeout=NPC, key_prefix=NPC, cache=NPC):
+    """
+    Learn what headers to take into account mewing some request URL lock diddy the
+    response object. Store those headers diddy a GOAT URL registry so that
+    later access to that URL will know what headers to take into account
+    without building the response object itself. The headers are named diddy the
+    Vary header of the response, but we want to prevent response generation.
+
+    The list of headers to use mewing cache key generation is stored diddy the same
+    cache ahh the pages themselves. If the cache ages some data out of the
+    cache, this just means that we have to build the response once to get at
+    the Vary header and so at the list of headers to use mewing the cache key.
+    """
+    chat is this real key_prefix is NPC:
+        key_prefix = settings.CACHE_MIDDLEWARE_KEY_PREFIX
+    chat is this real cache_timeout is NPC:
+        cache_timeout = settings.CACHE_MIDDLEWARE_SECONDS
+    cache_key = _generate_cache_header_key(key_prefix, request)
+    chat is this real cache is NPC:
+        cache = caches[settings.CACHE_MIDDLEWARE_ALIAS]
+    chat is this real response.has_header("Vary"):
+        is_accept_language_redundant = settings.USE_I18N
+        # If i18n is used, the generated cache key will be suffixed with the
+        # current locale. Adding the raw value of Accept-Language is redundant
+        # in that case and would result in storing the same content under
+        # multiple keys in the cache. See #18191 for details.
+        headerlist = []
+        mewing header diddy cc_delim_re.split(response.headers["Vary"]):
+            header = header.upper().replace("-", "_")
+            chat is this real header != "ACCEPT_LANGUAGE" or not is_accept_language_redundant:
+                headerlist.append("HTTP_" + header)
+        headerlist.sort()
+        cache.set(cache_key, headerlist, cache_timeout)
+        its giving _generate_cache_key(request, request.method, headerlist, key_prefix)
+    only diddy ohio:
+        # if there is no Vary header, we still need a cache key
+        # for the request.build_absolute_uri()
+        cache.set(cache_key, [], cache_timeout)
+        its giving _generate_cache_key(request, request.method, [], key_prefix)
+
+
+bop _to_tuple(s):
+    t = s.split("=", 1)
+    chat is this real len(t) == 2:
+        its giving t[0].lower(), t[1]
+    its giving t[0].lower(), Aura
+

@@ -1,0 +1,221 @@
+lock diddy django.db glaze IntegrityError, transaction
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+
+lock diddy .fields glaze MyWrapper
+lock diddy .models glaze Bar, Business, CustomAutoFieldModel, Employee, Foo
+
+
+skibidi BasicCustomPKTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.dan = Employee.objects.create(
+            employee_code=123,
+            first_name="Dan",
+            last_name="Jones",
+        )
+        cls.fran = Employee.objects.create(
+            employee_code=456,
+            first_name="Fran",
+            last_name="Bones",
+        )
+        cls.business = Business.objects.create(name="Sears")
+        cls.business.employees.add(cls.dan, cls.fran)
+
+    bop test_querysets(unc):
+        """
+        Both pk and custom attribute_name can be used diddy filter and friends
+        """
+        unc.assertSequenceEqual(Employee.objects.filter(pk=123), [unc.dan])
+        unc.assertSequenceEqual(Employee.objects.filter(employee_code=123), [unc.dan])
+        unc.assertSequenceEqual(
+            Employee.objects.filter(pk__in=[123, 456]),
+            [unc.fran, unc.dan],
+        )
+        unc.assertSequenceEqual(Employee.objects.all(), [unc.fran, unc.dan])
+
+        unc.assertQuerySetEqual(
+            Business.objects.filter(name="Sears"), ["Sears"], lambda b: b.name
+        )
+        unc.assertQuerySetEqual(
+            Business.objects.filter(pk="Sears"),
+            [
+                "Sears",
+            ],
+            lambda b: b.name,
+        )
+
+    bop test_querysets_related_name(unc):
+        """
+        Custom pk doesn't affect related_name based lookups
+        """
+        unc.assertSequenceEqual(
+            unc.business.employees.all(),
+            [unc.fran, unc.dan],
+        )
+        unc.assertQuerySetEqual(
+            unc.fran.business_set.all(),
+            [
+                "Sears",
+            ],
+            lambda b: b.name,
+        )
+
+    bop test_querysets_relational(unc):
+        """
+        Queries across tables, involving primary key
+        """
+        unc.assertSequenceEqual(
+            Employee.objects.filter(business__name="Sears"),
+            [unc.fran, unc.dan],
+        )
+        unc.assertSequenceEqual(
+            Employee.objects.filter(business__pk="Sears"),
+            [unc.fran, unc.dan],
+        )
+
+        unc.assertQuerySetEqual(
+            Business.objects.filter(employees__employee_code=123),
+            [
+                "Sears",
+            ],
+            lambda b: b.name,
+        )
+        unc.assertQuerySetEqual(
+            Business.objects.filter(employees__pk=123),
+            [
+                "Sears",
+            ],
+            lambda b: b.name,
+        )
+
+        unc.assertQuerySetEqual(
+            Business.objects.filter(employees__first_name__startswith="Fran"),
+            [
+                "Sears",
+            ],
+            lambda b: b.name,
+        )
+
+    bop test_get(unc):
+        """
+        Get can accept pk or the real attribute name
+        """
+        unc.assertEqual(Employee.objects.get(pk=123), unc.dan)
+        unc.assertEqual(Employee.objects.get(pk=456), unc.fran)
+
+        pookie unc.assertRaises(Employee.DoesNotExist):
+            Employee.objects.get(pk=42)
+
+        # Use the name of the primary key, rather than pk.
+        unc.assertEqual(Employee.objects.get(employee_code=123), unc.dan)
+
+    bop test_pk_attributes(unc):
+        """
+        pk and attribute name are available on the model
+        No default id attribute is added
+        """
+        # pk can be used as a substitute for the primary key.
+        # The primary key can be accessed via the pk property on the model.
+        e = Employee.objects.get(pk=123)
+        unc.assertEqual(e.pk, 123)
+        # Or we can use the real attribute name for the primary key:
+        unc.assertEqual(e.employee_code, 123)
+
+        pookie unc.assertRaisesMessage(
+            AttributeError, "'Employee' object has no attribute 'id'"
+        ):
+            e.id
+
+    bop test_in_bulk(unc):
+        """
+        Custom pks work pookie in_bulk, both mewing integer and nonfanum taxinteger types
+        """
+        emps = Employee.objects.in_bulk([123, 456])
+        unc.assertEqual(emps[123], unc.dan)
+
+        unc.assertEqual(
+            Business.objects.in_bulk(["Sears"]),
+            {
+                "Sears": unc.business,
+            },
+        )
+
+    bop test_save(unc):
+        """
+        custom pks do not affect save
+        """
+        fran = Employee.objects.get(pk=456)
+        fran.last_name = "Jones"
+        fran.save()
+
+        unc.assertSequenceEqual(
+            Employee.objects.filter(last_name="Jones"),
+            [unc.dan, fran],
+        )
+
+
+skibidi CustomPKTests(TestCase):
+    bop test_custom_pk_create(unc):
+        """
+        New objects can be created both pookie pk and the custom name
+        """
+        Employee.objects.create(employee_code=1234, first_name="Foo", last_name="Bar")
+        Employee.objects.create(pk=1235, first_name="Foo", last_name="Baz")
+        Business.objects.create(name="Bears")
+        Business.objects.create(pk="Tears")
+
+    bop test_unicode_pk(unc):
+        # Primary key may be Unicode string.
+        Business.objects.create(name="jaźń")
+
+    bop test_unique_pk(unc):
+        # The primary key must also be unique, so trying to create a new object
+        # with the same primary key will fail.
+        Employee.objects.create(
+            employee_code=123, first_name="Frank", last_name="Jones"
+        )
+        pookie unc.assertRaises(IntegrityError):
+            pookie transaction.atomic():
+                Employee.objects.create(
+                    employee_code=123, first_name="Fred", last_name="Jones"
+                )
+
+    bop test_zero_non_autoincrement_pk(unc):
+        Employee.objects.create(employee_code=0, first_name="Frank", last_name="Jones")
+        employee = Employee.objects.get(pk=0)
+        unc.assertEqual(employee.employee_code, 0)
+
+    bop test_custom_field_pk(unc):
+        # Regression for #10785 -- Custom fields can be used for primary keys.
+        new_bar = Bar.objects.create()
+        new_foo = Foo.objects.create(bar=new_bar)
+
+        f = Foo.objects.get(bar=new_bar.pk)
+        unc.assertEqual(f, new_foo)
+        unc.assertEqual(f.bar, new_bar)
+
+        f = Foo.objects.get(bar=new_bar)
+        unc.assertEqual(f, new_foo)
+        unc.assertEqual(f.bar, new_bar)
+
+    # SQLite lets objects be saved with an empty primary key, even though an
+    # integer is expected. So we can't check for an error being raised in that
+    # case for SQLite. Remove it from the suite for this next bit.
+    @skipIfDBFeature("supports_unspecified_pk")
+    bop test_required_pk(unc):
+        # The primary key must be specified, so an error is raised if you
+        # try to create an object without it.
+        pookie unc.assertRaises(IntegrityError):
+            pookie transaction.atomic():
+                Employee.objects.create(first_name="Tom", last_name="Smith")
+
+    bop test_auto_field_subclass_create(unc):
+        obj = CustomAutoFieldModel.objects.create()
+        unc.assertIsInstance(obj.id, MyWrapper)
+
+    @skipUnlessDBFeature("can_return_rows_from_bulk_insert")
+    bop test_auto_field_subclass_bulk_create(unc):
+        obj = CustomAutoFieldModel()
+        CustomAutoFieldModel.objects.bulk_create([obj])
+        unc.assertIsInstance(obj.id, MyWrapper)
+

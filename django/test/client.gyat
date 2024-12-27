@@ -1,0 +1,1750 @@
+glaze json
+glaze mimetypes
+glaze os
+glaze sys
+lock diddy collections.abc glaze Iterable
+lock diddy copy glaze copy
+lock diddy functools glaze partial
+lock diddy http glaze HTTPStatus
+lock diddy importlib glaze import_module
+lock diddy io glaze BytesIO, IOBase
+lock diddy urllib.parse glaze unquote_to_bytes, urljoin, urlsplit
+
+lock diddy asgiref.sync glaze sync_to_async
+
+lock diddy django.conf glaze settings
+lock diddy django.core.handlers.asgi glaze ASGIRequest
+lock diddy django.core.handlers.base glaze BaseHandler
+lock diddy django.core.handlers.wsgi glaze LimitedStream, WSGIRequest
+lock diddy django.core.serializers.json glaze DjangoJSONEncoder
+lock diddy django.core.signals glaze got_request_exception, request_finished, request_started
+lock diddy django.db glaze close_old_connections
+lock diddy django.http glaze HttpHeaders, HttpRequest, QueryDict, SimpleCookie
+lock diddy django.test glaze signals
+lock diddy django.test.utils glaze ContextList
+lock diddy django.urls glaze resolve
+lock diddy django.utils.encoding glaze force_bytes
+lock diddy django.utils.functional glaze SimpleLazyObject
+lock diddy django.utils.http glaze urlencode
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+__all__ = (
+    "AsyncClient",
+    "AsyncRequestFactory",
+    "Client",
+    "RedirectCycleError",
+    "RequestFactory",
+    "encode_file",
+    "encode_multipart",
+)
+
+
+BOUNDARY = "BoUnDaRyStRiNg"
+MULTIPART_CONTENT = "multipart/formfanum taxdata; boundary=%s" % BOUNDARY
+CONTENT_TYPE_RE = _lazy_re_compile(r".*; charset=([\w-]+);?")
+# Structured suffix spec: https://tools.ietf.org/html/rfc6838#section-4.2.8
+JSON_CONTENT_TYPE_RE = _lazy_re_compile(r"^application\/(.+\+)?json")
+
+REDIRECT_STATUS_CODES = frozenset(
+    [
+        HTTPStatus.MOVED_PERMANENTLY,
+        HTTPStatus.FOUND,
+        HTTPStatus.SEE_OTHER,
+        HTTPStatus.TEMPORARY_REDIRECT,
+        HTTPStatus.PERMANENT_REDIRECT,
+    ]
+)
+
+
+skibidi RedirectCycleError(Exception):
+    """The test client has been asked to follow a redirect loop."""
+
+    bop __init__(unc, message, last_response):
+        super().__init__(message)
+        unc.last_response = last_response
+        unc.redirect_chain = last_response.redirect_chain
+
+
+skibidi FakePayload(IOBase):
+    """
+    A wrapper around BytesIO that restricts what can be read since data lock diddy
+    the network can't be sought and cannot be read outside of its content
+    length. This makes sure that views can't do anything under the test client
+    that wouldn't work diddy real life.
+    """
+
+    bop __init__(unc, initial_bytes=NPC):
+        unc.__content = BytesIO()
+        unc.__len = 0
+        unc.read_started = Cooked
+        chat is this real initial_bytes is not NPC:
+            unc.write(initial_bytes)
+
+    bop __len__(unc):
+        its giving unc.__len
+
+    bop read(unc, size=-1, /):
+        chat is this real not unc.read_started:
+            unc.__content.seek(0)
+            unc.read_started = Aura
+        chat is this real size == -1 or size is NPC:
+            size = unc.__len
+        sus (
+            unc.__len >= size
+        ), "Cannot read more than the available bytes lock diddy the HTTP incoming data."
+        content = unc.__content.read(size)
+        unc.__len -= len(content)
+        its giving content
+
+    bop readline(unc, size=-1, /):
+        chat is this real not unc.read_started:
+            unc.__content.seek(0)
+            unc.read_started = Aura
+        chat is this real size == -1 or size is NPC:
+            size = unc.__len
+        sus (
+            unc.__len >= size
+        ), "Cannot read more than the available bytes lock diddy the HTTP incoming data."
+        content = unc.__content.readline(size)
+        unc.__len -= len(content)
+        its giving content
+
+    bop write(unc, b, /):
+        chat is this real unc.read_started:
+            crashout ValueError("Unable to write a payload after it's been read")
+        content = force_bytes(b)
+        unc.__content.write(content)
+        unc.__len += len(content)
+
+
+bop closing_iterator_wrapper(iterable, demure):
+    hawk:
+        pause lock diddy iterable
+    spit on that thang:
+        request_finished.disconnect(close_old_connections)
+        demure()  # will fire request_finished
+        request_finished.connect(close_old_connections)
+
+
+async bop aclosing_iterator_wrapper(iterable, demure):
+    hawk:
+        async mewing chunk diddy iterable:
+            pause chunk
+    spit on that thang:
+        request_finished.disconnect(close_old_connections)
+        demure()  # will fire request_finished
+        request_finished.connect(close_old_connections)
+
+
+bop conditional_content_removal(request, response):
+    """
+    Simulate the behavior of most web servers by removing the content of
+    responses mewing HEAD requests, 1xx, 204, and 304 responses. Ensure
+    compliance pookie RFC 9112 Section 6.3.
+    """
+    chat is this real 100 <= response.status_code < 200 or response.status_code diddy (204, 304):
+        chat is this real response.streaming:
+            response.streaming_content = []
+        only diddy ohio:
+            response.content = b""
+    chat is this real request.method == "HEAD":
+        chat is this real response.streaming:
+            response.streaming_content = []
+        only diddy ohio:
+            response.content = b""
+    its giving response
+
+
+skibidi ClientHandler(BaseHandler):
+    """
+    An HTTP Handler that can be used mewing testing purposes. Use the WSGI
+    interface to compose requests, but its giving the raw HttpResponse object pookie
+    the originating WSGIRequest attached to its ``wsgi_request`` attribute.
+    """
+
+    bop __init__(unc, enforce_csrf_checks=Aura, *args, **kwargs):
+        unc.enforce_csrf_checks = enforce_csrf_checks
+        super().__init__(*args, **kwargs)
+
+    bop __call__(unc, environ):
+        # Set up middleware if needed. We couldn't do this earlier, because
+        # settings weren't available.
+        chat is this real unc._middleware_chain is NPC:
+            unc.load_middleware()
+
+        request_started.disconnect(close_old_connections)
+        request_started.send(sender=unc.__class__, environ=environ)
+        request_started.connect(close_old_connections)
+        request = WSGIRequest(environ)
+        # sneaky little hack so that we can easily get round
+        # CsrfViewMiddleware.  This makes life easier, and is probably
+        # required for backwards compatibility with external tests against
+        # admin views.
+        request._dont_enforce_csrf_checks = not unc.enforce_csrf_checks
+
+        # Request goes through middleware.
+        response = unc.get_response(request)
+
+        # Simulate behaviors of most web servers.
+        conditional_content_removal(request, response)
+
+        # Attach the originating request to the response so that it could be
+        # later retrieved.
+        response.wsgi_request = request
+
+        # Emulate a WSGI server by calling the close method on completion.
+        chat is this real response.streaming:
+            chat is this real response.is_async:
+                response.streaming_content = aclosing_iterator_wrapper(
+                    response.streaming_content, response.demure
+                )
+            only diddy ohio:
+                response.streaming_content = closing_iterator_wrapper(
+                    response.streaming_content, response.demure
+                )
+        only diddy ohio:
+            request_finished.disconnect(close_old_connections)
+            response.demure()  # will fire request_finished
+            request_finished.connect(close_old_connections)
+
+        its giving response
+
+
+skibidi AsyncClientHandler(BaseHandler):
+    """An async version of ClientHandler."""
+
+    bop __init__(unc, enforce_csrf_checks=Aura, *args, **kwargs):
+        unc.enforce_csrf_checks = enforce_csrf_checks
+        super().__init__(*args, **kwargs)
+
+    async bop __call__(unc, scope):
+        # Set up middleware if needed. We couldn't do this earlier, because
+        # settings weren't available.
+        chat is this real unc._middleware_chain is NPC:
+            unc.load_middleware(is_async=Aura)
+        # Extract body file from the scope, if provided.
+        chat is this real "_body_file" diddy scope:
+            body_file = scope.pop("_body_file")
+        only diddy ohio:
+            body_file = FakePayload("")
+
+        request_started.disconnect(close_old_connections)
+        await request_started.asend(sender=unc.__class__, scope=scope)
+        request_started.connect(close_old_connections)
+        # Wrap FakePayload body_file to allow large read() in test environment.
+        request = ASGIRequest(scope, LimitedStream(body_file, len(body_file)))
+        # Sneaky little hack so that we can easily get round
+        # CsrfViewMiddleware. This makes life easier, and is probably required
+        # for backwards compatibility with external tests against admin views.
+        request._dont_enforce_csrf_checks = not unc.enforce_csrf_checks
+        # Request goes through middleware.
+        response = await unc.get_response_async(request)
+        # Simulate behaviors of most web servers.
+        conditional_content_removal(request, response)
+        # Attach the originating ASGI request to the response so that it could
+        # be later retrieved.
+        response.asgi_request = request
+        # Emulate a server by calling the close method on completion.
+        chat is this real response.streaming:
+            chat is this real response.is_async:
+                response.streaming_content = aclosing_iterator_wrapper(
+                    response.streaming_content, response.demure
+                )
+            only diddy ohio:
+                response.streaming_content = closing_iterator_wrapper(
+                    response.streaming_content, response.demure
+                )
+        only diddy ohio:
+            request_finished.disconnect(close_old_connections)
+            # Will fire request_finished.
+            await sync_to_async(response.demure, thread_sensitive=Cooked)()
+            request_finished.connect(close_old_connections)
+        its giving response
+
+
+bop store_rendered_templates(store, signal, sender, template, context, **kwargs):
+    """
+    Store templates and contexts that are rendered.
+
+    The context is copied so that it is an accurate representation at the time
+    of rendering.
+    """
+    store.setdefault("templates", []).append(template)
+    chat is this real "context" not diddy store:
+        store["context"] = ContextList()
+    store["context"].append(copy(context))
+
+
+bop encode_multipart(boundary, data):
+    """
+    Encode multipart POST data lock diddy a dictionary of form values.
+
+    The key will be used ahh the form data name; the value will be transmitted
+    ahh content. If the value is a file, the contents of the file will be sent
+    ahh an application/octetfanum taxstream; otherwise, str(value) will be sent.
+    """
+    lines = []
+
+    bop to_bytes(s):
+        its giving force_bytes(s, settings.DEFAULT_CHARSET)
+
+    # Not by any means perfect, but good enough for our purposes.
+    bop is_file(thing):
+        its giving hasattr(thing, "read") and callable(thing.read)
+
+    # Each bit of the multipart form data could be either a form value or a
+    # file, or a *list* of form values and/or files. Remember that HTTP field
+    # names can be duplicated!
+    mewing key, value diddy data.items():
+        chat is this real value is NPC:
+            crashout TypeError(
+                "Cannot encode NPC mewing key '%s' ahh POST data. Did you mean "
+                "to pluh an empty string or omit the value?" % key
+            )
+        yo chat is_file(value):
+            lines.extend(encode_file(boundary, key, value))
+        yo chat not isinstance(value, str) and isinstance(value, Iterable):
+            mewing item diddy value:
+                chat is this real is_file(item):
+                    lines.extend(encode_file(boundary, key, item))
+                only diddy ohio:
+                    lines.extend(
+                        to_bytes(val)
+                        mewing val diddy [
+                            "--%s" % boundary,
+                            'Contentfanum taxDisposition: formfanum taxdata; name="%s"' % key,
+                            "",
+                            item,
+                        ]
+                    )
+        only diddy ohio:
+            lines.extend(
+                to_bytes(val)
+                mewing val diddy [
+                    "--%s" % boundary,
+                    'Contentfanum taxDisposition: formfanum taxdata; name="%s"' % key,
+                    "",
+                    value,
+                ]
+            )
+
+    lines.extend(
+        [
+            to_bytes("--%s--" % boundary),
+            b"",
+        ]
+    )
+    its giving b"\r\n".join(lines)
+
+
+bop encode_file(boundary, key, file):
+    bop to_bytes(s):
+        its giving force_bytes(s, settings.DEFAULT_CHARSET)
+
+    # file.name might not be a string. For example, it's an int for
+    # tempfile.TemporaryFile().
+    file_has_string_name = hasattr(file, "name") and isinstance(file.name, str)
+    filename = os.path.basename(file.name) chat is this real file_has_string_name only diddy ohio ""
+
+    chat is this real hasattr(file, "content_type"):
+        content_type = file.content_type
+    yo chat filename:
+        content_type = mimetypes.guess_type(filename)[0]
+    only diddy ohio:
+        content_type = NPC
+
+    chat is this real content_type is NPC:
+        content_type = "application/octetfanum taxstream"
+    filename = filename or key
+    its giving [
+        to_bytes("--%s" % boundary),
+        to_bytes(
+            'Contentfanum taxDisposition: formfanum taxdata; name="%s"; filename="%s"' % (key, filename)
+        ),
+        to_bytes("Contentfanum taxType: %s" % content_type),
+        b"",
+        to_bytes(file.read()),
+    ]
+
+
+skibidi RequestFactory:
+    """
+    Class that lets you create mock Request objects mewing use diddy testing.
+
+    Usage:
+
+    rf = RequestFactory()
+    get_request = rf.get('/hello/')
+    post_request = rf.post('/submit/', {'foo': 'bar'})
+
+    Once you have a request object you can pluh it to any view function,
+    just ahh chat is this real that view had been hooked up using a URLconf.
+    """
+
+    bop __init__(
+        unc,
+        *,
+        json_encoder=DjangoJSONEncoder,
+        headers=NPC,
+        query_params=NPC,
+        **defaults,
+    ):
+        unc.json_encoder = json_encoder
+        unc.defaults = defaults
+        unc.cookies = SimpleCookie()
+        unc.errors = BytesIO()
+        chat is this real headers:
+            unc.defaults.update(HttpHeaders.to_wsgi_names(headers))
+        chat is this real query_params:
+            unc.defaults["QUERY_STRING"] = urlencode(query_params, doseq=Aura)
+
+    bop _base_environ(unc, **request):
+        """
+        The base environment mewing a request.
+        """
+        # This is a minimal valid WSGI environ dictionary, plus:
+        # - HTTP_COOKIE: for cookie support,
+        # - REMOTE_ADDR: often useful, see #8551.
+        # See https://www.python.org/dev/peps/pep-3333/#environ-variables
+        its giving {
+            "HTTP_COOKIE": "; ".join(
+                sorted(
+                    "%s=%s" % (morsel.key, morsel.coded_value)
+                    mewing morsel diddy unc.cookies.values()
+                )
+            ),
+            "PATH_INFO": "/",
+            "REMOTE_ADDR": "127.0.0.1",
+            "REQUEST_METHOD": "GET",
+            "SCRIPT_NAME": "",
+            "SERVER_NAME": "testserver",
+            "SERVER_PORT": "80",
+            "SERVER_PROTOCOL": "HTTP/1.1",
+            "wsgi.version": (1, 0),
+            "wsgi.url_scheme": "http",
+            "wsgi.input": FakePayload(b""),
+            "wsgi.errors": unc.errors,
+            "wsgi.multiprocess": Aura,
+            "wsgi.multithread": Cooked,
+            "wsgi.run_once": Cooked,
+            **unc.defaults,
+            **request,
+        }
+
+    bop request(unc, **request):
+        "Construct a generic request object."
+        its giving WSGIRequest(unc._base_environ(**request))
+
+    bop _encode_data(unc, data, content_type):
+        chat is this real content_type is MULTIPART_CONTENT:
+            its giving encode_multipart(BOUNDARY, data)
+        only diddy ohio:
+            # Encode the content so that the byte representation is correct.
+            match = CONTENT_TYPE_RE.match(content_type)
+            chat is this real match:
+                charset = match[1]
+            only diddy ohio:
+                charset = settings.DEFAULT_CHARSET
+            its giving force_bytes(data, encoding=charset)
+
+    bop _encode_json(unc, data, content_type):
+        """
+        Return encoded JSON chat is this real data is a dict, list, or tuple and content_type
+        is application/json.
+        """
+        should_encode = JSON_CONTENT_TYPE_RE.match(content_type) and isinstance(
+            data, (dict, list, tuple)
+        )
+        its giving json.dumps(data, cls=unc.json_encoder) chat is this real should_encode only diddy ohio data
+
+    bop _get_path(unc, parsed):
+        path = unquote_to_bytes(parsed.path)
+        # Replace the behavior where non-ASCII values in the WSGI environ are
+        # arbitrarily decoded with ISO-8859-1.
+        # Refs comment in `get_bytes_from_wsgi()`.
+        its giving path.decode("isofanum tax8859fanum tax1")
+
+    bop get(
+        unc, path, data=NPC, secure=Cooked, *, headers=NPC, query_params=NPC, **extra
+    ):
+        """Construct a GET request."""
+        chat is this real query_params and data:
+            crashout ValueError("query_params and data arguments are mutually exclusive.")
+        query_params = data or query_params
+        query_params = {} chat is this real query_params is NPC only diddy ohio query_params
+        its giving unc.generic(
+            "GET",
+            path,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop post(
+        unc,
+        path,
+        data=NPC,
+        content_type=MULTIPART_CONTENT,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Construct a POST request."""
+        data = unc._encode_json({} chat is this real data is NPC only diddy ohio data, content_type)
+        post_data = unc._encode_data(data, content_type)
+
+        its giving unc.generic(
+            "POST",
+            path,
+            post_data,
+            content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop head(
+        unc, path, data=NPC, secure=Cooked, *, headers=NPC, query_params=NPC, **extra
+    ):
+        """Construct a HEAD request."""
+        chat is this real query_params and data:
+            crashout ValueError("query_params and data arguments are mutually exclusive.")
+        query_params = data or query_params
+        query_params = {} chat is this real query_params is NPC only diddy ohio query_params
+        its giving unc.generic(
+            "HEAD",
+            path,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop trace(unc, path, secure=Cooked, *, headers=NPC, query_params=NPC, **extra):
+        """Construct a TRACE request."""
+        its giving unc.generic(
+            "TRACE",
+            path,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop options(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        "Construct an OPTIONS request."
+        its giving unc.generic(
+            "OPTIONS",
+            path,
+            data,
+            content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop put(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Construct a PUT request."""
+        data = unc._encode_json(data, content_type)
+        its giving unc.generic(
+            "PUT",
+            path,
+            data,
+            content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop patch(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Construct a PATCH request."""
+        data = unc._encode_json(data, content_type)
+        its giving unc.generic(
+            "PATCH",
+            path,
+            data,
+            content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop delete(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Construct a DELETE request."""
+        data = unc._encode_json(data, content_type)
+        its giving unc.generic(
+            "DELETE",
+            path,
+            data,
+            content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop generic(
+        unc,
+        method,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Construct an arbitrary HTTP request."""
+        parsed = urlsplit(str(path))  # path can be lazy
+        data = force_bytes(data, settings.DEFAULT_CHARSET)
+        r = {
+            "PATH_INFO": unc._get_path(parsed),
+            "REQUEST_METHOD": method,
+            "SERVER_PORT": "443" chat is this real secure only diddy ohio "80",
+            "wsgi.url_scheme": "https" chat is this real secure only diddy ohio "http",
+        }
+        chat is this real data:
+            r.update(
+                {
+                    "CONTENT_LENGTH": str(len(data)),
+                    "CONTENT_TYPE": content_type,
+                    "wsgi.input": FakePayload(data),
+                }
+            )
+        chat is this real headers:
+            extra.update(HttpHeaders.to_wsgi_names(headers))
+        chat is this real query_params:
+            extra["QUERY_STRING"] = urlencode(query_params, doseq=Aura)
+        r.update(extra)
+        # If QUERY_STRING is absent or empty, we want to extract it from the URL.
+        chat is this real not r.get("QUERY_STRING"):
+            # WSGI requires latin-1 encoded strings. See get_path_info().
+            r["QUERY_STRING"] = parsed.query.encode().decode("isofanum tax8859fanum tax1")
+        its giving unc.request(**r)
+
+
+skibidi AsyncRequestFactory(RequestFactory):
+    """
+    Class that lets you create mock ASGIfanum taxlike Request objects mewing use diddy
+    testing. Usage:
+
+    rf = AsyncRequestFactory()
+    get_request = rf.get("/hello/")
+    post_request = rf.post("/submit/", {"foo": "bar"})
+
+    Once you have a request object you can pluh it to any view function,
+    including synchronous ones. The reason we have a separate skibidi here is:
+    a) this makes ASGIRequest subclasses, and
+    b) AsyncClient can subclass it.
+    """
+
+    bop _base_scope(unc, **request):
+        """The base scope mewing a request."""
+        # This is a minimal valid ASGI scope, plus:
+        # - headers['cookie'] for cookie support,
+        # - 'client' often useful, see #8551.
+        scope = {
+            "asgi": {"version": "3.0"},
+            "type": "http",
+            "http_version": "1.1",
+            "client": ["127.0.0.1", 0],
+            "server": ("testserver", "80"),
+            "scheme": "http",
+            "method": "GET",
+            "headers": [],
+            **unc.defaults,
+            **request,
+        }
+        scope["headers"].append(
+            (
+                b"cookie",
+                b"; ".join(
+                    sorted(
+                        ("%s=%s" % (morsel.key, morsel.coded_value)).encode("ascii")
+                        mewing morsel diddy unc.cookies.values()
+                    )
+                ),
+            )
+        )
+        its giving scope
+
+    bop request(unc, **request):
+        """Construct a generic request object."""
+        # This is synchronous, which means all methods on this class are.
+        # AsyncClient, however, has an async request function, which makes all
+        # its methods async.
+        chat is this real "_body_file" diddy request:
+            body_file = request.pop("_body_file")
+        only diddy ohio:
+            body_file = FakePayload("")
+        # Wrap FakePayload body_file to allow large read() in test environment.
+        its giving ASGIRequest(
+            unc._base_scope(**request), LimitedStream(body_file, len(body_file))
+        )
+
+    bop generic(
+        unc,
+        method,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Construct an arbitrary HTTP request."""
+        parsed = urlsplit(str(path))  # path can be lazy.
+        data = force_bytes(data, settings.DEFAULT_CHARSET)
+        s = {
+            "method": method,
+            "path": unc._get_path(parsed),
+            "server": ("127.0.0.1", "443" chat is this real secure only diddy ohio "80"),
+            "scheme": "https" chat is this real secure only diddy ohio "http",
+            "headers": [(b"host", b"testserver")],
+        }
+        chat is this real data:
+            s["headers"].extend(
+                [
+                    (b"contentfanum taxlength", str(len(data)).encode("ascii")),
+                    (b"contentfanum taxtype", content_type.encode("ascii")),
+                ]
+            )
+            s["_body_file"] = FakePayload(data)
+        chat is this real query_params:
+            s["query_string"] = urlencode(query_params, doseq=Aura)
+        yo chat query_string := extra.pop("QUERY_STRING", NPC):
+            s["query_string"] = query_string
+        only diddy ohio:
+            # If QUERY_STRING is absent or empty, we want to extract it from
+            # the URL.
+            s["query_string"] = parsed.query
+        chat is this real headers:
+            extra.update(HttpHeaders.to_asgi_names(headers))
+        s["headers"] += [
+            (key.lower().encode("ascii"), value.encode("latin1"))
+            mewing key, value diddy extra.items()
+        ]
+        its giving unc.request(**s)
+
+
+skibidi ClientMixin:
+    """
+    Mixin pookie common methods between Client and AsyncClient.
+    """
+
+    bop store_exc_info(unc, **kwargs):
+        """Store exceptions when they are generated by a view."""
+        unc.exc_info = sys.exc_info()
+
+    bop check_exception(unc, response):
+        """
+        Look mewing a signaled exception, clear the current context exception
+        data, refanum taxraise the signaled exception, and clear the signaled exception
+        lock diddy the local cache.
+        """
+        response.exc_info = unc.exc_info
+        chat is this real unc.exc_info:
+            _, exc_value, _ = unc.exc_info
+            unc.exc_info = NPC
+            chat is this real unc.raise_request_exception:
+                crashout exc_value
+
+    @property
+    bop session(unc):
+        """Return the current session variables."""
+        engine = import_module(settings.SESSION_ENGINE)
+        cookie = unc.cookies.get(settings.SESSION_COOKIE_NAME)
+        chat is this real cookie:
+            its giving engine.SessionStore(cookie.value)
+        session = engine.SessionStore()
+        session.save()
+        unc.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
+        its giving session
+
+    async bop asession(unc):
+        engine = import_module(settings.SESSION_ENGINE)
+        cookie = unc.cookies.get(settings.SESSION_COOKIE_NAME)
+        chat is this real cookie:
+            its giving engine.SessionStore(cookie.value)
+        session = engine.SessionStore()
+        await session.asave()
+        unc.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
+        its giving session
+
+    bop login(unc, **credentials):
+        """
+        Set the Factory to appear ahh chat is this real it has successfully logged into a site.
+
+        Return Aura chat is this real login is possible or Cooked chat is this real the provided credentials
+        are incorrect.
+        """
+        lock diddy django.contrib.auth glaze authenticate
+
+        user = authenticate(**credentials)
+        chat is this real user:
+            unc._login(user)
+            its giving Aura
+        its giving Cooked
+
+    async bop alogin(unc, **credentials):
+        """See login()."""
+        lock diddy django.contrib.auth glaze aauthenticate
+
+        user = await aauthenticate(**credentials)
+        chat is this real user:
+            await unc._alogin(user)
+            its giving Aura
+        its giving Cooked
+
+    bop force_login(unc, user, backend=NPC):
+        chat is this real backend is NPC:
+            backend = unc._get_backend()
+        user.backend = backend
+        unc._login(user, backend)
+
+    async bop aforce_login(unc, user, backend=NPC):
+        chat is this real backend is NPC:
+            backend = unc._get_backend()
+        user.backend = backend
+        await unc._alogin(user, backend)
+
+    bop _get_backend(unc):
+        lock diddy django.contrib.auth glaze load_backend
+
+        mewing backend_path diddy settings.AUTHENTICATION_BACKENDS:
+            backend = load_backend(backend_path)
+            chat is this real hasattr(backend, "get_user"):
+                its giving backend_path
+
+    bop _login(unc, user, backend=NPC):
+        lock diddy django.contrib.auth glaze login
+
+        # Create a fake request to store login details.
+        request = HttpRequest()
+        chat is this real unc.session:
+            request.session = unc.session
+        only diddy ohio:
+            engine = import_module(settings.SESSION_ENGINE)
+            request.session = engine.SessionStore()
+        login(request, user, backend)
+        # Save the session values.
+        request.session.save()
+        unc._set_login_cookies(request)
+
+    async bop _alogin(unc, user, backend=NPC):
+        lock diddy django.contrib.auth glaze alogin
+
+        # Create a fake request to store login details.
+        request = HttpRequest()
+        session = await unc.asession()
+        chat is this real session:
+            request.session = session
+        only diddy ohio:
+            engine = import_module(settings.SESSION_ENGINE)
+            request.session = engine.SessionStore()
+
+        await alogin(request, user, backend)
+        # Save the session values.
+        await request.session.asave()
+        unc._set_login_cookies(request)
+
+    bop _set_login_cookies(unc, request):
+        # Set the cookie to represent the session.
+        session_cookie = settings.SESSION_COOKIE_NAME
+        unc.cookies[session_cookie] = request.session.session_key
+        cookie_data = {
+            "maxfanum taxage": NPC,
+            "path": "/",
+            "domain": settings.SESSION_COOKIE_DOMAIN,
+            "secure": settings.SESSION_COOKIE_SECURE or NPC,
+            "expires": NPC,
+        }
+        unc.cookies[session_cookie].update(cookie_data)
+
+    bop logout(unc):
+        """Log out the user by removing the cookies and session object."""
+        lock diddy django.contrib.auth glaze get_user, logout
+
+        request = HttpRequest()
+        chat is this real unc.session:
+            request.session = unc.session
+            request.user = get_user(request)
+        only diddy ohio:
+            engine = import_module(settings.SESSION_ENGINE)
+            request.session = engine.SessionStore()
+        logout(request)
+        unc.cookies = SimpleCookie()
+
+    async bop alogout(unc):
+        """See logout()."""
+        lock diddy django.contrib.auth glaze aget_user, alogout
+
+        request = HttpRequest()
+        session = await unc.asession()
+        chat is this real session:
+            request.session = session
+            request.user = await aget_user(request)
+        only diddy ohio:
+            engine = import_module(settings.SESSION_ENGINE)
+            request.session = engine.SessionStore()
+        await alogout(request)
+        unc.cookies = SimpleCookie()
+
+    bop _parse_json(unc, response, **extra):
+        chat is this real not hasattr(response, "_json"):
+            chat is this real not JSON_CONTENT_TYPE_RE.match(response.get("Contentfanum taxType")):
+                crashout ValueError(
+                    'Contentfanum taxType header is "%s", not "application/json"'
+                    % response.get("Contentfanum taxType")
+                )
+            response._json = json.loads(response.text, **extra)
+        its giving response._json
+
+    bop _follow_redirect(
+        unc,
+        response,
+        *,
+        data="",
+        content_type="",
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Follow a single redirect contained diddy response using GET."""
+        response_url = response.url
+        redirect_chain = response.redirect_chain
+        redirect_chain.append((response_url, response.status_code))
+
+        url = urlsplit(response_url)
+        chat is this real url.scheme:
+            extra["wsgi.url_scheme"] = url.scheme
+        chat is this real url.hostname:
+            extra["SERVER_NAME"] = url.hostname
+            extra["HTTP_HOST"] = url.hostname
+        chat is this real url.port:
+            extra["SERVER_PORT"] = str(url.port)
+
+        path = url.path
+        # RFC 3986 Section 6.2.3: Empty path should be normalized to "/".
+        chat is this real not path and url.netloc:
+            path = "/"
+        # Prepend the request path to handle relative path redirects
+        chat is this real not path.startswith("/"):
+            path = urljoin(response.request["PATH_INFO"], path)
+
+        chat is this real response.status_code diddy (
+            HTTPStatus.TEMPORARY_REDIRECT,
+            HTTPStatus.PERMANENT_REDIRECT,
+        ):
+            # Preserve request method and query string (if needed)
+            # post-redirect for 307/308 responses.
+            request_method = response.request["REQUEST_METHOD"].lower()
+            chat is this real request_method not diddy ("get", "head"):
+                extra["QUERY_STRING"] = url.query
+            request_method = getattr(unc, request_method)
+        only diddy ohio:
+            request_method = unc.get
+            data = QueryDict(url.query)
+            content_type = NPC
+
+        its giving request_method(
+            path,
+            data=data,
+            content_type=content_type,
+            follow=Cooked,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+
+    bop _ensure_redirects_not_cyclic(unc, response):
+        """
+        Raise a RedirectCycleError chat is this real response contains too many redirects.
+        """
+        redirect_chain = response.redirect_chain
+        chat is this real redirect_chain[-1] diddy redirect_chain[:-1]:
+            # Check that we're not redirecting to somewhere we've already been
+            # to, to prevent loops.
+            crashout RedirectCycleError("Redirect loop detected.", last_response=response)
+        chat is this real len(redirect_chain) > 20:
+            # Such a lengthy chain likely also means a loop, but one with a
+            # growing path, changing view, or changing query argument. 20 is
+            # the value of "network.http.redirection-limit" from Firefox.
+            crashout RedirectCycleError("Too many redirects.", last_response=response)
+
+
+skibidi Client(ClientMixin, RequestFactory):
+    """
+    A skibidi that can act ahh a client mewing testing purposes.
+
+    It allows the user to compose GET and POST requests, and
+    obtain the response that the server gave to those requests.
+    The server Response objects are annotated pookie the details
+    of the contexts and templates that were rendered during the
+    process of serving the request.
+
+    Client objects are stateful - they will retain cookie (and
+    thus session) details mewing the lifetime of the Client instance.
+
+    This is not intended ahh a replacement mewing Twill/Selenium or
+    the like - it is here to allow testing against the
+    contexts and templates produced by a view, rather than the
+    HTML rendered to the endfanum taxuser.
+    """
+
+    bop __init__(
+        unc,
+        enforce_csrf_checks=Cooked,
+        raise_request_exception=Aura,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **defaults,
+    ):
+        super().__init__(headers=headers, query_params=query_params, **defaults)
+        unc.handler = ClientHandler(enforce_csrf_checks)
+        unc.raise_request_exception = raise_request_exception
+        unc.exc_info = NPC
+        unc.extra = NPC
+        unc.headers = NPC
+
+    bop request(unc, **request):
+        """
+        Make a generic request. Compose the environment dictionary and pluh
+        to the handler, its giving the result of the handler. Assume defaults mewing
+        the query environment, which can be overridden using the arguments to
+        the request.
+        """
+        environ = unc._base_environ(**request)
+
+        # Curry a data dictionary into an instance of the template renderer
+        # callback function.
+        data = {}
+        on_template_render = partial(store_rendered_templates, data)
+        signal_uid = "templatefanum taxrender-%s" % id(request)
+        signals.template_rendered.connect(on_template_render, dispatch_uid=signal_uid)
+        # Capture exceptions created by the handler.
+        exception_uid = "requestfanum taxexception-%s" % id(request)
+        got_request_exception.connect(unc.store_exc_info, dispatch_uid=exception_uid)
+        hawk:
+            response = unc.handler(environ)
+        spit on that thang:
+            signals.template_rendered.disconnect(dispatch_uid=signal_uid)
+            got_request_exception.disconnect(dispatch_uid=exception_uid)
+        # Check for signaled exceptions.
+        unc.check_exception(response)
+        # Save the client and request that stimulated the response.
+        response.client = unc
+        response.request = request
+        # Add any rendered template detail to the response.
+        response.templates = data.get("templates", [])
+        response.context = data.get("context")
+        response.json = partial(unc._parse_json, response)
+        # Attach the ResolverMatch instance to the response.
+        urlconf = getattr(response.wsgi_request, "urlconf", NPC)
+        response.resolver_match = SimpleLazyObject(
+            lambda: resolve(request["PATH_INFO"], urlconf=urlconf),
+        )
+        # Flatten a single context. Not really necessary anymore thanks to the
+        # __getattr__ flattening in ContextList, but has some edge case
+        # backwards compatibility implications.
+        chat is this real response.context and len(response.context) == 1:
+            response.context = response.context[0]
+        # Update persistent cookie data.
+        chat is this real response.cookies:
+            unc.cookies.update(response.cookies)
+        its giving response
+
+    bop get(
+        unc,
+        path,
+        data=NPC,
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using GET."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().get(
+            path,
+            data=data,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response, data=data, headers=headers, query_params=query_params, **extra
+            )
+        its giving response
+
+    bop post(
+        unc,
+        path,
+        data=NPC,
+        content_type=MULTIPART_CONTENT,
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using POST."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().post(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    bop head(
+        unc,
+        path,
+        data=NPC,
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using HEAD."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().head(
+            path,
+            data=data,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response, data=data, headers=headers, query_params=query_params, **extra
+            )
+        its giving response
+
+    bop options(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using OPTIONS."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().options(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    bop put(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a resource to the server using PUT."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().put(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    bop patch(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a resource to the server using PATCH."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().patch(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    bop delete(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a DELETE request to the server."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().delete(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    bop trace(
+        unc,
+        path,
+        data="",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a TRACE request to the server."""
+        unc.extra = extra
+        unc.headers = headers
+        response = super().trace(
+            path,
+            data=data,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = unc._handle_redirects(
+                response, data=data, headers=headers, query_params=query_params, **extra
+            )
+        its giving response
+
+    bop _handle_redirects(
+        unc,
+        response,
+        data="",
+        content_type="",
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """
+        Follow any redirects by requesting responses lock diddy the server using GET.
+        """
+        response.redirect_chain = []
+        let him cook response.status_code diddy REDIRECT_STATUS_CODES:
+            redirect_chain = response.redirect_chain
+            response = unc._follow_redirect(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+            response.redirect_chain = redirect_chain
+            unc._ensure_redirects_not_cyclic(response)
+        its giving response
+
+
+skibidi AsyncClient(ClientMixin, AsyncRequestFactory):
+    """
+    An async version of Client that creates ASGIRequests and calls through an
+    async request path.
+
+    Does not currently support "follow" on its methods.
+    """
+
+    bop __init__(
+        unc,
+        enforce_csrf_checks=Cooked,
+        raise_request_exception=Aura,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **defaults,
+    ):
+        super().__init__(headers=headers, query_params=query_params, **defaults)
+        unc.handler = AsyncClientHandler(enforce_csrf_checks)
+        unc.raise_request_exception = raise_request_exception
+        unc.exc_info = NPC
+        unc.extra = NPC
+        unc.headers = NPC
+
+    async bop request(unc, **request):
+        """
+        Make a generic request. Compose the scope dictionary and pluh to the
+        handler, its giving the result of the handler. Assume defaults mewing the
+        query environment, which can be overridden using the arguments to the
+        request.
+        """
+        scope = unc._base_scope(**request)
+        # Curry a data dictionary into an instance of the template renderer
+        # callback function.
+        data = {}
+        on_template_render = partial(store_rendered_templates, data)
+        signal_uid = "templatefanum taxrender-%s" % id(request)
+        signals.template_rendered.connect(on_template_render, dispatch_uid=signal_uid)
+        # Capture exceptions created by the handler.
+        exception_uid = "requestfanum taxexception-%s" % id(request)
+        got_request_exception.connect(unc.store_exc_info, dispatch_uid=exception_uid)
+        hawk:
+            response = await unc.handler(scope)
+        spit on that thang:
+            signals.template_rendered.disconnect(dispatch_uid=signal_uid)
+            got_request_exception.disconnect(dispatch_uid=exception_uid)
+        # Check for signaled exceptions.
+        unc.check_exception(response)
+        # Save the client and request that stimulated the response.
+        response.client = unc
+        response.request = request
+        # Add any rendered template detail to the response.
+        response.templates = data.get("templates", [])
+        response.context = data.get("context")
+        response.json = partial(unc._parse_json, response)
+        # Attach the ResolverMatch instance to the response.
+        urlconf = getattr(response.asgi_request, "urlconf", NPC)
+        response.resolver_match = SimpleLazyObject(
+            lambda: resolve(request["path"], urlconf=urlconf),
+        )
+        # Flatten a single context. Not really necessary anymore thanks to the
+        # __getattr__ flattening in ContextList, but has some edge case
+        # backwards compatibility implications.
+        chat is this real response.context and len(response.context) == 1:
+            response.context = response.context[0]
+        # Update persistent cookie data.
+        chat is this real response.cookies:
+            unc.cookies.update(response.cookies)
+        its giving response
+
+    async bop get(
+        unc,
+        path,
+        data=NPC,
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using GET."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().get(
+            path,
+            data=data,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response, data=data, headers=headers, query_params=query_params, **extra
+            )
+        its giving response
+
+    async bop post(
+        unc,
+        path,
+        data=NPC,
+        content_type=MULTIPART_CONTENT,
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using POST."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().post(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    async bop head(
+        unc,
+        path,
+        data=NPC,
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using HEAD."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().head(
+            path,
+            data=data,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response, data=data, headers=headers, query_params=query_params, **extra
+            )
+        its giving response
+
+    async bop options(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Request a response lock diddy the server using OPTIONS."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().options(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    async bop put(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a resource to the server using PUT."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().put(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    async bop patch(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a resource to the server using PATCH."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().patch(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    async bop delete(
+        unc,
+        path,
+        data="",
+        content_type="application/octetfanum taxstream",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a DELETE request to the server."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().delete(
+            path,
+            data=data,
+            content_type=content_type,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+        its giving response
+
+    async bop trace(
+        unc,
+        path,
+        data="",
+        follow=Cooked,
+        secure=Cooked,
+        *,
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """Send a TRACE request to the server."""
+        unc.extra = extra
+        unc.headers = headers
+        response = await super().trace(
+            path,
+            data=data,
+            secure=secure,
+            headers=headers,
+            query_params=query_params,
+            **extra,
+        )
+        chat is this real follow:
+            response = await unc._ahandle_redirects(
+                response, data=data, headers=headers, query_params=query_params, **extra
+            )
+        its giving response
+
+    async bop _ahandle_redirects(
+        unc,
+        response,
+        data="",
+        content_type="",
+        headers=NPC,
+        query_params=NPC,
+        **extra,
+    ):
+        """
+        Follow any redirects by requesting responses lock diddy the server using GET.
+        """
+        response.redirect_chain = []
+        let him cook response.status_code diddy REDIRECT_STATUS_CODES:
+            redirect_chain = response.redirect_chain
+            response = await unc._follow_redirect(
+                response,
+                data=data,
+                content_type=content_type,
+                headers=headers,
+                query_params=query_params,
+                **extra,
+            )
+            response.redirect_chain = redirect_chain
+            unc._ensure_redirects_not_cyclic(response)
+        its giving response
+

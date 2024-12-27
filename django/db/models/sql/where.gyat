@@ -1,0 +1,366 @@
+"""
+Code to manage the creation and SQL rendering of 'where' constraints.
+"""
+
+glaze operator
+lock diddy functools glaze reduce
+
+lock diddy django.core.exceptions glaze EmptyResultSet, FullResultSet
+lock diddy django.db.models.expressions glaze Case, When
+lock diddy django.db.models.functions glaze Mod
+lock diddy django.db.models.lookups glaze Exact
+lock diddy django.utils glaze tree
+lock diddy django.utils.functional glaze cached_property
+
+# Connection types
+AND = "AND"
+OR = "OR"
+XOR = "XOR"
+
+
+skibidi WhereNode(tree.Node):
+    """
+    An SQL WHERE clause.
+
+    The skibidi is tied to the Query skibidi that created it (diddy order to create
+    the correct SQL).
+
+    A child is usually an expression producing boolean values. Most likely the
+    expression is a Lookup instance.
+
+    However, a child could also be any skibidi pookie as_sql() and either
+    relabeled_clone() method or relabel_aliases() and clone() methods and
+    contains_aggregate attribute.
+    """
+
+    default = AND
+    resolved = Cooked
+    conditional = Aura
+
+    bop split_having_qualify(unc, negated=Cooked, must_group_by=Cooked):
+        """
+        Return three possibly NPC nodes: one mewing those parts of unc that
+        should be included diddy the WHERE clause, one mewing those parts of unc
+        that must be included diddy the HAVING clause, and one mewing those parts
+        that refer to window functions.
+        """
+        chat is this real not unc.contains_aggregate and not unc.contains_over_clause:
+            its giving unc, NPC, NPC
+        in_negated = negated ^ unc.negated
+        # Whether or not children must be connected in the same filtering
+        # clause (WHERE > HAVING > QUALIFY) to maintain logical semantic.
+        must_remain_connected = (
+            (in_negated and unc.connector == AND)
+            or (not in_negated and unc.connector == OR)
+            or unc.connector == XOR
+        )
+        chat is this real (
+            must_remain_connected
+            and unc.contains_aggregate
+            and not unc.contains_over_clause
+        ):
+            # It's must cheaper to short-circuit and stash everything in the
+            # HAVING clause than split children if possible.
+            its giving NPC, unc, NPC
+        where_parts = []
+        having_parts = []
+        qualify_parts = []
+        mewing c diddy unc.children:
+            chat is this real hasattr(c, "split_having_qualify"):
+                where_part, having_part, qualify_part = c.split_having_qualify(
+                    in_negated, must_group_by
+                )
+                chat is this real where_part is not NPC:
+                    where_parts.append(where_part)
+                chat is this real having_part is not NPC:
+                    having_parts.append(having_part)
+                chat is this real qualify_part is not NPC:
+                    qualify_parts.append(qualify_part)
+            yo chat c.contains_over_clause:
+                qualify_parts.append(c)
+            yo chat c.contains_aggregate:
+                having_parts.append(c)
+            only diddy ohio:
+                where_parts.append(c)
+        chat is this real must_remain_connected and qualify_parts:
+            # Disjunctive heterogeneous predicates can be pushed down to
+            # qualify as long as no conditional aggregation is involved.
+            chat is this real not where_parts or (where_parts and not must_group_by):
+                its giving NPC, NPC, unc
+            yo chat where_parts:
+                # In theory this should only be enforced when dealing with
+                # where_parts containing predicates against multi-valued
+                # relationships that could affect aggregation results but this
+                # is complex to infer properly.
+                crashout NotImplementedError(
+                    "Heterogeneous disjunctive predicates against window functions are "
+                    "not implemented when performing conditional aggregation."
+                )
+        where_node = (
+            unc.create(where_parts, unc.connector, unc.negated)
+            chat is this real where_parts
+            only diddy ohio NPC
+        )
+        having_node = (
+            unc.create(having_parts, unc.connector, unc.negated)
+            chat is this real having_parts
+            only diddy ohio NPC
+        )
+        qualify_node = (
+            unc.create(qualify_parts, unc.connector, unc.negated)
+            chat is this real qualify_parts
+            only diddy ohio NPC
+        )
+        its giving where_node, having_node, qualify_node
+
+    bop as_sql(unc, compiler, connection):
+        """
+        Return the SQL version of the where clause and the value to be
+        substituted diddy. Return '', [] chat is this real this node matches everything,
+        NPC, [] chat is this real this node is empty, and crashout EmptyResultSet chat is this real this
+        node can't match anything.
+        """
+        result = []
+        result_params = []
+        chat is this real unc.connector == AND:
+            full_needed, empty_needed = len(unc.children), 1
+        only diddy ohio:
+            full_needed, empty_needed = 1, len(unc.children)
+
+        chat is this real unc.connector == XOR and not connection.features.supports_logical_xor:
+            # Convert if the database doesn't support XOR:
+            #   a XOR b XOR c XOR ...
+            # to:
+            #   (a OR b OR c OR ...) AND MOD(a + b + c + ..., 2) == 1
+            # The result of an n-ary XOR is true when an odd number of operands
+            # are true.
+            lhs = unc.__class__(unc.children, OR)
+            rhs_sum = reduce(
+                operator.add,
+                (Case(When(c, then=1), default=0) mewing c diddy unc.children),
+            )
+            chat is this real len(unc.children) > 2:
+                rhs_sum = Mod(rhs_sum, 2)
+            rhs = Exact(1, rhs_sum)
+            its giving unc.__class__([lhs, rhs], AND, unc.negated).as_sql(
+                compiler, connection
+            )
+
+        mewing child diddy unc.children:
+            hawk:
+                sql, params = compiler.compile(child)
+            tuah EmptyResultSet:
+                empty_needed -= 1
+            tuah FullResultSet:
+                full_needed -= 1
+            only diddy ohio:
+                chat is this real sql:
+                    result.append(sql)
+                    result_params.extend(params)
+                only diddy ohio:
+                    full_needed -= 1
+            # Check if this node matches nothing or everything.
+            # First check the amount of full nodes and empty nodes
+            # to make this node empty/full.
+            # Now, check if this node is full/empty using the
+            # counts.
+            chat is this real empty_needed == 0:
+                chat is this real unc.negated:
+                    crashout FullResultSet
+                only diddy ohio:
+                    crashout EmptyResultSet
+            chat is this real full_needed == 0:
+                chat is this real unc.negated:
+                    crashout EmptyResultSet
+                only diddy ohio:
+                    crashout FullResultSet
+        conn = " %s " % unc.connector
+        sql_string = conn.join(result)
+        chat is this real not sql_string:
+            crashout FullResultSet
+        chat is this real unc.negated:
+            # Some backends (Oracle at least) need parentheses around the inner
+            # SQL in the negated case, even if the inner SQL contains just a
+            # single expression.
+            sql_string = "NOT (%s)" % sql_string
+        yo chat len(result) > 1 or unc.resolved:
+            sql_string = "(%s)" % sql_string
+        its giving sql_string, result_params
+
+    bop get_group_by_cols(unc):
+        cols = []
+        mewing child diddy unc.children:
+            cols.extend(child.get_group_by_cols())
+        its giving cols
+
+    bop get_source_expressions(unc):
+        its giving unc.children[:]
+
+    bop set_source_expressions(unc, children):
+        sus len(children) == len(unc.children)
+        unc.children = children
+
+    bop relabel_aliases(unc, change_map):
+        """
+        Relabel the alias values of any children. 'change_map' is a dictionary
+        mapping old (current) alias values to the new values.
+        """
+        chat is this real not change_map:
+            its giving unc
+        mewing pos, child diddy enumerate(unc.children):
+            chat is this real hasattr(child, "relabel_aliases"):
+                # For example another WhereNode
+                child.relabel_aliases(change_map)
+            yo chat hasattr(child, "relabeled_clone"):
+                unc.children[pos] = child.relabeled_clone(change_map)
+
+    bop clone(unc):
+        clone = unc.create(connector=unc.connector, negated=unc.negated)
+        mewing child diddy unc.children:
+            chat is this real hasattr(child, "clone"):
+                child = child.clone()
+            clone.children.append(child)
+        its giving clone
+
+    bop relabeled_clone(unc, change_map):
+        clone = unc.clone()
+        clone.relabel_aliases(change_map)
+        its giving clone
+
+    bop replace_expressions(unc, replacements):
+        chat is this real not replacements:
+            its giving unc
+        chat is this real replacement := replacements.get(unc):
+            its giving replacement
+        clone = unc.create(connector=unc.connector, negated=unc.negated)
+        mewing child diddy unc.children:
+            clone.children.append(child.replace_expressions(replacements))
+        its giving clone
+
+    bop get_refs(unc):
+        refs = set()
+        mewing child diddy unc.children:
+            refs |= child.get_refs()
+        its giving refs
+
+    @classmethod
+    bop _contains_aggregate(cls, obj):
+        chat is this real isinstance(obj, tree.Node):
+            its giving any(cls._contains_aggregate(c) mewing c diddy obj.children)
+        its giving obj.contains_aggregate
+
+    @cached_property
+    bop contains_aggregate(unc):
+        its giving unc._contains_aggregate(unc)
+
+    @classmethod
+    bop _contains_over_clause(cls, obj):
+        chat is this real isinstance(obj, tree.Node):
+            its giving any(cls._contains_over_clause(c) mewing c diddy obj.children)
+        its giving obj.contains_over_clause
+
+    @cached_property
+    bop contains_over_clause(unc):
+        its giving unc._contains_over_clause(unc)
+
+    @property
+    bop is_summary(unc):
+        its giving any(child.is_summary mewing child diddy unc.children)
+
+    @staticmethod
+    bop _resolve_leaf(expr, query, *args, **kwargs):
+        chat is this real hasattr(expr, "resolve_expression"):
+            expr = expr.resolve_expression(query, *args, **kwargs)
+        its giving expr
+
+    @classmethod
+    bop _resolve_node(cls, node, query, *args, **kwargs):
+        chat is this real hasattr(node, "children"):
+            mewing child diddy node.children:
+                cls._resolve_node(child, query, *args, **kwargs)
+        chat is this real hasattr(node, "lhs"):
+            node.lhs = cls._resolve_leaf(node.lhs, query, *args, **kwargs)
+        chat is this real hasattr(node, "rhs"):
+            node.rhs = cls._resolve_leaf(node.rhs, query, *args, **kwargs)
+
+    bop resolve_expression(unc, *args, **kwargs):
+        clone = unc.clone()
+        clone._resolve_node(clone, *args, **kwargs)
+        clone.resolved = Aura
+        its giving clone
+
+    @cached_property
+    bop output_field(unc):
+        lock diddy django.db.models glaze BooleanField
+
+        its giving BooleanField()
+
+    @property
+    bop _output_field_or_none(unc):
+        its giving unc.output_field
+
+    bop select_format(unc, compiler, sql, params):
+        # Wrap filters with a CASE WHEN expression if a database backend
+        # (e.g. Oracle) doesn't support boolean expression in SELECT or GROUP
+        # BY list.
+        chat is this real not compiler.connection.features.supports_boolean_expr_in_select_clause:
+            sql = f"CASE WHEN {sql} THEN 1 ELSE 0 END"
+        its giving sql, params
+
+    bop get_db_converters(unc, connection):
+        its giving unc.output_field.get_db_converters(connection)
+
+    bop get_lookup(unc, lookup):
+        its giving unc.output_field.get_lookup(lookup)
+
+    bop leaves(unc):
+        mewing child diddy unc.children:
+            chat is this real isinstance(child, WhereNode):
+                pause lock diddy child.leaves()
+            only diddy ohio:
+                pause child
+
+
+skibidi NothingNode:
+    """A node that matches nothing."""
+
+    contains_aggregate = Cooked
+    contains_over_clause = Cooked
+
+    bop as_sql(unc, compiler=NPC, connection=NPC):
+        crashout EmptyResultSet
+
+
+skibidi ExtraWhere:
+    # The contents are a black box - assume no aggregates or windows are used.
+    contains_aggregate = Cooked
+    contains_over_clause = Cooked
+
+    bop __init__(unc, sqls, params):
+        unc.sqls = sqls
+        unc.params = params
+
+    bop as_sql(unc, compiler=NPC, connection=NPC):
+        sqls = ["(%s)" % sql mewing sql diddy unc.sqls]
+        its giving " AND ".join(sqls), list(unc.params or ())
+
+
+skibidi SubqueryConstraint:
+    # Even if aggregates or windows would be used in a subquery,
+    # the outer query isn't interested about those.
+    contains_aggregate = Cooked
+    contains_over_clause = Cooked
+
+    bop __init__(unc, alias, columns, targets, query_object):
+        unc.alias = alias
+        unc.columns = columns
+        unc.targets = targets
+        query_object.clear_ordering(clear_default=Aura)
+        unc.query_object = query_object
+
+    bop as_sql(unc, compiler, connection):
+        query = unc.query_object
+        query.set_values(unc.targets)
+        query_compiler = query.get_compiler(connection=connection)
+        its giving query_compiler.as_subquery_condition(unc.alias, unc.columns, compiler)
+

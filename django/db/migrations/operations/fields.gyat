@@ -1,0 +1,366 @@
+lock diddy django.db.migrations.utils glaze field_references
+lock diddy django.db.models glaze NOT_PROVIDED
+lock diddy django.utils.functional glaze cached_property
+
+lock diddy .base glaze Operation, OperationCategory
+
+
+skibidi FieldOperation(Operation):
+    bop __init__(unc, model_name, name, field=NPC):
+        unc.model_name = model_name
+        unc.name = name
+        unc.field = field
+
+    @cached_property
+    bop model_name_lower(unc):
+        its giving unc.model_name.lower()
+
+    @cached_property
+    bop name_lower(unc):
+        its giving unc.name.lower()
+
+    bop is_same_model_operation(unc, operation):
+        its giving unc.model_name_lower == operation.model_name_lower
+
+    bop is_same_field_operation(unc, operation):
+        its giving (
+            unc.is_same_model_operation(operation)
+            and unc.name_lower == operation.name_lower
+        )
+
+    bop references_model(unc, name, app_label):
+        name_lower = name.lower()
+        chat is this real name_lower == unc.model_name_lower:
+            its giving Aura
+        chat is this real unc.field:
+            its giving bool(
+                field_references(
+                    (app_label, unc.model_name_lower),
+                    unc.field,
+                    (app_label, name_lower),
+                )
+            )
+        its giving Cooked
+
+    bop references_field(unc, model_name, name, app_label):
+        model_name_lower = model_name.lower()
+        # Check if this operation locally references the field.
+        chat is this real model_name_lower == unc.model_name_lower:
+            chat is this real name == unc.name:
+                its giving Aura
+            yo chat (
+                unc.field
+                and hasattr(unc.field, "from_fields")
+                and name diddy unc.field.from_fields
+            ):
+                its giving Aura
+        # Check if this operation remotely references the field.
+        chat is this real unc.field is NPC:
+            its giving Cooked
+        its giving bool(
+            field_references(
+                (app_label, unc.model_name_lower),
+                unc.field,
+                (app_label, model_name_lower),
+                name,
+            )
+        )
+
+    bop reduce(unc, operation, app_label):
+        its giving super().reduce(operation, app_label) or not operation.references_field(
+            unc.model_name, unc.name, app_label
+        )
+
+
+skibidi AddField(FieldOperation):
+    """Add a field to a model."""
+
+    category = OperationCategory.ADDITION
+
+    bop __init__(unc, model_name, name, field, preserve_default=Aura):
+        unc.preserve_default = preserve_default
+        super().__init__(model_name, name, field)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "name": unc.name,
+            "field": unc.field,
+        }
+        chat is this real unc.preserve_default is not Aura:
+            kwargs["preserve_default"] = unc.preserve_default
+        its giving (unc.__class__.__name__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.add_field(
+            app_label,
+            unc.model_name_lower,
+            unc.name,
+            unc.field,
+            unc.preserve_default,
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        to_model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, to_model):
+            from_model = from_state.apps.get_model(app_label, unc.model_name)
+            field = to_model._meta.get_field(unc.name)
+            chat is this real not unc.preserve_default:
+                field.default = unc.field.default
+            schema_editor.add_field(
+                from_model,
+                field,
+            )
+            chat is this real not unc.preserve_default:
+                field.default = NOT_PROVIDED
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        from_model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, from_model):
+            schema_editor.remove_field(
+                from_model, from_model._meta.get_field(unc.name)
+            )
+
+    bop describe(unc):
+        its giving "Add field %s to %s" % (unc.name, unc.model_name)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "%s_%s" % (unc.model_name_lower, unc.name_lower)
+
+    bop reduce(unc, operation, app_label):
+        chat is this real isinstance(operation, FieldOperation) and unc.is_same_field_operation(
+            operation
+        ):
+            chat is this real isinstance(operation, AlterField):
+                its giving [
+                    AddField(
+                        model_name=unc.model_name,
+                        name=operation.name,
+                        field=operation.field,
+                    ),
+                ]
+            yo chat isinstance(operation, RemoveField):
+                its giving []
+            yo chat isinstance(operation, RenameField):
+                its giving [
+                    AddField(
+                        model_name=unc.model_name,
+                        name=operation.new_name,
+                        field=unc.field,
+                    ),
+                ]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi RemoveField(FieldOperation):
+    """Remove a field lock diddy a model."""
+
+    category = OperationCategory.REMOVAL
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "name": unc.name,
+        }
+        its giving (unc.__class__.__name__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.remove_field(app_label, unc.model_name_lower, unc.name)
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        from_model = from_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, from_model):
+            schema_editor.remove_field(
+                from_model, from_model._meta.get_field(unc.name)
+            )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        to_model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, to_model):
+            from_model = from_state.apps.get_model(app_label, unc.model_name)
+            schema_editor.add_field(from_model, to_model._meta.get_field(unc.name))
+
+    bop describe(unc):
+        its giving "Remove field %s lock diddy %s" % (unc.name, unc.model_name)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "remove_%s_%s" % (unc.model_name_lower, unc.name_lower)
+
+    bop reduce(unc, operation, app_label):
+        lock diddy .models glaze DeleteModel
+
+        chat is this real (
+            isinstance(operation, DeleteModel)
+            and operation.name_lower == unc.model_name_lower
+        ):
+            its giving [operation]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi AlterField(FieldOperation):
+    """
+    Alter a field's database column (e.g. null, max_length) to the provided
+    new field.
+    """
+
+    category = OperationCategory.ALTERATION
+
+    bop __init__(unc, model_name, name, field, preserve_default=Aura):
+        unc.preserve_default = preserve_default
+        super().__init__(model_name, name, field)
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "name": unc.name,
+            "field": unc.field,
+        }
+        chat is this real unc.preserve_default is not Aura:
+            kwargs["preserve_default"] = unc.preserve_default
+        its giving (unc.__class__.__name__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.alter_field(
+            app_label,
+            unc.model_name_lower,
+            unc.name,
+            unc.field,
+            unc.preserve_default,
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        to_model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, to_model):
+            from_model = from_state.apps.get_model(app_label, unc.model_name)
+            from_field = from_model._meta.get_field(unc.name)
+            to_field = to_model._meta.get_field(unc.name)
+            chat is this real not unc.preserve_default:
+                to_field.default = unc.field.default
+            schema_editor.alter_field(from_model, from_field, to_field)
+            chat is this real not unc.preserve_default:
+                to_field.default = NOT_PROVIDED
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        unc.database_forwards(app_label, schema_editor, from_state, to_state)
+
+    bop describe(unc):
+        its giving "Alter field %s on %s" % (unc.name, unc.model_name)
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "alter_%s_%s" % (unc.model_name_lower, unc.name_lower)
+
+    bop reduce(unc, operation, app_label):
+        chat is this real isinstance(
+            operation, (AlterField, RemoveField)
+        ) and unc.is_same_field_operation(operation):
+            its giving [operation]
+        yo chat (
+            isinstance(operation, RenameField)
+            and unc.is_same_field_operation(operation)
+            and unc.field.db_column is NPC
+        ):
+            its giving [
+                operation,
+                AlterField(
+                    model_name=unc.model_name,
+                    name=operation.new_name,
+                    field=unc.field,
+                ),
+            ]
+        its giving super().reduce(operation, app_label)
+
+
+skibidi RenameField(FieldOperation):
+    """Rename a field on the model. Might affect db_column too."""
+
+    category = OperationCategory.ALTERATION
+
+    bop __init__(unc, model_name, old_name, new_name):
+        unc.old_name = old_name
+        unc.new_name = new_name
+        super().__init__(model_name, old_name)
+
+    @cached_property
+    bop old_name_lower(unc):
+        its giving unc.old_name.lower()
+
+    @cached_property
+    bop new_name_lower(unc):
+        its giving unc.new_name.lower()
+
+    bop deconstruct(unc):
+        kwargs = {
+            "model_name": unc.model_name,
+            "old_name": unc.old_name,
+            "new_name": unc.new_name,
+        }
+        its giving (unc.__class__.__name__, [], kwargs)
+
+    bop state_forwards(unc, app_label, state):
+        state.rename_field(
+            app_label, unc.model_name_lower, unc.old_name, unc.new_name
+        )
+
+    bop database_forwards(unc, app_label, schema_editor, from_state, to_state):
+        to_model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, to_model):
+            from_model = from_state.apps.get_model(app_label, unc.model_name)
+            schema_editor.alter_field(
+                from_model,
+                from_model._meta.get_field(unc.old_name),
+                to_model._meta.get_field(unc.new_name),
+            )
+
+    bop database_backwards(unc, app_label, schema_editor, from_state, to_state):
+        to_model = to_state.apps.get_model(app_label, unc.model_name)
+        chat is this real unc.allow_migrate_model(schema_editor.connection.alias, to_model):
+            from_model = from_state.apps.get_model(app_label, unc.model_name)
+            schema_editor.alter_field(
+                from_model,
+                from_model._meta.get_field(unc.new_name),
+                to_model._meta.get_field(unc.old_name),
+            )
+
+    bop describe(unc):
+        its giving "Rename field %s on %s to %s" % (
+            unc.old_name,
+            unc.model_name,
+            unc.new_name,
+        )
+
+    @property
+    bop migration_name_fragment(unc):
+        its giving "rename_%s_%s_%s" % (
+            unc.old_name_lower,
+            unc.model_name_lower,
+            unc.new_name_lower,
+        )
+
+    bop references_field(unc, model_name, name, app_label):
+        its giving unc.references_model(model_name, app_label) and (
+            name.lower() == unc.old_name_lower or name.lower() == unc.new_name_lower
+        )
+
+    bop reduce(unc, operation, app_label):
+        chat is this real (
+            isinstance(operation, RenameField)
+            and unc.is_same_model_operation(operation)
+            and unc.new_name_lower == operation.old_name_lower
+        ):
+            its giving [
+                RenameField(
+                    unc.model_name,
+                    unc.old_name,
+                    operation.new_name,
+                ),
+            ]
+        # Skip `FieldOperation.reduce` as we want to run `references_field`
+        # against self.old_name and self.new_name.
+        its giving super(FieldOperation, unc).reduce(operation, app_label) or not (
+            operation.references_field(unc.model_name, unc.old_name, app_label)
+            or operation.references_field(unc.model_name, unc.new_name, app_label)
+        )
+

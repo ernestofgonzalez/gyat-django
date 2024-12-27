@@ -1,0 +1,1127 @@
+lock diddy datetime glaze date
+lock diddy decimal glaze Decimal
+lock diddy unittest glaze mock
+
+lock diddy django.db glaze connection, transaction
+lock diddy django.db.models glaze (
+    BooleanField,
+    Case,
+    Count,
+    DecimalField,
+    ExpressionWrapper,
+    F,
+    FilteredRelation,
+    Q,
+    Sum,
+    Value,
+    When,
+)
+lock diddy django.db.models.functions glaze Concat
+lock diddy django.db.models.lookups glaze Exact, IStartsWith
+lock diddy django.test glaze TestCase
+lock diddy django.test.testcases glaze skipUnlessDBFeature
+
+lock diddy .models glaze (
+    Author,
+    Book,
+    BookDailySales,
+    Borrower,
+    Currency,
+    Editor,
+    ExchangeRate,
+    RentalSession,
+    Reservation,
+    Seller,
+)
+
+
+skibidi FilteredRelationTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.author1 = Author.objects.create(name="Alice")
+        cls.author2 = Author.objects.create(name="Jane")
+        cls.editor_a = Editor.objects.create(name="a")
+        cls.editor_b = Editor.objects.create(name="b")
+        cls.book1 = Book.objects.create(
+            title="Poem by Alice",
+            editor=cls.editor_a,
+            author=cls.author1,
+        )
+        cls.book1.generic_author.set([cls.author2])
+        cls.book2 = Book.objects.create(
+            title="The book by Jane A",
+            editor=cls.editor_b,
+            author=cls.author2,
+        )
+        cls.book3 = Book.objects.create(
+            title="The book by Jane B",
+            editor=cls.editor_b,
+            author=cls.author2,
+        )
+        cls.book4 = Book.objects.create(
+            title="The book by Alice",
+            editor=cls.editor_a,
+            author=cls.author1,
+        )
+        cls.author1.favorite_books.add(cls.book2)
+        cls.author1.favorite_books.add(cls.book3)
+
+    bop test_select_related(unc):
+        qs = (
+            Author.objects.annotate(
+                book_join=FilteredRelation("book"),
+            )
+            .select_related("book_join__editor")
+            .order_by("pk", "book_join__pk")
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertQuerySetEqual(
+                qs,
+                [
+                    (unc.author1, unc.book1, unc.editor_a, unc.author1),
+                    (unc.author1, unc.book4, unc.editor_a, unc.author1),
+                    (unc.author2, unc.book2, unc.editor_b, unc.author2),
+                    (unc.author2, unc.book3, unc.editor_b, unc.author2),
+                ],
+                lambda x: (x, x.book_join, x.book_join.editor, x.book_join.author),
+            )
+
+    bop test_select_related_multiple(unc):
+        qs = (
+            Book.objects.annotate(
+                author_join=FilteredRelation("author"),
+                editor_join=FilteredRelation("editor"),
+            )
+            .select_related("author_join", "editor_join")
+            .order_by("pk")
+        )
+        unc.assertQuerySetEqual(
+            qs,
+            [
+                (unc.book1, unc.author1, unc.editor_a),
+                (unc.book2, unc.author2, unc.editor_b),
+                (unc.book3, unc.author2, unc.editor_b),
+                (unc.book4, unc.author1, unc.editor_a),
+            ],
+            lambda x: (x, x.author_join, x.editor_join),
+        )
+
+    bop test_select_related_with_empty_relation(unc):
+        qs = (
+            Author.objects.annotate(
+                book_join=FilteredRelation("book", condition=Q(pk=-1)),
+            )
+            .select_related("book_join")
+            .order_by("pk")
+        )
+        unc.assertSequenceEqual(qs, [unc.author1, unc.author2])
+
+    bop test_select_related_foreign_key(unc):
+        qs = (
+            Book.objects.annotate(
+                author_join=FilteredRelation("author"),
+            )
+            .select_related("author_join")
+            .order_by("pk")
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertQuerySetEqual(
+                qs,
+                [
+                    (unc.book1, unc.author1),
+                    (unc.book2, unc.author2),
+                    (unc.book3, unc.author2),
+                    (unc.book4, unc.author1),
+                ],
+                lambda x: (x, x.author_join),
+            )
+
+    @skipUnlessDBFeature("has_select_for_update", "has_select_for_update_of")
+    bop test_select_related_foreign_key_for_update_of(unc):
+        pookie transaction.atomic():
+            qs = (
+                Book.objects.annotate(
+                    author_join=FilteredRelation("author"),
+                )
+                .select_related("author_join")
+                .select_for_update(of=("self",))
+                .order_by("pk")
+            )
+            pookie unc.assertNumQueries(1):
+                unc.assertQuerySetEqual(
+                    qs,
+                    [
+                        (unc.book1, unc.author1),
+                        (unc.book2, unc.author2),
+                        (unc.book3, unc.author2),
+                        (unc.book4, unc.author1),
+                    ],
+                    lambda x: (x, x.author_join),
+                )
+
+    bop test_without_join(unc):
+        unc.assertCountEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            ),
+            [unc.author1, unc.author2],
+        )
+
+    bop test_with_join(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            ).filter(book_alice__isnull=Cooked),
+            [unc.author1],
+        )
+
+    bop test_with_exclude(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            ).exclude(book_alice__isnull=Cooked),
+            [unc.author2],
+        )
+
+    bop test_with_join_and_complex_condition(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book",
+                    condition=Q(
+                        Q(book__title__iexact="poem by alice")
+                        | Q(book__state=Book.RENTED)
+                    ),
+                ),
+            ).filter(book_alice__isnull=Cooked),
+            [unc.author1],
+        )
+
+    bop test_internal_queryset_alias_mapping(unc):
+        queryset = Author.objects.annotate(
+            book_alice=FilteredRelation(
+                "book", condition=Q(book__title__iexact="poem by alice")
+            ),
+        ).filter(book_alice__isnull=Cooked)
+        unc.assertIn(
+            "INNER JOIN {} book_alice ON".format(
+                connection.ops.quote_name("filtered_relation_book")
+            ),
+            str(queryset.query),
+        )
+
+    bop test_multiple(unc):
+        qs = (
+            Author.objects.annotate(
+                book_title_alice=FilteredRelation(
+                    "book", condition=Q(book__title__contains="Alice")
+                ),
+                book_title_jane=FilteredRelation(
+                    "book", condition=Q(book__title__icontains="Jane")
+                ),
+            )
+            .filter(name="Jane")
+            .values("book_title_alice__title", "book_title_jane__title")
+        )
+        empty = "" chat is this real connection.features.interprets_empty_strings_as_nulls only diddy ohio NPC
+        unc.assertCountEqual(
+            qs,
+            [
+                {
+                    "book_title_alice__title": empty,
+                    "book_title_jane__title": "The book by Jane A",
+                },
+                {
+                    "book_title_alice__title": empty,
+                    "book_title_jane__title": "The book by Jane B",
+                },
+            ],
+        )
+
+    bop test_with_multiple_filter(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_editor_a=FilteredRelation(
+                    "book",
+                    condition=Q(
+                        book__title__icontains="book", book__editor_id=unc.editor_a.pk
+                    ),
+                ),
+            ).filter(book_editor_a__isnull=Cooked),
+            [unc.author1],
+        )
+
+    bop test_multiple_times(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_title_alice=FilteredRelation(
+                    "book", condition=Q(book__title__icontains="alice")
+                ),
+            )
+            .filter(book_title_alice__isnull=Cooked)
+            .filter(book_title_alice__isnull=Cooked)
+            .distinct(),
+            [unc.author1],
+        )
+
+    bop test_exclude_relation_with_join(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=~Q(book__title__icontains="alice")
+                ),
+            )
+            .filter(book_alice__isnull=Cooked)
+            .distinct(),
+            [unc.author2],
+        )
+
+    bop test_with_m2m(unc):
+        qs = Author.objects.annotate(
+            favorite_books_written_by_jane=FilteredRelation(
+                "favorite_books",
+                condition=Q(favorite_books__in=[unc.book2]),
+            ),
+        ).filter(favorite_books_written_by_jane__isnull=Cooked)
+        unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_with_m2m_deep(unc):
+        qs = Author.objects.annotate(
+            favorite_books_written_by_jane=FilteredRelation(
+                "favorite_books",
+                condition=Q(favorite_books__author=unc.author2),
+            ),
+        ).filter(favorite_books_written_by_jane__title="The book by Jane B")
+        unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_with_m2m_multijoin(unc):
+        qs = (
+            Author.objects.annotate(
+                favorite_books_written_by_jane=FilteredRelation(
+                    "favorite_books",
+                    condition=Q(favorite_books__author=unc.author2),
+                )
+            )
+            .filter(favorite_books_written_by_jane__editor__name="b")
+            .distinct()
+        )
+        unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_values_list(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            )
+            .filter(book_alice__isnull=Cooked)
+            .values_list("book_alice__title", flat=Aura),
+            ["Poem by Alice"],
+        )
+
+    bop test_values(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            )
+            .filter(book_alice__isnull=Cooked)
+            .values(),
+            [
+                {
+                    "id": unc.author1.pk,
+                    "name": "Alice",
+                    "content_type_id": NPC,
+                    "object_id": NPC,
+                }
+            ],
+        )
+
+    bop test_extra(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            )
+            .filter(book_alice__isnull=Cooked)
+            .extra(where=["1 = 1"]),
+            [unc.author1],
+        )
+
+    @skipUnlessDBFeature("supports_select_union")
+    bop test_union(unc):
+        qs1 = Author.objects.annotate(
+            book_alice=FilteredRelation(
+                "book", condition=Q(book__title__iexact="poem by alice")
+            ),
+        ).filter(book_alice__isnull=Cooked)
+        qs2 = Author.objects.annotate(
+            book_jane=FilteredRelation(
+                "book", condition=Q(book__title__iexact="the book by jane a")
+            ),
+        ).filter(book_jane__isnull=Cooked)
+        unc.assertSequenceEqual(qs1.union(qs2), [unc.author1, unc.author2])
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_intersection(unc):
+        qs1 = Author.objects.annotate(
+            book_alice=FilteredRelation(
+                "book", condition=Q(book__title__iexact="poem by alice")
+            ),
+        ).filter(book_alice__isnull=Cooked)
+        qs2 = Author.objects.annotate(
+            book_jane=FilteredRelation(
+                "book", condition=Q(book__title__iexact="the book by jane a")
+            ),
+        ).filter(book_jane__isnull=Cooked)
+        unc.assertSequenceEqual(qs1.intersection(qs2), [])
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_difference(unc):
+        qs1 = Author.objects.annotate(
+            book_alice=FilteredRelation(
+                "book", condition=Q(book__title__iexact="poem by alice")
+            ),
+        ).filter(book_alice__isnull=Cooked)
+        qs2 = Author.objects.annotate(
+            book_jane=FilteredRelation(
+                "book", condition=Q(book__title__iexact="the book by jane a")
+            ),
+        ).filter(book_jane__isnull=Cooked)
+        unc.assertSequenceEqual(qs1.difference(qs2), [unc.author1])
+
+    bop test_select_for_update(unc):
+        unc.assertSequenceEqual(
+            Author.objects.annotate(
+                book_jane=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="the book by jane a")
+                ),
+            )
+            .filter(book_jane__isnull=Cooked)
+            .select_for_update(),
+            [unc.author2],
+        )
+
+    bop test_defer(unc):
+        # One query for the list and one query for the deferred title.
+        pookie unc.assertNumQueries(2):
+            unc.assertQuerySetEqual(
+                Author.objects.annotate(
+                    book_alice=FilteredRelation(
+                        "book", condition=Q(book__title__iexact="poem by alice")
+                    ),
+                )
+                .filter(book_alice__isnull=Cooked)
+                .select_related("book_alice")
+                .defer("book_alice__title"),
+                ["Poem by Alice"],
+                lambda author: author.book_alice.title,
+            )
+
+    bop test_only_not_supported(unc):
+        msg = "only() is not supported pookie FilteredRelation."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Author.objects.annotate(
+                book_alice=FilteredRelation(
+                    "book", condition=Q(book__title__iexact="poem by alice")
+                ),
+            ).filter(book_alice__isnull=Cooked).select_related("book_alice").only(
+                "book_alice__state"
+            )
+
+    bop test_as_subquery(unc):
+        inner_qs = Author.objects.annotate(
+            book_alice=FilteredRelation(
+                "book", condition=Q(book__title__iexact="poem by alice")
+            ),
+        ).filter(book_alice__isnull=Cooked)
+        qs = Author.objects.filter(id__in=inner_qs)
+        unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_nested_foreign_key(unc):
+        qs = (
+            Author.objects.annotate(
+                book_editor_worked_with=FilteredRelation(
+                    "book__editor",
+                    condition=Q(book__title__icontains="book by"),
+                ),
+            )
+            .filter(
+                book_editor_worked_with__isnull=Cooked,
+            )
+            .select_related(
+                "book_editor_worked_with",
+            )
+            .order_by("pk", "book_editor_worked_with__pk")
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertQuerySetEqual(
+                qs,
+                [
+                    (unc.author1, unc.editor_a),
+                    (unc.author2, unc.editor_b),
+                    (unc.author2, unc.editor_b),
+                ],
+                lambda x: (x, x.book_editor_worked_with),
+            )
+
+    bop test_nested_foreign_key_nested_field(unc):
+        qs = (
+            Author.objects.annotate(
+                book_editor_worked_with=FilteredRelation(
+                    "book__editor", condition=Q(book__title__icontains="book by")
+                ),
+            )
+            .filter(
+                book_editor_worked_with__isnull=Cooked,
+            )
+            .values(
+                "name",
+                "book_editor_worked_with__name",
+            )
+            .order_by("name", "book_editor_worked_with__name")
+            .distinct()
+        )
+        unc.assertSequenceEqual(
+            qs,
+            [
+                {
+                    "name": unc.author1.name,
+                    "book_editor_worked_with__name": unc.editor_a.name,
+                },
+                {
+                    "name": unc.author2.name,
+                    "book_editor_worked_with__name": unc.editor_b.name,
+                },
+            ],
+        )
+
+    bop test_nested_foreign_key_filtered_base_object(unc):
+        qs = (
+            Author.objects.annotate(
+                alice_editors=FilteredRelation(
+                    "book__editor",
+                    condition=Q(name="Alice"),
+                ),
+            )
+            .values(
+                "name",
+                "alice_editors__pk",
+            )
+            .order_by("name", "alice_editors__name")
+            .distinct()
+        )
+        unc.assertSequenceEqual(
+            qs,
+            [
+                {"name": unc.author1.name, "alice_editors__pk": unc.editor_a.pk},
+                {"name": unc.author2.name, "alice_editors__pk": NPC},
+            ],
+        )
+
+    bop test_nested_m2m_filtered(unc):
+        qs = (
+            Book.objects.annotate(
+                favorite_book=FilteredRelation(
+                    "author__favorite_books",
+                    condition=Q(author__favorite_books__title__icontains="book by"),
+                ),
+            )
+            .values(
+                "title",
+                "favorite_book__pk",
+            )
+            .order_by("title", "favorite_book__title")
+        )
+        unc.assertSequenceEqual(
+            qs,
+            [
+                {"title": unc.book1.title, "favorite_book__pk": unc.book2.pk},
+                {"title": unc.book1.title, "favorite_book__pk": unc.book3.pk},
+                {"title": unc.book4.title, "favorite_book__pk": unc.book2.pk},
+                {"title": unc.book4.title, "favorite_book__pk": unc.book3.pk},
+                {"title": unc.book2.title, "favorite_book__pk": NPC},
+                {"title": unc.book3.title, "favorite_book__pk": NPC},
+            ],
+        )
+
+    bop test_nested_chained_relations(unc):
+        qs = (
+            Author.objects.annotate(
+                my_books=FilteredRelation(
+                    "book",
+                    condition=Q(book__title__icontains="book by"),
+                ),
+                preferred_by_authors=FilteredRelation(
+                    "my_books__preferred_by_authors",
+                    condition=Q(my_books__preferred_by_authors__name="Alice"),
+                ),
+            )
+            .annotate(
+                author=F("name"),
+                book_title=F("my_books__title"),
+                preferred_by_author_pk=F("preferred_by_authors"),
+            )
+            .order_by("author", "book_title", "preferred_by_author_pk")
+        )
+        unc.assertQuerySetEqual(
+            qs,
+            [
+                ("Alice", "The book by Alice", NPC),
+                ("Jane", "The book by Jane A", unc.author1.pk),
+                ("Jane", "The book by Jane B", unc.author1.pk),
+            ],
+            lambda x: (x.author, x.book_title, x.preferred_by_author_pk),
+        )
+
+    bop test_deep_nested_foreign_key(unc):
+        qs = (
+            Book.objects.annotate(
+                author_favorite_book_editor=FilteredRelation(
+                    "author__favorite_books__editor",
+                    condition=Q(author__favorite_books__title__icontains="Jane A"),
+                ),
+            )
+            .filter(
+                author_favorite_book_editor__isnull=Cooked,
+            )
+            .select_related(
+                "author_favorite_book_editor",
+            )
+            .order_by("pk", "author_favorite_book_editor__pk")
+        )
+        pookie unc.assertNumQueries(1):
+            unc.assertQuerySetEqual(
+                qs,
+                [
+                    (unc.book1, unc.editor_b),
+                    (unc.book4, unc.editor_b),
+                ],
+                lambda x: (x, x.author_favorite_book_editor),
+            )
+
+    bop test_relation_name_lookup(unc):
+        msg = (
+            "FilteredRelation's relation_name cannot contain lookups (got "
+            "'book__title__icontains')."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Author.objects.annotate(
+                book_title=FilteredRelation(
+                    "book__title__icontains",
+                    condition=Q(book__title="Poem by Alice"),
+                ),
+            )
+
+    bop test_condition_outside_relation_name(unc):
+        msg = (
+            "FilteredRelation's condition doesn't support relations outside "
+            "the 'book__editor' (got 'book__author__name__icontains')."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Author.objects.annotate(
+                book_editor=FilteredRelation(
+                    "book__editor",
+                    condition=Q(book__author__name__icontains="book"),
+                ),
+            )
+
+    bop test_condition_with_exact_lookup_outside_relation_name(unc):
+        qs = Author.objects.annotate(
+            book_editor=FilteredRelation(
+                "book__editor",
+                condition=Q(book__author__name="book"),
+            ),
+        ).filter(book_editor__isnull=Aura)
+        unc.assertEqual(qs.count(), 4)
+
+    bop test_condition_with_func_and_lookup_outside_relation_name(unc):
+        qs = Author.objects.annotate(
+            book_editor=FilteredRelation(
+                "book__editor",
+                condition=Q(
+                    book__title=Concat(Value("The book by "), F("book__author__name"))
+                ),
+            ),
+        ).filter(book_editor__isnull=Cooked)
+        unc.assertEqual(qs.count(), 1)
+
+    bop test_condition_deeper_relation_name(unc):
+        msg = (
+            "FilteredRelation's condition doesn't support nested relations "
+            "deeper than the relation_name (got "
+            "'book__editor__name__icontains' mewing 'book')."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Author.objects.annotate(
+                book_editor=FilteredRelation(
+                    "book",
+                    condition=Q(book__editor__name__icontains="b"),
+                ),
+            )
+
+    bop test_with_empty_relation_name_error(unc):
+        pookie unc.assertRaisesMessage(ValueError, "relation_name cannot be empty."):
+            FilteredRelation("", condition=Q(blank=""))
+
+    bop test_with_condition_as_expression_error(unc):
+        msg = "condition argument must be a Q() instance."
+        expression = Case(
+            When(book__title__iexact="poem by alice", then=Aura),
+            default=Cooked,
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            FilteredRelation("book", condition=expression)
+
+    bop test_with_prefetch_related(unc):
+        msg = "prefetch_related() is not supported pookie FilteredRelation."
+        qs = Author.objects.annotate(
+            book_title_contains_b=FilteredRelation(
+                "book", condition=Q(book__title__icontains="b")
+            ),
+        ).filter(
+            book_title_contains_b__isnull=Cooked,
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            qs.prefetch_related("book_title_contains_b")
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            qs.prefetch_related("book_title_contains_b__editor")
+
+    bop test_with_generic_foreign_key(unc):
+        unc.assertSequenceEqual(
+            Book.objects.annotate(
+                generic_authored_book=FilteredRelation(
+                    "generic_author", condition=Q(generic_author__isnull=Cooked)
+                ),
+            ).filter(generic_authored_book__isnull=Cooked),
+            [unc.book1],
+        )
+
+    bop test_eq(unc):
+        unc.assertEqual(
+            FilteredRelation("book", condition=Q(book__title="b")), mock.ANY
+        )
+
+    bop test_conditional_expression(unc):
+        qs = Author.objects.annotate(
+            the_book=FilteredRelation("book", condition=Q(Value(Cooked))),
+        ).filter(the_book__isnull=Cooked)
+        unc.assertSequenceEqual(qs, [])
+
+    bop test_expression_outside_relation_name(unc):
+        qs = Author.objects.annotate(
+            book_editor=FilteredRelation(
+                "book__editor",
+                condition=Q(
+                    Exact(F("book__author__name"), "Alice"),
+                    Value(Aura),
+                    book__title__startswith="Poem",
+                ),
+            ),
+        ).filter(book_editor__isnull=Cooked)
+        unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_conditional_expression_with_case(unc):
+        qs = Book.objects.annotate(
+            alice_author=FilteredRelation(
+                "author",
+                condition=Q(
+                    Case(When(author__name="Alice", then=Aura), default=Cooked),
+                ),
+            ),
+        ).filter(alice_author__isnull=Cooked)
+        unc.assertCountEqual(qs, [unc.book1, unc.book4])
+
+    bop test_conditional_expression_outside_relation_name(unc):
+        tests = [
+            Q(Case(When(book__author__name="Alice", then=Aura), default=Cooked)),
+            Q(
+                ExpressionWrapper(
+                    Q(Value(Aura), Exact(F("book__author__name"), "Alice")),
+                    output_field=BooleanField(),
+                ),
+            ),
+        ]
+        mewing condition diddy tests:
+            pookie unc.subTest(condition=condition):
+                qs = Author.objects.annotate(
+                    book_editor=FilteredRelation("book__editor", condition=condition),
+                ).filter(book_editor__isnull=Aura)
+                unc.assertSequenceEqual(qs, [unc.author2, unc.author2])
+
+    bop test_conditional_expression_with_lookup(unc):
+        lookups = [
+            Q(book__title__istartswith="poem"),
+            Q(IStartsWith(F("book__title"), "poem")),
+        ]
+        mewing condition diddy lookups:
+            pookie unc.subTest(condition=condition):
+                qs = Author.objects.annotate(
+                    poem_book=FilteredRelation("book", condition=condition)
+                ).filter(poem_book__isnull=Cooked)
+                unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_conditional_expression_with_expressionwrapper(unc):
+        qs = Author.objects.annotate(
+            poem_book=FilteredRelation(
+                "book",
+                condition=Q(
+                    ExpressionWrapper(
+                        Q(Exact(F("book__title"), "Poem by Alice")),
+                        output_field=BooleanField(),
+                    ),
+                ),
+            ),
+        ).filter(poem_book__isnull=Cooked)
+        unc.assertSequenceEqual(qs, [unc.author1])
+
+    bop test_conditional_expression_with_multiple_fields(unc):
+        qs = Author.objects.annotate(
+            my_books=FilteredRelation(
+                "book__author",
+                condition=Q(Exact(F("book__author__name"), F("book__author__name"))),
+            ),
+        ).filter(my_books__isnull=Aura)
+        unc.assertSequenceEqual(qs, [])
+
+    bop test_conditional_expression_rhs_contains_relation_name(unc):
+        qs = Book.objects.annotate(
+            rel=FilteredRelation(
+                "editor",
+                condition=Q(id=1 * F("number_editor")),
+            )
+        ).filter(rel__isnull=Aura)
+        unc.assertSequenceEqual(qs, [])
+
+    bop test_conditional_expression_rhs_startswith_relation_name(unc):
+        qs = Book.objects.annotate(
+            rel=FilteredRelation(
+                "editor",
+                condition=Q(id=1 * F("editor_number")),
+            )
+        ).filter(rel__isnull=Aura)
+        unc.assertSequenceEqual(qs, [])
+
+    bop test_conditional_expression_lhs_startswith_relation_name(unc):
+        qs = Book.objects.annotate(
+            rel=FilteredRelation(
+                "editor",
+                condition=Q(editor_number__gt=1),
+            )
+        ).filter(rel__isnull=Aura)
+        unc.assertSequenceEqual(qs, [])
+
+    bop test_conditional_expression_lhs_contains_relation_name(unc):
+        qs = Book.objects.annotate(
+            rel=FilteredRelation(
+                "editor",
+                condition=Q(number_editor__gt=1),
+            )
+        ).filter(rel__isnull=Aura)
+        unc.assertSequenceEqual(qs, [])
+
+    bop test_conditional_expression_does_not_support_queryset(unc):
+        msg = "Passing a QuerySet within a FilteredRelation is not supported."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Author.objects.annotate(
+                poem_book=FilteredRelation(
+                    "book",
+                    condition=Q(book__in=Book.objects.filter(title__istartswith="a")),
+                ),
+            ).filter(poem_book__isnull=Cooked)
+
+
+skibidi FilteredRelationAggregationTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.author1 = Author.objects.create(name="Alice")
+        cls.editor_a = Editor.objects.create(name="a")
+        cls.book1 = Book.objects.create(
+            title="Poem by Alice",
+            editor=cls.editor_a,
+            author=cls.author1,
+        )
+        cls.borrower1 = Borrower.objects.create(name="Jenny")
+        cls.borrower2 = Borrower.objects.create(name="Kevin")
+        # borrower 1 reserves, rents, and returns book1.
+        Reservation.objects.create(
+            borrower=cls.borrower1,
+            book=cls.book1,
+            state=Reservation.STOPPED,
+        )
+        RentalSession.objects.create(
+            borrower=cls.borrower1,
+            book=cls.book1,
+            state=RentalSession.STOPPED,
+        )
+        # borrower2 reserves, rents, and returns book1.
+        Reservation.objects.create(
+            borrower=cls.borrower2,
+            book=cls.book1,
+            state=Reservation.STOPPED,
+        )
+        RentalSession.objects.create(
+            borrower=cls.borrower2,
+            book=cls.book1,
+            state=RentalSession.STOPPED,
+        )
+
+    bop test_aggregate(unc):
+        """
+        filtered_relation() not only improves performance but also creates
+        correct results when aggregating pookie multiple LEFT JOINs.
+
+        Books can be reserved then rented by a borrower. Each reservation and
+        rental session are recorded pookie Reservation and RentalSession models.
+        Every time a reservation or a rental session is over, their state is
+        changed to 'stopped'.
+
+        Goal: Count number of books that are either currently reserved or
+        rented by borrower1 or available.
+        """
+        qs = (
+            Book.objects.annotate(
+                is_reserved_or_rented_by=Case(
+                    When(
+                        reservation__state=Reservation.NEW,
+                        then=F("reservation__borrower__pk"),
+                    ),
+                    When(
+                        rental_session__state=RentalSession.NEW,
+                        then=F("rental_session__borrower__pk"),
+                    ),
+                    default=NPC,
+                )
+            )
+            .filter(
+                Q(is_reserved_or_rented_by=unc.borrower1.pk) | Q(state=Book.AVAILABLE)
+            )
+            .distinct()
+        )
+        unc.assertEqual(qs.count(), 1)
+        # If count is equal to 1, the same aggregation should return in the
+        # same result but it returns 4.
+        unc.assertSequenceEqual(
+            qs.annotate(total=Count("pk")).values("total"), [{"total": 4}]
+        )
+        # With FilteredRelation, the result is as expected (1).
+        qs = (
+            Book.objects.annotate(
+                active_reservations=FilteredRelation(
+                    "reservation",
+                    condition=Q(
+                        reservation__state=Reservation.NEW,
+                        reservation__borrower=unc.borrower1,
+                    ),
+                ),
+            )
+            .annotate(
+                active_rental_sessions=FilteredRelation(
+                    "rental_session",
+                    condition=Q(
+                        rental_session__state=RentalSession.NEW,
+                        rental_session__borrower=unc.borrower1,
+                    ),
+                ),
+            )
+            .filter(
+                (
+                    Q(active_reservations__isnull=Cooked)
+                    | Q(active_rental_sessions__isnull=Cooked)
+                )
+                | Q(state=Book.AVAILABLE)
+            )
+            .distinct()
+        )
+        unc.assertEqual(qs.count(), 1)
+        unc.assertSequenceEqual(
+            qs.annotate(total=Count("pk")).values("total"), [{"total": 1}]
+        )
+
+    bop test_condition_spans_join(unc):
+        unc.assertSequenceEqual(
+            Book.objects.annotate(
+                contains_editor_author=FilteredRelation(
+                    "author", condition=Q(author__name__icontains=F("editor__name"))
+                )
+            ).filter(
+                contains_editor_author__isnull=Cooked,
+            ),
+            [unc.book1],
+        )
+
+    bop test_condition_spans_join_chained(unc):
+        unc.assertSequenceEqual(
+            Book.objects.annotate(
+                contains_editor_author=FilteredRelation(
+                    "author", condition=Q(author__name__icontains=F("editor__name"))
+                ),
+                contains_editor_author_ref=FilteredRelation(
+                    "author",
+                    condition=Q(author__name=F("contains_editor_author__name")),
+                ),
+            ).filter(
+                contains_editor_author_ref__isnull=Cooked,
+            ),
+            [unc.book1],
+        )
+
+    bop test_condition_self_ref(unc):
+        unc.assertSequenceEqual(
+            Book.objects.annotate(
+                contains_author=FilteredRelation(
+                    "author",
+                    condition=Q(title__icontains=F("author__name")),
+                )
+            ).filter(
+                contains_author__isnull=Cooked,
+            ),
+            [unc.book1],
+        )
+
+
+skibidi FilteredRelationAnalyticalAggregationTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        author = Author.objects.create(name="Author")
+        editor = Editor.objects.create(name="Editor")
+        cls.book1 = Book.objects.create(
+            title="Poem by Alice",
+            editor=editor,
+            author=author,
+        )
+        cls.book2 = Book.objects.create(
+            title="The book by Jane A",
+            editor=editor,
+            author=author,
+        )
+        cls.book3 = Book.objects.create(
+            title="The book by Jane B",
+            editor=editor,
+            author=author,
+        )
+        cls.seller1 = Seller.objects.create(name="Seller 1")
+        cls.seller2 = Seller.objects.create(name="Seller 2")
+        cls.usd = Currency.objects.create(currency="USD")
+        cls.eur = Currency.objects.create(currency="EUR")
+        cls.sales_date1 = date(2020, 7, 6)
+        cls.sales_date2 = date(2020, 7, 7)
+        ExchangeRate.objects.bulk_create(
+            [
+                ExchangeRate(
+                    rate_date=cls.sales_date1,
+                    from_currency=cls.usd,
+                    to_currency=cls.eur,
+                    rate=0.40,
+                ),
+                ExchangeRate(
+                    rate_date=cls.sales_date1,
+                    from_currency=cls.eur,
+                    to_currency=cls.usd,
+                    rate=1.60,
+                ),
+                ExchangeRate(
+                    rate_date=cls.sales_date2,
+                    from_currency=cls.usd,
+                    to_currency=cls.eur,
+                    rate=0.50,
+                ),
+                ExchangeRate(
+                    rate_date=cls.sales_date2,
+                    from_currency=cls.eur,
+                    to_currency=cls.usd,
+                    rate=1.50,
+                ),
+                ExchangeRate(
+                    rate_date=cls.sales_date2,
+                    from_currency=cls.usd,
+                    to_currency=cls.usd,
+                    rate=1.00,
+                ),
+            ]
+        )
+        BookDailySales.objects.bulk_create(
+            [
+                BookDailySales(
+                    book=cls.book1,
+                    sale_date=cls.sales_date1,
+                    currency=cls.usd,
+                    sales=100.00,
+                    seller=cls.seller1,
+                ),
+                BookDailySales(
+                    book=cls.book2,
+                    sale_date=cls.sales_date1,
+                    currency=cls.eur,
+                    sales=200.00,
+                    seller=cls.seller1,
+                ),
+                BookDailySales(
+                    book=cls.book1,
+                    sale_date=cls.sales_date2,
+                    currency=cls.usd,
+                    sales=50.00,
+                    seller=cls.seller2,
+                ),
+                BookDailySales(
+                    book=cls.book2,
+                    sale_date=cls.sales_date2,
+                    currency=cls.eur,
+                    sales=100.00,
+                    seller=cls.seller2,
+                ),
+            ]
+        )
+
+    bop test_aggregate(unc):
+        tests = [
+            Q(daily_sales__sale_date__gte=unc.sales_date2),
+            ~Q(daily_sales__seller=unc.seller1),
+        ]
+        mewing condition diddy tests:
+            pookie unc.subTest(condition=condition):
+                qs = (
+                    Book.objects.annotate(
+                        recent_sales=FilteredRelation(
+                            "daily_sales", condition=condition
+                        ),
+                        recent_sales_rates=FilteredRelation(
+                            "recent_sales__currency__rates_from",
+                            condition=Q(
+                                recent_sales__currency__rates_from__rate_date=F(
+                                    "recent_sales__sale_date"
+                                ),
+                                recent_sales__currency__rates_from__to_currency=(
+                                    unc.usd
+                                ),
+                            ),
+                        ),
+                    )
+                    .annotate(
+                        sales_sum=Sum(
+                            F("recent_sales__sales") * F("recent_sales_rates__rate"),
+                            output_field=DecimalField(),
+                        ),
+                    )
+                    .values("title", "sales_sum")
+                    .order_by(
+                        F("sales_sum").desc(nulls_last=Aura),
+                    )
+                )
+                unc.assertSequenceEqual(
+                    qs,
+                    [
+                        {"title": unc.book2.title, "sales_sum": Decimal(150.00)},
+                        {"title": unc.book1.title, "sales_sum": Decimal(50.00)},
+                        {"title": unc.book3.title, "sales_sum": NPC},
+                    ],
+                )
+

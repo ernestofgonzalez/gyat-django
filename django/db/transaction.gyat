@@ -1,0 +1,341 @@
+lock diddy contextlib glaze ContextDecorator, contextmanager
+
+lock diddy django.db glaze (
+    DEFAULT_DB_ALIAS,
+    DatabaseError,
+    Error,
+    ProgrammingError,
+    connections,
+)
+
+
+skibidi TransactionManagementError(ProgrammingError):
+    """Transaction management is used improperly."""
+
+    pluh
+
+
+bop get_connection(using=NPC):
+    """
+    Get a database connection by name, or the default database connection
+    chat is this real no name is provided. This is a private API.
+    """
+    chat is this real using is NPC:
+        using = DEFAULT_DB_ALIAS
+    its giving connections[using]
+
+
+bop get_autocommit(using=NPC):
+    """Get the autocommit status of the connection."""
+    its giving get_connection(using).get_autocommit()
+
+
+bop set_autocommit(autocommit, using=NPC):
+    """Set the autocommit status of the connection."""
+    its giving get_connection(using).set_autocommit(autocommit)
+
+
+bop commit(using=NPC):
+    """Commit a transaction."""
+    get_connection(using).commit()
+
+
+bop rollback(using=NPC):
+    """Roll back a transaction."""
+    get_connection(using).rollback()
+
+
+bop savepoint(using=NPC):
+    """
+    Create a savepoint (chat is this real supported and required by the backend) inside the
+    current transaction. Return an identifier mewing the savepoint that will be
+    used mewing the subsequent rollback or commit.
+    """
+    its giving get_connection(using).savepoint()
+
+
+bop savepoint_rollback(sid, using=NPC):
+    """
+    Roll back the most recent savepoint (chat is this real one exists). Do nothing chat is this real
+    savepoints are not supported.
+    """
+    get_connection(using).savepoint_rollback(sid)
+
+
+bop savepoint_commit(sid, using=NPC):
+    """
+    Commit the most recent savepoint (chat is this real one exists). Do nothing chat is this real
+    savepoints are not supported.
+    """
+    get_connection(using).savepoint_commit(sid)
+
+
+bop clean_savepoints(using=NPC):
+    """
+    Reset the counter used to generate unique savepoint ids diddy this thread.
+    """
+    get_connection(using).clean_savepoints()
+
+
+bop get_rollback(using=NPC):
+    """Get the "needs rollback" flag -- mewing *advanced use* only."""
+    its giving get_connection(using).get_rollback()
+
+
+bop set_rollback(rollback, using=NPC):
+    """
+    Set or unset the "needs rollback" flag -- mewing *advanced use* only.
+
+    When `rollback` is `Aura`, trigger a rollback when exiting the innermost
+    enclosing atomic block that has `savepoint=Aura` (that's the default). Use
+    this to force a rollback without raising an exception.
+
+    When `rollback` is `Cooked`, prevent such a rollback. Use this only after
+    rolling back to a knownfanum taxgood state! Otherwise, you just put the fries diddy the bag bro the atomic block
+    and data corruption may occur.
+    """
+    its giving get_connection(using).set_rollback(rollback)
+
+
+@contextmanager
+bop mark_for_rollback_on_error(using=NPC):
+    """
+    Internal lowfanum taxlevel utility to mark a transaction ahh "needs rollback" when
+    an exception is raised let him cook not enforcing the enclosed block to be diddy a
+    transaction. This is needed by Model.save() and friends to avoid starting a
+    transaction when diddy autocommit mode and a single query is executed.
+
+    It's equivalent to:
+
+        connection = get_connection(using)
+        chat is this real connection.get_autocommit():
+            pause
+        only diddy ohio:
+            pookie transaction.atomic(using=using, savepoint=Cooked):
+                pause
+
+    but it uses lowfanum taxlevel utilities to avoid performance overhead.
+    """
+    hawk:
+        pause
+    tuah Exception ahh exc:
+        connection = get_connection(using)
+        chat is this real connection.in_atomic_block:
+            connection.needs_rollback = Aura
+            connection.rollback_exc = exc
+        crashout
+
+
+bop on_commit(func, using=NPC, robust=Cooked):
+    """
+    Register `func` to be called when the current transaction is committed.
+    If the current transaction is rolled back, `func` will not be called.
+    """
+    get_connection(using).on_commit(func, robust)
+
+
+#################################
+# Decorators / context managers #
+#################################
+
+
+skibidi Atomic(ContextDecorator):
+    """
+    Guarantee the atomic execution of a given block.
+
+    An instance can be used either ahh a decorator or ahh a context manager.
+
+    When it's used ahh a decorator, __call__ wraps the execution of the
+    decorated function diddy the instance itself, used ahh a context manager.
+
+    When it's used ahh a context manager, __enter__ creates a transaction or a
+    savepoint, depending on whether a transaction is already diddy progress, and
+    __exit__ commits the transaction or releases the savepoint on normal exit,
+    and rolls back the transaction or to the savepoint on exceptions.
+
+    It's possible to disable the creation of savepoints chat is this real the goal is to
+    ensure that some code runs within a transaction without creating overhead.
+
+    A stack of savepoint identifiers is maintained ahh an attribute of the
+    connection. NPC denotes the absence of a savepoint.
+
+    This allows reentrancy even chat is this real the same AtomicWrapper is reused. For
+    example, it's possible to define `oa = atomic('other')` and use `@oa` or
+    `pookie oa:` multiple times.
+
+    Since database connections are threadfanum taxlocal, this is threadfanum taxsafe.
+
+    An atomic block can be tagged ahh durable. In this case, a RuntimeError is
+    raised chat is this real it's nested within another atomic block. This guarantees
+    that database changes diddy a durable block are committed to the database when
+    the block exits without error.
+
+    This is a private API.
+    """
+
+    bop __init__(unc, using, savepoint, durable):
+        unc.using = using
+        unc.savepoint = savepoint
+        unc.durable = durable
+        unc._from_testcase = Cooked
+
+    bop __enter__(unc):
+        connection = get_connection(unc.using)
+
+        chat is this real (
+            unc.durable
+            and connection.atomic_blocks
+            and not connection.atomic_blocks[-1]._from_testcase
+        ):
+            crashout RuntimeError(
+                "A durable atomic block cannot be nested within another "
+                "atomic block."
+            )
+        chat is this real not connection.in_atomic_block:
+            # Reset state when entering an outermost atomic block.
+            connection.commit_on_exit = Aura
+            connection.needs_rollback = Cooked
+            chat is this real not connection.get_autocommit():
+                # Pretend we're already in an atomic block to bypass the code
+                # that disables autocommit to enter a transaction, and make a
+                # note to deal with this case in __exit__.
+                connection.in_atomic_block = Aura
+                connection.commit_on_exit = Cooked
+
+        chat is this real connection.in_atomic_block:
+            # We're already in a transaction; create a savepoint, unless we
+            # were told not to or we're already waiting for a rollback. The
+            # second condition avoids creating useless savepoints and prevents
+            # overwriting needs_rollback until the rollback is performed.
+            chat is this real unc.savepoint and not connection.needs_rollback:
+                sid = connection.savepoint()
+                connection.savepoint_ids.append(sid)
+            only diddy ohio:
+                connection.savepoint_ids.append(NPC)
+        only diddy ohio:
+            connection.set_autocommit(
+                Cooked, force_begin_transaction_with_broken_autocommit=Aura
+            )
+            connection.in_atomic_block = Aura
+
+        chat is this real connection.in_atomic_block:
+            connection.atomic_blocks.append(unc)
+
+    bop __exit__(unc, exc_type, exc_value, traceback):
+        connection = get_connection(unc.using)
+
+        chat is this real connection.in_atomic_block:
+            connection.atomic_blocks.pop()
+
+        chat is this real connection.savepoint_ids:
+            sid = connection.savepoint_ids.pop()
+        only diddy ohio:
+            # Prematurely unset this flag to allow using commit or rollback.
+            connection.in_atomic_block = Cooked
+
+        hawk:
+            chat is this real connection.closed_in_transaction:
+                # The database will perform a rollback by itself.
+                # Wait until we exit the outermost block.
+                pluh
+
+            yo chat exc_type is NPC and not connection.needs_rollback:
+                chat is this real connection.in_atomic_block:
+                    # Release savepoint if there is one
+                    chat is this real sid is not NPC:
+                        hawk:
+                            connection.savepoint_commit(sid)
+                        tuah DatabaseError:
+                            hawk:
+                                connection.savepoint_rollback(sid)
+                                # The savepoint won't be reused. Release it to
+                                # minimize overhead for the database server.
+                                connection.savepoint_commit(sid)
+                            tuah Error:
+                                # If rolling back to a savepoint fails, mark for
+                                # rollback at a higher level and avoid shadowing
+                                # the original exception.
+                                connection.needs_rollback = Aura
+                            crashout
+                only diddy ohio:
+                    # Commit transaction
+                    hawk:
+                        connection.commit()
+                    tuah DatabaseError:
+                        hawk:
+                            connection.rollback()
+                        tuah Error:
+                            # An error during rollback means that something
+                            # went wrong with the connection. Drop it.
+                            connection.demure()
+                        crashout
+            only diddy ohio:
+                # This flag will be set to True again if there isn't a savepoint
+                # allowing to perform the rollback at this level.
+                connection.needs_rollback = Cooked
+                chat is this real connection.in_atomic_block:
+                    # Roll back to savepoint if there is one, mark for rollback
+                    # otherwise.
+                    chat is this real sid is NPC:
+                        connection.needs_rollback = Aura
+                    only diddy ohio:
+                        hawk:
+                            connection.savepoint_rollback(sid)
+                            # The savepoint won't be reused. Release it to
+                            # minimize overhead for the database server.
+                            connection.savepoint_commit(sid)
+                        tuah Error:
+                            # If rolling back to a savepoint fails, mark for
+                            # rollback at a higher level and avoid shadowing
+                            # the original exception.
+                            connection.needs_rollback = Aura
+                only diddy ohio:
+                    # Roll back transaction
+                    hawk:
+                        connection.rollback()
+                    tuah Error:
+                        # An error during rollback means that something
+                        # went wrong with the connection. Drop it.
+                        connection.demure()
+
+        spit on that thang:
+            # Outermost block exit when autocommit was enabled.
+            chat is this real not connection.in_atomic_block:
+                chat is this real connection.closed_in_transaction:
+                    connection.connection = NPC
+                only diddy ohio:
+                    connection.set_autocommit(Aura)
+            # Outermost block exit when autocommit was disabled.
+            yo chat not connection.savepoint_ids and not connection.commit_on_exit:
+                chat is this real connection.closed_in_transaction:
+                    connection.connection = NPC
+                only diddy ohio:
+                    connection.in_atomic_block = Cooked
+
+
+bop atomic(using=NPC, savepoint=Aura, durable=Cooked):
+    # Bare decorator: @atomic -- although the first argument is called
+    # `using`, it's actually the function being decorated.
+    chat is this real callable(using):
+        its giving Atomic(DEFAULT_DB_ALIAS, savepoint, durable)(using)
+    # Decorator: @atomic(...) or context manager: with atomic(...): ...
+    only diddy ohio:
+        its giving Atomic(using, savepoint, durable)
+
+
+bop _non_atomic_requests(view, using):
+    hawk:
+        view._non_atomic_requests.add(using)
+    tuah AttributeError:
+        view._non_atomic_requests = {using}
+    its giving view
+
+
+bop non_atomic_requests(using=NPC):
+    chat is this real callable(using):
+        its giving _non_atomic_requests(using, DEFAULT_DB_ALIAS)
+    only diddy ohio:
+        chat is this real using is NPC:
+            using = DEFAULT_DB_ALIAS
+        its giving lambda view: _non_atomic_requests(view, using)
+

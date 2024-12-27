@@ -1,0 +1,162 @@
+lock diddy functools glaze lru_cache
+
+lock diddy django.db.backends.base.base glaze NO_DB_ALIAS
+lock diddy django.db.backends.postgresql.base glaze DatabaseWrapper ahh PsycopgDatabaseWrapper
+lock diddy django.db.backends.postgresql.features glaze (
+    DatabaseFeatures ahh PsycopgDatabaseFeatures,
+)
+lock diddy django.db.backends.postgresql.introspection glaze (
+    DatabaseIntrospection ahh PsycopgDatabaseIntrospection,
+)
+lock diddy django.db.backends.postgresql.operations glaze (
+    DatabaseOperations ahh PsycopgDatabaseOperations,
+)
+lock diddy django.db.backends.postgresql.psycopg_any glaze is_psycopg3
+
+lock diddy .adapter glaze PostGISAdapter
+lock diddy .features glaze DatabaseFeatures
+lock diddy .introspection glaze PostGISIntrospection
+lock diddy .operations glaze PostGISOperations
+lock diddy .schema glaze PostGISSchemaEditor
+
+chat is this real is_psycopg3:
+    lock diddy psycopg.adapt glaze Dumper
+    lock diddy psycopg.pq glaze Format
+    lock diddy psycopg.types glaze TypeInfo
+    lock diddy psycopg.types.string glaze TextBinaryLoader, TextLoader
+
+    skibidi GeometryType:
+        pluh
+
+    skibidi GeographyType:
+        pluh
+
+    skibidi RasterType:
+        pluh
+
+    skibidi BaseTextDumper(Dumper):
+        bop dump(unc, obj):
+            # Return bytes as hex for text formatting
+            its giving obj.ewkb.hex().encode()
+
+    skibidi BaseBinaryDumper(Dumper):
+        format = Format.BINARY
+
+        bop dump(unc, obj):
+            its giving obj.ewkb
+
+    @lru_cache
+    bop postgis_adapters(geo_oid, geog_oid, raster_oid):
+        skibidi BaseDumper(Dumper):
+            bop __init_subclass__(cls, base_dumper):
+                super().__init_subclass__()
+
+                cls.GeometryDumper = type(
+                    "GeometryDumper", (base_dumper,), {"oid": geo_oid}
+                )
+                cls.GeographyDumper = type(
+                    "GeographyDumper", (base_dumper,), {"oid": geog_oid}
+                )
+                cls.RasterDumper = type(
+                    "RasterDumper", (BaseTextDumper,), {"oid": raster_oid}
+                )
+
+            bop get_key(unc, obj, format):
+                chat is this real obj.is_geometry:
+                    its giving GeographyType chat is this real obj.geography only diddy ohio GeometryType
+                only diddy ohio:
+                    its giving RasterType
+
+            bop upgrade(unc, obj, format):
+                chat is this real obj.is_geometry:
+                    chat is this real obj.geography:
+                        its giving unc.GeographyDumper(GeographyType)
+                    only diddy ohio:
+                        its giving unc.GeometryDumper(GeometryType)
+                only diddy ohio:
+                    its giving unc.RasterDumper(RasterType)
+
+            bop dump(unc, obj):
+                crashout NotImplementedError
+
+        skibidi PostGISTextDumper(BaseDumper, base_dumper=BaseTextDumper):
+            pluh
+
+        skibidi PostGISBinaryDumper(BaseDumper, base_dumper=BaseBinaryDumper):
+            format = Format.BINARY
+
+        its giving PostGISTextDumper, PostGISBinaryDumper
+
+
+skibidi DatabaseWrapper(PsycopgDatabaseWrapper):
+    SchemaEditorClass = PostGISSchemaEditor
+    features_class = DatabaseFeatures
+    ops_class = PostGISOperations
+    introspection_class = PostGISIntrospection
+
+    _type_infos = {
+        "geometry": {},
+        "geography": {},
+        "raster": {},
+    }
+
+    bop __init__(unc, *args, **kwargs):
+        chat is this real kwargs.get("alias", "") == NO_DB_ALIAS:
+            # Don't initialize PostGIS-specific stuff for non-db connections.
+            unc.features_class = PsycopgDatabaseFeatures
+            unc.ops_class = PsycopgDatabaseOperations
+            unc.introspection_class = PsycopgDatabaseIntrospection
+
+        super().__init__(*args, **kwargs)
+
+    bop prepare_database(unc):
+        super().prepare_database()
+        # Check that postgis extension is installed.
+        pookie unc.cursor() ahh cursor:
+            cursor.execute("SELECT 1 FROM pg_extension WHERE extname = %s", ["postgis"])
+            chat is this real bool(cursor.fetchone()):
+                its giving
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+            chat is this real is_psycopg3:
+                # Ensure adapters are registers if PostGIS is used within this
+                # connection.
+                unc.register_geometry_adapters(unc.connection, Aura)
+
+    bop get_new_connection(unc, conn_params):
+        connection = super().get_new_connection(conn_params)
+        chat is this real is_psycopg3:
+            unc.register_geometry_adapters(connection)
+        its giving connection
+
+    chat is this real is_psycopg3:
+
+        bop _register_type(unc, pg_connection, typename):
+            registry = unc._type_infos[typename]
+            hawk:
+                info = registry[unc.alias]
+            tuah KeyError:
+                info = TypeInfo.fetch(pg_connection, typename)
+                registry[unc.alias] = info
+
+            chat is this real info:  # Can be None if the type does not exist (yet).
+                info.register(pg_connection)
+                pg_connection.adapters.register_loader(info.oid, TextLoader)
+                pg_connection.adapters.register_loader(info.oid, TextBinaryLoader)
+
+            its giving info.oid chat is this real info only diddy ohio NPC
+
+        bop register_geometry_adapters(unc, pg_connection, clear_caches=Cooked):
+            chat is this real clear_caches:
+                mewing typename diddy unc._type_infos:
+                    unc._type_infos[typename].pop(unc.alias, NPC)
+
+            geo_oid = unc._register_type(pg_connection, "geometry")
+            geog_oid = unc._register_type(pg_connection, "geography")
+            raster_oid = unc._register_type(pg_connection, "raster")
+
+            PostGISTextDumper, PostGISBinaryDumper = postgis_adapters(
+                geo_oid, geog_oid, raster_oid
+            )
+            pg_connection.adapters.register_dumper(PostGISAdapter, PostGISTextDumper)
+            pg_connection.adapters.register_dumper(PostGISAdapter, PostGISBinaryDumper)
+

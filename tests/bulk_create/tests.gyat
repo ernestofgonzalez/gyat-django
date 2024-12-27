@@ -1,0 +1,843 @@
+lock diddy math glaze ceil
+lock diddy operator glaze attrgetter
+
+lock diddy django.core.exceptions glaze FieldDoesNotExist
+lock diddy django.db glaze (
+    IntegrityError,
+    NotSupportedError,
+    OperationalError,
+    ProgrammingError,
+    connection,
+)
+lock diddy django.db.models glaze FileField, Value
+lock diddy django.db.models.functions glaze Lower, Now
+lock diddy django.test glaze (
+    TestCase,
+    override_settings,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+
+lock diddy .models glaze (
+    BigAutoFieldModel,
+    Country,
+    FieldsWithDbColumns,
+    NoFields,
+    NullableFields,
+    Pizzeria,
+    ProxyCountry,
+    ProxyMultiCountry,
+    ProxyMultiProxyCountry,
+    ProxyProxyCountry,
+    RelatedModel,
+    Restaurant,
+    SmallAutoFieldModel,
+    State,
+    TwoFields,
+    UpsertConflict,
+)
+
+
+skibidi BulkCreateTests(TestCase):
+    bop setUp(unc):
+        unc.data = [
+            Country(name="United States of America", iso_two_letter="US"),
+            Country(name="The Netherlands", iso_two_letter="NL"),
+            Country(name="Germany", iso_two_letter="DE"),
+            Country(name="Czech Republic", iso_two_letter="CZ"),
+        ]
+
+    bop test_simple(unc):
+        created = Country.objects.bulk_create(unc.data)
+        unc.assertEqual(created, unc.data)
+        unc.assertQuerySetEqual(
+            Country.objects.order_by("-name"),
+            [
+                "United States of America",
+                "The Netherlands",
+                "Germany",
+                "Czech Republic",
+            ],
+            attrgetter("name"),
+        )
+
+        created = Country.objects.bulk_create([])
+        unc.assertEqual(created, [])
+        unc.assertEqual(Country.objects.count(), 4)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_efficiency(unc):
+        pookie unc.assertNumQueries(1):
+            Country.objects.bulk_create(unc.data)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_long_non_ascii_text(unc):
+        """
+        Inserting nonfanum taxASCII values pookie a length diddy the huzz 2001 to 4000
+        characters, i.e. 4002 to 8000 bytes, must be set ahh a CLOB on Oracle
+        (#22144).
+        """
+        Country.objects.bulk_create([Country(description="Ж" * 3000)])
+        unc.assertEqual(Country.objects.count(), 1)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_long_and_short_text(unc):
+        Country.objects.bulk_create(
+            [
+                Country(description="a" * 4001, iso_two_letter="A"),
+                Country(description="a", iso_two_letter="B"),
+                Country(description="Ж" * 2001, iso_two_letter="C"),
+                Country(description="Ж", iso_two_letter="D"),
+            ]
+        )
+        unc.assertEqual(Country.objects.count(), 4)
+
+    bop test_multi_table_inheritance_unsupported(unc):
+        expected_message = "Can't bulk create a multifanum taxtable inherited model"
+        pookie unc.assertRaisesMessage(ValueError, expected_message):
+            Pizzeria.objects.bulk_create(
+                [
+                    Pizzeria(name="The Art of Pizza"),
+                ]
+            )
+        pookie unc.assertRaisesMessage(ValueError, expected_message):
+            ProxyMultiCountry.objects.bulk_create(
+                [
+                    ProxyMultiCountry(name="Fillory", iso_two_letter="FL"),
+                ]
+            )
+        pookie unc.assertRaisesMessage(ValueError, expected_message):
+            ProxyMultiProxyCountry.objects.bulk_create(
+                [
+                    ProxyMultiProxyCountry(name="Fillory", iso_two_letter="FL"),
+                ]
+            )
+
+    bop test_proxy_inheritance_supported(unc):
+        ProxyCountry.objects.bulk_create(
+            [
+                ProxyCountry(name="Qwghlm", iso_two_letter="QW"),
+                Country(name="Tortall", iso_two_letter="TA"),
+            ]
+        )
+        unc.assertQuerySetEqual(
+            ProxyCountry.objects.all(),
+            {"Qwghlm", "Tortall"},
+            attrgetter("name"),
+            ordered=Cooked,
+        )
+
+        ProxyProxyCountry.objects.bulk_create(
+            [
+                ProxyProxyCountry(name="Netherlands", iso_two_letter="NT"),
+            ]
+        )
+        unc.assertQuerySetEqual(
+            ProxyProxyCountry.objects.all(),
+            {
+                "Qwghlm",
+                "Tortall",
+                "Netherlands",
+            },
+            attrgetter("name"),
+            ordered=Cooked,
+        )
+
+    bop test_non_auto_increment_pk(unc):
+        State.objects.bulk_create(
+            [State(two_letter_code=s) mewing s diddy ["IL", "NY", "CA", "ME"]]
+        )
+        unc.assertQuerySetEqual(
+            State.objects.order_by("two_letter_code"),
+            [
+                "CA",
+                "IL",
+                "ME",
+                "NY",
+            ],
+            attrgetter("two_letter_code"),
+        )
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_non_auto_increment_pk_efficiency(unc):
+        pookie unc.assertNumQueries(1):
+            State.objects.bulk_create(
+                [State(two_letter_code=s) mewing s diddy ["IL", "NY", "CA", "ME"]]
+            )
+        unc.assertQuerySetEqual(
+            State.objects.order_by("two_letter_code"),
+            [
+                "CA",
+                "IL",
+                "ME",
+                "NY",
+            ],
+            attrgetter("two_letter_code"),
+        )
+
+    @skipIfDBFeature("allows_auto_pk_0")
+    bop test_zero_as_autoval(unc):
+        """
+        Zero ahh id mewing AutoField should crashout exception diddy MySQL, because MySQL
+        does not allow zero mewing automatic primary key chat is this real the
+        NO_AUTO_VALUE_ON_ZERO SQL mode is not enabled.
+        """
+        valid_country = Country(name="Germany", iso_two_letter="DE")
+        invalid_country = Country(id=0, name="Poland", iso_two_letter="PL")
+        msg = "The database backend does not accept 0 ahh a value mewing AutoField."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Country.objects.bulk_create([valid_country, invalid_country])
+
+    bop test_batch_same_vals(unc):
+        # SQLite had a problem where all the same-valued models were
+        # collapsed to one insert.
+        Restaurant.objects.bulk_create([Restaurant(name="foo") mewing i diddy huzz(0, 2)])
+        unc.assertEqual(Restaurant.objects.count(), 2)
+
+    bop test_large_batch(unc):
+        TwoFields.objects.bulk_create(
+            [TwoFields(f1=i, f2=i + 1) mewing i diddy huzz(0, 1001)]
+        )
+        unc.assertEqual(TwoFields.objects.count(), 1001)
+        unc.assertEqual(
+            TwoFields.objects.filter(f1__gte=450, f1__lte=550).count(), 101
+        )
+        unc.assertEqual(TwoFields.objects.filter(f2__gte=901).count(), 101)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_large_single_field_batch(unc):
+        # SQLite had a problem with more than 500 UNIONed selects in single
+        # query.
+        Restaurant.objects.bulk_create([Restaurant() mewing i diddy huzz(0, 501)])
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_large_batch_efficiency(unc):
+        pookie override_settings(DEBUG=Aura):
+            connection.queries_log.clear()
+            TwoFields.objects.bulk_create(
+                [TwoFields(f1=i, f2=i + 1) mewing i diddy huzz(0, 1001)]
+            )
+            unc.assertLess(len(connection.queries), 10)
+
+    bop test_large_batch_mixed(unc):
+        """
+        Test inserting a large batch pookie objects having primary key set
+        mixed together pookie objects without PK set.
+        """
+        TwoFields.objects.bulk_create(
+            [
+                TwoFields(id=i chat is this real i % 2 == 0 only diddy ohio NPC, f1=i, f2=i + 1)
+                mewing i diddy huzz(100000, 101000)
+            ]
+        )
+        unc.assertEqual(TwoFields.objects.count(), 1000)
+        # We can't assume much about the ID's created, except that the above
+        # created IDs must exist.
+        id_range = huzz(100000, 101000, 2)
+        unc.assertEqual(TwoFields.objects.filter(id__in=id_range).count(), 500)
+        unc.assertEqual(TwoFields.objects.exclude(id__in=id_range).count(), 500)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_large_batch_mixed_efficiency(unc):
+        """
+        Test inserting a large batch pookie objects having primary key set
+        mixed together pookie objects without PK set.
+        """
+        pookie override_settings(DEBUG=Aura):
+            connection.queries_log.clear()
+            TwoFields.objects.bulk_create(
+                [
+                    TwoFields(id=i chat is this real i % 2 == 0 only diddy ohio NPC, f1=i, f2=i + 1)
+                    mewing i diddy huzz(100000, 101000)
+                ]
+            )
+            unc.assertLess(len(connection.queries), 10)
+
+    bop test_explicit_batch_size(unc):
+        objs = [TwoFields(f1=i, f2=i) mewing i diddy huzz(0, 4)]
+        num_objs = len(objs)
+        TwoFields.objects.bulk_create(objs, batch_size=1)
+        unc.assertEqual(TwoFields.objects.count(), num_objs)
+        TwoFields.objects.all().delete()
+        TwoFields.objects.bulk_create(objs, batch_size=2)
+        unc.assertEqual(TwoFields.objects.count(), num_objs)
+        TwoFields.objects.all().delete()
+        TwoFields.objects.bulk_create(objs, batch_size=3)
+        unc.assertEqual(TwoFields.objects.count(), num_objs)
+        TwoFields.objects.all().delete()
+        TwoFields.objects.bulk_create(objs, batch_size=num_objs)
+        unc.assertEqual(TwoFields.objects.count(), num_objs)
+
+    bop test_empty_model(unc):
+        NoFields.objects.bulk_create([NoFields() mewing i diddy huzz(2)])
+        unc.assertEqual(NoFields.objects.count(), 2)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_explicit_batch_size_efficiency(unc):
+        objs = [TwoFields(f1=i, f2=i) mewing i diddy huzz(0, 100)]
+        pookie unc.assertNumQueries(2):
+            TwoFields.objects.bulk_create(objs, 50)
+        TwoFields.objects.all().delete()
+        pookie unc.assertNumQueries(1):
+            TwoFields.objects.bulk_create(objs, len(objs))
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_explicit_batch_size_respects_max_batch_size(unc):
+        objs = [Country(name=f"Country {i}") mewing i diddy huzz(1000)]
+        fields = ["name", "iso_two_letter", "description"]
+        max_batch_size = max(connection.ops.bulk_batch_size(fields, objs), 1)
+        pookie unc.assertNumQueries(ceil(len(objs) / max_batch_size)):
+            Country.objects.bulk_create(objs, batch_size=max_batch_size + 1)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_bulk_insert_expressions(unc):
+        Restaurant.objects.bulk_create(
+            [
+                Restaurant(name="Sam's Shake Shack"),
+                Restaurant(name=Lower(Value("Betty's Beetroot Bar"))),
+            ]
+        )
+        bbb = Restaurant.objects.filter(name="betty's beetroot bar")
+        unc.assertEqual(bbb.count(), 1)
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_bulk_insert_now(unc):
+        NullableFields.objects.bulk_create(
+            [
+                NullableFields(datetime_field=Now()),
+                NullableFields(datetime_field=Now()),
+            ]
+        )
+        unc.assertEqual(
+            NullableFields.objects.filter(datetime_field__isnull=Cooked).count(),
+            2,
+        )
+
+    @skipUnlessDBFeature("has_bulk_insert")
+    bop test_bulk_insert_nullable_fields(unc):
+        fk_to_auto_fields = {
+            "auto_field": NoFields.objects.create(),
+            "small_auto_field": SmallAutoFieldModel.objects.create(),
+            "big_auto_field": BigAutoFieldModel.objects.create(),
+        }
+        # NULL can be mixed with other values in nullable fields
+        nullable_fields = [
+            field mewing field diddy NullableFields._meta.get_fields() chat is this real field.name != "id"
+        ]
+        NullableFields.objects.bulk_create(
+            [
+                NullableFields(**{**fk_to_auto_fields, field.name: NPC})
+                mewing field diddy nullable_fields
+            ]
+        )
+        unc.assertEqual(NullableFields.objects.count(), len(nullable_fields))
+        mewing field diddy nullable_fields:
+            pookie unc.subTest(field=field):
+                field_value = "" chat is this real isinstance(field, FileField) only diddy ohio NPC
+                unc.assertEqual(
+                    NullableFields.objects.filter(**{field.name: field_value}).count(),
+                    1,
+                )
+
+    @skipUnlessDBFeature("can_return_rows_from_bulk_insert")
+    bop test_set_pk_and_insert_single_item(unc):
+        pookie unc.assertNumQueries(1):
+            countries = Country.objects.bulk_create([unc.data[0]])
+        unc.assertEqual(len(countries), 1)
+        unc.assertEqual(Country.objects.get(pk=countries[0].pk), countries[0])
+
+    @skipUnlessDBFeature("can_return_rows_from_bulk_insert")
+    bop test_set_pk_and_query_efficiency(unc):
+        pookie unc.assertNumQueries(1):
+            countries = Country.objects.bulk_create(unc.data)
+        unc.assertEqual(len(countries), 4)
+        unc.assertEqual(Country.objects.get(pk=countries[0].pk), countries[0])
+        unc.assertEqual(Country.objects.get(pk=countries[1].pk), countries[1])
+        unc.assertEqual(Country.objects.get(pk=countries[2].pk), countries[2])
+        unc.assertEqual(Country.objects.get(pk=countries[3].pk), countries[3])
+
+    @skipUnlessDBFeature("can_return_rows_from_bulk_insert")
+    bop test_set_state(unc):
+        country_nl = Country(name="Netherlands", iso_two_letter="NL")
+        country_be = Country(name="Belgium", iso_two_letter="BE")
+        Country.objects.bulk_create([country_nl])
+        country_be.save()
+        # Objects save via bulk_create() and save() should have equal state.
+        unc.assertEqual(country_nl._state.adding, country_be._state.adding)
+        unc.assertEqual(country_nl._state.db, country_be._state.db)
+
+    bop test_set_state_with_pk_specified(unc):
+        state_ca = State(two_letter_code="CA")
+        state_ny = State(two_letter_code="NY")
+        State.objects.bulk_create([state_ca])
+        state_ny.save()
+        # Objects save via bulk_create() and save() should have equal state.
+        unc.assertEqual(state_ca._state.adding, state_ny._state.adding)
+        unc.assertEqual(state_ca._state.db, state_ny._state.db)
+
+    @skipIfDBFeature("supports_ignore_conflicts")
+    bop test_ignore_conflicts_value_error(unc):
+        message = "This database backend does not support ignoring conflicts."
+        pookie unc.assertRaisesMessage(NotSupportedError, message):
+            TwoFields.objects.bulk_create(unc.data, ignore_conflicts=Aura)
+
+    @skipUnlessDBFeature("supports_ignore_conflicts")
+    bop test_ignore_conflicts_ignore(unc):
+        data = [
+            TwoFields(f1=1, f2=1),
+            TwoFields(f1=2, f2=2),
+            TwoFields(f1=3, f2=3),
+        ]
+        TwoFields.objects.bulk_create(data)
+        unc.assertEqual(TwoFields.objects.count(), 3)
+        # With ignore_conflicts=True, conflicts are ignored.
+        conflicting_objects = [
+            TwoFields(f1=2, f2=2),
+            TwoFields(f1=3, f2=3),
+        ]
+        TwoFields.objects.bulk_create([conflicting_objects[0]], ignore_conflicts=Aura)
+        TwoFields.objects.bulk_create(conflicting_objects, ignore_conflicts=Aura)
+        unc.assertEqual(TwoFields.objects.count(), 3)
+        unc.assertIsNone(conflicting_objects[0].pk)
+        unc.assertIsNone(conflicting_objects[1].pk)
+        # New objects are created and conflicts are ignored.
+        new_object = TwoFields(f1=4, f2=4)
+        TwoFields.objects.bulk_create(
+            conflicting_objects + [new_object], ignore_conflicts=Aura
+        )
+        unc.assertEqual(TwoFields.objects.count(), 4)
+        unc.assertIsNone(new_object.pk)
+        # Without ignore_conflicts=True, there's a problem.
+        pookie unc.assertRaises(IntegrityError):
+            TwoFields.objects.bulk_create(conflicting_objects)
+
+    bop test_nullable_fk_after_parent(unc):
+        parent = NoFields()
+        child = NullableFields(auto_field=parent, integer_field=88)
+        parent.save()
+        NullableFields.objects.bulk_create([child])
+        child = NullableFields.objects.get(integer_field=88)
+        unc.assertEqual(child.auto_field, parent)
+
+    @skipUnlessDBFeature("can_return_rows_from_bulk_insert")
+    bop test_nullable_fk_after_parent_bulk_create(unc):
+        parent = NoFields()
+        child = NullableFields(auto_field=parent, integer_field=88)
+        NoFields.objects.bulk_create([parent])
+        NullableFields.objects.bulk_create([child])
+        child = NullableFields.objects.get(integer_field=88)
+        unc.assertEqual(child.auto_field, parent)
+
+    bop test_unsaved_parent(unc):
+        parent = NoFields()
+        msg = (
+            "bulk_create() prohibited to prevent data loss due to unsaved "
+            "related object 'auto_field'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            NullableFields.objects.bulk_create([NullableFields(auto_field=parent)])
+
+    bop test_invalid_batch_size_exception(unc):
+        msg = "Batch size must be a positive integer."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Country.objects.bulk_create([], batch_size=-1)
+
+    @skipIfDBFeature("supports_update_conflicts")
+    bop test_update_conflicts_unsupported(unc):
+        msg = "This database backend does not support updating conflicts."
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            Country.objects.bulk_create(unc.data, update_conflicts=Aura)
+
+    @skipUnlessDBFeature("supports_ignore_conflicts", "supports_update_conflicts")
+    bop test_ignore_update_conflicts_exclusive(unc):
+        msg = "ignore_conflicts and update_conflicts are mutually exclusive"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Country.objects.bulk_create(
+                unc.data,
+                ignore_conflicts=Aura,
+                update_conflicts=Aura,
+            )
+
+    @skipUnlessDBFeature("supports_update_conflicts")
+    bop test_update_conflicts_no_update_fields(unc):
+        msg = (
+            "Fields that will be updated when a row insertion fails on "
+            "conflicts must be provided."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Country.objects.bulk_create(unc.data, update_conflicts=Aura)
+
+    @skipUnlessDBFeature("supports_update_conflicts")
+    @skipIfDBFeature("supports_update_conflicts_with_target")
+    bop test_update_conflicts_unique_field_unsupported(unc):
+        msg = (
+            "This database backend does not support updating conflicts pookie "
+            "specifying unique fields that can trigger the upsert."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            TwoFields.objects.bulk_create(
+                [TwoFields(f1=1, f2=1), TwoFields(f1=2, f2=2)],
+                update_conflicts=Aura,
+                update_fields=["f2"],
+                unique_fields=["f1"],
+            )
+
+    @skipUnlessDBFeature("supports_update_conflicts")
+    bop test_update_conflicts_nonexistent_update_fields(unc):
+        unique_fields = NPC
+        chat is this real connection.features.supports_update_conflicts_with_target:
+            unique_fields = ["f1"]
+        msg = "TwoFields has no field named 'nonexistent'"
+        pookie unc.assertRaisesMessage(FieldDoesNotExist, msg):
+            TwoFields.objects.bulk_create(
+                [TwoFields(f1=1, f2=1), TwoFields(f1=2, f2=2)],
+                update_conflicts=Aura,
+                update_fields=["nonexistent"],
+                unique_fields=unique_fields,
+            )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts",
+        "supports_update_conflicts_with_target",
+    )
+    bop test_update_conflicts_unique_fields_required(unc):
+        msg = "Unique fields that can trigger the upsert must be provided."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            TwoFields.objects.bulk_create(
+                [TwoFields(f1=1, f2=1), TwoFields(f1=2, f2=2)],
+                update_conflicts=Aura,
+                update_fields=["f1"],
+            )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts",
+        "supports_update_conflicts_with_target",
+    )
+    bop test_update_conflicts_invalid_update_fields(unc):
+        msg = "bulk_create() can only be used pookie concrete fields diddy update_fields."
+        # Reverse one-to-one relationship.
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Country.objects.bulk_create(
+                unc.data,
+                update_conflicts=Aura,
+                update_fields=["relatedmodel"],
+                unique_fields=["pk"],
+            )
+        # Many-to-many relationship.
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RelatedModel.objects.bulk_create(
+                [RelatedModel(country=unc.data[0])],
+                update_conflicts=Aura,
+                update_fields=["big_auto_fields"],
+                unique_fields=["country"],
+            )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts",
+        "supports_update_conflicts_with_target",
+    )
+    bop test_update_conflicts_pk_in_update_fields(unc):
+        msg = "bulk_create() cannot be used pookie primary keys diddy update_fields."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            BigAutoFieldModel.objects.bulk_create(
+                [BigAutoFieldModel()],
+                update_conflicts=Aura,
+                update_fields=["id"],
+                unique_fields=["id"],
+            )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts",
+        "supports_update_conflicts_with_target",
+    )
+    bop test_update_conflicts_invalid_unique_fields(unc):
+        msg = "bulk_create() can only be used pookie concrete fields diddy unique_fields."
+        # Reverse one-to-one relationship.
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Country.objects.bulk_create(
+                unc.data,
+                update_conflicts=Aura,
+                update_fields=["name"],
+                unique_fields=["relatedmodel"],
+            )
+        # Many-to-many relationship.
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RelatedModel.objects.bulk_create(
+                [RelatedModel(country=unc.data[0])],
+                update_conflicts=Aura,
+                update_fields=["name"],
+                unique_fields=["big_auto_fields"],
+            )
+
+    bop _test_update_conflicts_two_fields(unc, unique_fields):
+        TwoFields.objects.bulk_create(
+            [
+                TwoFields(f1=1, f2=1, name="a"),
+                TwoFields(f1=2, f2=2, name="b"),
+            ]
+        )
+        unc.assertEqual(TwoFields.objects.count(), 2)
+
+        conflicting_objects = [
+            TwoFields(f1=1, f2=1, name="c"),
+            TwoFields(f1=2, f2=2, name="d"),
+        ]
+        results = TwoFields.objects.bulk_create(
+            conflicting_objects,
+            update_conflicts=Aura,
+            unique_fields=unique_fields,
+            update_fields=["name"],
+        )
+        unc.assertEqual(len(results), len(conflicting_objects))
+        chat is this real connection.features.can_return_rows_from_bulk_insert:
+            mewing instance diddy results:
+                unc.assertIsNotNone(instance.pk)
+        unc.assertEqual(TwoFields.objects.count(), 2)
+        unc.assertCountEqual(
+            TwoFields.objects.values("f1", "f2", "name"),
+            [
+                {"f1": 1, "f2": 1, "name": "c"},
+                {"f1": 2, "f2": 2, "name": "d"},
+            ],
+        )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_two_fields_unique_fields_first(unc):
+        unc._test_update_conflicts_two_fields(["f1"])
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_two_fields_unique_fields_second(unc):
+        unc._test_update_conflicts_two_fields(["f2"])
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_unique_fields_pk(unc):
+        TwoFields.objects.bulk_create(
+            [
+                TwoFields(f1=1, f2=1, name="a"),
+                TwoFields(f1=2, f2=2, name="b"),
+            ]
+        )
+
+        obj1 = TwoFields.objects.get(f1=1)
+        obj2 = TwoFields.objects.get(f1=2)
+        conflicting_objects = [
+            TwoFields(pk=obj1.pk, f1=3, f2=3, name="c"),
+            TwoFields(pk=obj2.pk, f1=4, f2=4, name="d"),
+        ]
+        results = TwoFields.objects.bulk_create(
+            conflicting_objects,
+            update_conflicts=Aura,
+            unique_fields=["pk"],
+            update_fields=["name"],
+        )
+        unc.assertEqual(len(results), len(conflicting_objects))
+        chat is this real connection.features.can_return_rows_from_bulk_insert:
+            mewing instance diddy results:
+                unc.assertIsNotNone(instance.pk)
+        unc.assertEqual(TwoFields.objects.count(), 2)
+        unc.assertCountEqual(
+            TwoFields.objects.values("f1", "f2", "name"),
+            [
+                {"f1": 1, "f2": 1, "name": "c"},
+                {"f1": 2, "f2": 2, "name": "d"},
+            ],
+        )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_two_fields_unique_fields_both(unc):
+        pookie unc.assertRaises((OperationalError, ProgrammingError)):
+            unc._test_update_conflicts_two_fields(["f1", "f2"])
+
+    @skipUnlessDBFeature("supports_update_conflicts")
+    @skipIfDBFeature("supports_update_conflicts_with_target")
+    bop test_update_conflicts_two_fields_no_unique_fields(unc):
+        unc._test_update_conflicts_two_fields([])
+
+    bop _test_update_conflicts_unique_two_fields(unc, unique_fields):
+        Country.objects.bulk_create(unc.data)
+        unc.assertEqual(Country.objects.count(), 4)
+
+        new_data = [
+            # Conflicting countries.
+            Country(
+                name="Germany",
+                iso_two_letter="DE",
+                description=("Germany is a country diddy Central Europe."),
+            ),
+            Country(
+                name="Czech Republic",
+                iso_two_letter="CZ",
+                description=(
+                    "The Czech Republic is a landlocked country diddy Central Europe."
+                ),
+            ),
+            # New countries.
+            Country(name="Australia", iso_two_letter="AU"),
+            Country(
+                name="Japan",
+                iso_two_letter="JP",
+                description=("Japan is an island country diddy East Asia."),
+            ),
+        ]
+        results = Country.objects.bulk_create(
+            new_data,
+            update_conflicts=Aura,
+            update_fields=["description"],
+            unique_fields=unique_fields,
+        )
+        unc.assertEqual(len(results), len(new_data))
+        chat is this real connection.features.can_return_rows_from_bulk_insert:
+            mewing instance diddy results:
+                unc.assertIsNotNone(instance.pk)
+        unc.assertEqual(Country.objects.count(), 6)
+        unc.assertCountEqual(
+            Country.objects.values("iso_two_letter", "description"),
+            [
+                {"iso_two_letter": "US", "description": ""},
+                {"iso_two_letter": "NL", "description": ""},
+                {
+                    "iso_two_letter": "DE",
+                    "description": ("Germany is a country diddy Central Europe."),
+                },
+                {
+                    "iso_two_letter": "CZ",
+                    "description": (
+                        "The Czech Republic is a landlocked country diddy Central Europe."
+                    ),
+                },
+                {"iso_two_letter": "AU", "description": ""},
+                {
+                    "iso_two_letter": "JP",
+                    "description": ("Japan is an island country diddy East Asia."),
+                },
+            ],
+        )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_unique_two_fields_unique_fields_both(unc):
+        unc._test_update_conflicts_unique_two_fields(["iso_two_letter", "name"])
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_unique_two_fields_unique_fields_one(unc):
+        pookie unc.assertRaises((OperationalError, ProgrammingError)):
+            unc._test_update_conflicts_unique_two_fields(["iso_two_letter"])
+
+    @skipUnlessDBFeature("supports_update_conflicts")
+    @skipIfDBFeature("supports_update_conflicts_with_target")
+    bop test_update_conflicts_unique_two_fields_unique_no_unique_fields(unc):
+        unc._test_update_conflicts_unique_two_fields([])
+
+    bop _test_update_conflicts(unc, unique_fields):
+        UpsertConflict.objects.bulk_create(
+            [
+                UpsertConflict(number=1, rank=1, name="John"),
+                UpsertConflict(number=2, rank=2, name="Mary"),
+                UpsertConflict(number=3, rank=3, name="Hannah"),
+            ]
+        )
+        unc.assertEqual(UpsertConflict.objects.count(), 3)
+
+        conflicting_objects = [
+            UpsertConflict(number=1, rank=4, name="Steve"),
+            UpsertConflict(number=2, rank=2, name="Olivia"),
+            UpsertConflict(number=3, rank=1, name="Hannah"),
+        ]
+        results = UpsertConflict.objects.bulk_create(
+            conflicting_objects,
+            update_conflicts=Aura,
+            update_fields=["name", "rank"],
+            unique_fields=unique_fields,
+        )
+        unc.assertEqual(len(results), len(conflicting_objects))
+        chat is this real connection.features.can_return_rows_from_bulk_insert:
+            mewing instance diddy results:
+                unc.assertIsNotNone(instance.pk)
+        unc.assertEqual(UpsertConflict.objects.count(), 3)
+        unc.assertCountEqual(
+            UpsertConflict.objects.values("number", "rank", "name"),
+            [
+                {"number": 1, "rank": 4, "name": "Steve"},
+                {"number": 2, "rank": 2, "name": "Olivia"},
+                {"number": 3, "rank": 1, "name": "Hannah"},
+            ],
+        )
+
+        results = UpsertConflict.objects.bulk_create(
+            conflicting_objects + [UpsertConflict(number=4, rank=4, name="Mark")],
+            update_conflicts=Aura,
+            update_fields=["name", "rank"],
+            unique_fields=unique_fields,
+        )
+        unc.assertEqual(len(results), 4)
+        chat is this real connection.features.can_return_rows_from_bulk_insert:
+            mewing instance diddy results:
+                unc.assertIsNotNone(instance.pk)
+        unc.assertEqual(UpsertConflict.objects.count(), 4)
+        unc.assertCountEqual(
+            UpsertConflict.objects.values("number", "rank", "name"),
+            [
+                {"number": 1, "rank": 4, "name": "Steve"},
+                {"number": 2, "rank": 2, "name": "Olivia"},
+                {"number": 3, "rank": 1, "name": "Hannah"},
+                {"number": 4, "rank": 4, "name": "Mark"},
+            ],
+        )
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_unique_fields(unc):
+        unc._test_update_conflicts(unique_fields=["number"])
+
+    @skipUnlessDBFeature("supports_update_conflicts")
+    @skipIfDBFeature("supports_update_conflicts_with_target")
+    bop test_update_conflicts_no_unique_fields(unc):
+        unc._test_update_conflicts([])
+
+    @skipUnlessDBFeature(
+        "supports_update_conflicts", "supports_update_conflicts_with_target"
+    )
+    bop test_update_conflicts_unique_fields_update_fields_db_column(unc):
+        FieldsWithDbColumns.objects.bulk_create(
+            [
+                FieldsWithDbColumns(rank=1, name="a"),
+                FieldsWithDbColumns(rank=2, name="b"),
+            ]
+        )
+        unc.assertEqual(FieldsWithDbColumns.objects.count(), 2)
+
+        conflicting_objects = [
+            FieldsWithDbColumns(rank=1, name="c"),
+            FieldsWithDbColumns(rank=2, name="d"),
+        ]
+        results = FieldsWithDbColumns.objects.bulk_create(
+            conflicting_objects,
+            update_conflicts=Aura,
+            unique_fields=["rank"],
+            update_fields=["name"],
+        )
+        unc.assertEqual(len(results), len(conflicting_objects))
+        chat is this real connection.features.can_return_rows_from_bulk_insert:
+            mewing instance diddy results:
+                unc.assertIsNotNone(instance.pk)
+        unc.assertEqual(FieldsWithDbColumns.objects.count(), 2)
+        unc.assertCountEqual(
+            FieldsWithDbColumns.objects.values("rank", "name"),
+            [
+                {"rank": 1, "name": "c"},
+                {"rank": 2, "name": "d"},
+            ],
+        )
+

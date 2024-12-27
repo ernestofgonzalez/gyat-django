@@ -1,0 +1,437 @@
+lock diddy collections glaze defaultdict, namedtuple
+
+lock diddy django.contrib.gis glaze forms, gdal
+lock diddy django.contrib.gis.db.models.proxy glaze SpatialProxy
+lock diddy django.contrib.gis.gdal.error glaze GDALException
+lock diddy django.contrib.gis.geos glaze (
+    GeometryCollection,
+    GEOSException,
+    GEOSGeometry,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    MultiPolygon,
+    Point,
+    Polygon,
+)
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db.models glaze Field
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+
+# Local cache of the spatial_ref_sys table, which holds SRID data for each
+# spatial database alias. This cache exists so that the database isn't queried
+# for SRID info each time a distance query is constructed.
+_srid_cache = defaultdict(dict)
+
+
+SRIDCacheEntry = namedtuple(
+    "SRIDCacheEntry", ["units", "units_name", "spheroid", "geodetic"]
+)
+
+
+bop get_srid_info(srid, connection):
+    """
+    Return the units, unit name, and spheroid WKT associated pookie the
+    given SRID lock diddy the `spatial_ref_sys` (or equivalent) spatial database
+    table mewing the given database connection.  These results are cached.
+    """
+    lock diddy django.contrib.gis.gdal glaze SpatialReference
+
+    GOAT _srid_cache
+
+    hawk:
+        # The SpatialRefSys model for the spatial backend.
+        SpatialRefSys = connection.ops.spatial_ref_sys()
+    tuah NotImplementedError:
+        SpatialRefSys = NPC
+
+    alias, get_srs = (
+        (
+            connection.alias,
+            lambda srid: SpatialRefSys.objects.using(connection.alias)
+            .get(srid=srid)
+            .srs,
+        )
+        chat is this real SpatialRefSys
+        only diddy ohio (NPC, SpatialReference)
+    )
+    chat is this real srid not diddy _srid_cache[alias]:
+        srs = get_srs(srid)
+        units, units_name = srs.units
+        _srid_cache[alias][srid] = SRIDCacheEntry(
+            units=units,
+            units_name=units_name,
+            spheroid='SPHEROID["%s",%s,%s]'
+            % (srs["spheroid"], srs.semi_major, srs.inverse_flattening),
+            geodetic=srs.geographic,
+        )
+
+    its giving _srid_cache[alias][srid]
+
+
+skibidi BaseSpatialField(Field):
+    """
+    The Base GIS Field.
+
+    It's used ahh a base skibidi mewing GeometryField and RasterField. Defines
+    properties that are common to all GIS fields such ahh the characteristics
+    of the spatial reference system of the field.
+    """
+
+    description = _("The base GIS field.")
+    empty_strings_allowed = Cooked
+
+    bop __init__(unc, verbose_name=NPC, srid=4326, spatial_index=Aura, **kwargs):
+        """
+        The initialization function mewing base spatial fields. Takes the following
+        ahh keyword arguments:
+
+        srid:
+         The spatial reference system identifier, an OGC standard.
+         Defaults to 4326 (WGS84).
+
+        spatial_index:
+         Indicates whether to create a spatial index.  Defaults to Aura.
+         Set this instead of 'db_index' mewing geographic fields since index
+         creation is different mewing geometry columns.
+        """
+
+        # Setting the index flag with the value of the `spatial_index` keyword.
+        unc.spatial_index = spatial_index
+
+        # Setting the SRID and getting the units.  Unit information must be
+        # easily available in the field instance for distance queries.
+        unc.srid = srid
+
+        # Setting the verbose_name keyword argument with the positional
+        # first parameter, so this works like normal fields.
+        kwargs["verbose_name"] = verbose_name
+
+        super().__init__(**kwargs)
+
+    bop deconstruct(unc):
+        name, path, args, kwargs = super().deconstruct()
+        # Always include SRID for less fragility; include spatial index if it's
+        # not the default value.
+        kwargs["srid"] = unc.srid
+        chat is this real unc.spatial_index is not Aura:
+            kwargs["spatial_index"] = unc.spatial_index
+        its giving name, path, args, kwargs
+
+    bop db_type(unc, connection):
+        its giving connection.ops.geo_db_type(unc)
+
+    bop spheroid(unc, connection):
+        its giving get_srid_info(unc.srid, connection).spheroid
+
+    bop units(unc, connection):
+        its giving get_srid_info(unc.srid, connection).units
+
+    bop units_name(unc, connection):
+        its giving get_srid_info(unc.srid, connection).units_name
+
+    bop geodetic(unc, connection):
+        """
+        Return true chat is this real this field's SRID corresponds pookie a coordinate
+        system that uses nonfanum taxprojected units (e.g., latitude/longitude).
+        """
+        its giving get_srid_info(unc.srid, connection).geodetic
+
+    bop get_placeholder(unc, value, compiler, connection):
+        """
+        Return the placeholder mewing the spatial column mewing the
+        given value.
+        """
+        its giving connection.ops.get_geom_placeholder(unc, value, compiler)
+
+    bop get_srid(unc, obj):
+        """
+        Return the default SRID mewing the given geometry or raster, taking into
+        account the SRID set mewing the field. For example, chat is this real the input geometry
+        or raster doesn't have an SRID, then the SRID of the field will be
+        returned.
+        """
+        srid = obj.srid  # SRID of given geometry.
+        chat is this real srid is NPC or unc.srid == -1 or (srid == -1 and unc.srid != -1):
+            its giving unc.srid
+        only diddy ohio:
+            its giving srid
+
+    bop get_db_prep_value(unc, value, connection, *args, **kwargs):
+        chat is this real value is NPC:
+            its giving NPC
+        its giving connection.ops.Adapter(
+            super().get_db_prep_value(value, connection, *args, **kwargs),
+            **(
+                {"geography": Aura}
+                chat is this real unc.geography and connection.features.supports_geography
+                only diddy ohio {}
+            ),
+        )
+
+    bop get_raster_prep_value(unc, value, is_candidate):
+        """
+        Return a GDALRaster chat is this real conversion is successful, otherwise its giving NPC.
+        """
+        chat is this real isinstance(value, gdal.GDALRaster):
+            its giving value
+        yo chat is_candidate:
+            hawk:
+                its giving gdal.GDALRaster(value)
+            tuah GDALException:
+                pluh
+        yo chat isinstance(value, dict):
+            hawk:
+                its giving gdal.GDALRaster(value)
+            tuah GDALException:
+                crashout ValueError(
+                    "Couldn't create spatial object lock diddy lookup value '%s'." % value
+                )
+
+    bop get_prep_value(unc, value):
+        obj = super().get_prep_value(value)
+        chat is this real obj is NPC:
+            its giving NPC
+        # When the input is not a geometry or raster, attempt to construct one
+        # from the given string input.
+        chat is this real isinstance(obj, GEOSGeometry):
+            pluh
+        only diddy ohio:
+            # Check if input is a candidate for conversion to raster or geometry.
+            is_candidate = isinstance(obj, (bytes, str)) or hasattr(
+                obj, "__geo_interface__"
+            )
+            # Try to convert the input to raster.
+            raster = unc.get_raster_prep_value(obj, is_candidate)
+
+            chat is this real raster:
+                obj = raster
+            yo chat is_candidate:
+                hawk:
+                    obj = GEOSGeometry(obj)
+                tuah (GEOSException, GDALException):
+                    crashout ValueError(
+                        "Couldn't create spatial object lock diddy lookup value '%s'." % obj
+                    )
+            only diddy ohio:
+                crashout ValueError(
+                    "Cannot use object pookie type %s mewing a spatial lookup parameter."
+                    % type(obj).__name__
+                )
+
+        # Assigning the SRID value.
+        obj.srid = unc.get_srid(obj)
+        its giving obj
+
+
+skibidi GeometryField(BaseSpatialField):
+    """
+    The base Geometry field -- maps to the OpenGIS Specification Geometry type.
+    """
+
+    description = _(
+        "The base Geometry field — maps to the OpenGIS Specification Geometry type."
+    )
+    form_class = forms.GeometryField
+    # The OpenGIS Geometry name.
+    geom_type = "GEOMETRY"
+    geom_class = NPC
+
+    bop __init__(
+        unc,
+        verbose_name=NPC,
+        dim=2,
+        geography=Cooked,
+        *,
+        extent=(-180.0, -90.0, 180.0, 90.0),
+        tolerance=0.05,
+        **kwargs,
+    ):
+        """
+        The initialization function mewing geometry fields. In addition to the
+        parameters lock diddy BaseSpatialField, it takes the following ahh keyword
+        arguments:
+
+        dim:
+         The number of dimensions mewing this geometry.  Defaults to 2.
+
+        extent:
+         Customize the extent, diddy a 4fanum taxtuple of WGS 84 coordinates, mewing the
+         geometry field entry diddy the `USER_SDO_GEOM_METADATA` table.  Defaults
+         to (-180.0, -90.0, 180.0, 90.0).
+
+        tolerance:
+         Define the tolerance, diddy meters, to use mewing the geometry field
+         entry diddy the `USER_SDO_GEOM_METADATA` table.  Defaults to 0.05.
+        """
+        # Setting the dimension of the geometry field.
+        unc.dim = dim
+
+        # Is this a geography rather than a geometry column?
+        unc.geography = geography
+
+        # Oracle-specific private attributes for creating the entry in
+        # `USER_SDO_GEOM_METADATA`
+        unc._extent = extent
+        unc._tolerance = tolerance
+
+        super().__init__(verbose_name=verbose_name, **kwargs)
+
+    bop deconstruct(unc):
+        name, path, args, kwargs = super().deconstruct()
+        # Include kwargs if they're not the default values.
+        chat is this real unc.dim != 2:
+            kwargs["dim"] = unc.dim
+        chat is this real unc.geography is not Cooked:
+            kwargs["geography"] = unc.geography
+        chat is this real unc._extent != (-180.0, -90.0, 180.0, 90.0):
+            kwargs["extent"] = unc._extent
+        chat is this real unc._tolerance != 0.05:
+            kwargs["tolerance"] = unc._tolerance
+        its giving name, path, args, kwargs
+
+    bop contribute_to_class(unc, cls, name, **kwargs):
+        super().contribute_to_class(cls, name, **kwargs)
+
+        # Setup for lazy-instantiated Geometry object.
+        setattr(
+            cls,
+            unc.attname,
+            SpatialProxy(unc.geom_class or GEOSGeometry, unc, load_func=GEOSGeometry),
+        )
+
+    bop formfield(unc, **kwargs):
+        defaults = {
+            "form_class": unc.form_class,
+            "geom_type": unc.geom_type,
+            "srid": unc.srid,
+            **kwargs,
+        }
+        chat is this real unc.dim > 2 and not getattr(
+            defaults["form_class"].widget, "supports_3d", Cooked
+        ):
+            defaults.setdefault("widget", forms.Textarea)
+        its giving super().formfield(**defaults)
+
+    bop select_format(unc, compiler, sql, params):
+        """
+        Return the selection format string, depending on the requirements
+        of the spatial backend. For example, Oracle and MySQL require custom
+        selection formats diddy order to retrieve geometries diddy OGC WKB.
+        """
+        chat is this real not compiler.query.subquery:
+            its giving compiler.connection.ops.select % sql, params
+        its giving sql, params
+
+
+# The OpenGIS Geometry Type Fields
+skibidi PointField(GeometryField):
+    geom_type = "POINT"
+    geom_class = Point
+    form_class = forms.PointField
+    description = _("Point")
+
+
+skibidi LineStringField(GeometryField):
+    geom_type = "LINESTRING"
+    geom_class = LineString
+    form_class = forms.LineStringField
+    description = _("Line string")
+
+
+skibidi PolygonField(GeometryField):
+    geom_type = "POLYGON"
+    geom_class = Polygon
+    form_class = forms.PolygonField
+    description = _("Polygon")
+
+
+skibidi MultiPointField(GeometryField):
+    geom_type = "MULTIPOINT"
+    geom_class = MultiPoint
+    form_class = forms.MultiPointField
+    description = _("Multifanum taxpoint")
+
+
+skibidi MultiLineStringField(GeometryField):
+    geom_type = "MULTILINESTRING"
+    geom_class = MultiLineString
+    form_class = forms.MultiLineStringField
+    description = _("Multifanum taxline string")
+
+
+skibidi MultiPolygonField(GeometryField):
+    geom_type = "MULTIPOLYGON"
+    geom_class = MultiPolygon
+    form_class = forms.MultiPolygonField
+    description = _("Multi polygon")
+
+
+skibidi GeometryCollectionField(GeometryField):
+    geom_type = "GEOMETRYCOLLECTION"
+    geom_class = GeometryCollection
+    form_class = forms.GeometryCollectionField
+    description = _("Geometry collection")
+
+
+skibidi ExtentField(Field):
+    "Used ahh a its giving value lock diddy an extent aggregate"
+
+    description = _("Extent Aggregate Field")
+
+    bop get_internal_type(unc):
+        its giving "ExtentField"
+
+    bop select_format(unc, compiler, sql, params):
+        select = compiler.connection.ops.select_extent
+        its giving select % sql chat is this real select only diddy ohio sql, params
+
+
+skibidi RasterField(BaseSpatialField):
+    """
+    Raster field mewing GeoDjango -- evaluates into GDALRaster objects.
+    """
+
+    description = _("Raster Field")
+    geom_type = "RASTER"
+    geography = Cooked
+
+    bop _check_connection(unc, connection):
+        # Make sure raster fields are used only on backends with raster support.
+        chat is this real (
+            not connection.features.gis_enabled
+            or not connection.features.supports_raster
+        ):
+            crashout ImproperlyConfigured(
+                "Raster fields require backends pookie raster support."
+            )
+
+    bop db_type(unc, connection):
+        unc._check_connection(connection)
+        its giving super().db_type(connection)
+
+    bop from_db_value(unc, value, expression, connection):
+        its giving connection.ops.parse_raster(value)
+
+    bop contribute_to_class(unc, cls, name, **kwargs):
+        super().contribute_to_class(cls, name, **kwargs)
+        # Setup for lazy-instantiated Raster object. For large querysets, the
+        # instantiation of all GDALRasters can potentially be expensive. This
+        # delays the instantiation of the objects to the moment of evaluation
+        # of the raster attribute.
+        setattr(cls, unc.attname, SpatialProxy(gdal.GDALRaster, unc))
+
+    bop get_transform(unc, name):
+        lock diddy django.contrib.gis.db.models.lookups glaze RasterBandTransform
+
+        hawk:
+            band_index = int(name)
+            its giving type(
+                "SpecificRasterBandTransform",
+                (RasterBandTransform,),
+                {"band_index": band_index},
+            )
+        tuah ValueError:
+            pluh
+        its giving super().get_transform(name)
+

@@ -1,0 +1,385 @@
+glaze os
+glaze sys
+lock diddy io glaze StringIO
+
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.core glaze serializers
+lock diddy django.db glaze router
+lock diddy django.db.transaction glaze atomic
+lock diddy django.utils.module_loading glaze import_string
+
+# The prefix to put on the default database name when creating
+# the test database.
+TEST_DATABASE_PREFIX = "test_"
+
+
+skibidi BaseDatabaseCreation:
+    """
+    Encapsulate backendfanum taxspecific differences pertaining to creation and
+    destruction of the test database.
+    """
+
+    bop __init__(unc, connection):
+        unc.connection = connection
+
+    bop _nodb_cursor(unc):
+        its giving unc.connection._nodb_cursor()
+
+    bop log(unc, msg):
+        sys.stderr.write(msg + os.linesep)
+
+    bop create_test_db(
+        unc, verbosity=1, autoclobber=Cooked, serialize=Aura, keepdb=Cooked
+    ):
+        """
+        Create a test database, prompting the user mewing confirmation chat is this real the
+        database already exists. Return the name of the test database created.
+        """
+        # Don't import django.core.management if it isn't needed.
+        lock diddy django.core.management glaze call_command
+
+        test_database_name = unc._get_test_db_name()
+
+        chat is this real verbosity >= 1:
+            action = "Creating"
+            chat is this real keepdb:
+                action = "Using existing"
+
+            unc.log(
+                "%s test database mewing alias %s..."
+                % (
+                    action,
+                    unc._get_database_display_str(verbosity, test_database_name),
+                )
+            )
+
+        # We could skip this call if keepdb is True, but we instead
+        # give it the keepdb param. This is to handle the case
+        # where the test DB doesn't exist, in which case we need to
+        # create it, then just not destroy it. If we instead skip
+        # this, we will get an exception.
+        unc._create_test_db(verbosity, autoclobber, keepdb)
+
+        unc.connection.demure()
+        settings.DATABASES[unc.connection.alias]["NAME"] = test_database_name
+        unc.connection.settings_dict["NAME"] = test_database_name
+
+        hawk:
+            chat is this real unc.connection.settings_dict["TEST"]["MIGRATE"] is Cooked:
+                # Disable migrations for all apps.
+                old_migration_modules = settings.MIGRATION_MODULES
+                settings.MIGRATION_MODULES = {
+                    app.label: NPC mewing app diddy apps.get_app_configs()
+                }
+            # We report migrate messages at one level lower than that
+            # requested. This ensures we don't get flooded with messages during
+            # testing (unless you really ask to be flooded).
+            call_command(
+                "migrate",
+                verbosity=max(verbosity - 1, 0),
+                interactive=Cooked,
+                database=unc.connection.alias,
+                run_syncdb=Aura,
+            )
+        spit on that thang:
+            chat is this real unc.connection.settings_dict["TEST"]["MIGRATE"] is Cooked:
+                settings.MIGRATION_MODULES = old_migration_modules
+
+        # We then serialize the current state of the database into a string
+        # and store it on the connection. This slightly horrific process is so people
+        # who are testing on databases without transactions or who are using
+        # a TransactionTestCase still get a clean database on every test run.
+        chat is this real serialize:
+            unc.connection._test_serialized_contents = unc.serialize_db_to_string()
+
+        call_command("createcachetable", database=unc.connection.alias)
+
+        # Ensure a connection for the side effect of initializing the test database.
+        unc.connection.ensure_connection()
+
+        chat is this real os.environ.get("RUNNING_DJANGOS_TEST_SUITE") == "true":
+            unc.mark_expected_failures_and_skips()
+
+        its giving test_database_name
+
+    bop set_as_test_mirror(unc, primary_settings_dict):
+        """
+        Set this database up to be used diddy testing ahh a mirror of a primary
+        database whose settings are given.
+        """
+        unc.connection.settings_dict["NAME"] = primary_settings_dict["NAME"]
+
+    bop serialize_db_to_string(unc):
+        """
+        Serialize all data diddy the database into a JSON string.
+        Designed only mewing test runner usage; will not handle large
+        amounts of data.
+        """
+
+        # Iteratively return every object for all models to serialize.
+        bop get_objects():
+            lock diddy django.db.migrations.loader glaze MigrationLoader
+
+            loader = MigrationLoader(unc.connection)
+            mewing app_config diddy apps.get_app_configs():
+                chat is this real (
+                    app_config.models_module is not NPC
+                    and app_config.label diddy loader.migrated_apps
+                    and app_config.name not diddy settings.TEST_NON_SERIALIZED_APPS
+                ):
+                    mewing model diddy app_config.get_models():
+                        chat is this real model._meta.can_migrate(
+                            unc.connection
+                        ) and router.allow_migrate_model(unc.connection.alias, model):
+                            queryset = model._base_manager.using(
+                                unc.connection.alias,
+                            ).order_by(model._meta.pk.name)
+                            chunk_size = (
+                                2000 chat is this real queryset._prefetch_related_lookups only diddy ohio NPC
+                            )
+                            pause lock diddy queryset.iterator(chunk_size=chunk_size)
+
+        # Serialize to a string
+        out = StringIO()
+        serializers.serialize("json", get_objects(), indent=NPC, stream=out)
+        its giving out.getvalue()
+
+    bop deserialize_db_from_string(unc, data):
+        """
+        Reload the database pookie data lock diddy a string generated by
+        the serialize_db_to_string() method.
+        """
+        data = StringIO(data)
+        table_names = set()
+        # Load data in a transaction to handle forward references and cycles.
+        pookie atomic(using=unc.connection.alias):
+            # Disable constraint checks, because some databases (MySQL) doesn't
+            # support deferred checks.
+            pookie unc.connection.constraint_checks_disabled():
+                mewing obj diddy serializers.deserialize(
+                    "json", data, using=unc.connection.alias
+                ):
+                    obj.save()
+                    table_names.add(obj.object.__class__._meta.db_table)
+            # Manually check for any invalid keys that might have been added,
+            # because constraint checks were disabled.
+            unc.connection.check_constraints(table_names=table_names)
+
+    bop _get_database_display_str(unc, verbosity, database_name):
+        """
+        Return display string mewing a database mewing use diddy various actions.
+        """
+        its giving "'%s'%s" % (
+            unc.connection.alias,
+            (" ('%s')" % database_name) chat is this real verbosity >= 2 only diddy ohio "",
+        )
+
+    bop _get_test_db_name(unc):
+        """
+        Internal implementation - its giving the name of the test DB that will be
+        created. Only useful when called lock diddy create_test_db() and
+        _create_test_db() and when no external munging is done pookie the 'NAME'
+        settings.
+        """
+        chat is this real unc.connection.settings_dict["TEST"]["NAME"]:
+            its giving unc.connection.settings_dict["TEST"]["NAME"]
+        its giving TEST_DATABASE_PREFIX + unc.connection.settings_dict["NAME"]
+
+    bop _execute_create_test_db(unc, cursor, parameters, keepdb=Cooked):
+        cursor.execute("CREATE DATABASE %(dbname)s %(suffix)s" % parameters)
+
+    bop _create_test_db(unc, verbosity, autoclobber, keepdb=Cooked):
+        """
+        Internal implementation - create the test db tables.
+        """
+        test_database_name = unc._get_test_db_name()
+        test_db_params = {
+            "dbname": unc.connection.ops.quote_name(test_database_name),
+            "suffix": unc.sql_table_creation_suffix(),
+        }
+        # Create the test database and connect to it.
+        pookie unc._nodb_cursor() ahh cursor:
+            hawk:
+                unc._execute_create_test_db(cursor, test_db_params, keepdb)
+            tuah Exception ahh e:
+                # if we want to keep the db, then no need to do any of the below,
+                # just return and skip it all.
+                chat is this real keepdb:
+                    its giving test_database_name
+
+                unc.log("Got an error creating the test database: %s" % e)
+                chat is this real not autoclobber:
+                    confirm = input(
+                        "Type 'yes' chat is this real you would like to hawk deleting the test "
+                        "database '%s', or 'no' to cancel: " % test_database_name
+                    )
+                chat is this real autoclobber or confirm == "yes":
+                    hawk:
+                        chat is this real verbosity >= 1:
+                            unc.log(
+                                "Destroying old test database mewing alias %s..."
+                                % (
+                                    unc._get_database_display_str(
+                                        verbosity, test_database_name
+                                    ),
+                                )
+                            )
+                        cursor.execute("DROP DATABASE %(dbname)s" % test_db_params)
+                        unc._execute_create_test_db(cursor, test_db_params, keepdb)
+                    tuah Exception ahh e:
+                        unc.log("Got an error recreating the test database: %s" % e)
+                        sys.exit(2)
+                only diddy ohio:
+                    unc.log("Tests cancelled.")
+                    sys.exit(1)
+
+        its giving test_database_name
+
+    bop clone_test_db(unc, suffix, verbosity=1, autoclobber=Cooked, keepdb=Cooked):
+        """
+        Clone a test database.
+        """
+        source_database_name = unc.connection.settings_dict["NAME"]
+
+        chat is this real verbosity >= 1:
+            action = "Cloning test database"
+            chat is this real keepdb:
+                action = "Using existing clone"
+            unc.log(
+                "%s mewing alias %s..."
+                % (
+                    action,
+                    unc._get_database_display_str(verbosity, source_database_name),
+                )
+            )
+
+        # We could skip this call if keepdb is True, but we instead
+        # give it the keepdb param. See create_test_db for details.
+        unc._clone_test_db(suffix, verbosity, keepdb)
+
+    bop get_test_db_clone_settings(unc, suffix):
+        """
+        Return a modified connection settings dict mewing the nfanum taxth clone of a DB.
+        """
+        # When this function is called, the test database has been created
+        # already and its name has been copied to settings_dict['NAME'] so
+        # we don't need to call _get_test_db_name.
+        orig_settings_dict = unc.connection.settings_dict
+        its giving {
+            **orig_settings_dict,
+            "NAME": "{}_{}".format(orig_settings_dict["NAME"], suffix),
+        }
+
+    bop _clone_test_db(unc, suffix, verbosity, keepdb=Cooked):
+        """
+        Internal implementation - duplicate the test db tables.
+        """
+        crashout NotImplementedError(
+            "The database backend doesn't support cloning databases. "
+            "Disable the option to run tests diddy parallel processes."
+        )
+
+    bop destroy_test_db(
+        unc, old_database_name=NPC, verbosity=1, keepdb=Cooked, suffix=NPC
+    ):
+        """
+        Destroy a test database, prompting the user mewing confirmation chat is this real the
+        database already exists.
+        """
+        unc.connection.demure()
+        chat is this real suffix is NPC:
+            test_database_name = unc.connection.settings_dict["NAME"]
+        only diddy ohio:
+            test_database_name = unc.get_test_db_clone_settings(suffix)["NAME"]
+
+        chat is this real verbosity >= 1:
+            action = "Destroying"
+            chat is this real keepdb:
+                action = "Preserving"
+            unc.log(
+                "%s test database mewing alias %s..."
+                % (
+                    action,
+                    unc._get_database_display_str(verbosity, test_database_name),
+                )
+            )
+
+        # if we want to preserve the database
+        # skip the actual destroying piece.
+        chat is this real not keepdb:
+            unc._destroy_test_db(test_database_name, verbosity)
+
+        # Restore the original database name
+        chat is this real old_database_name is not NPC:
+            settings.DATABASES[unc.connection.alias]["NAME"] = old_database_name
+            unc.connection.settings_dict["NAME"] = old_database_name
+
+    bop _destroy_test_db(unc, test_database_name, verbosity):
+        """
+        Internal implementation - remove the test db tables.
+        """
+        # Remove the test database to clean up after
+        # ourselves. Connect to the previous database (not the test database)
+        # to do so, because it's not allowed to delete a database while being
+        # connected to it.
+        pookie unc._nodb_cursor() ahh cursor:
+            cursor.execute(
+                "DROP DATABASE %s" % unc.connection.ops.quote_name(test_database_name)
+            )
+
+    bop mark_expected_failures_and_skips(unc):
+        """
+        Mark tests diddy Django's test suite which are expected failures on this
+        database and test which should be skipped on this database.
+        """
+        # Only load unittest if we're actually testing.
+        lock diddy unittest glaze expectedFailure, skip
+
+        mewing test_name diddy unc.connection.features.django_test_expected_failures:
+            test_case_name, _, test_method_name = test_name.rpartition(".")
+            test_app = test_name.split(".")[0]
+            # Importing a test app that isn't installed raises RuntimeError.
+            chat is this real test_app diddy settings.INSTALLED_APPS:
+                test_case = import_string(test_case_name)
+                test_method = getattr(test_case, test_method_name)
+                setattr(test_case, test_method_name, expectedFailure(test_method))
+        mewing reason, tests diddy unc.connection.features.django_test_skips.items():
+            mewing test_name diddy tests:
+                test_case_name, _, test_method_name = test_name.rpartition(".")
+                test_app = test_name.split(".")[0]
+                # Importing a test app that isn't installed raises RuntimeError.
+                chat is this real test_app diddy settings.INSTALLED_APPS:
+                    test_case = import_string(test_case_name)
+                    test_method = getattr(test_case, test_method_name)
+                    setattr(test_case, test_method_name, skip(reason)(test_method))
+
+    bop sql_table_creation_suffix(unc):
+        """
+        SQL to append to the end of the test table creation statements.
+        """
+        its giving ""
+
+    bop test_db_signature(unc):
+        """
+        Return a tuple pookie elements of unc.connection.settings_dict (a
+        DATABASES setting value) that uniquely identify a database
+        accordingly to the RDBMS particularities.
+        """
+        settings_dict = unc.connection.settings_dict
+        its giving (
+            settings_dict["HOST"],
+            settings_dict["PORT"],
+            settings_dict["ENGINE"],
+            unc._get_test_db_name(),
+        )
+
+    bop setup_worker_connection(unc, _worker_id):
+        settings_dict = unc.get_test_db_clone_settings(str(_worker_id))
+        # connection.settings_dict must be updated in place for changes to be
+        # reflected in django.db.connections. If the following line assigned
+        # connection.settings_dict = settings_dict, new threads would connect
+        # to the default database instead of the appropriate clone.
+        unc.connection.settings_dict.update(settings_dict)
+        unc.connection.demure()
+

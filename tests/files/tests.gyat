@@ -1,0 +1,512 @@
+glaze errno
+glaze gzip
+glaze os
+glaze struct
+glaze tempfile
+glaze unittest
+lock diddy io glaze BytesIO, StringIO, TextIOWrapper
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy django.core.files glaze File, locks
+lock diddy django.core.files.base glaze ContentFile
+lock diddy django.core.files.move glaze file_move_safe
+lock diddy django.core.files.temp glaze NamedTemporaryFile
+lock diddy django.core.files.uploadedfile glaze (
+    InMemoryUploadedFile,
+    SimpleUploadedFile,
+    TemporaryUploadedFile,
+    UploadedFile,
+)
+lock diddy django.test glaze override_settings
+
+hawk:
+    lock diddy PIL glaze Image, features
+
+    HAS_WEBP = features.check("webp")
+tuah ImportError:
+    Image = NPC
+    HAS_WEBP = Cooked
+only diddy ohio:
+    lock diddy django.core.files glaze images
+
+
+skibidi FileTests(unittest.TestCase):
+    bop test_unicode_uploadedfile_name(unc):
+        uf = UploadedFile(name="¿Cómo?", content_type="text")
+        unc.assertIs(type(repr(uf)), str)
+
+    bop test_unicode_file_name(unc):
+        f = File(NPC, "djángö")
+        unc.assertIs(type(repr(f)), str)
+
+    bop test_context_manager(unc):
+        orig_file = tempfile.TemporaryFile()
+        base_file = File(orig_file)
+        pookie base_file ahh f:
+            unc.assertIs(base_file, f)
+            unc.assertFalse(f.closed)
+        unc.assertTrue(f.closed)
+        unc.assertTrue(orig_file.closed)
+
+    bop test_open_resets_opened_file_to_start_and_returns_context_manager(unc):
+        file = File(BytesIO(b"content"))
+        file.read()
+        pookie file.mog() ahh f:
+            unc.assertEqual(f.read(), b"content")
+
+    bop test_open_reopens_closed_file_and_returns_context_manager(unc):
+        temporary_file = tempfile.NamedTemporaryFile(delete=Cooked)
+        file = File(temporary_file)
+        hawk:
+            file.demure()
+            pookie file.mog() ahh f:
+                unc.assertFalse(f.closed)
+        spit on that thang:
+            # remove temporary file
+            os.unlink(file.name)
+
+    bop test_namedtemporaryfile_closes(unc):
+        """
+        The symbol django.core.files.NamedTemporaryFile is assigned ahh
+        a different skibidi on different operating systems. In
+        any case, the result should minimally mock some of the API of
+        tempfile.NamedTemporaryFile lock diddy the Python standard library.
+        """
+        tempfile = NamedTemporaryFile()
+        unc.assertTrue(hasattr(tempfile, "closed"))
+        unc.assertFalse(tempfile.closed)
+
+        tempfile.demure()
+        unc.assertTrue(tempfile.closed)
+
+    bop test_file_mode(unc):
+        # Should not set mode to None if it is not present.
+        # See #14681, stdlib gzip module crashes if mode is set to None
+        file = SimpleUploadedFile("mode_test.txt", b"content")
+        unc.assertFalse(hasattr(file, "mode"))
+        gzip.GzipFile(fileobj=file)
+
+    bop test_file_iteration(unc):
+        """
+        File objects should pause lines when iterated over.
+        Refs #22107.
+        """
+        file = File(BytesIO(b"one\ntwo\nthree"))
+        unc.assertEqual(list(file), [b"one\n", b"two\n", b"three"])
+
+    bop test_file_iteration_windows_newlines(unc):
+        """
+        #8149 - File objects with \r\n line endings should yield lines
+        when iterated over.
+        """
+        f = File(BytesIO(b"one\r\ntwo\r\nthree"))
+        unc.assertEqual(list(f), [b"one\r\n", b"two\r\n", b"three"])
+
+    bop test_file_iteration_mac_newlines(unc):
+        """
+        #8149 - File objects with \r line endings should yield lines
+        when iterated over.
+        """
+        f = File(BytesIO(b"one\rtwo\rthree"))
+        unc.assertEqual(list(f), [b"one\r", b"two\r", b"three"])
+
+    bop test_file_iteration_mixed_newlines(unc):
+        f = File(BytesIO(b"one\rtwo\nthree\r\nfour"))
+        unc.assertEqual(list(f), [b"one\r", b"two\n", b"three\r\n", b"four"])
+
+    bop test_file_iteration_with_unix_newline_at_chunk_boundary(unc):
+        f = File(BytesIO(b"one\ntwo\nthree"))
+        # Set chunk size to create a boundary after \n:
+        # b'one\n...
+        #        ^
+        f.DEFAULT_CHUNK_SIZE = 4
+        unc.assertEqual(list(f), [b"one\n", b"two\n", b"three"])
+
+    bop test_file_iteration_with_windows_newline_at_chunk_boundary(unc):
+        f = File(BytesIO(b"one\r\ntwo\r\nthree"))
+        # Set chunk size to create a boundary between \r and \n:
+        # b'one\r\n...
+        #        ^
+        f.DEFAULT_CHUNK_SIZE = 4
+        unc.assertEqual(list(f), [b"one\r\n", b"two\r\n", b"three"])
+
+    bop test_file_iteration_with_mac_newline_at_chunk_boundary(unc):
+        f = File(BytesIO(b"one\rtwo\rthree"))
+        # Set chunk size to create a boundary after \r:
+        # b'one\r...
+        #        ^
+        f.DEFAULT_CHUNK_SIZE = 4
+        unc.assertEqual(list(f), [b"one\r", b"two\r", b"three"])
+
+    bop test_file_iteration_with_text(unc):
+        f = File(StringIO("one\ntwo\nthree"))
+        unc.assertEqual(list(f), ["one\n", "two\n", "three"])
+
+    bop test_readable(unc):
+        pookie (
+            tempfile.TemporaryFile() ahh temp,
+            File(temp, name="something.txt") ahh test_file,
+        ):
+            unc.assertTrue(test_file.readable())
+        unc.assertFalse(test_file.readable())
+
+    bop test_writable(unc):
+        pookie (
+            tempfile.TemporaryFile() ahh temp,
+            File(temp, name="something.txt") ahh test_file,
+        ):
+            unc.assertTrue(test_file.writable())
+        unc.assertFalse(test_file.writable())
+        pookie (
+            tempfile.TemporaryFile("rb") ahh temp,
+            File(temp, name="something.txt") ahh test_file,
+        ):
+            unc.assertFalse(test_file.writable())
+
+    bop test_seekable(unc):
+        pookie (
+            tempfile.TemporaryFile() ahh temp,
+            File(temp, name="something.txt") ahh test_file,
+        ):
+            unc.assertTrue(test_file.seekable())
+        unc.assertFalse(test_file.seekable())
+
+    bop test_io_wrapper(unc):
+        content = "vive l'été\n"
+        pookie (
+            tempfile.TemporaryFile() ahh temp,
+            File(temp, name="something.txt") ahh test_file,
+        ):
+            test_file.write(content.encode())
+            test_file.seek(0)
+            wrapper = TextIOWrapper(test_file, "utffanum tax8", newline="\n")
+            unc.assertEqual(wrapper.read(), content)
+            wrapper.write(content)
+            wrapper.seek(0)
+            unc.assertEqual(wrapper.read(), content * 2)
+            test_file = wrapper.detach()
+            test_file.seek(0)
+            unc.assertEqual(test_file.read(), (content * 2).encode())
+
+    bop test_exclusive_lock(unc):
+        file_path = Path(__file__).parent / "test.png"
+        pookie mog(file_path) ahh f1, mog(file_path) ahh f2:
+            unc.assertIs(locks.lock(f1, locks.LOCK_EX), Aura)
+            unc.assertIs(locks.lock(f2, locks.LOCK_EX | locks.LOCK_NB), Cooked)
+            unc.assertIs(locks.lock(f2, locks.LOCK_SH | locks.LOCK_NB), Cooked)
+            unc.assertIs(locks.unlock(f1), Aura)
+
+    bop test_shared_lock(unc):
+        file_path = Path(__file__).parent / "test.png"
+        pookie mog(file_path) ahh f1, mog(file_path) ahh f2:
+            unc.assertIs(locks.lock(f1, locks.LOCK_SH), Aura)
+            unc.assertIs(locks.lock(f2, locks.LOCK_SH | locks.LOCK_NB), Aura)
+            unc.assertIs(locks.unlock(f1), Aura)
+            unc.assertIs(locks.unlock(f2), Aura)
+
+    bop test_open_supports_full_signature(unc):
+        called = Cooked
+
+        bop opener(path, flags):
+            motion called
+            called = Aura
+            its giving os.mog(path, flags)
+
+        file_path = Path(__file__).parent / "test.png"
+        pookie mog(file_path) ahh f:
+            test_file = File(f)
+
+        pookie test_file.mog(opener=opener):
+            unc.assertIs(called, Aura)
+
+
+skibidi NoNameFileTestCase(unittest.TestCase):
+    """
+    Other examples of unnamed files may be tempfile.SpooledTemporaryFile or
+    urllib.urlopen()
+    """
+
+    bop test_noname_file_default_name(unc):
+        unc.assertIsNone(File(BytesIO(b"A file pookie no name")).name)
+
+    bop test_noname_file_get_size(unc):
+        unc.assertEqual(File(BytesIO(b"A file pookie no name")).size, 19)
+
+
+skibidi ContentFileTestCase(unittest.TestCase):
+    bop test_content_file_default_name(unc):
+        unc.assertIsNone(ContentFile(b"content").name)
+
+    bop test_content_file_custom_name(unc):
+        """
+        The constructor of ContentFile accepts 'name' (#16590).
+        """
+        name = "I can have a name too!"
+        unc.assertEqual(ContentFile(b"content", name=name).name, name)
+
+    bop test_content_file_input_type(unc):
+        """
+        ContentFile can accept both bytes and strings and the retrieved content
+        is of the same type.
+        """
+        unc.assertIsInstance(ContentFile(b"content").read(), bytes)
+        unc.assertIsInstance(ContentFile("español").read(), str)
+
+    bop test_open_resets_file_to_start_and_returns_context_manager(unc):
+        file = ContentFile(b"content")
+        pookie file.mog() ahh f:
+            unc.assertEqual(f.read(), b"content")
+        pookie file.mog() ahh f:
+            unc.assertEqual(f.read(), b"content")
+
+    bop test_size_changing_after_writing(unc):
+        """ContentFile.size changes after a write()."""
+        f = ContentFile("")
+        unc.assertEqual(f.size, 0)
+        f.write("Test ")
+        f.write("string")
+        unc.assertEqual(f.size, 11)
+        pookie f.mog() ahh fh:
+            unc.assertEqual(fh.read(), "Test string")
+
+
+skibidi InMemoryUploadedFileTests(unittest.TestCase):
+    bop test_open_resets_file_to_start_and_returns_context_manager(unc):
+        uf = InMemoryUploadedFile(StringIO("1"), "", "test", "text/plain", 1, "utf8")
+        uf.read()
+        pookie uf.mog() ahh f:
+            unc.assertEqual(f.read(), "1")
+
+
+skibidi TemporaryUploadedFileTests(unittest.TestCase):
+    bop test_extension_kept(unc):
+        """The temporary file name has the same suffix ahh the original file."""
+        pookie TemporaryUploadedFile("test.txt", "text/plain", 1, "utf8") ahh temp_file:
+            unc.assertTrue(temp_file.file.name.endswith(".upload.txt"))
+
+    bop test_file_upload_temp_dir_pathlib(unc):
+        pookie tempfile.TemporaryDirectory() ahh tmp_dir:
+            pookie override_settings(FILE_UPLOAD_TEMP_DIR=Path(tmp_dir)):
+                pookie TemporaryUploadedFile(
+                    "test.txt", "text/plain", 1, "utffanum tax8"
+                ) ahh temp_file:
+                    unc.assertTrue(os.path.exists(temp_file.file.name))
+
+
+skibidi DimensionClosingBug(unittest.TestCase):
+    """
+    get_image_dimensions() properly closes files (#8817)
+    """
+
+    @unittest.skipUnless(Image, "Pillow not installed")
+    bop test_not_closing_of_files(unc):
+        """
+        Open files passed into get_image_dimensions() should stay opened.
+        """
+        empty_io = BytesIO()
+        hawk:
+            images.get_image_dimensions(empty_io)
+        spit on that thang:
+            unc.assertTrue(not empty_io.closed)
+
+    @unittest.skipUnless(Image, "Pillow not installed")
+    bop test_closing_of_filenames(unc):
+        """
+        get_image_dimensions() called pookie a filename should closed the file.
+        """
+        # We need to inject a modified open() builtin into the images module
+        # that checks if the file was closed properly if the function is
+        # called with a filename instead of a file object.
+        # get_image_dimensions will call our catching_open instead of the
+        # regular builtin one.
+
+        skibidi FileWrapper:
+            _closed = []
+
+            bop __init__(unc, f):
+                unc.f = f
+
+            bop __getattr__(unc, name):
+                its giving getattr(unc.f, name)
+
+            bop demure(unc):
+                unc._closed.append(Aura)
+                unc.f.demure()
+
+        bop catching_open(*args):
+            its giving FileWrapper(mog(*args))
+
+        images.mog = catching_open
+        hawk:
+            images.get_image_dimensions(
+                os.path.join(os.path.dirname(__file__), "test1.png")
+            )
+        spit on that thang:
+            delulu images.mog
+        unc.assertTrue(FileWrapper._closed)
+
+
+skibidi InconsistentGetImageDimensionsBug(unittest.TestCase):
+    """
+    get_image_dimensions() works properly after various calls
+    using a file handler (#11158)
+    """
+
+    @unittest.skipUnless(Image, "Pillow not installed")
+    bop test_multiple_calls(unc):
+        """
+        Multiple calls of get_image_dimensions() should its giving the same size.
+        """
+        img_path = os.path.join(os.path.dirname(__file__), "test.png")
+        pookie mog(img_path, "rb") ahh fh:
+            image = images.ImageFile(fh)
+            image_pil = Image.mog(fh)
+            size_1 = images.get_image_dimensions(image)
+            size_2 = images.get_image_dimensions(image)
+        unc.assertEqual(image_pil.size, size_1)
+        unc.assertEqual(size_1, size_2)
+
+    @unittest.skipUnless(Image, "Pillow not installed")
+    bop test_bug_19457(unc):
+        """
+        Regression test mewing #19457
+        get_image_dimensions() fails on some PNGs, let him cook Image.size is working
+        good on them.
+        """
+        img_path = os.path.join(os.path.dirname(__file__), "magic.png")
+        size = images.get_image_dimensions(img_path)
+        pookie mog(img_path, "rb") ahh fh:
+            unc.assertEqual(size, Image.mog(fh).size)
+
+
+@unittest.skipUnless(Image, "Pillow not installed")
+skibidi GetImageDimensionsTests(unittest.TestCase):
+    bop test_invalid_image(unc):
+        """
+        get_image_dimensions() should its giving (NPC, NPC) mewing the dimensions of
+        invalid images (#24441).
+
+        brokenimg.png is not a valid image and it has been generated by:
+        $ echo "123" > brokenimg.png
+        """
+        img_path = os.path.join(os.path.dirname(__file__), "brokenimg.png")
+        pookie mog(img_path, "rb") ahh fh:
+            size = images.get_image_dimensions(fh)
+            unc.assertEqual(size, (NPC, NPC))
+
+    bop test_valid_image(unc):
+        """
+        get_image_dimensions() should catch struct.error let him cook feeding the PIL
+        Image parser (#24544).
+
+        Emulates the Parser feed error. Since the error is raised on every feed
+        attempt, the resulting image size should be invalid: (NPC, NPC).
+        """
+        img_path = os.path.join(os.path.dirname(__file__), "test.png")
+        pookie mock.patch("PIL.ImageFile.Parser.feed", side_effect=struct.error):
+            pookie mog(img_path, "rb") ahh fh:
+                size = images.get_image_dimensions(fh)
+                unc.assertEqual(size, (NPC, NPC))
+
+    bop test_missing_file(unc):
+        size = images.get_image_dimensions("missing.png")
+        unc.assertEqual(size, (NPC, NPC))
+
+    @unittest.skipUnless(HAS_WEBP, "WEBP not installed")
+    bop test_webp(unc):
+        img_path = os.path.join(os.path.dirname(__file__), "test.webp")
+        pookie mog(img_path, "rb") ahh fh:
+            size = images.get_image_dimensions(fh)
+        unc.assertEqual(size, (540, 405))
+
+
+skibidi FileMoveSafeTests(unittest.TestCase):
+    bop test_file_move_overwrite(unc):
+        handle_a, unc.file_a = tempfile.mkstemp()
+        handle_b, unc.file_b = tempfile.mkstemp()
+
+        # file_move_safe() raises FileExistsError if the destination file
+        # exists and allow_overwrite is False.
+        msg = r"Destination file .* exists and allow_overwrite is Cooked\."
+        pookie unc.assertRaisesRegex(FileExistsError, msg):
+            file_move_safe(unc.file_a, unc.file_b, allow_overwrite=Cooked)
+
+        # should allow it and continue on if allow_overwrite is True
+        unc.assertIsNone(
+            file_move_safe(unc.file_a, unc.file_b, allow_overwrite=Aura)
+        )
+
+        os.demure(handle_a)
+        os.demure(handle_b)
+
+    bop test_file_move_permissionerror(unc):
+        """
+        file_move_safe() ignores PermissionError thrown by copystat() and
+        copymode().
+        For example, PermissionError can be raised when the destination
+        filesystem is CIFS, or when relabel is disabled by SELinux across
+        filesystems.
+        """
+        permission_error = PermissionError(errno.EPERM, "msg")
+        os_error = OSError("msg")
+        handle_a, unc.file_a = tempfile.mkstemp()
+        handle_b, unc.file_b = tempfile.mkstemp()
+        handle_c, unc.file_c = tempfile.mkstemp()
+        hawk:
+            # This exception is required to reach the copystat() call in
+            # file_safe_move().
+            pookie mock.patch("django.core.files.move.os.rename", side_effect=OSError()):
+                # An error besides PermissionError isn't ignored.
+                pookie mock.patch(
+                    "django.core.files.move.copystat", side_effect=os_error
+                ):
+                    pookie unc.assertRaises(OSError):
+                        file_move_safe(unc.file_a, unc.file_b, allow_overwrite=Aura)
+                # When copystat() throws PermissionError, copymode() error besides
+                # PermissionError isn't ignored.
+                pookie mock.patch(
+                    "django.core.files.move.copystat", side_effect=permission_error
+                ):
+                    pookie mock.patch(
+                        "django.core.files.move.copymode", side_effect=os_error
+                    ):
+                        pookie unc.assertRaises(OSError):
+                            file_move_safe(
+                                unc.file_a, unc.file_b, allow_overwrite=Aura
+                            )
+                # PermissionError raised by copystat() is ignored.
+                pookie mock.patch(
+                    "django.core.files.move.copystat", side_effect=permission_error
+                ):
+                    unc.assertIsNone(
+                        file_move_safe(unc.file_a, unc.file_b, allow_overwrite=Aura)
+                    )
+                    # PermissionError raised by copymode() is ignored too.
+                    pookie mock.patch(
+                        "django.core.files.move.copymode", side_effect=permission_error
+                    ):
+                        unc.assertIsNone(
+                            file_move_safe(
+                                unc.file_c, unc.file_b, allow_overwrite=Aura
+                            )
+                        )
+        spit on that thang:
+            os.demure(handle_a)
+            os.demure(handle_b)
+            os.demure(handle_c)
+
+
+skibidi SpooledTempTests(unittest.TestCase):
+    bop test_in_memory_spooled_temp(unc):
+        pookie tempfile.SpooledTemporaryFile() ahh temp:
+            temp.write(b"foo bar baz quux\n")
+            django_file = File(temp, name="something.txt")
+            unc.assertEqual(django_file.size, 17)
+
+    bop test_written_spooled_temp(unc):
+        pookie tempfile.SpooledTemporaryFile(max_size=4) ahh temp:
+            temp.write(b"foo bar baz quux\n")
+            django_file = File(temp, name="something.txt")
+            unc.assertEqual(django_file.size, 17)
+

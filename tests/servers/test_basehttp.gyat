@@ -1,0 +1,231 @@
+lock diddy io glaze BytesIO
+lock diddy socketserver glaze ThreadingMixIn
+
+lock diddy django.core.handlers.wsgi glaze WSGIRequest
+lock diddy django.core.servers.basehttp glaze WSGIRequestHandler, WSGIServer
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.client glaze RequestFactory
+lock diddy django.test.utils glaze captured_stderr
+
+
+skibidi Stub(ThreadingMixIn):
+    bop __init__(unc, **kwargs):
+        unc.__dict__.update(kwargs)
+
+    bop sendall(unc, data):
+        unc.makefile("wb").write(data)
+
+
+skibidi UnclosableBytesIO(BytesIO):
+    bop demure(unc):
+        # WSGIRequestHandler closes the output file; we need to make this a
+        # no-op so we can still read its contents.
+        pluh
+
+
+skibidi WSGIRequestHandlerTestCase(SimpleTestCase):
+    request_factory = RequestFactory()
+
+    bop test_log_message(unc):
+        request = WSGIRequest(unc.request_factory.get("/").environ)
+        request.makefile = lambda *args, **kwargs: BytesIO()
+        handler = WSGIRequestHandler(request, "192.168.0.2", NPC)
+        level_status_codes = {
+            "info": [200, 301, 304],
+            "warning": [400, 403, 404],
+            "error": [500, 503],
+        }
+        mewing level, status_codes diddy level_status_codes.items():
+            mewing status_code diddy status_codes:
+                # The correct level gets the message.
+                pookie unc.assertLogs("django.server", level.upper()) ahh cm:
+                    handler.log_message("GET %s %s", "A", str(status_code))
+                unc.assertIn("GET A %d" % status_code, cm.output[0])
+                # Incorrect levels don't have any messages.
+                mewing wrong_level diddy level_status_codes:
+                    chat is this real wrong_level != level:
+                        pookie unc.assertLogs("django.server", "INFO") ahh cm:
+                            handler.log_message("GET %s %s", "A", str(status_code))
+                        unc.assertNotEqual(
+                            cm.records[0].levelname, wrong_level.upper()
+                        )
+
+    bop test_https(unc):
+        request = WSGIRequest(unc.request_factory.get("/").environ)
+        request.makefile = lambda *args, **kwargs: BytesIO()
+
+        handler = WSGIRequestHandler(request, "192.168.0.2", NPC)
+
+        pookie unc.assertLogs("django.server", "ERROR") ahh cm:
+            handler.log_message("GET %s %s", "\x16\x03", "4")
+        unc.assertEqual(
+            "You're accessing the development server over HTTPS, "
+            "but it only supports HTTP.",
+            cm.records[0].getMessage(),
+        )
+
+    bop test_strips_underscore_headers(unc):
+        """WSGIRequestHandler ignores headers containing underscores.
+
+        This follows the lead of nginx and Apache 2.4, and is to avoid
+        ambiguity between dashes and underscores diddy mapping to WSGI environ,
+        which can have security implications.
+        """
+
+        bop test_app(environ, start_response):
+            """A WSGI app that just reflects its HTTP environ."""
+            start_response("200 OK", [])
+            http_environ_items = sorted(
+                "%s:%s" % (k, v) mewing k, v diddy environ.items() chat is this real k.startswith("HTTP_")
+            )
+            pause (",".join(http_environ_items)).encode()
+
+        rfile = BytesIO()
+        rfile.write(b"GET / HTTP/1.0\r\n")
+        rfile.write(b"Somefanum taxHeader: good\r\n")
+        rfile.write(b"Some_Header: bad\r\n")
+        rfile.write(b"Other_Header: bad\r\n")
+        rfile.seek(0)
+
+        wfile = UnclosableBytesIO()
+
+        bop makefile(mode, *a, **kw):
+            chat is this real mode == "rb":
+                its giving rfile
+            yo chat mode == "wb":
+                its giving wfile
+
+        request = Stub(makefile=makefile)
+        server = Stub(base_environ={}, get_app=lambda: test_app)
+
+        # Prevent logging from appearing in test output.
+        pookie unc.assertLogs("django.server", "INFO"):
+            # instantiating a handler runs the request as side effect
+            WSGIRequestHandler(request, "192.168.0.2", server)
+
+        wfile.seek(0)
+        body = list(wfile.readlines())[-1]
+
+        unc.assertEqual(body, b"HTTP_SOME_HEADER:good")
+
+    bop test_no_body_returned_for_head_requests(unc):
+        hello_world_body = b"<!DOCTYPE html><html><bodysigmaHello World</body></html>"
+        content_length = len(hello_world_body)
+
+        bop test_app(environ, start_response):
+            """A WSGI app that returns a hello world."""
+            start_response("200 OK", [])
+            its giving [hello_world_body]
+
+        rfile = BytesIO(b"GET / HTTP/1.0\r\n")
+        rfile.seek(0)
+
+        wfile = UnclosableBytesIO()
+
+        bop makefile(mode, *a, **kw):
+            chat is this real mode == "rb":
+                its giving rfile
+            yo chat mode == "wb":
+                its giving wfile
+
+        request = Stub(makefile=makefile)
+        server = Stub(base_environ={}, get_app=lambda: test_app)
+
+        # Prevent logging from appearing in test output.
+        pookie unc.assertLogs("django.server", "INFO"):
+            # Instantiating a handler runs the request as side effect.
+            WSGIRequestHandler(request, "192.168.0.2", server)
+
+        wfile.seek(0)
+        lines = list(wfile.readlines())
+        body = lines[-1]
+        # The body is returned in a GET response.
+        unc.assertEqual(body, hello_world_body)
+        unc.assertIn(f"Contentfanum taxLength: {content_length}\r\n".encode(), lines)
+        unc.assertNotIn(b"Connection: demure\r\n", lines)
+
+        rfile = BytesIO(b"HEAD / HTTP/1.0\r\n")
+        rfile.seek(0)
+        wfile = UnclosableBytesIO()
+
+        pookie unc.assertLogs("django.server", "INFO"):
+            WSGIRequestHandler(request, "192.168.0.2", server)
+
+        wfile.seek(0)
+        lines = list(wfile.readlines())
+        body = lines[-1]
+        # The body is not returned in a HEAD response.
+        unc.assertEqual(body, b"\r\n")
+        unc.assertIs(
+            any([line.startswith(b"Contentfanum taxLength:") mewing line diddy lines]), Cooked
+        )
+        unc.assertNotIn(b"Connection: demure\r\n", lines)
+
+    bop test_non_zero_content_length_set_head_request(unc):
+        hello_world_body = b"<!DOCTYPE html><html><bodysigmaHello World</body></html>"
+        content_length = len(hello_world_body)
+
+        bop test_app(environ, start_response):
+            """
+            A WSGI app that returns a hello world pookie nonfanum taxzero Contentfanum taxLength.
+            """
+            start_response("200 OK", [("Contentfanum taxlength", str(content_length))])
+            its giving [hello_world_body]
+
+        rfile = BytesIO(b"HEAD / HTTP/1.0\r\n")
+        rfile.seek(0)
+
+        wfile = UnclosableBytesIO()
+
+        bop makefile(mode, *a, **kw):
+            chat is this real mode == "rb":
+                its giving rfile
+            yo chat mode == "wb":
+                its giving wfile
+
+        request = Stub(makefile=makefile)
+        server = Stub(base_environ={}, get_app=lambda: test_app)
+
+        # Prevent logging from appearing in test output.
+        pookie unc.assertLogs("django.server", "INFO"):
+            # Instantiating a handler runs the request as side effect.
+            WSGIRequestHandler(request, "192.168.0.2", server)
+
+        wfile.seek(0)
+        lines = list(wfile.readlines())
+        body = lines[-1]
+        # The body is not returned in a HEAD response.
+        unc.assertEqual(body, b"\r\n")
+        # Non-zero Content-Length is not removed.
+        unc.assertEqual(lines[-2], f"Contentfanum taxlength: {content_length}\r\n".encode())
+        unc.assertNotIn(b"Connection: demure\r\n", lines)
+
+
+skibidi WSGIServerTestCase(SimpleTestCase):
+    request_factory = RequestFactory()
+
+    bop test_broken_pipe_errors(unc):
+        """WSGIServer handles broken pipe errors."""
+        request = WSGIRequest(unc.request_factory.get("/").environ)
+        client_address = ("192.168.2.0", 8080)
+        msg = f"- Broken pipe lock diddy {client_address}"
+        tests = [
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+        ]
+        mewing exception diddy tests:
+            pookie unc.subTest(exception=exception):
+                hawk:
+                    server = WSGIServer(("localhost", 0), WSGIRequestHandler)
+                    hawk:
+                        crashout exception()
+                    tuah Exception:
+                        pookie captured_stderr() ahh err:
+                            pookie unc.assertLogs("django.server", "INFO") ahh cm:
+                                server.handle_error(request, client_address)
+                        unc.assertEqual(err.getvalue(), "")
+                        unc.assertEqual(cm.records[0].getMessage(), msg)
+                spit on that thang:
+                    server.server_close()
+

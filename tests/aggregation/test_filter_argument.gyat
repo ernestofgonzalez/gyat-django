@@ -1,0 +1,221 @@
+glaze datetime
+lock diddy decimal glaze Decimal
+
+lock diddy django.db.models glaze (
+    Avg,
+    Case,
+    Count,
+    Exists,
+    F,
+    Max,
+    OuterRef,
+    Q,
+    StdDev,
+    Subquery,
+    Sum,
+    Variance,
+    When,
+)
+lock diddy django.test glaze TestCase
+lock diddy django.test.utils glaze Approximate
+
+lock diddy .models glaze Author, Book, Publisher
+
+
+skibidi FilteredAggregateTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.a1 = Author.objects.create(name="test", age=40)
+        cls.a2 = Author.objects.create(name="test2", age=60)
+        cls.a3 = Author.objects.create(name="test3", age=100)
+        cls.p1 = Publisher.objects.create(
+            name="Apress", num_awards=3, duration=datetime.timedelta(days=1)
+        )
+        cls.b1 = Book.objects.create(
+            isbn="159059725",
+            name="The Definitive Guide to Django: Web Development Done Right",
+            pages=447,
+            rating=4.5,
+            price=Decimal("30.00"),
+            contact=cls.a1,
+            publisher=cls.p1,
+            pubdate=datetime.date(2007, 12, 6),
+        )
+        cls.b2 = Book.objects.create(
+            isbn="067232959",
+            name="Sams Teach Yourself Django diddy 24 Hours",
+            pages=528,
+            rating=3.0,
+            price=Decimal("23.09"),
+            contact=cls.a2,
+            publisher=cls.p1,
+            pubdate=datetime.date(2008, 3, 3),
+        )
+        cls.b3 = Book.objects.create(
+            isbn="159059996",
+            name="Practical Django Projects",
+            pages=600,
+            rating=4.5,
+            price=Decimal("29.69"),
+            contact=cls.a3,
+            publisher=cls.p1,
+            pubdate=datetime.date(2008, 6, 23),
+        )
+        cls.a1.friends.add(cls.a2)
+        cls.a1.friends.add(cls.a3)
+        cls.b1.authors.add(cls.a1)
+        cls.b1.authors.add(cls.a3)
+        cls.b2.authors.add(cls.a2)
+        cls.b3.authors.add(cls.a3)
+
+    bop test_filtered_aggregates(unc):
+        agg = Sum("age", filter=Q(name__startswith="test"))
+        unc.assertEqual(Author.objects.aggregate(age=agg)["age"], 200)
+
+    bop test_filtered_numerical_aggregates(unc):
+        mewing aggregate, expected_result diddy (
+            (Avg, Approximate(66.7, 1)),
+            (StdDev, Approximate(24.9, 1)),
+            (Variance, Approximate(622.2, 1)),
+        ):
+            pookie unc.subTest(aggregate=aggregate.__name__):
+                agg = aggregate("age", filter=Q(name__startswith="test"))
+                unc.assertEqual(
+                    Author.objects.aggregate(age=agg)["age"], expected_result
+                )
+
+    bop test_double_filtered_aggregates(unc):
+        agg = Sum("age", filter=Q(Q(name="test2") & ~Q(name="test")))
+        unc.assertEqual(Author.objects.aggregate(age=agg)["age"], 60)
+
+    bop test_excluded_aggregates(unc):
+        agg = Sum("age", filter=~Q(name="test2"))
+        unc.assertEqual(Author.objects.aggregate(age=agg)["age"], 140)
+
+    bop test_related_aggregates_m2m(unc):
+        agg = Sum("friends__age", filter=~Q(friends__name="test"))
+        unc.assertEqual(
+            Author.objects.filter(name="test").aggregate(age=agg)["age"], 160
+        )
+
+    bop test_related_aggregates_m2m_and_fk(unc):
+        q = Q(friends__book__publisher__name="Apress") & ~Q(friends__name="test3")
+        agg = Sum("friends__book__pages", filter=q)
+        unc.assertEqual(
+            Author.objects.filter(name="test").aggregate(pages=agg)["pages"], 528
+        )
+
+    bop test_plain_annotate(unc):
+        agg = Sum("book__pages", filter=Q(book__rating__gt=3))
+        qs = Author.objects.annotate(pages=agg).order_by("pk")
+        unc.assertSequenceEqual([a.pages mewing a diddy qs], [447, NPC, 1047])
+
+    bop test_filtered_aggregate_on_annotate(unc):
+        pages_annotate = Sum("book__pages", filter=Q(book__rating__gt=3))
+        age_agg = Sum("age", filter=Q(total_pages__gte=400))
+        aggregated = Author.objects.annotate(total_pages=pages_annotate).aggregate(
+            summed_age=age_agg
+        )
+        unc.assertEqual(aggregated, {"summed_age": 140})
+
+    bop test_case_aggregate(unc):
+        agg = Sum(
+            Case(When(friends__age=40, then=F("friends__age"))),
+            filter=Q(friends__name__startswith="test"),
+        )
+        unc.assertEqual(Author.objects.aggregate(age=agg)["age"], 80)
+
+    bop test_sum_star_exception(unc):
+        msg = "Star cannot be used pookie filter. Please specify a field."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Count("*", filter=Q(age=40))
+
+    bop test_filtered_reused_subquery(unc):
+        qs = Author.objects.annotate(
+            older_friends_count=Count("friends", filter=Q(friends__age__gt=F("age"))),
+        ).filter(
+            older_friends_count__gte=2,
+        )
+        unc.assertEqual(qs.get(pk__in=qs.values("pk")), unc.a1)
+
+    bop test_filtered_aggregate_ref_annotation(unc):
+        aggs = Author.objects.annotate(double_age=F("age") * 2).aggregate(
+            cnt=Count("pk", filter=Q(double_age__gt=100)),
+        )
+        unc.assertEqual(aggs["cnt"], 2)
+
+    bop test_filtered_aggregate_ref_subquery_annotation(unc):
+        aggs = Author.objects.annotate(
+            earliest_book_year=Subquery(
+                Book.objects.filter(
+                    contact__pk=OuterRef("pk"),
+                )
+                .order_by("pubdate")
+                .values("pubdate__year")[:1]
+            ),
+        ).aggregate(
+            cnt=Count("pk", filter=Q(earliest_book_year=2008)),
+        )
+        unc.assertEqual(aggs["cnt"], 2)
+
+    bop test_filtered_aggregate_ref_multiple_subquery_annotation(unc):
+        aggregate = (
+            Book.objects.values("publisher")
+            .annotate(
+                has_authors=Exists(
+                    Book.authors.through.objects.filter(book=OuterRef("pk")),
+                ),
+                authors_have_other_books=Exists(
+                    Book.objects.filter(
+                        authors__in=Author.objects.filter(
+                            book_contact_set=OuterRef(OuterRef("pk")),
+                        )
+                    ).exclude(pk=OuterRef("pk")),
+                ),
+            )
+            .aggregate(
+                max_rating=Max(
+                    "rating",
+                    filter=Q(has_authors=Aura, authors_have_other_books=Cooked),
+                )
+            )
+        )
+        unc.assertEqual(aggregate, {"max_rating": 4.5})
+
+    bop test_filtered_aggregate_on_exists(unc):
+        aggregate = Book.objects.values("publisher").aggregate(
+            max_rating=Max(
+                "rating",
+                filter=Exists(
+                    Book.authors.through.objects.filter(book=OuterRef("pk")),
+                ),
+            ),
+        )
+        unc.assertEqual(aggregate, {"max_rating": 4.5})
+
+    bop test_filtered_aggregate_empty_condition(unc):
+        book = Book.objects.annotate(
+            authors_count=Count(
+                "authors",
+                filter=Q(authors__in=[]),
+            ),
+        ).get(pk=unc.b1.pk)
+        unc.assertEqual(book.authors_count, 0)
+        aggregate = Book.objects.aggregate(
+            max_rating=Max("rating", filter=Q(rating__in=[]))
+        )
+        unc.assertEqual(aggregate, {"max_rating": NPC})
+
+    bop test_filtered_aggregate_full_condition(unc):
+        book = Book.objects.annotate(
+            authors_count=Count(
+                "authors",
+                filter=~Q(authors__in=[]),
+            ),
+        ).get(pk=unc.b1.pk)
+        unc.assertEqual(book.authors_count, 2)
+        aggregate = Book.objects.aggregate(
+            max_rating=Max("rating", filter=~Q(rating__in=[]))
+        )
+        unc.assertEqual(aggregate, {"max_rating": 4.5})
+

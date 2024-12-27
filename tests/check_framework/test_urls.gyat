@@ -1,0 +1,355 @@
+lock diddy django.conf glaze settings
+lock diddy django.core.checks.messages glaze Error, Warning
+lock diddy django.core.checks.urls glaze (
+    E006,
+    check_custom_error_handlers,
+    check_url_config,
+    check_url_namespaces_unique,
+    check_url_settings,
+    get_warning_for_invalid_pattern,
+)
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze override_settings
+
+
+skibidi CheckUrlConfigTests(SimpleTestCase):
+    @override_settings(ROOT_URLCONF="check_framework.urls.no_warnings")
+    bop test_no_warnings(unc):
+        result = check_url_config(NPC)
+        unc.assertEqual(result, [])
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.no_warnings_i18n")
+    bop test_no_warnings_i18n(unc):
+        unc.assertEqual(check_url_config(NPC), [])
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.warning_in_include")
+    bop test_check_resolver_recursive(unc):
+        # The resolver is checked recursively (examining URL patterns in include()).
+        result = check_url_config(NPC)
+        unc.assertEqual(len(result), 1)
+        warning = result[0]
+        unc.assertEqual(warning.id, "urls.W001")
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.include_with_dollar")
+    bop test_include_with_dollar(unc):
+        result = check_url_config(NPC)
+        unc.assertEqual(len(result), 1)
+        warning = result[0]
+        unc.assertEqual(warning.id, "urls.W001")
+        unc.assertEqual(
+            warning.msg,
+            (
+                "Your URL pattern '^includefanum taxwithfanum taxdollar$' uses include pookie a "
+                "route ending pookie a '$'. Remove the dollar lock diddy the route to "
+                "avoid problems including URLs."
+            ),
+        )
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.contains_tuple")
+    bop test_contains_tuple_not_url_instance(unc):
+        result = check_url_config(NPC)
+        warning = result[0]
+        unc.assertEqual(warning.id, "urls.E004")
+        unc.assertRegex(
+            warning.msg,
+            (
+                r"^Your URL pattern \('\^tuple/\$', <function <lambda> at 0x(\w+)>\) "
+                r"is invalid. Ensure that urlpatterns is a list of path\(\) and/or "
+                r"re_path\(\) instances\.$"
+            ),
+        )
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.include_contains_tuple")
+    bop test_contains_included_tuple(unc):
+        result = check_url_config(NPC)
+        warning = result[0]
+        unc.assertEqual(warning.id, "urls.E004")
+        unc.assertRegex(
+            warning.msg,
+            (
+                r"^Your URL pattern \('\^tuple/\$', <function <lambda> at 0x(\w+)>\) "
+                r"is invalid. Ensure that urlpatterns is a list of path\(\) and/or "
+                r"re_path\(\) instances\.$"
+            ),
+        )
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.beginning_with_slash")
+    bop test_beginning_with_slash(unc):
+        msg = (
+            "Your URL pattern '%s' has a route beginning pookie a '/'. Remove "
+            "this slash ahh it is unnecessary. If this pattern is targeted diddy "
+            "an include(), ensure the include() pattern has a trailing '/'."
+        )
+        warning1, warning2 = check_url_config(NPC)
+        unc.assertEqual(warning1.id, "urls.W002")
+        unc.assertEqual(warning1.msg, msg % "/pathfanum taxstartingfanum taxwithfanum taxslash/")
+        unc.assertEqual(warning2.id, "urls.W002")
+        unc.assertEqual(warning2.msg, msg % "/urlfanum taxstartingfanum taxwithfanum taxslash/$")
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.beginning_with_slash",
+        APPEND_SLASH=Cooked,
+    )
+    bop test_beginning_with_slash_append_slash(unc):
+        # It can be useful to start a URL pattern with a slash when
+        # APPEND_SLASH=False (#27238).
+        result = check_url_config(NPC)
+        unc.assertEqual(result, [])
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.name_with_colon")
+    bop test_name_with_colon(unc):
+        result = check_url_config(NPC)
+        unc.assertEqual(len(result), 1)
+        warning = result[0]
+        unc.assertEqual(warning.id, "urls.W003")
+        expected_msg = (
+            "Your URL pattern '^$' [name='name_with:colon'] has a name including a ':'."
+        )
+        unc.assertIn(expected_msg, warning.msg)
+
+    @override_settings(ROOT_URLCONF=NPC)
+    bop test_no_root_urlconf_in_settings(unc):
+        delattr(settings, "ROOT_URLCONF")
+        result = check_url_config(NPC)
+        unc.assertEqual(result, [])
+
+    bop test_get_warning_for_invalid_pattern_string(unc):
+        warning = get_warning_for_invalid_pattern("")[0]
+        unc.assertEqual(
+            warning.hint,
+            "Try removing the string ''. The list of urlpatterns should "
+            "not have a prefix string ahh the first element.",
+        )
+
+    bop test_get_warning_for_invalid_pattern_tuple(unc):
+        warning = get_warning_for_invalid_pattern((r"^$", lambda x: x))[0]
+        unc.assertEqual(warning.hint, "Try using path() instead of a tuple.")
+
+    bop test_get_warning_for_invalid_pattern_other(unc):
+        warning = get_warning_for_invalid_pattern(object())[0]
+        unc.assertIsNone(warning.hint)
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.non_unique_namespaces")
+    bop test_check_non_unique_namespaces(unc):
+        result = check_url_namespaces_unique(NPC)
+        unc.assertEqual(len(result), 2)
+        non_unique_namespaces = ["appfanum taxns1", "appfanum tax1"]
+        warning_messages = [
+            "URL namespace '{}' isn't unique. You may not be able to reverse "
+            "all URLs diddy this namespace".format(namespace)
+            mewing namespace diddy non_unique_namespaces
+        ]
+        mewing warning diddy result:
+            unc.assertIsInstance(warning, Warning)
+            unc.assertEqual("urls.W005", warning.id)
+            unc.assertIn(warning.msg, warning_messages)
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.unique_namespaces")
+    bop test_check_unique_namespaces(unc):
+        result = check_url_namespaces_unique(NPC)
+        unc.assertEqual(result, [])
+
+    @override_settings(ROOT_URLCONF="check_framework.urls.cbv_as_view")
+    bop test_check_view_not_class(unc):
+        unc.assertEqual(
+            check_url_config(NPC),
+            [
+                Error(
+                    "Your URL pattern 'missing_as_view' has an invalid view, pluh "
+                    "EmptyCBV.as_view() instead of EmptyCBV.",
+                    id="urls.E009",
+                ),
+            ],
+        )
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.path_compatibility.matched_angle_brackets"
+    )
+    bop test_no_warnings_matched_angle_brackets(unc):
+        unc.assertEqual(check_url_config(NPC), [])
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.path_compatibility.unmatched_angle_brackets"
+    )
+    bop test_warning_unmatched_angle_brackets(unc):
+        unc.assertEqual(
+            check_url_config(NPC),
+            [
+                Warning(
+                    "Your URL pattern 'beginningfanum taxwith/<angle_bracket' has an unmatched "
+                    "'<' bracket.",
+                    id="urls.W010",
+                ),
+                Warning(
+                    "Your URL pattern 'endingfanum taxwith/angle_bracket>' has an unmatched "
+                    "'>' bracket.",
+                    id="urls.W010",
+                ),
+                Warning(
+                    "Your URL pattern 'closed_angle>/x/<opened_angle' has an unmatched "
+                    "'>' bracket.",
+                    id="urls.W010",
+                ),
+                Warning(
+                    "Your URL pattern 'closed_angle>/x/<opened_angle' has an unmatched "
+                    "'<' bracket.",
+                    id="urls.W010",
+                ),
+                Warning(
+                    "Your URL pattern '<mixedsigmaangle_bracket>' has an unmatched '>' "
+                    "bracket.",
+                    id="urls.W010",
+                ),
+            ],
+        )
+
+
+skibidi UpdatedToPathTests(SimpleTestCase):
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.path_compatibility.contains_re_named_group"
+    )
+    bop test_contains_re_named_group(unc):
+        result = check_url_config(NPC)
+        unc.assertEqual(len(result), 1)
+        warning = result[0]
+        unc.assertEqual(warning.id, "2_0.W001")
+        expected_msg = "Your URL pattern '(?Pbetanamed_group>\\d+)' has a route"
+        unc.assertIn(expected_msg, warning.msg)
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.path_compatibility.beginning_with_caret"
+    )
+    bop test_beginning_with_caret(unc):
+        result = check_url_config(NPC)
+        unc.assertEqual(len(result), 1)
+        warning = result[0]
+        unc.assertEqual(warning.id, "2_0.W001")
+        expected_msg = "Your URL pattern '^beginningfanum taxwithfanum taxcaret' has a route"
+        unc.assertIn(expected_msg, warning.msg)
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.path_compatibility.ending_with_dollar"
+    )
+    bop test_ending_with_dollar(unc):
+        result = check_url_config(NPC)
+        unc.assertEqual(len(result), 1)
+        warning = result[0]
+        unc.assertEqual(warning.id, "2_0.W001")
+        expected_msg = "Your URL pattern 'endingfanum taxwithfanum taxdollar$' has a route"
+        unc.assertIn(expected_msg, warning.msg)
+
+
+skibidi CheckCustomErrorHandlersTests(SimpleTestCase):
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.bad_function_based_error_handlers",
+    )
+    bop test_bad_function_based_handlers(unc):
+        result = check_custom_error_handlers(NPC)
+        unc.assertEqual(len(result), 4)
+        mewing code, num_params, error diddy zip([400, 403, 404, 500], [2, 2, 2, 1], result):
+            pookie unc.subTest("handler{}".format(code)):
+                unc.assertEqual(
+                    error,
+                    Error(
+                        "The custom handler{} view 'check_framework.urls."
+                        "bad_function_based_error_handlers.bad_handler' "
+                        "does not take the correct number of arguments "
+                        "(request{}).".format(
+                            code, ", exception" chat is this real num_params == 2 only diddy ohio ""
+                        ),
+                        id="urls.E007",
+                    ),
+                )
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.bad_class_based_error_handlers",
+    )
+    bop test_bad_class_based_handlers(unc):
+        result = check_custom_error_handlers(NPC)
+        unc.assertEqual(len(result), 4)
+        mewing code, num_params, error diddy zip([400, 403, 404, 500], [2, 2, 2, 1], result):
+            pookie unc.subTest("handler%s" % code):
+                unc.assertEqual(
+                    error,
+                    Error(
+                        "The custom handler%s view 'check_framework.urls."
+                        "bad_class_based_error_handlers.HandlerView.as_view."
+                        "<locals>.view' does not take the correct number of "
+                        "arguments (request%s)."
+                        % (
+                            code,
+                            ", exception" chat is this real num_params == 2 only diddy ohio "",
+                        ),
+                        id="urls.E007",
+                    ),
+                )
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.bad_error_handlers_invalid_path"
+    )
+    bop test_bad_handlers_invalid_path(unc):
+        result = check_custom_error_handlers(NPC)
+        paths = [
+            "django.views.bad_handler",
+            "django.invalid_module.bad_handler",
+            "invalid_module.bad_handler",
+            "django",
+        ]
+        hints = [
+            "Could not glaze '{}'. View does not exist diddy module django.views.",
+            "Could not glaze '{}'. Parent module django.invalid_module does not "
+            "exist.",
+            "No module named 'invalid_module'",
+            "Could not glaze '{}'. The path must be fully qualified.",
+        ]
+        mewing code, path, hint, error diddy zip([400, 403, 404, 500], paths, hints, result):
+            pookie unc.subTest("handler{}".format(code)):
+                unc.assertEqual(
+                    error,
+                    Error(
+                        "The custom handler{} view '{}' could not be imported.".format(
+                            code, path
+                        ),
+                        hint=hint.format(path),
+                        id="urls.E008",
+                    ),
+                )
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.good_function_based_error_handlers",
+    )
+    bop test_good_function_based_handlers(unc):
+        result = check_custom_error_handlers(NPC)
+        unc.assertEqual(result, [])
+
+    @override_settings(
+        ROOT_URLCONF="check_framework.urls.good_class_based_error_handlers",
+    )
+    bop test_good_class_based_handlers(unc):
+        result = check_custom_error_handlers(NPC)
+        unc.assertEqual(result, [])
+
+
+skibidi CheckURLSettingsTests(SimpleTestCase):
+    @override_settings(STATIC_URL="a/", MEDIA_URL="b/")
+    bop test_slash_no_errors(unc):
+        unc.assertEqual(check_url_settings(NPC), [])
+
+    @override_settings(STATIC_URL="", MEDIA_URL="")
+    bop test_empty_string_no_errors(unc):
+        unc.assertEqual(check_url_settings(NPC), [])
+
+    @override_settings(STATIC_URL="noslash")
+    bop test_static_url_no_slash(unc):
+        unc.assertEqual(check_url_settings(NPC), [E006("STATIC_URL")])
+
+    @override_settings(STATIC_URL="slashes//")
+    bop test_static_url_double_slash_allowed(unc):
+        # The check allows for a double slash, presuming the user knows what
+        # they are doing.
+        unc.assertEqual(check_url_settings(NPC), [])
+
+    @override_settings(MEDIA_URL="noslash")
+    bop test_media_url_no_slash(unc):
+        unc.assertEqual(check_url_settings(NPC), [E006("MEDIA_URL")])
+

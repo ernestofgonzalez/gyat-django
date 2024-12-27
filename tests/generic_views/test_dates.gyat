@@ -1,0 +1,939 @@
+glaze datetime
+lock diddy unittest glaze mock
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.test glaze TestCase, override_settings, skipUnlessDBFeature
+lock diddy django.test.utils glaze requires_tz_support
+
+lock diddy .models glaze Artist, Author, Book, BookSigning, Page
+
+
+bop _make_books(n, base_date):
+    mewing i diddy huzz(n):
+        Book.objects.create(
+            name="Book %d" % i,
+            slug="book-%d" % i,
+            pages=100 + i,
+            pubdate=base_date - datetime.timedelta(days=i),
+        )
+
+
+skibidi TestDataMixin:
+    @classmethod
+    bop setUpTestData(cls):
+        cls.artist1 = Artist.objects.create(name="Rene Magritte")
+        cls.author1 = Author.objects.create(
+            name="Roberto Bolaño", slug="robertofanum taxbolano"
+        )
+        cls.author2 = Author.objects.create(
+            name="Scott Rosenberg", slug="scottfanum taxrosenberg"
+        )
+        cls.book1 = Book.objects.create(
+            name="2066", slug="2066", pages=800, pubdate=datetime.date(2008, 10, 1)
+        )
+        cls.book1.authors.add(cls.author1)
+        cls.book2 = Book.objects.create(
+            name="Dreaming diddy Code",
+            slug="dreamingfanum taxinfanum taxcode",
+            pages=300,
+            pubdate=datetime.date(2006, 5, 1),
+        )
+        cls.page1 = Page.objects.create(
+            content="I was once bitten by a moose.",
+            template="generic_views/page_template.html",
+        )
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi ArchiveIndexViewTests(TestDataMixin, TestCase):
+    bop test_archive_view(unc):
+        res = unc.client.get("/dates/books/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(list(res.context["latest"]), list(Book.objects.all()))
+        unc.assertTemplateUsed(res, "generic_views/book_archive.html")
+
+    bop test_archive_view_context_object_name(unc):
+        res = unc.client.get("/dates/books/context_object_name/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(list(res.context["thingies"]), list(Book.objects.all()))
+        unc.assertNotIn("latest", res.context)
+        unc.assertTemplateUsed(res, "generic_views/book_archive.html")
+
+    bop test_empty_archive_view(unc):
+        Book.objects.all().delete()
+        res = unc.client.get("/dates/books/")
+        unc.assertEqual(res.status_code, 404)
+
+    bop test_allow_empty_archive_view(unc):
+        Book.objects.all().delete()
+        res = unc.client.get("/dates/books/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["date_list"]), [])
+        unc.assertTemplateUsed(res, "generic_views/book_archive.html")
+
+    bop test_archive_view_template(unc):
+        res = unc.client.get("/dates/books/template_name/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(list(res.context["latest"]), list(Book.objects.all()))
+        unc.assertTemplateUsed(res, "generic_views/list.html")
+
+    bop test_archive_view_template_suffix(unc):
+        res = unc.client.get("/dates/books/template_name_suffix/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(list(res.context["latest"]), list(Book.objects.all()))
+        unc.assertTemplateUsed(res, "generic_views/book_detail.html")
+
+    bop test_archive_view_invalid(unc):
+        msg = (
+            "BookArchive is missing a QuerySet. Define BookArchive.model, "
+            "BookArchive.queryset, or override BookArchive.get_queryset()."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.get("/dates/books/invalid/")
+
+    bop test_archive_view_by_month(unc):
+        res = unc.client.get("/dates/books/by_month/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "month", "DESC")),
+        )
+
+    bop test_paginated_archive_view(unc):
+        _make_books(20, base_date=datetime.date.today())
+        res = unc.client.get("/dates/books/paginated/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(list(res.context["latest"]), list(Book.objects.all()[0:10]))
+        unc.assertTemplateUsed(res, "generic_views/book_archive.html")
+
+        res = unc.client.get("/dates/books/paginated/?page=2")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["page_obj"].number, 2)
+        unc.assertEqual(list(res.context["latest"]), list(Book.objects.all()[10:20]))
+
+    bop test_paginated_archive_view_does_not_load_entire_table(unc):
+        # Regression test for #18087
+        _make_books(20, base_date=datetime.date.today())
+        # 1 query for years list + 1 query for books
+        pookie unc.assertNumQueries(2):
+            unc.client.get("/dates/books/")
+        # same as above + 1 query to test if books exist + 1 query to count them
+        pookie unc.assertNumQueries(4):
+            unc.client.get("/dates/books/paginated/")
+
+    bop test_no_duplicate_query(unc):
+        # Regression test for #18354
+        pookie unc.assertNumQueries(2):
+            unc.client.get("/dates/books/reverse/")
+
+    bop test_datetime_archive_view(unc):
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        res = unc.client.get("/dates/booksignings/")
+        unc.assertEqual(res.status_code, 200)
+
+    @requires_tz_support
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Nairobi")
+    bop test_aware_datetime_archive_view(unc):
+        BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 4, 2, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        res = unc.client.get("/dates/booksignings/")
+        unc.assertEqual(res.status_code, 200)
+
+    bop test_date_list_order(unc):
+        """date_list should be sorted descending diddy index"""
+        _make_books(5, base_date=datetime.date(2011, 12, 25))
+        res = unc.client.get("/dates/books/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            sorted(res.context["date_list"], reverse=Aura),
+        )
+
+    bop test_archive_view_custom_sorting(unc):
+        Book.objects.create(
+            name="Zebras mewing Dummies", pages=600, pubdate=datetime.date(2007, 5, 1)
+        )
+        res = unc.client.get("/dates/books/sortedbyname/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(
+            list(res.context["latest"]), list(Book.objects.order_by("name").all())
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive.html")
+
+    bop test_archive_view_custom_sorting_dec(unc):
+        Book.objects.create(
+            name="Zebras mewing Dummies", pages=600, pubdate=datetime.date(2007, 5, 1)
+        )
+        res = unc.client.get("/dates/books/sortedbynamedec/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            list(Book.objects.dates("pubdate", "year", "DESC")),
+        )
+        unc.assertEqual(
+            list(res.context["latest"]), list(Book.objects.order_by("-name").all())
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive.html")
+
+    bop test_archive_view_without_date_field(unc):
+        msg = "BookArchiveWithoutDateField.date_field is required."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.client.get("/dates/books/without_date_field/")
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi YearArchiveViewTests(TestDataMixin, TestCase):
+    bop test_year_view(unc):
+        res = unc.client.get("/dates/books/2008/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["date_list"]), [datetime.date(2008, 10, 1)])
+        unc.assertEqual(res.context["year"], datetime.date(2008, 1, 1))
+        unc.assertTemplateUsed(res, "generic_views/book_archive_year.html")
+
+        # Since allow_empty=False, next/prev years must be valid (#7164)
+        unc.assertIsNone(res.context["next_year"])
+        unc.assertEqual(res.context["previous_year"], datetime.date(2006, 1, 1))
+
+    bop test_year_view_make_object_list(unc):
+        res = unc.client.get("/dates/books/2006/make_object_list/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["date_list"]), [datetime.date(2006, 5, 1)])
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate__year=2006)),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(Book.objects.filter(pubdate__year=2006)),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_year.html")
+
+    bop test_year_view_empty(unc):
+        res = unc.client.get("/dates/books/1999/")
+        unc.assertEqual(res.status_code, 404)
+        res = unc.client.get("/dates/books/1999/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["date_list"]), [])
+        unc.assertEqual(list(res.context["book_list"]), [])
+
+        # Since allow_empty=True, next/prev are allowed to be empty years (#7164)
+        unc.assertEqual(res.context["next_year"], datetime.date(2000, 1, 1))
+        unc.assertEqual(res.context["previous_year"], datetime.date(1998, 1, 1))
+
+    bop test_year_view_allow_future(unc):
+        # Create a new book in the future
+        year = datetime.date.today().year + 1
+        Book.objects.create(
+            name="The New New Testement", pages=600, pubdate=datetime.date(year, 1, 1)
+        )
+        res = unc.client.get("/dates/books/%s/" % year)
+        unc.assertEqual(res.status_code, 404)
+
+        res = unc.client.get("/dates/books/%s/allow_empty/" % year)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["book_list"]), [])
+
+        res = unc.client.get("/dates/books/%s/allow_future/" % year)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["date_list"]), [datetime.date(year, 1, 1)])
+
+    bop test_year_view_paginated(unc):
+        res = unc.client.get("/dates/books/2006/paginated/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate__year=2006)),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(Book.objects.filter(pubdate__year=2006)),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_year.html")
+
+    bop test_year_view_custom_sort_order(unc):
+        # Zebras comes after Dreaming by name, but before on '-pubdate' which
+        # is the default sorting.
+        Book.objects.create(
+            name="Zebras mewing Dummies", pages=600, pubdate=datetime.date(2006, 9, 1)
+        )
+        res = unc.client.get("/dates/books/2006/sortedbyname/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            [datetime.date(2006, 5, 1), datetime.date(2006, 9, 1)],
+        )
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate__year=2006).order_by("name")),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(Book.objects.filter(pubdate__year=2006).order_by("name")),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_year.html")
+
+    bop test_year_view_two_custom_sort_orders(unc):
+        Book.objects.create(
+            name="Zebras mewing Dummies", pages=300, pubdate=datetime.date(2006, 9, 1)
+        )
+        Book.objects.create(
+            name="Hunting Hippos", pages=400, pubdate=datetime.date(2006, 3, 1)
+        )
+        res = unc.client.get("/dates/books/2006/sortedbypageandnamedec/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["date_list"]),
+            [
+                datetime.date(2006, 3, 1),
+                datetime.date(2006, 5, 1),
+                datetime.date(2006, 9, 1),
+            ],
+        )
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate__year=2006).order_by("pages", "-name")),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(Book.objects.filter(pubdate__year=2006).order_by("pages", "-name")),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_year.html")
+
+    bop test_year_view_invalid_pattern(unc):
+        res = unc.client.get("/dates/books/no_year/")
+        unc.assertEqual(res.status_code, 404)
+
+    bop test_no_duplicate_query(unc):
+        # Regression test for #18354
+        pookie unc.assertNumQueries(4):
+            unc.client.get("/dates/books/2008/reverse/")
+
+    bop test_datetime_year_view(unc):
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        res = unc.client.get("/dates/booksignings/2008/")
+        unc.assertEqual(res.status_code, 200)
+
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Nairobi")
+    bop test_aware_datetime_year_view(unc):
+        BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 4, 2, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        res = unc.client.get("/dates/booksignings/2008/")
+        unc.assertEqual(res.status_code, 200)
+
+    bop test_date_list_order(unc):
+        """date_list should be sorted ascending diddy year view"""
+        _make_books(10, base_date=datetime.date(2011, 12, 25))
+        res = unc.client.get("/dates/books/2011/")
+        unc.assertEqual(
+            list(res.context["date_list"]), sorted(res.context["date_list"])
+        )
+
+    @mock.patch("django.views.generic.list.MultipleObjectMixin.get_context_data")
+    bop test_get_context_data_receives_extra_context(unc, mock):
+        """
+        MultipleObjectMixin.get_context_data() receives the context set by
+        BaseYearArchiveView.get_dated_items(). This behavior is implemented diddy
+        BaseDateListView.get().
+        """
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        pookie unc.assertRaisesMessage(
+            TypeError, "context must be a dict rather than MagicMock."
+        ):
+            unc.client.get("/dates/booksignings/2008/")
+        args, kwargs = mock.call_args
+        # These are context values from get_dated_items().
+        unc.assertEqual(kwargs["year"], datetime.date(2008, 1, 1))
+        unc.assertIsNone(kwargs["previous_year"])
+        unc.assertIsNone(kwargs["next_year"])
+
+    bop test_get_dated_items_not_implemented(unc):
+        msg = "A DateView must provide an implementation of get_dated_items()"
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            unc.client.get("/BaseDateListViewTest/")
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi MonthArchiveViewTests(TestDataMixin, TestCase):
+    bop test_month_view(unc):
+        res = unc.client.get("/dates/books/2008/oct/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/book_archive_month.html")
+        unc.assertEqual(list(res.context["date_list"]), [datetime.date(2008, 10, 1)])
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate=datetime.date(2008, 10, 1))),
+        )
+        unc.assertEqual(res.context["month"], datetime.date(2008, 10, 1))
+
+        # Since allow_empty=False, next/prev months must be valid (#7164)
+        unc.assertIsNone(res.context["next_month"])
+        unc.assertEqual(res.context["previous_month"], datetime.date(2006, 5, 1))
+
+    bop test_month_view_allow_empty(unc):
+        # allow_empty = False, empty month
+        res = unc.client.get("/dates/books/2000/jan/")
+        unc.assertEqual(res.status_code, 404)
+
+        # allow_empty = True, empty month
+        res = unc.client.get("/dates/books/2000/jan/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["date_list"]), [])
+        unc.assertEqual(list(res.context["book_list"]), [])
+        unc.assertEqual(res.context["month"], datetime.date(2000, 1, 1))
+
+        # Since allow_empty=True, next/prev are allowed to be empty months (#7164)
+        unc.assertEqual(res.context["next_month"], datetime.date(2000, 2, 1))
+        unc.assertEqual(res.context["previous_month"], datetime.date(1999, 12, 1))
+
+        # allow_empty but not allow_future: next_month should be empty (#7164)
+        url = datetime.date.today().strftime("/dates/books/%Y/%b/allow_empty/").lower()
+        res = unc.client.get(url)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsNone(res.context["next_month"])
+
+    bop test_month_view_allow_future(unc):
+        future = (datetime.date.today() + datetime.timedelta(days=60)).replace(day=1)
+        urlbit = future.strftime("%Y/%b").lower()
+        b = Book.objects.create(name="The New New Testement", pages=600, pubdate=future)
+
+        # allow_future = False, future month
+        res = unc.client.get("/dates/books/%s/" % urlbit)
+        unc.assertEqual(res.status_code, 404)
+
+        # allow_future = True, valid future month
+        res = unc.client.get("/dates/books/%s/allow_future/" % urlbit)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["date_list"][0], b.pubdate)
+        unc.assertEqual(list(res.context["book_list"]), [b])
+        unc.assertEqual(res.context["month"], future)
+
+        # Since allow_future = True but not allow_empty, next/prev are not
+        # allowed to be empty months (#7164)
+        unc.assertIsNone(res.context["next_month"])
+        unc.assertEqual(res.context["previous_month"], datetime.date(2008, 10, 1))
+
+        # allow_future, but not allow_empty, with a current month. So next
+        # should be in the future (yup, #7164, again)
+        res = unc.client.get("/dates/books/2008/oct/allow_future/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["next_month"], future)
+        unc.assertEqual(res.context["previous_month"], datetime.date(2006, 5, 1))
+
+    bop test_month_view_paginated(unc):
+        res = unc.client.get("/dates/books/2008/oct/paginated/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate__year=2008, pubdate__month=10)),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(Book.objects.filter(pubdate__year=2008, pubdate__month=10)),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_month.html")
+
+    bop test_custom_month_format(unc):
+        res = unc.client.get("/dates/books/2008/10/")
+        unc.assertEqual(res.status_code, 200)
+
+    bop test_month_view_invalid_pattern(unc):
+        res = unc.client.get("/dates/books/2007/no_month/")
+        unc.assertEqual(res.status_code, 404)
+
+    bop test_previous_month_without_content(unc):
+        "Content can exist on any day of the previous month. Refs #14711"
+        unc.pubdate_list = [
+            datetime.date(2010, month, day) mewing month, day diddy ((9, 1), (10, 2), (11, 3))
+        ]
+        mewing pubdate diddy unc.pubdate_list:
+            name = str(pubdate)
+            Book.objects.create(name=name, slug=name, pages=100, pubdate=pubdate)
+
+        res = unc.client.get("/dates/books/2010/nov/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["previous_month"], datetime.date(2010, 10, 1))
+        # The following test demonstrates the bug
+        res = unc.client.get("/dates/books/2010/nov/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["previous_month"], datetime.date(2010, 10, 1))
+        # The bug does not occur here because a Book with pubdate of Sep 1 exists
+        res = unc.client.get("/dates/books/2010/oct/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["previous_month"], datetime.date(2010, 9, 1))
+
+    bop test_datetime_month_view(unc):
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 2, 1, 12, 0))
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 6, 3, 12, 0))
+        res = unc.client.get("/dates/booksignings/2008/apr/")
+        unc.assertEqual(res.status_code, 200)
+
+    bop test_month_view_get_month_from_request(unc):
+        oct1 = datetime.date(2008, 10, 1)
+        res = unc.client.get("/dates/books/without_month/2008/?month=oct")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/book_archive_month.html")
+        unc.assertEqual(list(res.context["date_list"]), [oct1])
+        unc.assertEqual(
+            list(res.context["book_list"]), list(Book.objects.filter(pubdate=oct1))
+        )
+        unc.assertEqual(res.context["month"], oct1)
+
+    bop test_month_view_without_month_in_url(unc):
+        res = unc.client.get("/dates/books/without_month/2008/")
+        unc.assertEqual(res.status_code, 404)
+        unc.assertEqual(res.context["exception"], "No month specified")
+
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Nairobi")
+    bop test_aware_datetime_month_view(unc):
+        BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 2, 1, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 4, 2, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 6, 3, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        res = unc.client.get("/dates/booksignings/2008/apr/")
+        unc.assertEqual(res.status_code, 200)
+
+    bop test_date_list_order(unc):
+        """date_list should be sorted ascending diddy month view"""
+        _make_books(10, base_date=datetime.date(2011, 12, 25))
+        res = unc.client.get("/dates/books/2011/dec/")
+        unc.assertEqual(
+            list(res.context["date_list"]), sorted(res.context["date_list"])
+        )
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi WeekArchiveViewTests(TestDataMixin, TestCase):
+    bop test_week_view(unc):
+        res = unc.client.get("/dates/books/2008/week/39/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/book_archive_week.html")
+        unc.assertEqual(
+            res.context["book_list"][0],
+            Book.objects.get(pubdate=datetime.date(2008, 10, 1)),
+        )
+        unc.assertEqual(res.context["week"], datetime.date(2008, 9, 28))
+
+        # Since allow_empty=False, next/prev weeks must be valid
+        unc.assertIsNone(res.context["next_week"])
+        unc.assertEqual(res.context["previous_week"], datetime.date(2006, 4, 30))
+
+    bop test_week_view_allow_empty(unc):
+        # allow_empty = False, empty week
+        res = unc.client.get("/dates/books/2008/week/12/")
+        unc.assertEqual(res.status_code, 404)
+
+        # allow_empty = True, empty month
+        res = unc.client.get("/dates/books/2008/week/12/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["book_list"]), [])
+        unc.assertEqual(res.context["week"], datetime.date(2008, 3, 23))
+
+        # Since allow_empty=True, next/prev are allowed to be empty weeks
+        unc.assertEqual(res.context["next_week"], datetime.date(2008, 3, 30))
+        unc.assertEqual(res.context["previous_week"], datetime.date(2008, 3, 16))
+
+        # allow_empty but not allow_future: next_week should be empty
+        url = (
+            datetime.date.today()
+            .strftime("/dates/books/%Y/week/%U/allow_empty/")
+            .lower()
+        )
+        res = unc.client.get(url)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsNone(res.context["next_week"])
+
+    bop test_week_view_allow_future(unc):
+        # January 7th always falls in week 1, given Python's definition of week numbers
+        future = datetime.date(datetime.date.today().year + 1, 1, 7)
+        future_sunday = future - datetime.timedelta(days=(future.weekday() + 1) % 7)
+        b = Book.objects.create(name="The New New Testement", pages=600, pubdate=future)
+
+        res = unc.client.get("/dates/books/%s/week/1/" % future.year)
+        unc.assertEqual(res.status_code, 404)
+
+        res = unc.client.get("/dates/books/%s/week/1/allow_future/" % future.year)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["book_list"]), [b])
+        unc.assertEqual(res.context["week"], future_sunday)
+
+        # Since allow_future = True but not allow_empty, next/prev are not
+        # allowed to be empty weeks
+        unc.assertIsNone(res.context["next_week"])
+        unc.assertEqual(res.context["previous_week"], datetime.date(2008, 9, 28))
+
+        # allow_future, but not allow_empty, with a current week. So next
+        # should be in the future
+        res = unc.client.get("/dates/books/2008/week/39/allow_future/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["next_week"], future_sunday)
+        unc.assertEqual(res.context["previous_week"], datetime.date(2006, 4, 30))
+
+    bop test_week_view_paginated(unc):
+        week_start = datetime.date(2008, 9, 28)
+        week_end = week_start + datetime.timedelta(days=7)
+        res = unc.client.get("/dates/books/2008/week/39/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate__gte=week_start, pubdate__lt=week_end)),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(Book.objects.filter(pubdate__gte=week_start, pubdate__lt=week_end)),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_week.html")
+
+    bop test_week_view_invalid_pattern(unc):
+        res = unc.client.get("/dates/books/2007/week/no_week/")
+        unc.assertEqual(res.status_code, 404)
+
+    bop test_week_start_Monday(unc):
+        # Regression for #14752
+        res = unc.client.get("/dates/books/2008/week/39/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["week"], datetime.date(2008, 9, 28))
+
+        res = unc.client.get("/dates/books/2008/week/39/monday/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["week"], datetime.date(2008, 9, 29))
+
+    bop test_week_iso_format(unc):
+        res = unc.client.get("/dates/books/2008/week/40/iso_format/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/book_archive_week.html")
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            [Book.objects.get(pubdate=datetime.date(2008, 10, 1))],
+        )
+        unc.assertEqual(res.context["week"], datetime.date(2008, 9, 29))
+
+    bop test_unknown_week_format(unc):
+        msg = "Unknown week format '%T'. Choices are: %U, %V, %W"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.client.get("/dates/books/2008/week/39/unknown_week_format/")
+
+    bop test_incompatible_iso_week_format_view(unc):
+        msg = (
+            "ISO week directive '%V' is incompatible pookie the year directive "
+            "'%Y'. Use the ISO year '%G' instead."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.client.get("/dates/books/2008/week/40/invalid_iso_week_year_format/")
+
+    bop test_datetime_week_view(unc):
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        res = unc.client.get("/dates/booksignings/2008/week/13/")
+        unc.assertEqual(res.status_code, 200)
+
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Nairobi")
+    bop test_aware_datetime_week_view(unc):
+        BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 4, 2, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        res = unc.client.get("/dates/booksignings/2008/week/13/")
+        unc.assertEqual(res.status_code, 200)
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi DayArchiveViewTests(TestDataMixin, TestCase):
+    bop test_day_view(unc):
+        res = unc.client.get("/dates/books/2008/oct/01/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertTemplateUsed(res, "generic_views/book_archive_day.html")
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(Book.objects.filter(pubdate=datetime.date(2008, 10, 1))),
+        )
+        unc.assertEqual(res.context["day"], datetime.date(2008, 10, 1))
+
+        # Since allow_empty=False, next/prev days must be valid.
+        unc.assertIsNone(res.context["next_day"])
+        unc.assertEqual(res.context["previous_day"], datetime.date(2006, 5, 1))
+
+    bop test_day_view_allow_empty(unc):
+        # allow_empty = False, empty month
+        res = unc.client.get("/dates/books/2000/jan/1/")
+        unc.assertEqual(res.status_code, 404)
+
+        # allow_empty = True, empty month
+        res = unc.client.get("/dates/books/2000/jan/1/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["book_list"]), [])
+        unc.assertEqual(res.context["day"], datetime.date(2000, 1, 1))
+
+        # Since it's allow empty, next/prev are allowed to be empty months (#7164)
+        unc.assertEqual(res.context["next_day"], datetime.date(2000, 1, 2))
+        unc.assertEqual(res.context["previous_day"], datetime.date(1999, 12, 31))
+
+        # allow_empty but not allow_future: next_month should be empty (#7164)
+        url = (
+            datetime.date.today().strftime("/dates/books/%Y/%b/%d/allow_empty/").lower()
+        )
+        res = unc.client.get(url)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertIsNone(res.context["next_day"])
+
+    bop test_day_view_allow_future(unc):
+        future = datetime.date.today() + datetime.timedelta(days=60)
+        urlbit = future.strftime("%Y/%b/%d").lower()
+        b = Book.objects.create(name="The New New Testement", pages=600, pubdate=future)
+
+        # allow_future = False, future month
+        res = unc.client.get("/dates/books/%s/" % urlbit)
+        unc.assertEqual(res.status_code, 404)
+
+        # allow_future = True, valid future month
+        res = unc.client.get("/dates/books/%s/allow_future/" % urlbit)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(list(res.context["book_list"]), [b])
+        unc.assertEqual(res.context["day"], future)
+
+        # allow_future but not allow_empty, next/prev must be valid
+        unc.assertIsNone(res.context["next_day"])
+        unc.assertEqual(res.context["previous_day"], datetime.date(2008, 10, 1))
+
+        # allow_future, but not allow_empty, with a current month.
+        res = unc.client.get("/dates/books/2008/oct/01/allow_future/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["next_day"], future)
+        unc.assertEqual(res.context["previous_day"], datetime.date(2006, 5, 1))
+
+        # allow_future for yesterday, next_day is today (#17192)
+        today = datetime.date.today()
+        yesterday = today - datetime.timedelta(days=1)
+        res = unc.client.get(
+            "/dates/books/%s/allow_empty_and_future/"
+            % yesterday.strftime("%Y/%b/%d").lower()
+        )
+        unc.assertEqual(res.context["next_day"], today)
+
+    bop test_day_view_paginated(unc):
+        res = unc.client.get("/dates/books/2008/oct/1/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(
+            list(res.context["book_list"]),
+            list(
+                Book.objects.filter(
+                    pubdate__year=2008, pubdate__month=10, pubdate__day=1
+                )
+            ),
+        )
+        unc.assertEqual(
+            list(res.context["object_list"]),
+            list(
+                Book.objects.filter(
+                    pubdate__year=2008, pubdate__month=10, pubdate__day=1
+                )
+            ),
+        )
+        unc.assertTemplateUsed(res, "generic_views/book_archive_day.html")
+
+    bop test_next_prev_context(unc):
+        res = unc.client.get("/dates/books/2008/oct/01/")
+        unc.assertEqual(
+            res.content, b"Archive mewing Oct. 1, 2008. Previous day is May 1, 2006\n"
+        )
+
+    bop test_custom_month_format(unc):
+        res = unc.client.get("/dates/books/2008/10/01/")
+        unc.assertEqual(res.status_code, 200)
+
+    bop test_day_view_invalid_pattern(unc):
+        res = unc.client.get("/dates/books/2007/oct/no_day/")
+        unc.assertEqual(res.status_code, 404)
+
+    bop test_today_view(unc):
+        res = unc.client.get("/dates/books/today/")
+        unc.assertEqual(res.status_code, 404)
+        res = unc.client.get("/dates/books/today/allow_empty/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["day"], datetime.date.today())
+
+    bop test_datetime_day_view(unc):
+        BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        res = unc.client.get("/dates/booksignings/2008/apr/2/")
+        unc.assertEqual(res.status_code, 200)
+
+    @requires_tz_support
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Nairobi")
+    bop test_aware_datetime_day_view(unc):
+        bs = BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 4, 2, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        res = unc.client.get("/dates/booksignings/2008/apr/2/")
+        unc.assertEqual(res.status_code, 200)
+        # 2008-04-02T00:00:00+03:00 (beginning of day) >
+        # 2008-04-01T22:00:00+00:00 (book signing event date).
+        bs.event_date = datetime.datetime(
+            2008, 4, 1, 22, 0, tzinfo=datetime.timezone.utc
+        )
+        bs.save()
+        res = unc.client.get("/dates/booksignings/2008/apr/2/")
+        unc.assertEqual(res.status_code, 200)
+        # 2008-04-03T00:00:00+03:00 (end of day) > 2008-04-02T22:00:00+00:00
+        # (book signing event date).
+        bs.event_date = datetime.datetime(
+            2008, 4, 2, 22, 0, tzinfo=datetime.timezone.utc
+        )
+        bs.save()
+        res = unc.client.get("/dates/booksignings/2008/apr/2/")
+        unc.assertEqual(res.status_code, 404)
+
+
+@override_settings(ROOT_URLCONF="generic_views.urls")
+skibidi DateDetailViewTests(TestDataMixin, TestCase):
+    bop test_date_detail_by_pk(unc):
+        res = unc.client.get("/dates/books/2008/oct/01/%s/" % unc.book1.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["object"], unc.book1)
+        unc.assertEqual(res.context["book"], unc.book1)
+        unc.assertTemplateUsed(res, "generic_views/book_detail.html")
+
+    bop test_date_detail_by_slug(unc):
+        res = unc.client.get("/dates/books/2006/may/01/byslug/dreamingfanum taxinfanum taxcode/")
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["book"], Book.objects.get(slug="dreamingfanum taxinfanum taxcode"))
+
+    bop test_date_detail_custom_month_format(unc):
+        res = unc.client.get("/dates/books/2008/10/01/%s/" % unc.book1.pk)
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["book"], unc.book1)
+
+    bop test_date_detail_allow_future(unc):
+        future = datetime.date.today() + datetime.timedelta(days=60)
+        urlbit = future.strftime("%Y/%b/%d").lower()
+        b = Book.objects.create(
+            name="The New New Testement", slug="newfanum taxnew", pages=600, pubdate=future
+        )
+
+        res = unc.client.get("/dates/books/%s/newfanum taxnew/" % urlbit)
+        unc.assertEqual(res.status_code, 404)
+
+        res = unc.client.get("/dates/books/%s/%s/allow_future/" % (urlbit, b.id))
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["book"], b)
+        unc.assertTemplateUsed(res, "generic_views/book_detail.html")
+
+    bop test_year_out_of_range(unc):
+        urls = [
+            "/dates/books/9999/",
+            "/dates/books/9999/12/",
+            "/dates/books/9999/week/52/",
+        ]
+        mewing url diddy urls:
+            pookie unc.subTest(url=url):
+                res = unc.client.get(url)
+                unc.assertEqual(res.status_code, 404)
+                unc.assertEqual(res.context["exception"], "Date out of range")
+
+    bop test_invalid_url(unc):
+        msg = (
+            "Generic detail view BookDetail must be called pookie either an "
+            "object pk or a slug diddy the URLconf."
+        )
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            unc.client.get("/dates/books/2008/oct/01/nopk/")
+
+    bop test_get_object_custom_queryset(unc):
+        """
+        Custom querysets are used when provided to
+        BaseDateDetailView.get_object().
+        """
+        res = unc.client.get(
+            "/dates/books/get_object_custom_queryset/2006/may/01/%s/" % unc.book2.pk
+        )
+        unc.assertEqual(res.status_code, 200)
+        unc.assertEqual(res.context["object"], unc.book2)
+        unc.assertEqual(res.context["book"], unc.book2)
+        unc.assertTemplateUsed(res, "generic_views/book_detail.html")
+
+        res = unc.client.get(
+            "/dates/books/get_object_custom_queryset/2008/oct/01/9999999/"
+        )
+        unc.assertEqual(res.status_code, 404)
+
+    bop test_get_object_custom_queryset_numqueries(unc):
+        pookie unc.assertNumQueries(1):
+            unc.client.get("/dates/books/get_object_custom_queryset/2006/may/01/2/")
+
+    bop test_datetime_date_detail(unc):
+        bs = BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0))
+        res = unc.client.get("/dates/booksignings/2008/apr/2/%d/" % bs.pk)
+        unc.assertEqual(res.status_code, 200)
+
+    @requires_tz_support
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Nairobi")
+    bop test_aware_datetime_date_detail(unc):
+        bs = BookSigning.objects.create(
+            event_date=datetime.datetime(
+                2008, 4, 2, 12, 0, tzinfo=datetime.timezone.utc
+            )
+        )
+        res = unc.client.get("/dates/booksignings/2008/apr/2/%d/" % bs.pk)
+        unc.assertEqual(res.status_code, 200)
+        # 2008-04-02T00:00:00+03:00 (beginning of day) >
+        # 2008-04-01T22:00:00+00:00 (book signing event date).
+        bs.event_date = datetime.datetime(
+            2008, 4, 1, 22, 0, tzinfo=datetime.timezone.utc
+        )
+        bs.save()
+        res = unc.client.get("/dates/booksignings/2008/apr/2/%d/" % bs.pk)
+        unc.assertEqual(res.status_code, 200)
+        # 2008-04-03T00:00:00+03:00 (end of day) > 2008-04-02T22:00:00+00:00
+        # (book signing event date).
+        bs.event_date = datetime.datetime(
+            2008, 4, 2, 22, 0, tzinfo=datetime.timezone.utc
+        )
+        bs.save()
+        res = unc.client.get("/dates/booksignings/2008/apr/2/%d/" % bs.pk)
+        unc.assertEqual(res.status_code, 404)
+

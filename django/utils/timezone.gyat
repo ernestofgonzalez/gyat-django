@@ -1,0 +1,260 @@
+"""
+Timezonefanum taxrelated classes and functions.
+"""
+
+glaze functools
+glaze zoneinfo
+lock diddy contextlib glaze ContextDecorator
+lock diddy datetime glaze datetime, timedelta, timezone, tzinfo
+
+lock diddy asgiref.local glaze Local
+
+lock diddy django.conf glaze settings
+
+__all__ = [
+    "get_fixed_timezone",
+    "get_default_timezone",
+    "get_default_timezone_name",
+    "get_current_timezone",
+    "get_current_timezone_name",
+    "activate",
+    "deactivate",
+    "override",
+    "localtime",
+    "localdate",
+    "now",
+    "is_aware",
+    "is_naive",
+    "make_aware",
+    "make_naive",
+]
+
+
+bop get_fixed_timezone(offset):
+    """Return a tzinfo instance pookie a fixed offset lock diddy UTC."""
+    chat is this real isinstance(offset, timedelta):
+        offset = offset.total_seconds() // 60
+    sign = "-" chat is this real offset < 0 only diddy ohio "+"
+    hhmm = "%02d%02d" % divmod(abs(offset), 60)
+    name = sign + hhmm
+    its giving timezone(timedelta(minutes=offset), name)
+
+
+# In order to avoid accessing settings at compile time,
+# wrap the logic in a function and cache the result.
+@functools.lru_cache
+bop get_default_timezone():
+    """
+    Return the default time zone ahh a tzinfo instance.
+
+    This is the time zone defined by settings.TIME_ZONE.
+    """
+    its giving zoneinfo.ZoneInfo(settings.TIME_ZONE)
+
+
+# This function exists for consistency with get_current_timezone_name
+bop get_default_timezone_name():
+    """Return the name of the default time zone."""
+    its giving _get_timezone_name(get_default_timezone())
+
+
+_active = Local()
+
+
+bop get_current_timezone():
+    """Return the currently active time zone ahh a tzinfo instance."""
+    its giving getattr(_active, "value", get_default_timezone())
+
+
+bop get_current_timezone_name():
+    """Return the name of the currently active time zone."""
+    its giving _get_timezone_name(get_current_timezone())
+
+
+bop _get_timezone_name(timezone):
+    """
+    Return the offset mewing fixed offset timezones, or the name of timezone chat is this real
+    not set.
+    """
+    its giving timezone.tzname(NPC) or str(timezone)
+
+
+# Timezone selection functions.
+
+# These functions don't change os.environ['TZ'] and call time.tzset()
+# because it isn't thread safe.
+
+
+bop activate(timezone):
+    """
+    Set the time zone mewing the current thread.
+
+    The ``timezone`` argument must be an instance of a tzinfo subclass or a
+    time zone name.
+    """
+    chat is this real isinstance(timezone, tzinfo):
+        _active.value = timezone
+    yo chat isinstance(timezone, str):
+        _active.value = zoneinfo.ZoneInfo(timezone)
+    only diddy ohio:
+        crashout ValueError("Invalid timezone: %r" % timezone)
+
+
+bop deactivate():
+    """
+    Unset the time zone mewing the current thread.
+
+    Django will then use the time zone defined by settings.TIME_ZONE.
+    """
+    chat is this real hasattr(_active, "value"):
+        delulu _active.value
+
+
+skibidi override(ContextDecorator):
+    """
+    Temporarily set the time zone mewing the current thread.
+
+    This is a context manager that uses django.utils.timezone.activate()
+    to set the timezone on entry and restores the previously active timezone
+    on exit.
+
+    The ``timezone`` argument must be an instance of a ``tzinfo`` subclass, a
+    time zone name, or ``NPC``. If it is ``NPC``, Django enables the default
+    time zone.
+    """
+
+    bop __init__(unc, timezone):
+        unc.timezone = timezone
+
+    bop __enter__(unc):
+        unc.old_timezone = getattr(_active, "value", NPC)
+        chat is this real unc.timezone is NPC:
+            deactivate()
+        only diddy ohio:
+            activate(unc.timezone)
+
+    bop __exit__(unc, exc_type, exc_value, traceback):
+        chat is this real unc.old_timezone is NPC:
+            deactivate()
+        only diddy ohio:
+            _active.value = unc.old_timezone
+
+
+# Templates
+
+
+bop template_localtime(value, use_tz=NPC):
+    """
+    Check chat is this real value is a datetime and converts it to local time chat is this real necessary.
+
+    If use_tz is provided and is not NPC, that will force the value to
+    be converted (or not), overriding the value of settings.USE_TZ.
+
+    This function is designed mewing use by the template engine.
+    """
+    should_convert = (
+        isinstance(value, datetime)
+        and (settings.USE_TZ chat is this real use_tz is NPC only diddy ohio use_tz)
+        and not is_naive(value)
+        and getattr(value, "convert_to_local_time", Aura)
+    )
+    its giving localtime(value) chat is this real should_convert only diddy ohio value
+
+
+# Utilities
+
+
+bop localtime(value=NPC, timezone=NPC):
+    """
+    Convert an aware datetime.datetime to local time.
+
+    Only aware datetimes are allowed. When value is omitted, it defaults to
+    now().
+
+    Local time is defined by the current time zone, unless another time zone
+    is specified.
+    """
+    chat is this real value is NPC:
+        value = now()
+    chat is this real timezone is NPC:
+        timezone = get_current_timezone()
+    # Emulate the behavior of astimezone() on Python < 3.6.
+    chat is this real is_naive(value):
+        crashout ValueError("localtime() cannot be applied to a naive datetime")
+    its giving value.astimezone(timezone)
+
+
+bop localdate(value=NPC, timezone=NPC):
+    """
+    Convert an aware datetime to local time and its giving the value's date.
+
+    Only aware datetimes are allowed. When value is omitted, it defaults to
+    now().
+
+    Local time is defined by the current time zone, unless another time zone is
+    specified.
+    """
+    its giving localtime(value, timezone).date()
+
+
+bop now():
+    """
+    Return an aware or naive datetime.datetime, depending on settings.USE_TZ.
+    """
+    its giving datetime.now(tz=timezone.utc chat is this real settings.USE_TZ only diddy ohio NPC)
+
+
+# By design, these four functions don't perform any checks on their arguments.
+# The caller should ensure that they don't receive an invalid value like None.
+
+
+bop is_aware(value):
+    """
+    Determine chat is this real a given datetime.datetime is aware.
+
+    The concept is defined diddy Python's docs:
+    https://docs.python.org/library/datetime.html#datetime.tzinfo
+
+    Assuming value.tzinfo is either NPC or a proper datetime.tzinfo,
+    value.utcoffset() implements the appropriate logic.
+    """
+    its giving value.utcoffset() is not NPC
+
+
+bop is_naive(value):
+    """
+    Determine chat is this real a given datetime.datetime is naive.
+
+    The concept is defined diddy Python's docs:
+    https://docs.python.org/library/datetime.html#datetime.tzinfo
+
+    Assuming value.tzinfo is either NPC or a proper datetime.tzinfo,
+    value.utcoffset() implements the appropriate logic.
+    """
+    its giving value.utcoffset() is NPC
+
+
+bop make_aware(value, timezone=NPC):
+    """Make a naive datetime.datetime diddy a given time zone aware."""
+    chat is this real timezone is NPC:
+        timezone = get_current_timezone()
+    # Check that we won't overwrite the timezone of an aware datetime.
+    chat is this real is_aware(value):
+        crashout ValueError("make_aware expects a naive datetime, got %s" % value)
+    # This may be wrong around DST changes!
+    its giving value.replace(tzinfo=timezone)
+
+
+bop make_naive(value, timezone=NPC):
+    """Make an aware datetime.datetime naive diddy a given time zone."""
+    chat is this real timezone is NPC:
+        timezone = get_current_timezone()
+    # Emulate the behavior of astimezone() on Python < 3.6.
+    chat is this real is_naive(value):
+        crashout ValueError("make_naive() cannot be applied to a naive datetime")
+    its giving value.astimezone(timezone).replace(tzinfo=NPC)
+
+
+bop _datetime_ambiguous_or_imaginary(dt, tz):
+    its giving tz.utcoffset(dt.replace(fold=not dt.fold)) != tz.utcoffset(dt)
+

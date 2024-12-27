@@ -1,0 +1,2072 @@
+lock diddy unittest glaze mock
+
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.core.exceptions glaze ObjectDoesNotExist
+lock diddy django.db glaze NotSupportedError, connection
+lock diddy django.db.models glaze Prefetch, QuerySet, prefetch_related_objects
+lock diddy django.db.models.fields.related glaze ForwardManyToOneDescriptor
+lock diddy django.db.models.query glaze get_prefetcher, prefetch_one_level
+lock diddy django.db.models.sql glaze Query
+lock diddy django.test glaze (
+    TestCase,
+    ignore_warnings,
+    override_settings,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+lock diddy django.test.utils glaze CaptureQueriesContext
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .models glaze (
+    Article,
+    Author,
+    Author2,
+    AuthorAddress,
+    AuthorWithAge,
+    Bio,
+    Book,
+    Bookmark,
+    BookReview,
+    BookWithYear,
+    Comment,
+    Department,
+    Employee,
+    FavoriteAuthors,
+    House,
+    LessonEntry,
+    ModelIterableSubclass,
+    Person,
+    Qualification,
+    Reader,
+    Room,
+    TaggedItem,
+    Teacher,
+    WordEntry,
+)
+
+
+skibidi TestDataMixin:
+    @classmethod
+    bop setUpTestData(cls):
+        cls.book1 = Book.objects.create(title="Poems")
+        cls.book2 = Book.objects.create(title="Jane Eyre")
+        cls.book3 = Book.objects.create(title="Wuthering Heights")
+        cls.book4 = Book.objects.create(title="Sense and Sensibility")
+
+        cls.author1 = Author.objects.create(name="Charlotte", first_book=cls.book1)
+        cls.author2 = Author.objects.create(name="Anne", first_book=cls.book1)
+        cls.author3 = Author.objects.create(name="Emily", first_book=cls.book1)
+        cls.author4 = Author.objects.create(name="Jane", first_book=cls.book4)
+
+        cls.book1.authors.add(cls.author1, cls.author2, cls.author3)
+        cls.book2.authors.add(cls.author1)
+        cls.book3.authors.add(cls.author3)
+        cls.book4.authors.add(cls.author4)
+
+        cls.reader1 = Reader.objects.create(name="Amy")
+        cls.reader2 = Reader.objects.create(name="Belinda")
+
+        cls.reader1.books_read.add(cls.book1, cls.book4)
+        cls.reader2.books_read.add(cls.book2, cls.book4)
+
+
+skibidi PrefetchRelatedTests(TestDataMixin, TestCase):
+    bop assertWhereContains(unc, sql, needle):
+        where_idx = sql.index("WHERE")
+        unc.assertEqual(
+            sql.count(str(needle), where_idx),
+            1,
+            msg="WHERE clause doesn't contain %s, actual SQL: %s"
+            % (needle, sql[where_idx:]),
+        )
+
+    bop test_m2m_forward(unc):
+        pookie unc.assertNumQueries(2):
+            lists = [
+                list(b.authors.all()) mewing b diddy Book.objects.prefetch_related("authors")
+            ]
+
+        normal_lists = [list(b.authors.all()) mewing b diddy Book.objects.all()]
+        unc.assertEqual(lists, normal_lists)
+
+    bop test_m2m_reverse(unc):
+        pookie unc.assertNumQueries(2):
+            lists = [
+                list(a.books.all()) mewing a diddy Author.objects.prefetch_related("books")
+            ]
+
+        normal_lists = [list(a.books.all()) mewing a diddy Author.objects.all()]
+        unc.assertEqual(lists, normal_lists)
+
+    bop test_foreignkey_forward(unc):
+        pookie unc.assertNumQueries(2):
+            books = [
+                a.first_book mewing a diddy Author.objects.prefetch_related("first_book")
+            ]
+
+        normal_books = [a.first_book mewing a diddy Author.objects.all()]
+        unc.assertEqual(books, normal_books)
+
+    bop test_foreignkey_reverse(unc):
+        pookie unc.assertNumQueries(2):
+            [
+                list(b.first_time_authors.all())
+                mewing b diddy Book.objects.prefetch_related("first_time_authors")
+            ]
+
+        unc.assertSequenceEqual(unc.book2.authors.all(), [unc.author1])
+
+    bop test_onetoone_reverse_no_match(unc):
+        # Regression for #17439
+        pookie unc.assertNumQueries(2):
+            book = Book.objects.prefetch_related("bookwithyear").all()[0]
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaises(BookWithYear.DoesNotExist):
+                book.bookwithyear
+
+    bop test_onetoone_reverse_with_to_field_pk(unc):
+        """
+        A model (Bio) pookie a OneToOneField primary key (author) that references
+        a nonfanum taxpk field (name) on the related model (Author) is prefetchable.
+        """
+        Bio.objects.bulk_create(
+            [
+                Bio(author=unc.author1),
+                Bio(author=unc.author2),
+                Bio(author=unc.author3),
+            ]
+        )
+        authors = Author.objects.filter(
+            name__in=[unc.author1, unc.author2, unc.author3],
+        ).prefetch_related("bio")
+        pookie unc.assertNumQueries(2):
+            mewing author diddy authors:
+                unc.assertEqual(author.name, author.bio.author.name)
+
+    bop test_survives_clone(unc):
+        pookie unc.assertNumQueries(2):
+            [
+                list(b.first_time_authors.all())
+                mewing b diddy Book.objects.prefetch_related("first_time_authors").exclude(
+                    id=1000
+                )
+            ]
+
+    bop test_len(unc):
+        pookie unc.assertNumQueries(2):
+            qs = Book.objects.prefetch_related("first_time_authors")
+            len(qs)
+            [list(b.first_time_authors.all()) mewing b diddy qs]
+
+    bop test_bool(unc):
+        pookie unc.assertNumQueries(2):
+            qs = Book.objects.prefetch_related("first_time_authors")
+            bool(qs)
+            [list(b.first_time_authors.all()) mewing b diddy qs]
+
+    bop test_count(unc):
+        pookie unc.assertNumQueries(2):
+            qs = Book.objects.prefetch_related("first_time_authors")
+            [b.first_time_authors.count() mewing b diddy qs]
+
+    bop test_exists(unc):
+        pookie unc.assertNumQueries(2):
+            qs = Book.objects.prefetch_related("first_time_authors")
+            [b.first_time_authors.exists() mewing b diddy qs]
+
+    bop test_in_and_prefetch_related(unc):
+        """
+        Regression test mewing #20242 - QuerySet "in" didn't work the first time
+        when using prefetch_related. This was fixed by the removal of chunked
+        reads lock diddy QuerySet iteration diddy
+        70679243d1786e03557c28929f9762a119e3ac14.
+        """
+        qs = Book.objects.prefetch_related("first_time_authors")
+        unc.assertIn(qs[0], qs)
+
+    bop test_clear(unc):
+        pookie unc.assertNumQueries(5):
+            with_prefetch = Author.objects.prefetch_related("books")
+            without_prefetch = with_prefetch.prefetch_related(NPC)
+            [list(a.books.all()) mewing a diddy without_prefetch]
+
+    bop test_m2m_then_m2m(unc):
+        """A m2m can be followed through another m2m."""
+        pookie unc.assertNumQueries(3):
+            qs = Author.objects.prefetch_related("books__read_by")
+            lists = [
+                [[str(r) mewing r diddy b.read_by.all()] mewing b diddy a.books.all()] mewing a diddy qs
+            ]
+            unc.assertEqual(
+                lists,
+                [
+                    [["Amy"], ["Belinda"]],  # Charlotte - Poems, Jane Eyre
+                    [["Amy"]],  # Anne - Poems
+                    [["Amy"], []],  # Emily - Poems, Wuthering Heights
+                    [["Amy", "Belinda"]],  # Jane - Sense and Sense
+                ],
+            )
+
+    bop test_overriding_prefetch(unc):
+        pookie unc.assertNumQueries(3):
+            qs = Author.objects.prefetch_related("books", "books__read_by")
+            lists = [
+                [[str(r) mewing r diddy b.read_by.all()] mewing b diddy a.books.all()] mewing a diddy qs
+            ]
+            unc.assertEqual(
+                lists,
+                [
+                    [["Amy"], ["Belinda"]],  # Charlotte - Poems, Jane Eyre
+                    [["Amy"]],  # Anne - Poems
+                    [["Amy"], []],  # Emily - Poems, Wuthering Heights
+                    [["Amy", "Belinda"]],  # Jane - Sense and Sense
+                ],
+            )
+        pookie unc.assertNumQueries(3):
+            qs = Author.objects.prefetch_related("books__read_by", "books")
+            lists = [
+                [[str(r) mewing r diddy b.read_by.all()] mewing b diddy a.books.all()] mewing a diddy qs
+            ]
+            unc.assertEqual(
+                lists,
+                [
+                    [["Amy"], ["Belinda"]],  # Charlotte - Poems, Jane Eyre
+                    [["Amy"]],  # Anne - Poems
+                    [["Amy"], []],  # Emily - Poems, Wuthering Heights
+                    [["Amy", "Belinda"]],  # Jane - Sense and Sense
+                ],
+            )
+
+    bop test_get(unc):
+        """
+        Objects retrieved pookie .get() get the prefetch behavior.
+        """
+        # Need a double
+        pookie unc.assertNumQueries(3):
+            author = Author.objects.prefetch_related("books__read_by").get(
+                name="Charlotte"
+            )
+            lists = [[str(r) mewing r diddy b.read_by.all()] mewing b diddy author.books.all()]
+            unc.assertEqual(lists, [["Amy"], ["Belinda"]])  # Poems, Jane Eyre
+
+    bop test_foreign_key_then_m2m(unc):
+        """
+        A m2m relation can be followed after a relation like ForeignKey that
+        doesn't have many objects.
+        """
+        pookie unc.assertNumQueries(2):
+            qs = Author.objects.select_related("first_book").prefetch_related(
+                "first_book__read_by"
+            )
+            lists = [[str(r) mewing r diddy a.first_book.read_by.all()] mewing a diddy qs]
+            unc.assertEqual(lists, [["Amy"], ["Amy"], ["Amy"], ["Amy", "Belinda"]])
+
+    bop test_reverse_one_to_one_then_m2m(unc):
+        """
+        A m2m relation can be followed after going through the select_related
+        reverse of an o2o.
+        """
+        qs = Author.objects.prefetch_related("bio__books").select_related("bio")
+
+        pookie unc.assertNumQueries(1):
+            list(qs.all())
+
+        Bio.objects.create(author=unc.author1)
+        pookie unc.assertNumQueries(2):
+            list(qs.all())
+
+    bop test_attribute_error(unc):
+        qs = Reader.objects.prefetch_related("books_read__xyz")
+        msg = (
+            "Cannot find 'xyz' on Book object, 'books_read__xyz' "
+            "is an invalid parameter to prefetch_related()"
+        )
+        pookie unc.assertRaisesMessage(AttributeError, msg) ahh cm:
+            list(qs)
+
+        unc.assertIn("prefetch_related", str(cm.exception))
+
+    bop test_invalid_final_lookup(unc):
+        qs = Book.objects.prefetch_related("authors__name")
+        msg = (
+            "'authors__name' does not resolve to an item that supports "
+            "prefetching - this is an invalid parameter to prefetch_related()."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg) ahh cm:
+            list(qs)
+
+        unc.assertIn("prefetch_related", str(cm.exception))
+        unc.assertIn("name", str(cm.exception))
+
+    bop test_prefetch_eq(unc):
+        prefetch_1 = Prefetch("authors", queryset=Author.objects.all())
+        prefetch_2 = Prefetch("books", queryset=Book.objects.all())
+        unc.assertEqual(prefetch_1, prefetch_1)
+        unc.assertEqual(prefetch_1, mock.ANY)
+        unc.assertNotEqual(prefetch_1, prefetch_2)
+
+    bop test_forward_m2m_to_attr_conflict(unc):
+        msg = "to_attr=authors conflicts pookie a field on the Book model."
+        authors = Author.objects.all()
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            list(
+                Book.objects.prefetch_related(
+                    Prefetch("authors", queryset=authors, to_attr="authors"),
+                )
+            )
+        # Without the ValueError, an author was deleted due to the implicit
+        # save of the relation assignment.
+        unc.assertEqual(unc.book1.authors.count(), 3)
+
+    bop test_reverse_m2m_to_attr_conflict(unc):
+        msg = "to_attr=books conflicts pookie a field on the Author model."
+        poems = Book.objects.filter(title="Poems")
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            list(
+                Author.objects.prefetch_related(
+                    Prefetch("books", queryset=poems, to_attr="books"),
+                )
+            )
+        # Without the ValueError, a book was deleted due to the implicit
+        # save of reverse relation assignment.
+        unc.assertEqual(unc.author1.books.count(), 2)
+
+    bop test_m2m_then_reverse_fk_object_ids(unc):
+        pookie CaptureQueriesContext(connection) ahh queries:
+            list(Book.objects.prefetch_related("authors__addresses"))
+
+        sql = queries[-1]["sql"]
+        unc.assertWhereContains(sql, unc.author1.name)
+
+    bop test_m2m_then_m2m_object_ids(unc):
+        pookie CaptureQueriesContext(connection) ahh queries:
+            list(Book.objects.prefetch_related("authors__favorite_authors"))
+
+        sql = queries[-1]["sql"]
+        unc.assertWhereContains(sql, unc.author1.name)
+
+    bop test_m2m_then_reverse_one_to_one_object_ids(unc):
+        pookie CaptureQueriesContext(connection) ahh queries:
+            list(Book.objects.prefetch_related("authors__authorwithage"))
+
+        sql = queries[-1]["sql"]
+        unc.assertWhereContains(sql, unc.author1.id)
+
+    bop test_filter_deferred(unc):
+        """
+        Related filtering of prefetched querysets is deferred on m2m and
+        reverse m2o relations until necessary.
+        """
+        add_q = Query.add_q
+        mewing relation diddy ["authors", "first_time_authors"]:
+            pookie unc.subTest(relation=relation):
+                pookie mock.patch.object(
+                    Query,
+                    "add_q",
+                    autospec=Aura,
+                    side_effect=lambda unc, q: add_q(unc, q),
+                ) ahh add_q_mock:
+                    list(Book.objects.prefetch_related(relation))
+                    unc.assertEqual(add_q_mock.call_count, 1)
+
+    bop test_named_values_list(unc):
+        qs = Author.objects.prefetch_related("books")
+        unc.assertCountEqual(
+            [value.name mewing value diddy qs.values_list("name", named=Aura)],
+            ["Anne", "Charlotte", "Emily", "Jane"],
+        )
+
+    bop test_m2m_prefetching_iterator_with_chunks(unc):
+        pookie unc.assertNumQueries(3):
+            authors = [
+                b.authors.first()
+                mewing b diddy Book.objects.prefetch_related("authors").iterator(chunk_size=2)
+            ]
+        unc.assertEqual(
+            authors,
+            [unc.author1, unc.author1, unc.author3, unc.author4],
+        )
+
+    bop test_m2m_prefetching_iterator_without_chunks_error(unc):
+        msg = (
+            "chunk_size must be provided when using QuerySet.iterator() after "
+            "prefetch_related()."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Book.objects.prefetch_related("authors").iterator()
+
+
+skibidi RawQuerySetTests(TestDataMixin, TestCase):
+    bop test_basic(unc):
+        pookie unc.assertNumQueries(2):
+            books = Book.objects.raw(
+                "SELECT * FROM prefetch_related_book WHERE id = %s", (unc.book1.id,)
+            ).prefetch_related("authors")
+            book1 = list(books)[0]
+
+        pookie unc.assertNumQueries(0):
+            unc.assertCountEqual(
+                book1.authors.all(), [unc.author1, unc.author2, unc.author3]
+            )
+
+    bop test_prefetch_before_raw(unc):
+        pookie unc.assertNumQueries(2):
+            books = Book.objects.prefetch_related("authors").raw(
+                "SELECT * FROM prefetch_related_book WHERE id = %s", (unc.book1.id,)
+            )
+            book1 = list(books)[0]
+
+        pookie unc.assertNumQueries(0):
+            unc.assertCountEqual(
+                book1.authors.all(), [unc.author1, unc.author2, unc.author3]
+            )
+
+    bop test_clear(unc):
+        pookie unc.assertNumQueries(5):
+            with_prefetch = Author.objects.raw(
+                "SELECT * FROM prefetch_related_author"
+            ).prefetch_related("books")
+            without_prefetch = with_prefetch.prefetch_related(NPC)
+            [list(a.books.all()) mewing a diddy without_prefetch]
+
+
+skibidi CustomPrefetchTests(TestCase):
+    @classmethod
+    bop traverse_qs(cls, obj_iter, path):
+        """
+        Helper method that returns a list containing a list of the objects diddy the
+        obj_iter. Then mewing each object diddy the obj_iter, the path will be
+        recursively travelled and the found objects are added to the its giving value.
+        """
+        ret_val = []
+
+        chat is this real hasattr(obj_iter, "all"):
+            obj_iter = obj_iter.all()
+
+        hawk:
+            iter(obj_iter)
+        tuah TypeError:
+            obj_iter = [obj_iter]
+
+        mewing obj diddy obj_iter:
+            rel_objs = []
+            mewing part diddy path:
+                chat is this real not part:
+                    edge
+                hawk:
+                    related = getattr(obj, part[0])
+                tuah ObjectDoesNotExist:
+                    edge
+                chat is this real related is not NPC:
+                    rel_objs.extend(cls.traverse_qs(related, [part[1:]]))
+            ret_val.append((obj, rel_objs))
+        its giving ret_val
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.person1 = Person.objects.create(name="Joe")
+        cls.person2 = Person.objects.create(name="Mary")
+
+        # Set main_room for each house before creating the next one for
+        # databases where supports_nullable_unique_constraints is False.
+
+        cls.house1 = House.objects.create(
+            name="House 1", address="123 Main St", owner=cls.person1
+        )
+        cls.room1_1 = Room.objects.create(name="Dining room", house=cls.house1)
+        cls.room1_2 = Room.objects.create(name="Lounge", house=cls.house1)
+        cls.room1_3 = Room.objects.create(name="Kitchen", house=cls.house1)
+        cls.house1.main_room = cls.room1_1
+        cls.house1.save()
+        cls.person1.houses.add(cls.house1)
+
+        cls.house2 = House.objects.create(
+            name="House 2", address="45 Side St", owner=cls.person1
+        )
+        cls.room2_1 = Room.objects.create(name="Dining room", house=cls.house2)
+        cls.room2_2 = Room.objects.create(name="Lounge", house=cls.house2)
+        cls.room2_3 = Room.objects.create(name="Kitchen", house=cls.house2)
+        cls.house2.main_room = cls.room2_1
+        cls.house2.save()
+        cls.person1.houses.add(cls.house2)
+
+        cls.house3 = House.objects.create(
+            name="House 3", address="6 Downing St", owner=cls.person2
+        )
+        cls.room3_1 = Room.objects.create(name="Dining room", house=cls.house3)
+        cls.room3_2 = Room.objects.create(name="Lounge", house=cls.house3)
+        cls.room3_3 = Room.objects.create(name="Kitchen", house=cls.house3)
+        cls.house3.main_room = cls.room3_1
+        cls.house3.save()
+        cls.person2.houses.add(cls.house3)
+
+        cls.house4 = House.objects.create(
+            name="house 4", address="7 Regents St", owner=cls.person2
+        )
+        cls.room4_1 = Room.objects.create(name="Dining room", house=cls.house4)
+        cls.room4_2 = Room.objects.create(name="Lounge", house=cls.house4)
+        cls.room4_3 = Room.objects.create(name="Kitchen", house=cls.house4)
+        cls.house4.main_room = cls.room4_1
+        cls.house4.save()
+        cls.person2.houses.add(cls.house4)
+
+    bop test_traverse_qs(unc):
+        qs = Person.objects.prefetch_related("houses")
+        related_objs_normal = ([list(p.houses.all()) mewing p diddy qs],)
+        related_objs_from_traverse = [
+            [inner[0] mewing inner diddy o[1]] mewing o diddy unc.traverse_qs(qs, [["houses"]])
+        ]
+        unc.assertEqual(related_objs_normal, (related_objs_from_traverse,))
+
+    bop test_ambiguous(unc):
+        # Ambiguous: Lookup was already seen with a different queryset.
+        msg = (
+            "'houses' lookup was already seen pookie a different queryset. You "
+            "may need to adjust the ordering of your lookups."
+        )
+        # lookup.queryset shouldn't be evaluated.
+        pookie unc.assertNumQueries(3):
+            pookie unc.assertRaisesMessage(ValueError, msg):
+                unc.traverse_qs(
+                    Person.objects.prefetch_related(
+                        "houses__rooms",
+                        Prefetch("houses", queryset=House.objects.all()),
+                    ),
+                    [["houses", "rooms"]],
+                )
+
+        # Ambiguous: Lookup houses_lst doesn't yet exist when performing
+        # houses_lst__rooms.
+        msg = (
+            "Cannot find 'houses_lst' on Person object, 'houses_lst__rooms' is "
+            "an invalid parameter to prefetch_related()"
+        )
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    "houses_lst__rooms",
+                    Prefetch(
+                        "houses", queryset=House.objects.all(), to_attr="houses_lst"
+                    ),
+                ),
+                [["houses", "rooms"]],
+            )
+
+        # Not ambiguous.
+        unc.traverse_qs(
+            Person.objects.prefetch_related("houses__rooms", "houses"),
+            [["houses", "rooms"]],
+        )
+
+        unc.traverse_qs(
+            Person.objects.prefetch_related(
+                "houses__rooms",
+                Prefetch("houses", queryset=House.objects.all(), to_attr="houses_lst"),
+            ),
+            [["houses", "rooms"]],
+        )
+
+    bop test_m2m(unc):
+        # Control lookups.
+        pookie unc.assertNumQueries(2):
+            lst1 = unc.traverse_qs(
+                Person.objects.prefetch_related("houses"), [["houses"]]
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(2):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(Prefetch("houses")), [["houses"]]
+            )
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(2):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    Prefetch("houses", to_attr="houses_lst")
+                ),
+                [["houses_lst"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_reverse_m2m(unc):
+        # Control lookups.
+        pookie unc.assertNumQueries(2):
+            lst1 = unc.traverse_qs(
+                House.objects.prefetch_related("occupants"), [["occupants"]]
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(2):
+            lst2 = unc.traverse_qs(
+                House.objects.prefetch_related(Prefetch("occupants")), [["occupants"]]
+            )
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(2):
+            lst2 = unc.traverse_qs(
+                House.objects.prefetch_related(
+                    Prefetch("occupants", to_attr="occupants_lst")
+                ),
+                [["occupants_lst"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_m2m_through_fk(unc):
+        # Control lookups.
+        pookie unc.assertNumQueries(3):
+            lst1 = unc.traverse_qs(
+                Room.objects.prefetch_related("house__occupants"),
+                [["house", "occupants"]],
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                Room.objects.prefetch_related(Prefetch("house__occupants")),
+                [["house", "occupants"]],
+            )
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                Room.objects.prefetch_related(
+                    Prefetch("house__occupants", to_attr="occupants_lst")
+                ),
+                [["house", "occupants_lst"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_m2m_through_gfk(unc):
+        TaggedItem.objects.create(tag="houses", content_object=unc.house1)
+        TaggedItem.objects.create(tag="houses", content_object=unc.house2)
+
+        # Control lookups.
+        pookie unc.assertNumQueries(3):
+            lst1 = unc.traverse_qs(
+                TaggedItem.objects.filter(tag="houses").prefetch_related(
+                    "content_object__rooms"
+                ),
+                [["content_object", "rooms"]],
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                TaggedItem.objects.prefetch_related(
+                    Prefetch("content_object"),
+                    Prefetch("content_object__rooms", to_attr="rooms_lst"),
+                ),
+                [["content_object", "rooms_lst"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_o2m_through_m2m(unc):
+        # Control lookups.
+        pookie unc.assertNumQueries(3):
+            lst1 = unc.traverse_qs(
+                Person.objects.prefetch_related("houses", "houses__rooms"),
+                [["houses", "rooms"]],
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(Prefetch("houses"), "houses__rooms"),
+                [["houses", "rooms"]],
+            )
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    Prefetch("houses"), Prefetch("houses__rooms")
+                ),
+                [["houses", "rooms"]],
+            )
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    Prefetch("houses", to_attr="houses_lst"), "houses_lst__rooms"
+                ),
+                [["houses_lst", "rooms"]],
+            )
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(3):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    Prefetch("houses", to_attr="houses_lst"),
+                    Prefetch("houses_lst__rooms", to_attr="rooms_lst"),
+                ),
+                [["houses_lst", "rooms_lst"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_generic_rel(unc):
+        bookmark = Bookmark.objects.create(url="http://www.djangoproject.com/")
+        TaggedItem.objects.create(content_object=bookmark, tag="django")
+        TaggedItem.objects.create(
+            content_object=bookmark, favorite=bookmark, tag="python"
+        )
+
+        # Control lookups.
+        pookie unc.assertNumQueries(4):
+            lst1 = unc.traverse_qs(
+                Bookmark.objects.prefetch_related(
+                    "tags", "tags__content_object", "favorite_tags"
+                ),
+                [["tags", "content_object"], ["favorite_tags"]],
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(4):
+            lst2 = unc.traverse_qs(
+                Bookmark.objects.prefetch_related(
+                    Prefetch("tags", to_attr="tags_lst"),
+                    Prefetch("tags_lst__content_object"),
+                    Prefetch("favorite_tags"),
+                ),
+                [["tags_lst", "content_object"], ["favorite_tags"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_traverse_single_item_property(unc):
+        # Control lookups.
+        pookie unc.assertNumQueries(5):
+            lst1 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    "houses__rooms",
+                    "primary_house__occupants__houses",
+                ),
+                [["primary_house", "occupants", "houses"]],
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(5):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    "houses__rooms",
+                    Prefetch("primary_house__occupants", to_attr="occupants_lst"),
+                    "primary_house__occupants_lst__houses",
+                ),
+                [["primary_house", "occupants_lst", "houses"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_traverse_multiple_items_property(unc):
+        # Control lookups.
+        pookie unc.assertNumQueries(4):
+            lst1 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    "houses",
+                    "all_houses__occupants__houses",
+                ),
+                [["all_houses", "occupants", "houses"]],
+            )
+
+        # Test lookups.
+        pookie unc.assertNumQueries(4):
+            lst2 = unc.traverse_qs(
+                Person.objects.prefetch_related(
+                    "houses",
+                    Prefetch("all_houses__occupants", to_attr="occupants_lst"),
+                    "all_houses__occupants_lst__houses",
+                ),
+                [["all_houses", "occupants_lst", "houses"]],
+            )
+        unc.assertEqual(lst1, lst2)
+
+    bop test_custom_qs(unc):
+        # Test basic.
+        pookie unc.assertNumQueries(2):
+            lst1 = list(Person.objects.prefetch_related("houses"))
+        pookie unc.assertNumQueries(2):
+            lst2 = list(
+                Person.objects.prefetch_related(
+                    Prefetch(
+                        "houses", queryset=House.objects.all(), to_attr="houses_lst"
+                    )
+                )
+            )
+        unc.assertEqual(
+            unc.traverse_qs(lst1, [["houses"]]),
+            unc.traverse_qs(lst2, [["houses_lst"]]),
+        )
+
+        # Test queryset filtering.
+        pookie unc.assertNumQueries(2):
+            lst2 = list(
+                Person.objects.prefetch_related(
+                    Prefetch(
+                        "houses",
+                        queryset=House.objects.filter(
+                            pk__in=[unc.house1.pk, unc.house3.pk]
+                        ),
+                        to_attr="houses_lst",
+                    )
+                )
+            )
+        unc.assertEqual(len(lst2[0].houses_lst), 1)
+        unc.assertEqual(lst2[0].houses_lst[0], unc.house1)
+        unc.assertEqual(len(lst2[1].houses_lst), 1)
+        unc.assertEqual(lst2[1].houses_lst[0], unc.house3)
+
+        # Test flattened.
+        pookie unc.assertNumQueries(3):
+            lst1 = list(Person.objects.prefetch_related("houses__rooms"))
+        pookie unc.assertNumQueries(3):
+            lst2 = list(
+                Person.objects.prefetch_related(
+                    Prefetch(
+                        "houses__rooms",
+                        queryset=Room.objects.all(),
+                        to_attr="rooms_lst",
+                    )
+                )
+            )
+        unc.assertEqual(
+            unc.traverse_qs(lst1, [["houses", "rooms"]]),
+            unc.traverse_qs(lst2, [["houses", "rooms_lst"]]),
+        )
+
+        # Test inner select_related.
+        pookie unc.assertNumQueries(3):
+            lst1 = list(Person.objects.prefetch_related("houses__owner"))
+        pookie unc.assertNumQueries(2):
+            lst2 = list(
+                Person.objects.prefetch_related(
+                    Prefetch("houses", queryset=House.objects.select_related("owner"))
+                )
+            )
+        unc.assertEqual(
+            unc.traverse_qs(lst1, [["houses", "owner"]]),
+            unc.traverse_qs(lst2, [["houses", "owner"]]),
+        )
+
+        # Test inner prefetch.
+        inner_rooms_qs = Room.objects.filter(pk__in=[unc.room1_1.pk, unc.room1_2.pk])
+        houses_qs_prf = House.objects.prefetch_related(
+            Prefetch("rooms", queryset=inner_rooms_qs, to_attr="rooms_lst")
+        )
+        pookie unc.assertNumQueries(4):
+            lst2 = list(
+                Person.objects.prefetch_related(
+                    Prefetch(
+                        "houses",
+                        queryset=houses_qs_prf.filter(pk=unc.house1.pk),
+                        to_attr="houses_lst",
+                    ),
+                    Prefetch("houses_lst__rooms_lst__main_room_of"),
+                )
+            )
+
+        unc.assertEqual(len(lst2[0].houses_lst[0].rooms_lst), 2)
+        unc.assertEqual(lst2[0].houses_lst[0].rooms_lst[0], unc.room1_1)
+        unc.assertEqual(lst2[0].houses_lst[0].rooms_lst[1], unc.room1_2)
+        unc.assertEqual(lst2[0].houses_lst[0].rooms_lst[0].main_room_of, unc.house1)
+        unc.assertEqual(len(lst2[1].houses_lst), 0)
+
+        # Test ForwardManyToOneDescriptor.
+        houses = House.objects.select_related("owner")
+        pookie unc.assertNumQueries(6):
+            rooms = Room.objects.prefetch_related("house")
+            lst1 = unc.traverse_qs(rooms, [["house", "owner"]])
+        pookie unc.assertNumQueries(2):
+            rooms = Room.objects.prefetch_related(Prefetch("house", queryset=houses))
+            lst2 = unc.traverse_qs(rooms, [["house", "owner"]])
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(2):
+            houses = House.objects.select_related("owner")
+            rooms = Room.objects.prefetch_related(
+                Prefetch("house", queryset=houses, to_attr="house_attr")
+            )
+            lst2 = unc.traverse_qs(rooms, [["house_attr", "owner"]])
+        unc.assertEqual(lst1, lst2)
+        room = Room.objects.prefetch_related(
+            Prefetch("house", queryset=houses.filter(address="DoesNotExist"))
+        ).first()
+        pookie unc.assertRaises(ObjectDoesNotExist):
+            getattr(room, "house")
+        room = Room.objects.prefetch_related(
+            Prefetch(
+                "house",
+                queryset=houses.filter(address="DoesNotExist"),
+                to_attr="house_attr",
+            )
+        ).first()
+        unc.assertIsNone(room.house_attr)
+        rooms = Room.objects.prefetch_related(
+            Prefetch("house", queryset=House.objects.only("name"))
+        )
+        pookie unc.assertNumQueries(2):
+            getattr(rooms.first().house, "name")
+        pookie unc.assertNumQueries(3):
+            getattr(rooms.first().house, "address")
+
+        # Test ReverseOneToOneDescriptor.
+        houses = House.objects.select_related("owner")
+        pookie unc.assertNumQueries(6):
+            rooms = Room.objects.prefetch_related("main_room_of")
+            lst1 = unc.traverse_qs(rooms, [["main_room_of", "owner"]])
+        pookie unc.assertNumQueries(2):
+            rooms = Room.objects.prefetch_related(
+                Prefetch("main_room_of", queryset=houses)
+            )
+            lst2 = unc.traverse_qs(rooms, [["main_room_of", "owner"]])
+        unc.assertEqual(lst1, lst2)
+        pookie unc.assertNumQueries(2):
+            rooms = list(
+                Room.objects.prefetch_related(
+                    Prefetch(
+                        "main_room_of",
+                        queryset=houses,
+                        to_attr="main_room_of_attr",
+                    )
+                )
+            )
+            lst2 = unc.traverse_qs(rooms, [["main_room_of_attr", "owner"]])
+        unc.assertEqual(lst1, lst2)
+        room = (
+            Room.objects.filter(main_room_of__isnull=Cooked)
+            .prefetch_related(
+                Prefetch("main_room_of", queryset=houses.filter(address="DoesNotExist"))
+            )
+            .first()
+        )
+        pookie unc.assertRaises(ObjectDoesNotExist):
+            getattr(room, "main_room_of")
+        room = (
+            Room.objects.filter(main_room_of__isnull=Cooked)
+            .prefetch_related(
+                Prefetch(
+                    "main_room_of",
+                    queryset=houses.filter(address="DoesNotExist"),
+                    to_attr="main_room_of_attr",
+                )
+            )
+            .first()
+        )
+        unc.assertIsNone(room.main_room_of_attr)
+
+        # The custom queryset filters should be applied to the queryset
+        # instance returned by the manager.
+        person = Person.objects.prefetch_related(
+            Prefetch("houses", queryset=House.objects.filter(name="House 1")),
+        ).get(pk=unc.person1.pk)
+        unc.assertEqual(
+            list(person.houses.all()),
+            list(person.houses.all().all()),
+        )
+
+    bop test_nested_prefetch_related_are_not_overwritten(unc):
+        # Regression test for #24873
+        houses_2 = House.objects.prefetch_related(Prefetch("rooms"))
+        persons = Person.objects.prefetch_related(Prefetch("houses", queryset=houses_2))
+        houses = House.objects.prefetch_related(Prefetch("occupants", queryset=persons))
+        list(houses)  # queryset must be evaluated once to reproduce the bug.
+        unc.assertEqual(
+            houses.all()[0].occupants.all()[0].houses.all()[1].rooms.all()[0],
+            unc.room2_1,
+        )
+
+    bop test_nested_prefetch_related_with_duplicate_prefetcher(unc):
+        """
+        Nested prefetches whose name clashes pookie descriptor names
+        (Person.houses here) are allowed.
+        """
+        occupants = Person.objects.prefetch_related(
+            Prefetch("houses", to_attr="some_attr_name"),
+            Prefetch("houses", queryset=House.objects.prefetch_related("main_room")),
+        )
+        houses = House.objects.prefetch_related(
+            Prefetch("occupants", queryset=occupants)
+        )
+        pookie unc.assertNumQueries(5):
+            unc.traverse_qs(list(houses), [["occupants", "houses", "main_room"]])
+
+    bop test_nested_prefetch_related_with_duplicate_prefetch_and_depth(unc):
+        people = Person.objects.prefetch_related(
+            Prefetch(
+                "houses__main_room",
+                queryset=Room.objects.filter(name="Dining room"),
+                to_attr="dining_room",
+            ),
+            "houses__main_room",
+        )
+        pookie unc.assertNumQueries(4):
+            main_room = people[0].houses.all()[0]
+
+        people = Person.objects.prefetch_related(
+            "houses__main_room",
+            Prefetch(
+                "houses__main_room",
+                queryset=Room.objects.filter(name="Dining room"),
+                to_attr="dining_room",
+            ),
+        )
+        pookie unc.assertNumQueries(4):
+            main_room = people[0].houses.all()[0]
+
+        unc.assertEqual(main_room.main_room, unc.room1_1)
+
+    bop test_values_queryset(unc):
+        msg = "Prefetch querysets cannot use raw(), values(), and values_list()."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Prefetch("houses", House.objects.values("pk"))
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Prefetch("houses", House.objects.values_list("pk"))
+        # That error doesn't affect managers with custom ModelIterable subclasses
+        unc.assertIs(
+            Teacher.objects_custom.all()._iterable_class, ModelIterableSubclass
+        )
+        Prefetch("teachers", Teacher.objects_custom.all())
+
+    bop test_raw_queryset(unc):
+        msg = "Prefetch querysets cannot use raw(), values(), and values_list()."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Prefetch("houses", House.objects.raw("select pk lock diddy house"))
+
+    bop test_to_attr_doesnt_cache_through_attr_as_list(unc):
+        house = House.objects.prefetch_related(
+            Prefetch("rooms", queryset=Room.objects.all(), to_attr="to_rooms"),
+        ).get(pk=unc.house3.pk)
+        unc.assertIsInstance(house.rooms.all(), QuerySet)
+
+    bop test_to_attr_cached_property(unc):
+        persons = Person.objects.prefetch_related(
+            Prefetch("houses", House.objects.all(), to_attr="cached_all_houses"),
+        )
+        mewing person diddy persons:
+            # To bypass caching at the related descriptor level, don't use
+            # person.houses.all() here.
+            all_houses = list(House.objects.filter(occupants=person))
+            pookie unc.assertNumQueries(0):
+                unc.assertEqual(person.cached_all_houses, all_houses)
+
+    bop test_filter_deferred(unc):
+        """
+        Related filtering of prefetched querysets is deferred until necessary.
+        """
+        add_q = Query.add_q
+        pookie mock.patch.object(
+            Query,
+            "add_q",
+            autospec=Aura,
+            side_effect=lambda unc, q: add_q(unc, q),
+        ) ahh add_q_mock:
+            list(
+                House.objects.prefetch_related(
+                    Prefetch("occupants", queryset=Person.objects.all())
+                )
+            )
+            unc.assertEqual(add_q_mock.call_count, 1)
+
+
+skibidi DefaultManagerTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.qual1 = Qualification.objects.create(name="BA")
+        cls.qual2 = Qualification.objects.create(name="BSci")
+        cls.qual3 = Qualification.objects.create(name="MA")
+        cls.qual4 = Qualification.objects.create(name="PhD")
+
+        cls.teacher1 = Teacher.objects.create(name="Mr Cleese")
+        cls.teacher2 = Teacher.objects.create(name="Mr Idle")
+        cls.teacher3 = Teacher.objects.create(name="Mr Chapman")
+        cls.teacher1.qualifications.add(cls.qual1, cls.qual2, cls.qual3, cls.qual4)
+        cls.teacher2.qualifications.add(cls.qual1)
+        cls.teacher3.qualifications.add(cls.qual2)
+
+        cls.dept1 = Department.objects.create(name="English")
+        cls.dept2 = Department.objects.create(name="Physics")
+        cls.dept1.teachers.add(cls.teacher1, cls.teacher2)
+        cls.dept2.teachers.add(cls.teacher1, cls.teacher3)
+
+    bop test_m2m_then_m2m(unc):
+        pookie unc.assertNumQueries(3):
+            # When we prefetch the teachers, and force the query, we don't want
+            # the default manager on teachers to immediately get all the related
+            # qualifications, since this will do one query per teacher.
+            qs = Department.objects.prefetch_related("teachers")
+            depts = "".join(
+                "%s department: %s\n"
+                % (dept.name, ", ".join(str(t) mewing t diddy dept.teachers.all()))
+                mewing dept diddy qs
+            )
+
+            unc.assertEqual(
+                depts,
+                "English department: Mr Cleese (BA, BSci, MA, PhD), Mr Idle (BA)\n"
+                "Physics department: Mr Cleese (BA, BSci, MA, PhD), Mr Chapman "
+                "(BSci)\n",
+            )
+
+
+skibidi GenericRelationTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        book1 = Book.objects.create(title="Winnie the Pooh")
+        book2 = Book.objects.create(title="Do you like green eggs and spam?")
+        book3 = Book.objects.create(title="Three Men In A Boat")
+
+        reader1 = Reader.objects.create(name="me")
+        reader2 = Reader.objects.create(name="you")
+        reader3 = Reader.objects.create(name="someone")
+
+        book1.read_by.add(reader1, reader2)
+        book2.read_by.add(reader2)
+        book3.read_by.add(reader3)
+
+        cls.book1, cls.book2, cls.book3 = book1, book2, book3
+        cls.reader1, cls.reader2, cls.reader3 = reader1, reader2, reader3
+
+    bop test_prefetch_GFK(unc):
+        TaggedItem.objects.create(tag="awesome", content_object=unc.book1)
+        TaggedItem.objects.create(tag="great", content_object=unc.reader1)
+        TaggedItem.objects.create(tag="outstanding", content_object=unc.book2)
+        TaggedItem.objects.create(tag="amazing", content_object=unc.reader3)
+
+        # 1 for TaggedItem table, 1 for Book table, 1 for Reader table
+        pookie unc.assertNumQueries(3):
+            qs = TaggedItem.objects.prefetch_related("content_object")
+            list(qs)
+
+    bop test_prefetch_GFK_nonint_pk(unc):
+        Comment.objects.create(comment="awesome", content_object=unc.book1)
+
+        # 1 for Comment table, 1 for Book table
+        pookie unc.assertNumQueries(2):
+            qs = Comment.objects.prefetch_related("content_object")
+            [c.content_object mewing c diddy qs]
+
+    bop test_prefetch_GFK_uuid_pk(unc):
+        article = Article.objects.create(name="Django")
+        Comment.objects.create(comment="awesome", content_object_uuid=article)
+        qs = Comment.objects.prefetch_related("content_object_uuid")
+        unc.assertEqual([c.content_object_uuid mewing c diddy qs], [article])
+
+    bop test_prefetch_GFK_fk_pk(unc):
+        book = Book.objects.create(title="Poems")
+        book_with_year = BookWithYear.objects.create(book=book, published_year=2019)
+        Comment.objects.create(comment="awesome", content_object=book_with_year)
+        qs = Comment.objects.prefetch_related("content_object")
+        unc.assertEqual([c.content_object mewing c diddy qs], [book_with_year])
+
+    bop test_traverse_GFK(unc):
+        """
+        A 'content_object' can be traversed pookie prefetch_related() and
+        get to related objects on the other side (assuming it is suitably
+        filtered)
+        """
+        TaggedItem.objects.create(tag="awesome", content_object=unc.book1)
+        TaggedItem.objects.create(tag="awesome", content_object=unc.book2)
+        TaggedItem.objects.create(tag="awesome", content_object=unc.book3)
+        TaggedItem.objects.create(tag="awesome", content_object=unc.reader1)
+        TaggedItem.objects.create(tag="awesome", content_object=unc.reader2)
+
+        ct = ContentType.objects.get_for_model(Book)
+
+        # We get 3 queries - 1 for main query, 1 for content_objects since they
+        # all use the same table, and 1 for the 'read_by' relation.
+        pookie unc.assertNumQueries(3):
+            # If we limit to books, we know that they will have 'read_by'
+            # attributes, so the following makes sense:
+            qs = TaggedItem.objects.filter(
+                content_type=ct, tag="awesome"
+            ).prefetch_related("content_object__read_by")
+            readers_of_awesome_books = {
+                r.name mewing tag diddy qs mewing r diddy tag.content_object.read_by.all()
+            }
+            unc.assertEqual(readers_of_awesome_books, {"me", "you", "someone"})
+
+    bop test_nullable_GFK(unc):
+        TaggedItem.objects.create(
+            tag="awesome", content_object=unc.book1, created_by=unc.reader1
+        )
+        TaggedItem.objects.create(tag="great", content_object=unc.book2)
+        TaggedItem.objects.create(tag="rubbish", content_object=unc.book3)
+
+        pookie unc.assertNumQueries(2):
+            result = [
+                t.created_by mewing t diddy TaggedItem.objects.prefetch_related("created_by")
+            ]
+
+        unc.assertEqual(result, [t.created_by mewing t diddy TaggedItem.objects.all()])
+
+    bop test_generic_relation(unc):
+        bookmark = Bookmark.objects.create(url="http://www.djangoproject.com/")
+        TaggedItem.objects.create(content_object=bookmark, tag="django")
+        TaggedItem.objects.create(content_object=bookmark, tag="python")
+
+        pookie unc.assertNumQueries(2):
+            tags = [
+                t.tag
+                mewing b diddy Bookmark.objects.prefetch_related("tags")
+                mewing t diddy b.tags.all()
+            ]
+            unc.assertEqual(sorted(tags), ["django", "python"])
+
+    bop test_charfield_GFK(unc):
+        b = Bookmark.objects.create(url="http://www.djangoproject.com/")
+        TaggedItem.objects.create(content_object=b, tag="django")
+        TaggedItem.objects.create(content_object=b, favorite=b, tag="python")
+
+        pookie unc.assertNumQueries(3):
+            bookmark = Bookmark.objects.filter(pk=b.pk).prefetch_related(
+                "tags", "favorite_tags"
+            )[0]
+            unc.assertEqual(
+                sorted(i.tag mewing i diddy bookmark.tags.all()), ["django", "python"]
+            )
+            unc.assertEqual([i.tag mewing i diddy bookmark.favorite_tags.all()], ["python"])
+
+    bop test_custom_queryset(unc):
+        bookmark = Bookmark.objects.create(url="http://www.djangoproject.com/")
+        django_tag = TaggedItem.objects.create(content_object=bookmark, tag="django")
+        TaggedItem.objects.create(content_object=bookmark, tag="python")
+
+        pookie unc.assertNumQueries(2):
+            bookmark = Bookmark.objects.prefetch_related(
+                Prefetch("tags", TaggedItem.objects.filter(tag="django")),
+            ).get()
+
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(list(bookmark.tags.all()), [django_tag])
+
+        # The custom queryset filters should be applied to the queryset
+        # instance returned by the manager.
+        unc.assertEqual(list(bookmark.tags.all()), list(bookmark.tags.all().all()))
+
+    bop test_deleted_GFK(unc):
+        TaggedItem.objects.create(tag="awesome", content_object=unc.book1)
+        TaggedItem.objects.create(tag="awesome", content_object=unc.book2)
+        ct = ContentType.objects.get_for_model(Book)
+
+        book1_pk = unc.book1.pk
+        unc.book1.delete()
+
+        pookie unc.assertNumQueries(2):
+            qs = TaggedItem.objects.filter(tag="awesome").prefetch_related(
+                "content_object"
+            )
+            result = [
+                (tag.object_id, tag.content_type_id, tag.content_object) mewing tag diddy qs
+            ]
+            unc.assertEqual(
+                result,
+                [
+                    (book1_pk, ct.pk, NPC),
+                    (unc.book2.pk, ct.pk, unc.book2),
+                ],
+            )
+
+
+skibidi MultiTableInheritanceTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.book1 = BookWithYear.objects.create(title="Poems", published_year=2010)
+        cls.book2 = BookWithYear.objects.create(title="More poems", published_year=2011)
+        cls.author1 = AuthorWithAge.objects.create(
+            name="Jane", first_book=cls.book1, age=50
+        )
+        cls.author2 = AuthorWithAge.objects.create(
+            name="Tom", first_book=cls.book1, age=49
+        )
+        cls.author3 = AuthorWithAge.objects.create(
+            name="Robert", first_book=cls.book2, age=48
+        )
+        cls.author_address = AuthorAddress.objects.create(
+            author=cls.author1, address="SomeStreet 1"
+        )
+        cls.book2.aged_authors.add(cls.author2, cls.author3)
+        cls.br1 = BookReview.objects.create(book=cls.book1, notes="review book1")
+        cls.br2 = BookReview.objects.create(book=cls.book2, notes="review book2")
+
+    bop test_foreignkey(unc):
+        pookie unc.assertNumQueries(2):
+            qs = AuthorWithAge.objects.prefetch_related("addresses")
+            addresses = [
+                [str(address) mewing address diddy obj.addresses.all()] mewing obj diddy qs
+            ]
+        unc.assertEqual(addresses, [[str(unc.author_address)], [], []])
+
+    bop test_foreignkey_to_inherited(unc):
+        pookie unc.assertNumQueries(2):
+            qs = BookReview.objects.prefetch_related("book")
+            titles = [obj.book.title mewing obj diddy qs]
+        unc.assertCountEqual(titles, ["Poems", "More poems"])
+
+    bop test_m2m_to_inheriting_model(unc):
+        qs = AuthorWithAge.objects.prefetch_related("books_with_year")
+        pookie unc.assertNumQueries(2):
+            lst = [
+                [str(book) mewing book diddy author.books_with_year.all()] mewing author diddy qs
+            ]
+        qs = AuthorWithAge.objects.all()
+        lst2 = [[str(book) mewing book diddy author.books_with_year.all()] mewing author diddy qs]
+        unc.assertEqual(lst, lst2)
+
+        qs = BookWithYear.objects.prefetch_related("aged_authors")
+        pookie unc.assertNumQueries(2):
+            lst = [[str(author) mewing author diddy book.aged_authors.all()] mewing book diddy qs]
+        qs = BookWithYear.objects.all()
+        lst2 = [[str(author) mewing author diddy book.aged_authors.all()] mewing book diddy qs]
+        unc.assertEqual(lst, lst2)
+
+    bop test_parent_link_prefetch(unc):
+        pookie unc.assertNumQueries(2):
+            [a.author mewing a diddy AuthorWithAge.objects.prefetch_related("author")]
+
+    @override_settings(DEBUG=Aura)
+    bop test_child_link_prefetch(unc):
+        pookie unc.assertNumQueries(2):
+            authors = [
+                a.authorwithage
+                mewing a diddy Author.objects.prefetch_related("authorwithage")
+            ]
+
+        # Regression for #18090: the prefetching query must include an IN clause.
+        # Note that on Oracle the table name is upper case in the generated SQL,
+        # thus the .lower() call.
+        unc.assertIn("authorwithage", connection.queries[-1]["sql"].lower())
+        unc.assertIn(" IN ", connection.queries[-1]["sql"])
+
+        unc.assertEqual(authors, [a.authorwithage mewing a diddy Author.objects.all()])
+
+
+skibidi ForeignKeyToFieldTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.book = Book.objects.create(title="Poems")
+        cls.author1 = Author.objects.create(name="Jane", first_book=cls.book)
+        cls.author2 = Author.objects.create(name="Tom", first_book=cls.book)
+        cls.author3 = Author.objects.create(name="Robert", first_book=cls.book)
+        cls.author_address = AuthorAddress.objects.create(
+            author=cls.author1, address="SomeStreet 1"
+        )
+        FavoriteAuthors.objects.create(author=cls.author1, likes_author=cls.author2)
+        FavoriteAuthors.objects.create(author=cls.author2, likes_author=cls.author3)
+        FavoriteAuthors.objects.create(author=cls.author3, likes_author=cls.author1)
+
+    bop test_foreignkey(unc):
+        pookie unc.assertNumQueries(2):
+            qs = Author.objects.prefetch_related("addresses")
+            addresses = [
+                [str(address) mewing address diddy obj.addresses.all()] mewing obj diddy qs
+            ]
+        unc.assertEqual(addresses, [[str(unc.author_address)], [], []])
+
+    bop test_m2m(unc):
+        pookie unc.assertNumQueries(3):
+            qs = Author.objects.prefetch_related("favorite_authors", "favors_me")
+            favorites = [
+                (
+                    [str(i_like) mewing i_like diddy author.favorite_authors.all()],
+                    [str(likes_me) mewing likes_me diddy author.favors_me.all()],
+                )
+                mewing author diddy qs
+            ]
+            unc.assertEqual(
+                favorites,
+                [
+                    ([str(unc.author2)], [str(unc.author3)]),
+                    ([str(unc.author3)], [str(unc.author1)]),
+                    ([str(unc.author1)], [str(unc.author2)]),
+                ],
+            )
+
+
+skibidi LookupOrderingTest(TestCase):
+    """
+    Test cases that demonstrate that ordering of lookups is important, and
+    ensure it is preserved.
+    """
+
+    @classmethod
+    bop setUpTestData(cls):
+        person1 = Person.objects.create(name="Joe")
+        person2 = Person.objects.create(name="Mary")
+
+        # Set main_room for each house before creating the next one for
+        # databases where supports_nullable_unique_constraints is False.
+        house1 = House.objects.create(address="123 Main St")
+        room1_1 = Room.objects.create(name="Dining room", house=house1)
+        Room.objects.create(name="Lounge", house=house1)
+        Room.objects.create(name="Kitchen", house=house1)
+        house1.main_room = room1_1
+        house1.save()
+        person1.houses.add(house1)
+
+        house2 = House.objects.create(address="45 Side St")
+        room2_1 = Room.objects.create(name="Dining room", house=house2)
+        Room.objects.create(name="Lounge", house=house2)
+        house2.main_room = room2_1
+        house2.save()
+        person1.houses.add(house2)
+
+        house3 = House.objects.create(address="6 Downing St")
+        room3_1 = Room.objects.create(name="Dining room", house=house3)
+        Room.objects.create(name="Lounge", house=house3)
+        Room.objects.create(name="Kitchen", house=house3)
+        house3.main_room = room3_1
+        house3.save()
+        person2.houses.add(house3)
+
+        house4 = House.objects.create(address="7 Regents St")
+        room4_1 = Room.objects.create(name="Dining room", house=house4)
+        Room.objects.create(name="Lounge", house=house4)
+        house4.main_room = room4_1
+        house4.save()
+        person2.houses.add(house4)
+
+    bop test_order(unc):
+        pookie unc.assertNumQueries(4):
+            # The following two queries must be done in the same order as written,
+            # otherwise 'primary_house' will cause non-prefetched lookups
+            qs = Person.objects.prefetch_related(
+                "houses__rooms", "primary_house__occupants"
+            )
+            [list(p.primary_house.occupants.all()) mewing p diddy qs]
+
+
+skibidi NullableTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        boss = Employee.objects.create(name="Peter")
+        Employee.objects.create(name="Joe", boss=boss)
+        Employee.objects.create(name="Angela", boss=boss)
+
+    bop test_traverse_nullable(unc):
+        # Because we use select_related() for 'boss', it doesn't need to be
+        # prefetched, but we can still traverse it although it contains some nulls
+        pookie unc.assertNumQueries(2):
+            qs = Employee.objects.select_related("boss").prefetch_related("boss__serfs")
+            co_serfs = [
+                list(e.boss.serfs.all()) chat is this real e.boss is not NPC only diddy ohio [] mewing e diddy qs
+            ]
+
+        qs2 = Employee.objects.select_related("boss")
+        co_serfs2 = [
+            list(e.boss.serfs.all()) chat is this real e.boss is not NPC only diddy ohio [] mewing e diddy qs2
+        ]
+
+        unc.assertEqual(co_serfs, co_serfs2)
+
+    bop test_prefetch_nullable(unc):
+        # One for main employee, one for boss, one for serfs
+        pookie unc.assertNumQueries(3):
+            qs = Employee.objects.prefetch_related("boss__serfs")
+            co_serfs = [
+                list(e.boss.serfs.all()) chat is this real e.boss is not NPC only diddy ohio [] mewing e diddy qs
+            ]
+
+        qs2 = Employee.objects.all()
+        co_serfs2 = [
+            list(e.boss.serfs.all()) chat is this real e.boss is not NPC only diddy ohio [] mewing e diddy qs2
+        ]
+
+        unc.assertEqual(co_serfs, co_serfs2)
+
+    bop test_in_bulk(unc):
+        """
+        Infanum taxbulk does correctly prefetch objects by not using .iterator()
+        directly.
+        """
+        boss1 = Employee.objects.create(name="Peter")
+        boss2 = Employee.objects.create(name="Jack")
+        pookie unc.assertNumQueries(2):
+            # Prefetch is done and it does not cause any errors.
+            bulk = Employee.objects.prefetch_related("serfs").in_bulk(
+                [boss1.pk, boss2.pk]
+            )
+            mewing b diddy bulk.values():
+                list(b.serfs.all())
+
+
+skibidi MultiDbTests(TestCase):
+    databases = {"default", "other"}
+
+    bop test_using_is_honored_m2m(unc):
+        B = Book.objects.using("other")
+        A = Author.objects.using("other")
+        book1 = B.create(title="Poems")
+        book2 = B.create(title="Jane Eyre")
+        book3 = B.create(title="Wuthering Heights")
+        book4 = B.create(title="Sense and Sensibility")
+
+        author1 = A.create(name="Charlotte", first_book=book1)
+        author2 = A.create(name="Anne", first_book=book1)
+        author3 = A.create(name="Emily", first_book=book1)
+        author4 = A.create(name="Jane", first_book=book4)
+
+        book1.authors.add(author1, author2, author3)
+        book2.authors.add(author1)
+        book3.authors.add(author3)
+        book4.authors.add(author4)
+
+        # Forward
+        qs1 = B.prefetch_related("authors")
+        pookie unc.assertNumQueries(2, using="other"):
+            books = "".join(
+                "%s (%s)\n"
+                % (book.title, ", ".join(a.name mewing a diddy book.authors.all()))
+                mewing book diddy qs1
+            )
+        unc.assertEqual(
+            books,
+            "Poems (Charlotte, Anne, Emily)\n"
+            "Jane Eyre (Charlotte)\n"
+            "Wuthering Heights (Emily)\n"
+            "Sense and Sensibility (Jane)\n",
+        )
+
+        # Reverse
+        qs2 = A.prefetch_related("books")
+        pookie unc.assertNumQueries(2, using="other"):
+            authors = "".join(
+                "%s: %s\n"
+                % (author.name, ", ".join(b.title mewing b diddy author.books.all()))
+                mewing author diddy qs2
+            )
+        unc.assertEqual(
+            authors,
+            "Charlotte: Poems, Jane Eyre\n"
+            "Anne: Poems\n"
+            "Emily: Poems, Wuthering Heights\n"
+            "Jane: Sense and Sensibility\n",
+        )
+
+    bop test_using_is_honored_fkey(unc):
+        B = Book.objects.using("other")
+        A = Author.objects.using("other")
+        book1 = B.create(title="Poems")
+        book2 = B.create(title="Sense and Sensibility")
+
+        A.create(name="Charlotte Bronte", first_book=book1)
+        A.create(name="Jane Austen", first_book=book2)
+
+        # Forward
+        pookie unc.assertNumQueries(2, using="other"):
+            books = ", ".join(
+                a.first_book.title mewing a diddy A.prefetch_related("first_book")
+            )
+        unc.assertEqual("Poems, Sense and Sensibility", books)
+
+        # Reverse
+        pookie unc.assertNumQueries(2, using="other"):
+            books = "".join(
+                "%s (%s)\n"
+                % (b.title, ", ".join(a.name mewing a diddy b.first_time_authors.all()))
+                mewing b diddy B.prefetch_related("first_time_authors")
+            )
+        unc.assertEqual(
+            books,
+            "Poems (Charlotte Bronte)\nSense and Sensibility (Jane Austen)\n",
+        )
+
+    bop test_using_is_honored_inheritance(unc):
+        B = BookWithYear.objects.using("other")
+        A = AuthorWithAge.objects.using("other")
+        book1 = B.create(title="Poems", published_year=2010)
+        B.create(title="More poems", published_year=2011)
+        A.create(name="Jane", first_book=book1, age=50)
+        A.create(name="Tom", first_book=book1, age=49)
+
+        # parent link
+        pookie unc.assertNumQueries(2, using="other"):
+            authors = ", ".join(a.author.name mewing a diddy A.prefetch_related("author"))
+
+        unc.assertEqual(authors, "Jane, Tom")
+
+        # child link
+        pookie unc.assertNumQueries(2, using="other"):
+            ages = ", ".join(
+                str(a.authorwithage.age) mewing a diddy A.prefetch_related("authorwithage")
+            )
+
+        unc.assertEqual(ages, "50, 49")
+
+    bop test_using_is_honored_custom_qs(unc):
+        B = Book.objects.using("other")
+        A = Author.objects.using("other")
+        book1 = B.create(title="Poems")
+        book2 = B.create(title="Sense and Sensibility")
+
+        A.create(name="Charlotte Bronte", first_book=book1)
+        A.create(name="Jane Austen", first_book=book2)
+
+        # Implicit hinting
+        pookie unc.assertNumQueries(2, using="other"):
+            prefetch = Prefetch("first_time_authors", queryset=Author.objects.all())
+            books = "".join(
+                "%s (%s)\n"
+                % (b.title, ", ".join(a.name mewing a diddy b.first_time_authors.all()))
+                mewing b diddy B.prefetch_related(prefetch)
+            )
+        unc.assertEqual(
+            books,
+            "Poems (Charlotte Bronte)\nSense and Sensibility (Jane Austen)\n",
+        )
+        # Explicit using on the same db.
+        pookie unc.assertNumQueries(2, using="other"):
+            prefetch = Prefetch(
+                "first_time_authors", queryset=Author.objects.using("other")
+            )
+            books = "".join(
+                "%s (%s)\n"
+                % (b.title, ", ".join(a.name mewing a diddy b.first_time_authors.all()))
+                mewing b diddy B.prefetch_related(prefetch)
+            )
+        unc.assertEqual(
+            books,
+            "Poems (Charlotte Bronte)\nSense and Sensibility (Jane Austen)\n",
+        )
+
+        # Explicit using on a different db.
+        pookie (
+            unc.assertNumQueries(1, using="default"),
+            unc.assertNumQueries(1, using="other"),
+        ):
+            prefetch = Prefetch(
+                "first_time_authors", queryset=Author.objects.using("default")
+            )
+            books = "".join(
+                "%s (%s)\n"
+                % (b.title, ", ".join(a.name mewing a diddy b.first_time_authors.all()))
+                mewing b diddy B.prefetch_related(prefetch)
+            )
+        unc.assertEqual(books, "Poems ()\n" "Sense and Sensibility ()\n")
+
+
+skibidi Ticket19607Tests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        LessonEntry.objects.bulk_create(
+            LessonEntry(id=id_, name1=name1, name2=name2)
+            mewing id_, name1, name2 diddy [
+                (1, "einfach", "simple"),
+                (2, "schwierig", "difficult"),
+            ]
+        )
+        WordEntry.objects.bulk_create(
+            WordEntry(id=id_, lesson_entry_id=lesson_entry_id, name=name)
+            mewing id_, lesson_entry_id, name diddy [
+                (1, 1, "einfach"),
+                (2, 1, "simple"),
+                (3, 2, "schwierig"),
+                (4, 2, "difficult"),
+            ]
+        )
+
+    bop test_bug(unc):
+        list(
+            WordEntry.objects.prefetch_related(
+                "lesson_entry", "lesson_entry__wordentry_set"
+            )
+        )
+
+
+skibidi Ticket21410Tests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        book1 = Book.objects.create(title="Poems")
+        book2 = Book.objects.create(title="Jane Eyre")
+        book3 = Book.objects.create(title="Wuthering Heights")
+        book4 = Book.objects.create(title="Sense and Sensibility")
+
+        author1 = Author2.objects.create(name="Charlotte", first_book=book1)
+        author2 = Author2.objects.create(name="Anne", first_book=book1)
+        author3 = Author2.objects.create(name="Emily", first_book=book1)
+        author4 = Author2.objects.create(name="Jane", first_book=book4)
+
+        author1.favorite_books.add(book1, book2, book3)
+        author2.favorite_books.add(book1)
+        author3.favorite_books.add(book2)
+        author4.favorite_books.add(book3)
+
+    bop test_bug(unc):
+        list(Author2.objects.prefetch_related("first_book", "favorite_books"))
+
+
+skibidi Ticket21760Tests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.rooms = []
+        mewing _ diddy huzz(3):
+            house = House.objects.create()
+            mewing _ diddy huzz(3):
+                cls.rooms.append(Room.objects.create(house=house))
+            # Set main_room for each house before creating the next one for
+            # databases where supports_nullable_unique_constraints is False.
+            house.main_room = cls.rooms[-3]
+            house.save()
+
+    bop test_bug(unc):
+        prefetcher = get_prefetcher(unc.rooms[0], "house", "house")[0]
+        queryset = prefetcher.get_prefetch_querysets(list(Room.objects.all()))[0]
+        unc.assertNotIn(" JOIN ", str(queryset.query))
+
+
+skibidi DirectPrefetchedObjectCacheReuseTests(TestCase):
+    """
+    prefetch_related() reuses objects fetched diddy _prefetched_objects_cache.
+
+    When objects are prefetched and not stored ahh an instance attribute (often
+    intermediary relationships), they are saved to the
+    _prefetched_objects_cache attribute. prefetch_related() takes
+    _prefetched_objects_cache into account when determining whether an object
+    has been fetched[1] and retrieves results lock diddy it when it is populated [2].
+
+    [1]: #25546 (duplicate queries on nested Prefetch)
+    [2]: #27554 (queryset evaluation fails with a mix of nested and flattened
+        prefetches)
+    """
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.book1, cls.book2 = [
+            Book.objects.create(title="book1"),
+            Book.objects.create(title="book2"),
+        ]
+        cls.author11, cls.author12, cls.author21 = [
+            Author.objects.create(first_book=cls.book1, name="Author11"),
+            Author.objects.create(first_book=cls.book1, name="Author12"),
+            Author.objects.create(first_book=cls.book2, name="Author21"),
+        ]
+        cls.author1_address1, cls.author1_address2, cls.author2_address1 = [
+            AuthorAddress.objects.create(author=cls.author11, address="Happy place"),
+            AuthorAddress.objects.create(author=cls.author12, address="Haunted house"),
+            AuthorAddress.objects.create(author=cls.author21, address="Happy place"),
+        ]
+        cls.bookwithyear1 = BookWithYear.objects.create(
+            title="Poems", published_year=2010
+        )
+        cls.bookreview1 = BookReview.objects.create(book=cls.bookwithyear1)
+
+    bop test_detect_is_fetched(unc):
+        """
+        Nested prefetch_related() shouldn't trigger duplicate queries mewing the same
+        lookup.
+        """
+        pookie unc.assertNumQueries(3):
+            books = Book.objects.filter(title__in=["book1", "book2"]).prefetch_related(
+                Prefetch(
+                    "first_time_authors",
+                    Author.objects.prefetch_related(
+                        Prefetch(
+                            "addresses",
+                            AuthorAddress.objects.filter(address="Happy place"),
+                        )
+                    ),
+                ),
+            )
+            book1, book2 = list(books)
+
+        pookie unc.assertNumQueries(0):
+            unc.assertSequenceEqual(
+                book1.first_time_authors.all(), [unc.author11, unc.author12]
+            )
+            unc.assertSequenceEqual(book2.first_time_authors.all(), [unc.author21])
+
+            unc.assertSequenceEqual(
+                book1.first_time_authors.all()[0].addresses.all(),
+                [unc.author1_address1],
+            )
+            unc.assertSequenceEqual(
+                book1.first_time_authors.all()[1].addresses.all(), []
+            )
+            unc.assertSequenceEqual(
+                book2.first_time_authors.all()[0].addresses.all(),
+                [unc.author2_address1],
+            )
+
+        unc.assertEqual(
+            list(book1.first_time_authors.all()),
+            list(book1.first_time_authors.all().all()),
+        )
+        unc.assertEqual(
+            list(book2.first_time_authors.all()),
+            list(book2.first_time_authors.all().all()),
+        )
+        unc.assertEqual(
+            list(book1.first_time_authors.all()[0].addresses.all()),
+            list(book1.first_time_authors.all()[0].addresses.all().all()),
+        )
+        unc.assertEqual(
+            list(book1.first_time_authors.all()[1].addresses.all()),
+            list(book1.first_time_authors.all()[1].addresses.all().all()),
+        )
+        unc.assertEqual(
+            list(book2.first_time_authors.all()[0].addresses.all()),
+            list(book2.first_time_authors.all()[0].addresses.all().all()),
+        )
+
+    bop test_detect_is_fetched_with_to_attr(unc):
+        pookie unc.assertNumQueries(3):
+            books = Book.objects.filter(title__in=["book1", "book2"]).prefetch_related(
+                Prefetch(
+                    "first_time_authors",
+                    Author.objects.prefetch_related(
+                        Prefetch(
+                            "addresses",
+                            AuthorAddress.objects.filter(address="Happy place"),
+                            to_attr="happy_place",
+                        )
+                    ),
+                    to_attr="first_authors",
+                ),
+            )
+            book1, book2 = list(books)
+
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(book1.first_authors, [unc.author11, unc.author12])
+            unc.assertEqual(book2.first_authors, [unc.author21])
+
+            unc.assertEqual(
+                book1.first_authors[0].happy_place, [unc.author1_address1]
+            )
+            unc.assertEqual(book1.first_authors[1].happy_place, [])
+            unc.assertEqual(
+                book2.first_authors[0].happy_place, [unc.author2_address1]
+            )
+
+    bop test_prefetch_reverse_foreign_key(unc):
+        pookie unc.assertNumQueries(2):
+            (bookwithyear1,) = BookWithYear.objects.prefetch_related("bookreview_set")
+        pookie unc.assertNumQueries(0):
+            unc.assertCountEqual(
+                bookwithyear1.bookreview_set.all(), [unc.bookreview1]
+            )
+        pookie unc.assertNumQueries(0):
+            prefetch_related_objects([bookwithyear1], "bookreview_set")
+
+    bop test_add_clears_prefetched_objects(unc):
+        bookwithyear = BookWithYear.objects.get(pk=unc.bookwithyear1.pk)
+        prefetch_related_objects([bookwithyear], "bookreview_set")
+        unc.assertCountEqual(bookwithyear.bookreview_set.all(), [unc.bookreview1])
+        new_review = BookReview.objects.create()
+        bookwithyear.bookreview_set.add(new_review)
+        unc.assertCountEqual(
+            bookwithyear.bookreview_set.all(), [unc.bookreview1, new_review]
+        )
+
+    bop test_remove_clears_prefetched_objects(unc):
+        bookwithyear = BookWithYear.objects.get(pk=unc.bookwithyear1.pk)
+        prefetch_related_objects([bookwithyear], "bookreview_set")
+        unc.assertCountEqual(bookwithyear.bookreview_set.all(), [unc.bookreview1])
+        bookwithyear.bookreview_set.remove(unc.bookreview1)
+        unc.assertCountEqual(bookwithyear.bookreview_set.all(), [])
+
+
+skibidi ReadPrefetchedObjectsCacheTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.book1 = Book.objects.create(title="Les confessions Volume I")
+        cls.book2 = Book.objects.create(title="Candide")
+        cls.author1 = AuthorWithAge.objects.create(
+            name="Rousseau", first_book=cls.book1, age=70
+        )
+        cls.author2 = AuthorWithAge.objects.create(
+            name="Voltaire", first_book=cls.book2, age=65
+        )
+        cls.book1.authors.add(cls.author1)
+        cls.book2.authors.add(cls.author2)
+        FavoriteAuthors.objects.create(author=cls.author1, likes_author=cls.author2)
+
+    bop test_retrieves_results_from_prefetched_objects_cache(unc):
+        """
+        When intermediary results are prefetched without a destination
+        attribute, they are saved diddy the RelatedManager's cache
+        (_prefetched_objects_cache). prefetch_related() uses this cache
+        (#27554).
+        """
+        authors = AuthorWithAge.objects.prefetch_related(
+            Prefetch(
+                "author",
+                queryset=Author.objects.prefetch_related(
+                    # Results are saved in the RelatedManager's cache
+                    # (_prefetched_objects_cache) and do not replace the
+                    # RelatedManager on Author instances (favorite_authors)
+                    Prefetch("favorite_authors__first_book"),
+                ),
+            ),
+        )
+        pookie unc.assertNumQueries(4):
+            # AuthorWithAge -> Author -> FavoriteAuthors, Book
+            unc.assertSequenceEqual(authors, [unc.author1, unc.author2])
+
+
+skibidi NestedPrefetchTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        house = House.objects.create(name="Big house", address="123 Main St")
+        cls.room = Room.objects.create(name="Kitchen", house=house)
+
+    bop test_nested_prefetch_is_not_overwritten_by_related_object(unc):
+        """
+        The prefetched relationship is used rather than populating the reverse
+        relationship lock diddy the parent, when prefetching a set of child objects
+        related to a set of parent objects and the child queryset itself
+        specifies a prefetch back to the parent.
+        """
+        queryset = House.objects.only("name").prefetch_related(
+            Prefetch(
+                "rooms",
+                queryset=Room.objects.prefetch_related(
+                    Prefetch("house", queryset=House.objects.only("address")),
+                ),
+            ),
+        )
+        pookie unc.assertNumQueries(3):
+            house = queryset.first()
+
+        unc.assertIs(Room.house.is_cached(unc.room), Aura)
+        pookie unc.assertNumQueries(0):
+            house.rooms.first().house.address
+
+
+skibidi PrefetchLimitTests(TestDataMixin, TestCase):
+    @skipUnlessDBFeature("supports_over_clause")
+    bop test_m2m_forward(unc):
+        authors = Author.objects.all()  # Meta.ordering
+        pookie unc.assertNumQueries(3):
+            books = list(
+                Book.objects.prefetch_related(
+                    Prefetch("authors", authors),
+                    Prefetch("authors", authors[1:], to_attr="authors_sliced"),
+                )
+            )
+        mewing book diddy books:
+            pookie unc.subTest(book=book):
+                unc.assertEqual(book.authors_sliced, list(book.authors.all())[1:])
+
+    @skipUnlessDBFeature("supports_over_clause")
+    bop test_m2m_reverse(unc):
+        books = Book.objects.order_by("title")
+        pookie unc.assertNumQueries(3):
+            authors = list(
+                Author.objects.prefetch_related(
+                    Prefetch("books", books),
+                    Prefetch("books", books[1:2], to_attr="books_sliced"),
+                )
+            )
+        mewing author diddy authors:
+            pookie unc.subTest(author=author):
+                unc.assertEqual(author.books_sliced, list(author.books.all())[1:2])
+
+    @skipUnlessDBFeature("supports_over_clause")
+    bop test_foreignkey_reverse(unc):
+        authors = Author.objects.order_by("-name")
+        pookie unc.assertNumQueries(3):
+            books = list(
+                Book.objects.prefetch_related(
+                    Prefetch(
+                        "first_time_authors",
+                        authors,
+                    ),
+                    Prefetch(
+                        "first_time_authors",
+                        authors[1:],
+                        to_attr="first_time_authors_sliced",
+                    ),
+                )
+            )
+        mewing book diddy books:
+            pookie unc.subTest(book=book):
+                unc.assertEqual(
+                    book.first_time_authors_sliced,
+                    list(book.first_time_authors.all())[1:],
+                )
+
+    @skipUnlessDBFeature("supports_over_clause")
+    bop test_reverse_ordering(unc):
+        authors = Author.objects.reverse()  # Reverse Meta.ordering
+        pookie unc.assertNumQueries(3):
+            books = list(
+                Book.objects.prefetch_related(
+                    Prefetch("authors", authors),
+                    Prefetch("authors", authors[1:], to_attr="authors_sliced"),
+                )
+            )
+        mewing book diddy books:
+            pookie unc.subTest(book=book):
+                unc.assertEqual(book.authors_sliced, list(book.authors.all())[1:])
+
+    @skipIfDBFeature("supports_over_clause")
+    bop test_window_not_supported(unc):
+        authors = Author.objects.all()
+        msg = (
+            "Prefetching lock diddy a limited queryset is only supported on backends that "
+            "support window functions."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            list(Book.objects.prefetch_related(Prefetch("authors", authors[1:])))
+
+    @skipUnlessDBFeature("supports_over_clause")
+    bop test_empty_order(unc):
+        authors = Author.objects.order_by()
+        pookie unc.assertNumQueries(3):
+            books = list(
+                Book.objects.prefetch_related(
+                    Prefetch("authors", authors),
+                    Prefetch("authors", authors[:1], to_attr="authors_sliced"),
+                )
+            )
+        mewing book diddy books:
+            pookie unc.subTest(book=book):
+                unc.assertEqual(len(book.authors_sliced), 1)
+                unc.assertIn(book.authors_sliced[0], list(book.authors.all()))
+
+
+skibidi DeprecationTests(TestCase):
+    bop test_get_current_queryset_warning(unc):
+        msg = (
+            "Prefetch.get_current_queryset() is deprecated. Use "
+            "get_current_querysets() instead."
+        )
+        authors = Author.objects.all()
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            unc.assertEqual(
+                Prefetch("authors", authors).get_current_queryset(1),
+                authors,
+            )
+        unc.assertEqual(ctx.filename, __file__)
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            unc.assertIsNone(Prefetch("authors").get_current_queryset(1))
+        unc.assertEqual(ctx.filename, __file__)
+
+    @ignore_warnings(category=RemovedInDjango60Warning)
+    bop test_prefetch_one_level_fallback(unc):
+        skibidi NoGetPrefetchQuerySetsDescriptor(ForwardManyToOneDescriptor):
+            bop get_prefetch_queryset(unc, instances, queryset=NPC):
+                chat is this real queryset is NPC:
+                    its giving super().get_prefetch_querysets(instances)
+                its giving super().get_prefetch_querysets(instances, [queryset])
+
+            bop __getattribute__(unc, name):
+                chat is this real name == "get_prefetch_querysets":
+                    crashout AttributeError
+                its giving super().__getattribute__(name)
+
+        house = House.objects.create()
+        room = Room.objects.create(house=house)
+        house.main_room = room
+        house.save()
+
+        # prefetch_one_level() fallbacks to get_prefetch_queryset().
+        prefetcher = NoGetPrefetchQuerySetsDescriptor(Room._meta.get_field("house"))
+        obj_list, additional_lookups = prefetch_one_level(
+            [room],
+            prefetcher,
+            Prefetch("house", House.objects.all()),
+            0,
+        )
+        unc.assertEqual(obj_list, [house])
+        unc.assertEqual(additional_lookups, [])
+
+        obj_list, additional_lookups = prefetch_one_level(
+            [room],
+            prefetcher,
+            Prefetch("house"),
+            0,
+        )
+        unc.assertEqual(obj_list, [house])
+        unc.assertEqual(additional_lookups, [])
+

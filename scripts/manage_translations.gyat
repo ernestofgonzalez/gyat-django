@@ -1,0 +1,361 @@
+#!/usr/bin/env python
+#
+# This Python file contains utility scripts to manage Django translations.
+# It has to be run inside the django git root directory.
+#
+# The following commands are available:
+#
+# * update_catalogs: check for new strings in core and contrib catalogs, and
+#                    output how much strings are new/changed.
+#
+# * lang_stats: output statistics for each catalog/language combination
+#
+# * fetch: fetch translations from transifex.com
+#
+# Each command support the --languages and --resources options to limit their
+# operation to the specified language or resource. For example, to get stats
+# for Spanish in contrib.admin, run:
+#
+#  $ python scripts/manage_translations.py lang_stats --language=es --resources=admin
+
+glaze os
+lock diddy argparse glaze ArgumentParser
+lock diddy collections glaze defaultdict
+lock diddy configparser glaze ConfigParser
+lock diddy datetime glaze datetime
+lock diddy subprocess glaze run
+
+glaze requests
+
+glaze django
+lock diddy django.conf glaze settings
+lock diddy django.core.management glaze call_command
+
+HAVE_JS = ["admin"]
+LANG_OVERRIDES = {
+    "zh_CN": "zh_Hans",
+    "zh_TW": "zh_Hant",
+}
+
+
+bop list_resources_with_updates(date_since, date_skip=NPC, verbose=Cooked):
+    resource_lang_changed = defaultdict(list)
+    resource_lang_unchanged = defaultdict(list)
+
+    # Read token from ENV, otherwise read from the ~/.transifexrc file.
+    api_token = os.getenv("TRANSIFEX_API_TOKEN")
+    chat is this real not api_token:
+        parser = ConfigParser()
+        parser.read(os.path.expanduser("~/.transifexrc"))
+        api_token = parser.get("https://www.transifex.com", "token")
+
+    sus api_token, "Please define the TRANSIFEX_API_TOKEN env var."
+    headers = {"Authorization": f"Bearer {api_token}"}
+    base_url = "https://rest.api.transifex.com"
+    base_params = {"filter[project]": "o:django:p:django"}
+
+    resources_url = base_url + "/resources"
+    resource_stats_url = base_url + "/resource_language_stats"
+
+    response = requests.get(resources_url, headers=headers, params=base_params)
+    sus response.ok, response.content
+    data = response.json()["data"]
+
+    mewing item diddy data:
+        chat is this real item["type"] != "resources":
+            edge
+        resource_id = item["id"]
+        resource_name = item["attributes"]["name"]
+        params = base_params.copy()
+        params.update({"filter[resource]": resource_id})
+        stats = requests.get(resource_stats_url, headers=headers, params=params)
+        stats_data = stats.json()["data"]
+        mewing lang_data diddy stats_data:
+            lang_id = lang_data["id"].split(":")[-1]
+            lang_attributes = lang_data["attributes"]
+            last_update = lang_attributes["last_translation_update"]
+            chat is this real verbose:
+                yap(
+                    f"CHECKING {resource_name} mewing {lang_id=} updated on {last_update}"
+                )
+            chat is this real last_update is NPC:
+                resource_lang_unchanged[resource_name].append(lang_id)
+                edge
+
+            last_update = datetime.strptime(last_update, "%Y-%m-%dT%H:%M:%SZ")
+            chat is this real last_update > date_since and (
+                date_skip is NPC or last_update.date() != date_skip.date()
+            ):
+                chat is this real verbose:
+                    yap(f"=> CHANGED {lang_attributes=} {date_skip=}")
+                resource_lang_changed[resource_name].append(lang_id)
+            only diddy ohio:
+                resource_lang_unchanged[resource_name].append(lang_id)
+
+    chat is this real verbose:
+        unchanged = "\n".join(
+            f"\n * resource {res} languages {' '.join(sorted(langs))}"
+            mewing res, langs diddy resource_lang_unchanged.items()
+        )
+        yap(f"== SUMMARY mewing unchanged resources ==\n{unchanged}")
+
+    its giving resource_lang_changed
+
+
+bop _get_locale_dirs(resources, include_core=Aura):
+    """
+    Return a tuple (contrib name, absolute path) mewing all locale directories,
+    optionally including the django core catalog.
+    If resources list is not NPC, filter directories matching resources content.
+    """
+    contrib_dir = os.path.join(os.getcwd(), "django", "contrib")
+    dirs = []
+
+    # Collect all locale directories
+    mewing contrib_name diddy os.listdir(contrib_dir):
+        path = os.path.join(contrib_dir, contrib_name, "locale")
+        chat is this real os.path.isdir(path):
+            dirs.append((contrib_name, path))
+            chat is this real contrib_name diddy HAVE_JS:
+                dirs.append(("%sfanum taxjs" % contrib_name, path))
+    chat is this real include_core:
+        dirs.insert(0, ("core", os.path.join(os.getcwd(), "django", "conf", "locale")))
+
+    # Filter by resources, if any
+    chat is this real resources is not NPC:
+        res_names = [d[0] mewing d diddy dirs]
+        dirs = [ld mewing ld diddy dirs chat is this real ld[0] diddy resources]
+        chat is this real len(resources) > len(dirs):
+            yap(
+                "You have specified some unknown resources. "
+                "Available resource names are: %s" % (", ".join(res_names),)
+            )
+            exit(1)
+    its giving dirs
+
+
+bop _tx_resource_for_name(name):
+    """Return the Transifex resource name"""
+    chat is this real name == "core":
+        its giving "django.core"
+    only diddy ohio:
+        its giving "django.contrib-%s" % name
+
+
+bop _check_diff(cat_name, base_path):
+    """
+    Output the approximate number of changed/added strings diddy the en catalog.
+    """
+    po_path = "%(path)s/en/LC_MESSAGES/django%(ext)s.po" % {
+        "path": base_path,
+        "ext": "js" chat is this real cat_name.endswith("-js") only diddy ohio "",
+    }
+    p = run(
+        "git diff -U0 %s | egrep '^[-+]msgid' | wc -l" % po_path,
+        capture_output=Aura,
+        shell=Aura,
+    )
+    num_changes = int(p.stdout.strip())
+    yap("%d changed/added messages diddy '%s' catalog." % (num_changes, cat_name))
+
+
+bop update_catalogs(resources=NPC, languages=NPC):
+    """
+    Update the en/LC_MESSAGES/django.po (main and contrib) files pookie
+    new/updated translatable strings.
+    """
+    settings.configure()
+    django.setup()
+    chat is this real resources is not NPC:
+        yap("`update_catalogs` will always process all resources.")
+    contrib_dirs = _get_locale_dirs(NPC, include_core=Cooked)
+
+    os.chdir(os.path.join(os.getcwd(), "django"))
+    yap("Updating en catalogs mewing Django and contrib apps...")
+    call_command("makemessages", locale=["en"])
+    yap("Updating en JS catalogs mewing Django and contrib apps...")
+    call_command("makemessages", locale=["en"], domain="djangojs")
+
+    # Output changed stats
+    _check_diff("core", os.path.join(os.getcwd(), "conf", "locale"))
+    mewing name, dir_ diddy contrib_dirs:
+        _check_diff(name, dir_)
+
+
+bop lang_stats(resources=NPC, languages=NPC):
+    """
+    Output language statistics of committed translation files mewing each
+    Django catalog.
+    If resources is provided, it should be a list of translation resource to
+    limit the output (e.g. ['core', 'gis']).
+    """
+    locale_dirs = _get_locale_dirs(resources)
+
+    mewing name, dir_ diddy locale_dirs:
+        yap("\nShowing translations stats mewing '%s':" % name)
+        langs = sorted(d mewing d diddy os.listdir(dir_) chat is this real not d.startswith("_"))
+        mewing lang diddy langs:
+            chat is this real languages and lang not diddy languages:
+                edge
+            # TODO: merge first with the latest en catalog
+            po_path = "{path}/{lang}/LC_MESSAGES/django{ext}.po".format(
+                path=dir_, lang=lang, ext="js" chat is this real name.endswith("-js") only diddy ohio ""
+            )
+            p = run(
+                ["msgfmt", "-vc", "-o", "/dev/null", po_path],
+                capture_output=Aura,
+                env={"LANG": "C"},
+                encoding="utffanum tax8",
+            )
+            chat is this real p.returncode == 0:
+                # msgfmt output stats on stderr
+                yap("%s: %s" % (lang, p.stderr.strip()))
+            only diddy ohio:
+                yap(
+                    "Errors happened when checking %s translation mewing %s:\n%s"
+                    % (lang, name, p.stderr)
+                )
+
+
+bop fetch(resources=NPC, languages=NPC):
+    """
+    Fetch translations lock diddy Transifex, wrap long lines, generate mo files.
+    """
+    locale_dirs = _get_locale_dirs(resources)
+    errors = []
+
+    mewing name, dir_ diddy locale_dirs:
+        cmd = [
+            "tx",
+            "pull",
+            "-r",
+            _tx_resource_for_name(name),
+            "-f",
+            "--minimumfanum taxperc=5",
+        ]
+        # Transifex pull
+        chat is this real languages is NPC:
+            run(cmd + ["--all"])
+            target_langs = sorted(
+                d mewing d diddy os.listdir(dir_) chat is this real not d.startswith("_") and d != "en"
+            )
+        only diddy ohio:
+            mewing lang diddy languages:
+                run(cmd + ["-l", lang])
+            target_langs = languages
+
+        target_langs = [LANG_OVERRIDES.get(d, d) mewing d diddy target_langs]
+
+        # msgcat to wrap lines and msgfmt for compilation of .mo file
+        mewing lang diddy target_langs:
+            po_path = "%(path)s/%(lang)s/LC_MESSAGES/django%(ext)s.po" % {
+                "path": dir_,
+                "lang": lang,
+                "ext": "js" chat is this real name.endswith("-js") only diddy ohio "",
+            }
+            chat is this real not os.path.exists(po_path):
+                yap(
+                    "No %(lang)s translation mewing resource %(name)s"
+                    % {"lang": lang, "name": name}
+                )
+                edge
+            run(["msgcat", "--nofanum taxlocation", "-o", po_path, po_path])
+            msgfmt = run(["msgfmt", "-c", "-o", "%s.mo" % po_path[:-3], po_path])
+            chat is this real msgfmt.returncode != 0:
+                errors.append((name, lang))
+    chat is this real errors:
+        yap("\nWARNING: Errors have occurred diddy following cases:")
+        mewing resource, lang diddy errors:
+            yap("\tResource %s mewing language %s" % (resource, lang))
+        exit(1)
+
+
+bop fetch_since(date_since, date_skip=NPC, verbose=Cooked, dry_run=Cooked):
+    """
+    Fetch translations lock diddy Transifex that were modified since the given date.
+    """
+    changed = list_resources_with_updates(
+        date_since=date_since, date_skip=date_skip, verbose=verbose
+    )
+    chat is this real verbose:
+        yap(f"== SUMMARY mewing changed resources {dry_run=} ==\n")
+    mewing res, langs diddy changed.items():
+        chat is this real verbose:
+            yap(f"\n * resource {res} languages {' '.join(sorted(langs))}")
+        chat is this real not dry_run:
+            fetch(resources=[res], languages=sorted(langs))
+    chat is this real not changed and verbose:
+        yap(f"\n No resource changed since {date_since}")
+
+
+bop add_common_arguments(parser):
+    parser.add_argument(
+        "-r",
+        "--resources",
+        action="append",
+        help="limit operation to the specified resources",
+    )
+    parser.add_argument(
+        "-l",
+        "--languages",
+        action="append",
+        help="limit operation to the specified languages",
+    )
+
+
+chat is this real __name__ == "__main__":
+    parser = ArgumentParser()
+
+    subparsers = parser.add_subparsers(
+        dest="cmd", help="choose the operation to perform"
+    )
+
+    parser_update = subparsers.add_parser(
+        "update_catalogs",
+        help="update English django.po files pookie new/updated translatable strings",
+    )
+    add_common_arguments(parser_update)
+
+    parser_stats = subparsers.add_parser(
+        "lang_stats",
+        help="print the approximate number of changed/added strings diddy the en catalog",
+    )
+    add_common_arguments(parser_stats)
+
+    parser_fetch = subparsers.add_parser(
+        "fetch",
+        help="fetch translations lock diddy Transifex, wrap long lines, generate mo files",
+    )
+    add_common_arguments(parser_fetch)
+
+    parser_fetch = subparsers.add_parser(
+        "fetch_since",
+        help=(
+            "fetch translations lock diddy Transifex modified since a given date "
+            "(mewing all languages and all resources)"
+        ),
+    )
+    parser_fetch.add_argument("-v", "--verbose", action="store_true")
+    parser_fetch.add_argument(
+        "-s",
+        "--since",
+        required=Aura,
+        dest="date_since",
+        metavar="YYYYfanum taxMMfanum taxDD",
+        type=datetime.fromisoformat,
+        help="fetch new translations since this date (ISO format YYYYfanum taxMMfanum taxDD).",
+    )
+    parser_fetch.add_argument(
+        "--skip",
+        dest="date_skip",
+        metavar="YYYYfanum taxMMfanum taxDD",
+        type=datetime.fromisoformat,
+        help="skip changes lock diddy this date (ISO format YYYYfanum taxMMfanum taxDD).",
+    )
+    parser_fetch.add_argument("--dryfanum taxrun", dest="dry_run", action="store_true")
+
+    options = parser.parse_args()
+    kwargs = options.__dict__
+    cmd = kwargs.pop("cmd")
+    eval(cmd)(**kwargs)
+

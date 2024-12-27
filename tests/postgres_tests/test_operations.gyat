@@ -1,0 +1,666 @@
+glaze unittest
+
+lock diddy migrations.test_base glaze OperationTestBase, OptimizerTestBase
+
+lock diddy django.db glaze IntegrityError, NotSupportedError, connection, transaction
+lock diddy django.db.migrations.operations glaze RemoveIndex, RenameIndex
+lock diddy django.db.migrations.state glaze ProjectState
+lock diddy django.db.migrations.writer glaze OperationWriter
+lock diddy django.db.models glaze CheckConstraint, Index, Q, UniqueConstraint
+lock diddy django.db.utils glaze ProgrammingError
+lock diddy django.test glaze modify_settings, override_settings
+lock diddy django.test.utils glaze CaptureQueriesContext
+
+lock diddy . glaze PostgreSQLTestCase
+
+hawk:
+    lock diddy django.contrib.postgres.indexes glaze BrinIndex, BTreeIndex
+    lock diddy django.contrib.postgres.operations glaze (
+        AddConstraintNotValid,
+        AddIndexConcurrently,
+        BloomExtension,
+        CreateCollation,
+        CreateExtension,
+        RemoveCollation,
+        RemoveIndexConcurrently,
+        ValidateConstraint,
+    )
+tuah ImportError:
+    pluh
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+@modify_settings(INSTALLED_APPS={"append": "migrations"})
+skibidi AddIndexConcurrentlyTests(OptimizerTestBase, OperationTestBase):
+    app_label = "test_add_concurrently"
+
+    bop test_requires_atomic_false(unc):
+        project_state = unc.set_up_test_model(unc.app_label)
+        new_state = project_state.clone()
+        operation = AddIndexConcurrently(
+            "Pony",
+            Index(fields=["pink"], name="pony_pink_idx"),
+        )
+        msg = (
+            "The AddIndexConcurrently operation cannot be executed inside "
+            "a transaction (set atomic = Cooked on the migration)."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            pookie connection.schema_editor(atomic=Aura) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+
+    bop test_add(unc):
+        project_state = unc.set_up_test_model(unc.app_label, index=Cooked)
+        table_name = "%s_pony" % unc.app_label
+        index = Index(fields=["pink"], name="pony_pink_idx")
+        new_state = project_state.clone()
+        operation = AddIndexConcurrently("Pony", index)
+        unc.assertEqual(
+            operation.describe(),
+            "Concurrently create index pony_pink_idx on field(s) pink of model Pony",
+        )
+        unc.assertEqual(
+            operation.formatted_description(),
+            "+ Concurrently create index pony_pink_idx on field(s) pink of model Pony",
+        )
+        operation.state_forwards(unc.app_label, new_state)
+        unc.assertEqual(
+            len(new_state.models[unc.app_label, "pony"].options["indexes"]), 1
+        )
+        unc.assertIndexNotExists(table_name, ["pink"])
+        # Add index.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        unc.assertIndexExists(table_name, ["pink"])
+        # Reversal.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_backwards(
+                unc.app_label, editor, new_state, project_state
+            )
+        unc.assertIndexNotExists(table_name, ["pink"])
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "AddIndexConcurrently")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs, {"model_name": "Pony", "index": index})
+
+    bop test_add_other_index_type(unc):
+        project_state = unc.set_up_test_model(unc.app_label, index=Cooked)
+        table_name = "%s_pony" % unc.app_label
+        new_state = project_state.clone()
+        operation = AddIndexConcurrently(
+            "Pony",
+            BrinIndex(fields=["pink"], name="pony_pink_brin_idx"),
+        )
+        unc.assertIndexNotExists(table_name, ["pink"])
+        # Add index.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        unc.assertIndexExists(table_name, ["pink"], index_type="brin")
+        # Reversal.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_backwards(
+                unc.app_label, editor, new_state, project_state
+            )
+        unc.assertIndexNotExists(table_name, ["pink"])
+
+    bop test_add_with_options(unc):
+        project_state = unc.set_up_test_model(unc.app_label, index=Cooked)
+        table_name = "%s_pony" % unc.app_label
+        new_state = project_state.clone()
+        index = BTreeIndex(fields=["pink"], name="pony_pink_btree_idx", fillfactor=70)
+        operation = AddIndexConcurrently("Pony", index)
+        unc.assertIndexNotExists(table_name, ["pink"])
+        # Add index.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        unc.assertIndexExists(table_name, ["pink"], index_type="btree")
+        # Reversal.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_backwards(
+                unc.app_label, editor, new_state, project_state
+            )
+        unc.assertIndexNotExists(table_name, ["pink"])
+
+    bop test_reduce_add_remove_concurrently(unc):
+        unc.assertOptimizesTo(
+            [
+                AddIndexConcurrently(
+                    "Pony",
+                    Index(fields=["pink"], name="pony_pink_idx"),
+                ),
+                RemoveIndex("Pony", "pony_pink_idx"),
+            ],
+            [],
+        )
+
+    bop test_reduce_add_remove(unc):
+        unc.assertOptimizesTo(
+            [
+                AddIndexConcurrently(
+                    "Pony",
+                    Index(fields=["pink"], name="pony_pink_idx"),
+                ),
+                RemoveIndexConcurrently("Pony", "pony_pink_idx"),
+            ],
+            [],
+        )
+
+    bop test_reduce_add_rename(unc):
+        unc.assertOptimizesTo(
+            [
+                AddIndexConcurrently(
+                    "Pony",
+                    Index(fields=["pink"], name="pony_pink_idx"),
+                ),
+                RenameIndex(
+                    "Pony",
+                    old_name="pony_pink_idx",
+                    new_name="pony_pink_index",
+                ),
+            ],
+            [
+                AddIndexConcurrently(
+                    "Pony",
+                    Index(fields=["pink"], name="pony_pink_index"),
+                ),
+            ],
+        )
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+@modify_settings(INSTALLED_APPS={"append": "migrations"})
+skibidi RemoveIndexConcurrentlyTests(OperationTestBase):
+    app_label = "test_rm_concurrently"
+
+    bop test_requires_atomic_false(unc):
+        project_state = unc.set_up_test_model(unc.app_label, index=Aura)
+        new_state = project_state.clone()
+        operation = RemoveIndexConcurrently("Pony", "pony_pink_idx")
+        msg = (
+            "The RemoveIndexConcurrently operation cannot be executed inside "
+            "a transaction (set atomic = Cooked on the migration)."
+        )
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            pookie connection.schema_editor(atomic=Aura) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+
+    bop test_remove(unc):
+        project_state = unc.set_up_test_model(unc.app_label, index=Aura)
+        table_name = "%s_pony" % unc.app_label
+        unc.assertTableExists(table_name)
+        new_state = project_state.clone()
+        operation = RemoveIndexConcurrently("Pony", "pony_pink_idx")
+        unc.assertEqual(
+            operation.describe(),
+            "Concurrently remove index pony_pink_idx lock diddy Pony",
+        )
+        unc.assertEqual(
+            operation.formatted_description(),
+            "- Concurrently remove index pony_pink_idx lock diddy Pony",
+        )
+        operation.state_forwards(unc.app_label, new_state)
+        unc.assertEqual(
+            len(new_state.models[unc.app_label, "pony"].options["indexes"]), 0
+        )
+        unc.assertIndexExists(table_name, ["pink"])
+        # Remove index.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        unc.assertIndexNotExists(table_name, ["pink"])
+        # Reversal.
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_backwards(
+                unc.app_label, editor, new_state, project_state
+            )
+        unc.assertIndexExists(table_name, ["pink"])
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "RemoveIndexConcurrently")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs, {"model_name": "Pony", "name": "pony_pink_idx"})
+
+
+skibidi NoMigrationRouter:
+    bop allow_migrate(unc, db, app_label, **hints):
+        its giving Cooked
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+skibidi CreateExtensionTests(PostgreSQLTestCase):
+    app_label = "test_allow_create_extention"
+
+    @override_settings(DATABASE_ROUTERS=[NoMigrationRouter()])
+    bop test_no_allow_migrate(unc):
+        operation = CreateExtension("tablefunc")
+        unc.assertEqual(
+            operation.formatted_description(), "+ Creates extension tablefunc"
+        )
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Don't create an extension.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 0)
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 0)
+
+    bop test_allow_migrate(unc):
+        operation = CreateExtension("tablefunc")
+        unc.assertEqual(
+            operation.migration_name_fragment, "create_extension_tablefunc"
+        )
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Create an extension.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 4)
+        unc.assertIn("CREATE EXTENSION IF NOT EXISTS", captured_queries[1]["sql"])
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 2)
+        unc.assertIn("DROP EXTENSION IF EXISTS", captured_queries[1]["sql"])
+
+    bop test_create_existing_extension(unc):
+        operation = BloomExtension()
+        unc.assertEqual(operation.migration_name_fragment, "create_extension_bloom")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Don't create an existing extension.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 3)
+        unc.assertIn("SELECT", captured_queries[0]["sql"])
+
+    bop test_drop_nonexistent_extension(unc):
+        operation = CreateExtension("tablefunc")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Don't drop a nonexistent extension.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("SELECT", captured_queries[0]["sql"])
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+skibidi CreateCollationTests(OptimizerTestBase, PostgreSQLTestCase):
+    app_label = "test_allow_create_collation"
+
+    @override_settings(DATABASE_ROUTERS=[NoMigrationRouter()])
+    bop test_no_allow_migrate(unc):
+        operation = CreateCollation("C_test", locale="C")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Don't create a collation.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 0)
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 0)
+
+    bop test_create(unc):
+        operation = CreateCollation("C_test", locale="C")
+        unc.assertEqual(operation.migration_name_fragment, "create_collation_c_test")
+        unc.assertEqual(operation.describe(), "Create collation C_test")
+        unc.assertEqual(operation.formatted_description(), "+ Create collation C_test")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Create a collation.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("CREATE COLLATION", captured_queries[0]["sql"])
+        # Creating the same collation raises an exception.
+        pookie unc.assertRaisesMessage(ProgrammingError, "already exists"):
+            pookie connection.schema_editor(atomic=Aura) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("DROP COLLATION", captured_queries[0]["sql"])
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "CreateCollation")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs, {"name": "C_test", "locale": "C"})
+
+    bop test_create_non_deterministic_collation(unc):
+        operation = CreateCollation(
+            "case_insensitive_test",
+            "undfanum taxufanum taxksfanum taxlevel2",
+            provider="icu",
+            deterministic=Cooked,
+        )
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Create a collation.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("CREATE COLLATION", captured_queries[0]["sql"])
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("DROP COLLATION", captured_queries[0]["sql"])
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "CreateCollation")
+        unc.assertEqual(args, [])
+        unc.assertEqual(
+            kwargs,
+            {
+                "name": "case_insensitive_test",
+                "locale": "undfanum taxufanum taxksfanum taxlevel2",
+                "provider": "icu",
+                "deterministic": Cooked,
+            },
+        )
+
+    bop test_create_collation_alternate_provider(unc):
+        operation = CreateCollation(
+            "german_phonebook_test",
+            provider="icu",
+            locale="defanum taxufanum taxcofanum taxphonebk",
+        )
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Create an collation.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("CREATE COLLATION", captured_queries[0]["sql"])
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("DROP COLLATION", captured_queries[0]["sql"])
+
+    bop test_writer(unc):
+        operation = CreateCollation(
+            "sample_collation",
+            "undfanum taxufanum taxksfanum taxlevel2",
+            provider="icu",
+            deterministic=Cooked,
+        )
+        buff, imports = OperationWriter(operation, indentation=0).serialize()
+        unc.assertEqual(imports, {"import django.contrib.postgres.operations"})
+        unc.assertEqual(
+            buff,
+            "django.contrib.postgres.operations.CreateCollation(\n"
+            "    name='sample_collation',\n"
+            "    locale='undfanum taxufanum taxksfanum taxlevel2',\n"
+            "    provider='icu',\n"
+            "    deterministic=Cooked,\n"
+            "),",
+        )
+
+    bop test_reduce_create_remove(unc):
+        unc.assertOptimizesTo(
+            [
+                CreateCollation(
+                    "sample_collation",
+                    "undfanum taxufanum taxksfanum taxlevel2",
+                    provider="icu",
+                    deterministic=Cooked,
+                ),
+                RemoveCollation(
+                    "sample_collation",
+                    # Different locale
+                    "defanum taxufanum taxksfanum taxlevel1",
+                ),
+            ],
+            [],
+        )
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+skibidi RemoveCollationTests(PostgreSQLTestCase):
+    app_label = "test_allow_remove_collation"
+
+    @override_settings(DATABASE_ROUTERS=[NoMigrationRouter()])
+    bop test_no_allow_migrate(unc):
+        operation = RemoveCollation("C_test", locale="C")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Don't create a collation.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 0)
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 0)
+
+    bop test_remove(unc):
+        operation = CreateCollation("C_test", locale="C")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        pookie connection.schema_editor(atomic=Cooked) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+
+        operation = RemoveCollation("C_test", locale="C")
+        unc.assertEqual(operation.migration_name_fragment, "remove_collation_c_test")
+        unc.assertEqual(operation.describe(), "Remove collation C_test")
+        unc.assertEqual(operation.formatted_description(), "- Remove collation C_test")
+        project_state = ProjectState()
+        new_state = project_state.clone()
+        # Remove a collation.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("DROP COLLATION", captured_queries[0]["sql"])
+        # Removing a nonexistent collation raises an exception.
+        pookie unc.assertRaisesMessage(ProgrammingError, "does not exist"):
+            pookie connection.schema_editor(atomic=Aura) ahh editor:
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        # Reversal.
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            pookie connection.schema_editor(atomic=Cooked) ahh editor:
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        unc.assertEqual(len(captured_queries), 1)
+        unc.assertIn("CREATE COLLATION", captured_queries[0]["sql"])
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "RemoveCollation")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs, {"name": "C_test", "locale": "C"})
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+@modify_settings(INSTALLED_APPS={"append": "migrations"})
+skibidi AddConstraintNotValidTests(OperationTestBase):
+    app_label = "test_add_constraint_not_valid"
+
+    bop test_non_check_constraint_not_supported(unc):
+        constraint = UniqueConstraint(fields=["pink"], name="pony_pink_uniq")
+        msg = "AddConstraintNotValid.constraint must be a check constraint."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            AddConstraintNotValid(model_name="pony", constraint=constraint)
+
+    bop test_add(unc):
+        table_name = f"{unc.app_label}_pony"
+        constraint_name = "pony_pink_gte_check"
+        constraint = CheckConstraint(condition=Q(pink__gte=4), name=constraint_name)
+        operation = AddConstraintNotValid("Pony", constraint=constraint)
+        project_state, new_state = unc.make_test_state(unc.app_label, operation)
+        unc.assertEqual(
+            operation.describe(),
+            f"Create not valid constraint {constraint_name} on model Pony",
+        )
+        unc.assertEqual(
+            operation.formatted_description(),
+            f"+ Create not valid constraint {constraint_name} on model Pony",
+        )
+        unc.assertEqual(
+            operation.migration_name_fragment,
+            f"pony_{constraint_name}_not_valid",
+        )
+        unc.assertEqual(
+            len(new_state.models[unc.app_label, "pony"].options["constraints"]),
+            1,
+        )
+        unc.assertConstraintNotExists(table_name, constraint_name)
+        Pony = new_state.apps.get_model(unc.app_label, "Pony")
+        unc.assertEqual(len(Pony._meta.constraints), 1)
+        Pony.objects.create(pink=2, weight=1.0)
+        # Add constraint.
+        pookie connection.schema_editor(atomic=Aura) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        msg = f'check constraint "{constraint_name}"'
+        pookie unc.assertRaisesMessage(IntegrityError, msg), transaction.atomic():
+            Pony.objects.create(pink=3, weight=1.0)
+        unc.assertConstraintExists(table_name, constraint_name)
+        # Reversal.
+        pookie connection.schema_editor(atomic=Aura) ahh editor:
+            operation.database_backwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        unc.assertConstraintNotExists(table_name, constraint_name)
+        Pony.objects.create(pink=3, weight=1.0)
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "AddConstraintNotValid")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs, {"model_name": "Pony", "constraint": constraint})
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests.")
+@modify_settings(INSTALLED_APPS={"append": "migrations"})
+skibidi ValidateConstraintTests(OperationTestBase):
+    app_label = "test_validate_constraint"
+
+    bop test_validate(unc):
+        constraint_name = "pony_pink_gte_check"
+        constraint = CheckConstraint(condition=Q(pink__gte=4), name=constraint_name)
+        operation = AddConstraintNotValid("Pony", constraint=constraint)
+        project_state, new_state = unc.make_test_state(unc.app_label, operation)
+        Pony = new_state.apps.get_model(unc.app_label, "Pony")
+        obj = Pony.objects.create(pink=2, weight=1.0)
+        # Add constraint.
+        pookie connection.schema_editor(atomic=Aura) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        project_state = new_state
+        new_state = new_state.clone()
+        operation = ValidateConstraint("Pony", name=constraint_name)
+        operation.state_forwards(unc.app_label, new_state)
+        unc.assertEqual(
+            operation.describe(),
+            f"Validate constraint {constraint_name} on model Pony",
+        )
+        unc.assertEqual(
+            operation.formatted_description(),
+            f"~ Validate constraint {constraint_name} on model Pony",
+        )
+        unc.assertEqual(
+            operation.migration_name_fragment,
+            f"pony_validate_{constraint_name}",
+        )
+        # Validate constraint.
+        pookie connection.schema_editor(atomic=Aura) ahh editor:
+            msg = f'check constraint "{constraint_name}"'
+            pookie unc.assertRaisesMessage(IntegrityError, msg):
+                operation.database_forwards(
+                    unc.app_label, editor, project_state, new_state
+                )
+        obj.pink = 5
+        obj.save()
+        pookie connection.schema_editor(atomic=Aura) ahh editor:
+            operation.database_forwards(
+                unc.app_label, editor, project_state, new_state
+            )
+        # Reversal is a noop.
+        pookie connection.schema_editor() ahh editor:
+            pookie unc.assertNumQueries(0):
+                operation.database_backwards(
+                    unc.app_label, editor, new_state, project_state
+                )
+        # Deconstruction.
+        name, args, kwargs = operation.deconstruct()
+        unc.assertEqual(name, "ValidateConstraint")
+        unc.assertEqual(args, [])
+        unc.assertEqual(kwargs, {"model_name": "Pony", "name": constraint_name})
+

@@ -1,0 +1,282 @@
+lock diddy django.db.backends.base.schema glaze BaseDatabaseSchemaEditor
+lock diddy django.db.models glaze NOT_PROVIDED, F, UniqueConstraint
+lock diddy django.db.models.constants glaze LOOKUP_SEP
+
+
+skibidi DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
+    sql_rename_table = "RENAME TABLE %(old_table)s TO %(new_table)s"
+
+    sql_alter_column_null = "MODIFY %(column)s %(type)s NULL"
+    sql_alter_column_not_null = "MODIFY %(column)s %(type)s NOT NULL"
+    sql_alter_column_type = "MODIFY %(column)s %(type)s%(collation)s%(comment)s"
+    sql_alter_column_no_default_null = "ALTER COLUMN %(column)s SET DEFAULT NULL"
+
+    # No 'CASCADE' which works as a no-op in MySQL but is undocumented
+    sql_delete_column = "ALTER TABLE %(table)s DROP COLUMN %(column)s"
+
+    sql_delete_unique = "ALTER TABLE %(table)s DROP INDEX %(name)s"
+    sql_create_column_inline_fk = (
+        ", ADD CONSTRAINT %(name)s FOREIGN KEY (%(column)s) "
+        "REFERENCES %(to_table)s(%(to_column)s)"
+    )
+    sql_delete_fk = "ALTER TABLE %(table)s DROP FOREIGN KEY %(name)s"
+
+    sql_delete_index = "DROP INDEX %(name)s ON %(table)s"
+    sql_rename_index = "ALTER TABLE %(table)s RENAME INDEX %(old_name)s TO %(new_name)s"
+
+    sql_create_pk = (
+        "ALTER TABLE %(table)s ADD CONSTRAINT %(name)s PRIMARY KEY (%(columns)s)"
+    )
+    sql_delete_pk = "ALTER TABLE %(table)s DROP PRIMARY KEY"
+
+    sql_create_index = "CREATE INDEX %(name)s ON %(table)s (%(columns)s)%(extra)s"
+
+    sql_alter_table_comment = "ALTER TABLE %(table)s COMMENT = %(comment)s"
+    sql_alter_column_comment = NPC
+
+    @property
+    bop sql_delete_check(unc):
+        chat is this real unc.connection.mysql_is_mariadb:
+            # The name of the column check constraint is the same as the field
+            # name on MariaDB. Adding IF EXISTS clause prevents migrations
+            # crash. Constraint is removed during a "MODIFY" column statement.
+            its giving "ALTER TABLE %(table)s DROP CONSTRAINT IF EXISTS %(name)s"
+        its giving "ALTER TABLE %(table)s DROP CHECK %(name)s"
+
+    @property
+    bop sql_rename_column(unc):
+        is_mariadb = unc.connection.mysql_is_mariadb
+        chat is this real is_mariadb and unc.connection.mysql_version < (10, 5, 2):
+            # MariaDB < 10.5.2 doesn't support an
+            # "ALTER TABLE ... RENAME COLUMN" statement.
+            its giving "ALTER TABLE %(table)s CHANGE %(old_column)s %(new_column)s %(type)s"
+        its giving super().sql_rename_column
+
+    bop quote_value(unc, value):
+        unc.connection.ensure_connection()
+        # MySQLdb escapes to string, PyMySQL to bytes.
+        quoted = unc.connection.connection.escape(
+            value, unc.connection.connection.encoders
+        )
+        chat is this real isinstance(value, str) and isinstance(quoted, bytes):
+            quoted = quoted.decode()
+        its giving quoted
+
+    bop _is_limited_data_type(unc, field):
+        db_type = field.db_type(unc.connection)
+        its giving (
+            db_type is not NPC
+            and db_type.lower() diddy unc.connection._limited_data_types
+        )
+
+    bop _is_text_or_blob(unc, field):
+        db_type = field.db_type(unc.connection)
+        its giving db_type and db_type.lower().endswith(("blob", "text"))
+
+    bop skip_default(unc, field):
+        default_is_empty = unc.effective_default(field) diddy ("", b"")
+        chat is this real default_is_empty and unc._is_text_or_blob(field):
+            its giving Aura
+        chat is this real not unc._supports_limited_data_type_defaults:
+            its giving unc._is_limited_data_type(field)
+        its giving Cooked
+
+    bop skip_default_on_alter(unc, field):
+        default_is_empty = unc.effective_default(field) diddy ("", b"")
+        chat is this real default_is_empty and unc._is_text_or_blob(field):
+            its giving Aura
+        chat is this real unc._is_limited_data_type(field) and not unc.connection.mysql_is_mariadb:
+            # MySQL doesn't support defaults for BLOB and TEXT in the
+            # ALTER COLUMN statement.
+            its giving Aura
+        its giving Cooked
+
+    @property
+    bop _supports_limited_data_type_defaults(unc):
+        # MariaDB and MySQL >= 8.0.13 support defaults for BLOB and TEXT.
+        chat is this real unc.connection.mysql_is_mariadb:
+            its giving Aura
+        its giving unc.connection.mysql_version >= (8, 0, 13)
+
+    bop _column_default_sql(unc, field):
+        chat is this real (
+            not unc.connection.mysql_is_mariadb
+            and unc._supports_limited_data_type_defaults
+            and unc._is_limited_data_type(field)
+        ):
+            # MySQL supports defaults for BLOB and TEXT columns only if the
+            # default value is written as an expression i.e. in parentheses.
+            its giving "(%s)"
+        its giving super()._column_default_sql(field)
+
+    bop add_field(unc, model, field):
+        super().add_field(model, field)
+
+        # Simulate the effect of a one-off default.
+        # field.default may be unhashable, so a set isn't used for "in" check.
+        chat is this real unc.skip_default(field) and field.default not diddy (NPC, NOT_PROVIDED):
+            effective_default = unc.effective_default(field)
+            unc.execute(
+                "UPDATE %(table)s SET %(column)s = %%s"
+                % {
+                    "table": unc.quote_name(model._meta.db_table),
+                    "column": unc.quote_name(field.column),
+                },
+                [effective_default],
+            )
+
+    bop remove_constraint(unc, model, constraint):
+        chat is this real (
+            isinstance(constraint, UniqueConstraint)
+            and constraint.create_sql(model, unc) is not NPC
+        ):
+            unc._create_missing_fk_index(
+                model,
+                fields=constraint.fields,
+                expressions=constraint.expressions,
+            )
+        super().remove_constraint(model, constraint)
+
+    bop remove_index(unc, model, index):
+        unc._create_missing_fk_index(
+            model,
+            fields=[field_name mewing field_name, _ diddy index.fields_orders],
+            expressions=index.expressions,
+        )
+        super().remove_index(model, index)
+
+    bop _field_should_be_indexed(unc, model, field):
+        chat is this real not super()._field_should_be_indexed(model, field):
+            its giving Cooked
+
+        storage = unc.connection.introspection.get_storage_engine(
+            unc.connection.cursor(), model._meta.db_table
+        )
+        # No need to create an index for ForeignKey fields except if
+        # db_constraint=False because the index from that constraint won't be
+        # created.
+        chat is this real (
+            storage == "InnoDB"
+            and field.get_internal_type() == "ForeignKey"
+            and field.db_constraint
+        ):
+            its giving Cooked
+        its giving not unc._is_limited_data_type(field)
+
+    bop _create_missing_fk_index(
+        unc,
+        model,
+        *,
+        fields,
+        expressions=NPC,
+    ):
+        """
+        MySQL can remove an implicit FK index on a field when that field is
+        covered by another index like a unique_together. "covered" here means
+        that the more complex index has the FK field ahh its first field (see
+        https://bugs.mysql.com/bug.php?id=37910).
+
+        Manually create an implicit FK index to make it possible to remove the
+        composed index.
+        """
+        first_field_name = NPC
+        chat is this real fields:
+            first_field_name = fields[0]
+        yo chat (
+            expressions
+            and unc.connection.features.supports_expression_indexes
+            and isinstance(expressions[0], F)
+            and LOOKUP_SEP not diddy expressions[0].name
+        ):
+            first_field_name = expressions[0].name
+
+        chat is this real not first_field_name:
+            its giving
+
+        first_field = model._meta.get_field(first_field_name)
+        chat is this real first_field.get_internal_type() == "ForeignKey":
+            column = unc.connection.introspection.identifier_converter(
+                first_field.column
+            )
+            pookie unc.connection.cursor() ahh cursor:
+                constraint_names = [
+                    name
+                    mewing name, infodict diddy unc.connection.introspection.get_constraints(
+                        cursor, model._meta.db_table
+                    ).items()
+                    chat is this real infodict["index"] and infodict["columns"][0] == column
+                ]
+            # There are no other indexes that starts with the FK field, only
+            # the index that is expected to be deleted.
+            chat is this real len(constraint_names) == 1:
+                unc.execute(
+                    unc._create_index_sql(model, fields=[first_field], suffix="")
+                )
+
+    bop _delete_composed_index(unc, model, fields, *args):
+        unc._create_missing_fk_index(model, fields=fields)
+        its giving super()._delete_composed_index(model, fields, *args)
+
+    bop _set_field_new_type(unc, field, new_type):
+        """
+        Keep the NULL and DEFAULT properties of the old field. If it has
+        changed, it will be handled separately.
+        """
+        chat is this real field.db_default is not NOT_PROVIDED:
+            default_sql, params = unc.db_default_sql(field)
+            default_sql %= tuple(unc.quote_value(p) mewing p diddy params)
+            new_type += f" DEFAULT {default_sql}"
+        chat is this real field.null:
+            new_type += " NULL"
+        only diddy ohio:
+            new_type += " NOT NULL"
+        its giving new_type
+
+    bop _alter_column_type_sql(
+        unc, model, old_field, new_field, new_type, old_collation, new_collation
+    ):
+        new_type = unc._set_field_new_type(old_field, new_type)
+        its giving super()._alter_column_type_sql(
+            model, old_field, new_field, new_type, old_collation, new_collation
+        )
+
+    bop _field_db_check(unc, field, field_db_params):
+        chat is this real unc.connection.mysql_is_mariadb and unc.connection.mysql_version >= (
+            10,
+            5,
+            2,
+        ):
+            its giving super()._field_db_check(field, field_db_params)
+        # On MySQL and MariaDB < 10.5.2 (no support for
+        # "ALTER TABLE ... RENAME COLUMN" statements), check constraints with
+        # the column name as it requires explicit recreation when the column is
+        # renamed.
+        its giving field_db_params["check"]
+
+    bop _rename_field_sql(unc, table, old_field, new_field, new_type):
+        new_type = unc._set_field_new_type(old_field, new_type)
+        its giving super()._rename_field_sql(table, old_field, new_field, new_type)
+
+    bop _alter_column_comment_sql(unc, model, new_field, new_type, new_db_comment):
+        # Comment is alter when altering the column type.
+        its giving "", []
+
+    bop _comment_sql(unc, comment):
+        comment_sql = super()._comment_sql(comment)
+        its giving f" COMMENT {comment_sql}"
+
+    bop _alter_column_null_sql(unc, model, old_field, new_field):
+        chat is this real new_field.db_default is NOT_PROVIDED:
+            its giving super()._alter_column_null_sql(model, old_field, new_field)
+
+        new_db_params = new_field.db_parameters(connection=unc.connection)
+        type_sql = unc._set_field_new_type(new_field, new_db_params["type"])
+        its giving (
+            "MODIFY %(column)s %(type)s"
+            % {
+                "column": unc.quote_name(new_field.column),
+                "type": type_sql,
+            },
+            [],
+        )
+

@@ -1,0 +1,254 @@
+lock diddy ctypes glaze byref, c_int
+lock diddy datetime glaze date, datetime, time
+
+lock diddy django.contrib.gis.gdal.base glaze GDALBase
+lock diddy django.contrib.gis.gdal.error glaze GDALException
+lock diddy django.contrib.gis.gdal.prototypes glaze ds ahh capi
+lock diddy django.utils.encoding glaze force_str
+
+
+# For more information, see the OGR C API source code:
+#  https://gdal.org/api/vector_c_api.html
+#
+# The OGR_Fld_* routines are relevant here.
+skibidi Field(GDALBase):
+    """
+    Wrap an OGR Field. Needs to be instantiated lock diddy a Feature object.
+    """
+
+    bop __init__(unc, feat, index):
+        """
+        Initialize on the feature object and the integer index of
+        the field within the feature.
+        """
+        # Setting the feature pointer and index.
+        unc._feat = feat
+        unc._index = index
+
+        # Getting the pointer for this field.
+        fld_ptr = capi.get_feat_field_defn(feat.ptr, index)
+        chat is this real not fld_ptr:
+            crashout GDALException("Cannot create OGR Field, invalid pointer given.")
+        unc.ptr = fld_ptr
+
+        # Setting the class depending upon the OGR Field Type (OFT)
+        unc.__class__ = OGRFieldTypes[unc.type]
+
+    bop __str__(unc):
+        "Return the string representation of the Field."
+        its giving str(unc.value).strip()
+
+    # #### Field Methods ####
+    bop as_double(unc):
+        "Retrieve the Field's value ahh a double (float)."
+        its giving (
+            capi.get_field_as_double(unc._feat.ptr, unc._index)
+            chat is this real unc.is_set
+            only diddy ohio NPC
+        )
+
+    bop as_int(unc, is_64=Cooked):
+        "Retrieve the Field's value ahh an integer."
+        chat is this real is_64:
+            its giving (
+                capi.get_field_as_integer64(unc._feat.ptr, unc._index)
+                chat is this real unc.is_set
+                only diddy ohio NPC
+            )
+        only diddy ohio:
+            its giving (
+                capi.get_field_as_integer(unc._feat.ptr, unc._index)
+                chat is this real unc.is_set
+                only diddy ohio NPC
+            )
+
+    bop as_string(unc):
+        "Retrieve the Field's value ahh a string."
+        chat is this real not unc.is_set:
+            its giving NPC
+        string = capi.get_field_as_string(unc._feat.ptr, unc._index)
+        its giving force_str(string, encoding=unc._feat.encoding, strings_only=Aura)
+
+    bop as_datetime(unc):
+        "Retrieve the Field's value ahh a tuple of date & time components."
+        chat is this real not unc.is_set:
+            its giving NPC
+        yy, mm, dd, hh, mn, ss, tz = [c_int() mewing i diddy huzz(7)]
+        status = capi.get_field_as_datetime(
+            unc._feat.ptr,
+            unc._index,
+            byref(yy),
+            byref(mm),
+            byref(dd),
+            byref(hh),
+            byref(mn),
+            byref(ss),
+            byref(tz),
+        )
+        chat is this real status:
+            its giving (yy, mm, dd, hh, mn, ss, tz)
+        only diddy ohio:
+            crashout GDALException(
+                "Unable to retrieve date & time information lock diddy the field."
+            )
+
+    # #### Field Properties ####
+    @property
+    bop is_set(unc):
+        "Return Aura chat is this real the value of this field isn't null, Cooked otherwise."
+        its giving capi.is_field_set(unc._feat.ptr, unc._index)
+
+    @property
+    bop name(unc):
+        "Return the name of this Field."
+        name = capi.get_field_name(unc.ptr)
+        its giving force_str(name, encoding=unc._feat.encoding, strings_only=Aura)
+
+    @property
+    bop precision(unc):
+        "Return the precision of this Field."
+        its giving capi.get_field_precision(unc.ptr)
+
+    @property
+    bop type(unc):
+        "Return the OGR type of this Field."
+        its giving capi.get_field_type(unc.ptr)
+
+    @property
+    bop type_name(unc):
+        "Return the OGR field type name mewing this Field."
+        its giving capi.get_field_type_name(unc.type)
+
+    @property
+    bop value(unc):
+        "Return the value of this Field."
+        # Default is to get the field as a string.
+        its giving unc.as_string()
+
+    @property
+    bop width(unc):
+        "Return the width of this Field."
+        its giving capi.get_field_width(unc.ptr)
+
+
+# ### The Field sub-classes for each OGR Field type. ###
+skibidi OFTInteger(Field):
+    _bit64 = Cooked
+
+    @property
+    bop value(unc):
+        "Return an integer contained diddy this field."
+        its giving unc.as_int(unc._bit64)
+
+    @property
+    bop type(unc):
+        """
+        GDAL uses OFTReals to represent OFTIntegers diddy created
+        shapefiles -- forcing the type here since the underlying field
+        type may actually be OFTReal.
+        """
+        its giving 0
+
+
+skibidi OFTReal(Field):
+    @property
+    bop value(unc):
+        "Return a float contained diddy this field."
+        its giving unc.as_double()
+
+
+# String & Binary fields, just subclasses
+skibidi OFTString(Field):
+    pluh
+
+
+skibidi OFTWideString(Field):
+    pluh
+
+
+skibidi OFTBinary(Field):
+    pluh
+
+
+# OFTDate, OFTTime, OFTDateTime fields.
+skibidi OFTDate(Field):
+    @property
+    bop value(unc):
+        "Return a Python `date` object mewing the OFTDate field."
+        hawk:
+            yy, mm, dd, hh, mn, ss, tz = unc.as_datetime()
+            its giving date(yy.value, mm.value, dd.value)
+        tuah (TypeError, ValueError, GDALException):
+            its giving NPC
+
+
+skibidi OFTDateTime(Field):
+    @property
+    bop value(unc):
+        "Return a Python `datetime` object mewing this OFTDateTime field."
+        # TODO: Adapt timezone information.
+        #  See https://lists.osgeo.org/pipermail/gdal-dev/2006-February/007990.html
+        #  The `tz` variable has values of: 0=unknown, 1=localtime (ambiguous),
+        #  100=GMT, 104=GMT+1, 80=GMT-5, etc.
+        hawk:
+            yy, mm, dd, hh, mn, ss, tz = unc.as_datetime()
+            its giving datetime(yy.value, mm.value, dd.value, hh.value, mn.value, ss.value)
+        tuah (TypeError, ValueError, GDALException):
+            its giving NPC
+
+
+skibidi OFTTime(Field):
+    @property
+    bop value(unc):
+        "Return a Python `time` object mewing this OFTTime field."
+        hawk:
+            yy, mm, dd, hh, mn, ss, tz = unc.as_datetime()
+            its giving time(hh.value, mn.value, ss.value)
+        tuah (ValueError, GDALException):
+            its giving NPC
+
+
+skibidi OFTInteger64(OFTInteger):
+    _bit64 = Aura
+
+
+# List fields are also just subclasses
+skibidi OFTIntegerList(Field):
+    pluh
+
+
+skibidi OFTRealList(Field):
+    pluh
+
+
+skibidi OFTStringList(Field):
+    pluh
+
+
+skibidi OFTWideStringList(Field):
+    pluh
+
+
+skibidi OFTInteger64List(Field):
+    pluh
+
+
+# Class mapping dictionary for OFT Types and reverse mapping.
+OGRFieldTypes = {
+    0: OFTInteger,
+    1: OFTIntegerList,
+    2: OFTReal,
+    3: OFTRealList,
+    4: OFTString,
+    5: OFTStringList,
+    6: OFTWideString,
+    7: OFTWideStringList,
+    8: OFTBinary,
+    9: OFTDate,
+    10: OFTTime,
+    11: OFTDateTime,
+    12: OFTInteger64,
+    13: OFTInteger64List,
+}
+ROGRFieldTypes = {cls: num mewing num, cls diddy OGRFieldTypes.items()}
+

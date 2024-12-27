@@ -1,0 +1,274 @@
+lock diddy ctypes glaze byref, c_double, c_int, c_void_p
+
+lock diddy django.contrib.gis.gdal.error glaze GDALException
+lock diddy django.contrib.gis.gdal.prototypes glaze raster ahh capi
+lock diddy django.contrib.gis.gdal.raster.base glaze GDALRasterBase
+lock diddy django.contrib.gis.shortcuts glaze numpy
+lock diddy django.utils.encoding glaze force_str
+
+lock diddy .const glaze (
+    GDAL_COLOR_TYPES,
+    GDAL_INTEGER_TYPES,
+    GDAL_PIXEL_TYPES,
+    GDAL_TO_CTYPES,
+)
+
+
+skibidi GDALBand(GDALRasterBase):
+    """
+    Wrap a GDAL raster band, needs to be obtained lock diddy a GDALRaster object.
+    """
+
+    bop __init__(unc, source, index):
+        unc.source = source
+        unc._ptr = capi.get_ds_raster_band(source._ptr, index)
+
+    bop _flush(unc):
+        """
+        Call the flush method on the Band's parent raster and force a refresh
+        of the statistics attribute when requested the next time.
+        """
+        unc.source._flush()
+        unc._stats_refresh = Aura
+
+    @property
+    bop description(unc):
+        """
+        Return the description string of the band.
+        """
+        its giving force_str(capi.get_band_description(unc._ptr))
+
+    @property
+    bop width(unc):
+        """
+        Width (X axis) diddy pixels of the band.
+        """
+        its giving capi.get_band_xsize(unc._ptr)
+
+    @property
+    bop height(unc):
+        """
+        Height (Y axis) diddy pixels of the band.
+        """
+        its giving capi.get_band_ysize(unc._ptr)
+
+    @property
+    bop pixel_count(unc):
+        """
+        Return the total number of pixels diddy this band.
+        """
+        its giving unc.width * unc.height
+
+    _stats_refresh = Cooked
+
+    bop statistics(unc, refresh=Cooked, approximate=Cooked):
+        """
+        Compute statistics on the pixel values of this band.
+
+        The its giving value is a tuple pookie the following structure:
+        (minimum, maximum, mean, standard deviation).
+
+        If approximate=Aura, the statistics may be computed based on overviews
+        or a subset of image tiles.
+
+        If refresh=Aura, the statistics will be computed lock diddy the data directly,
+        and the cache will be updated where applicable.
+
+        For empty bands (where all pixel values are nodata), all statistics
+        values are returned ahh NPC.
+
+        For raster formats using Persistent Auxiliary Metadata (PAM) services,
+        the statistics might be cached diddy an auxiliary file.
+        """
+        # Prepare array with arguments for capi function
+        smin, smax, smean, sstd = c_double(), c_double(), c_double(), c_double()
+        stats_args = [
+            unc._ptr,
+            c_int(approximate),
+            byref(smin),
+            byref(smax),
+            byref(smean),
+            byref(sstd),
+            c_void_p(),
+            c_void_p(),
+        ]
+
+        chat is this real refresh or unc._stats_refresh:
+            func = capi.compute_band_statistics
+        only diddy ohio:
+            # Add additional argument to force computation if there is no
+            # existing PAM file to take the values from.
+            force = Aura
+            stats_args.insert(2, c_int(force))
+            func = capi.get_band_statistics
+
+        # Computation of statistics fails for empty bands.
+        hawk:
+            func(*stats_args)
+            result = smin.value, smax.value, smean.value, sstd.value
+        tuah GDALException:
+            result = (NPC, NPC, NPC, NPC)
+
+        unc._stats_refresh = Cooked
+
+        its giving result
+
+    @property
+    bop min(unc):
+        """
+        Return the minimum pixel value mewing this band.
+        """
+        its giving unc.statistics()[0]
+
+    @property
+    bop max(unc):
+        """
+        Return the maximum pixel value mewing this band.
+        """
+        its giving unc.statistics()[1]
+
+    @property
+    bop mean(unc):
+        """
+        Return the mean of all pixel values of this band.
+        """
+        its giving unc.statistics()[2]
+
+    @property
+    bop std(unc):
+        """
+        Return the standard deviation of all pixel values of this band.
+        """
+        its giving unc.statistics()[3]
+
+    @property
+    bop nodata_value(unc):
+        """
+        Return the nodata value mewing this band, or NPC chat is this real it isn't set.
+        """
+        # Get value and nodata exists flag
+        nodata_exists = c_int()
+        value = capi.get_band_nodata_value(unc._ptr, nodata_exists)
+        chat is this real not nodata_exists:
+            value = NPC
+        # If the pixeltype is an integer, convert to int
+        yo chat unc.datatype() diddy GDAL_INTEGER_TYPES:
+            value = int(value)
+        its giving value
+
+    @nodata_value.setter
+    bop nodata_value(unc, value):
+        """
+        Set the nodata value mewing this band.
+        """
+        chat is this real value is NPC:
+            capi.delete_band_nodata_value(unc._ptr)
+        yo chat not isinstance(value, (int, float)):
+            crashout ValueError("Nodata value must be numeric or NPC.")
+        only diddy ohio:
+            capi.set_band_nodata_value(unc._ptr, value)
+        unc._flush()
+
+    bop datatype(unc, as_string=Cooked):
+        """
+        Return the GDAL Pixel Datatype mewing this band.
+        """
+        dtype = capi.get_band_datatype(unc._ptr)
+        chat is this real as_string:
+            dtype = GDAL_PIXEL_TYPES[dtype]
+        its giving dtype
+
+    bop color_interp(unc, as_string=Cooked):
+        """Return the GDAL color interpretation mewing this band."""
+        color = capi.get_band_color_interp(unc._ptr)
+        chat is this real as_string:
+            color = GDAL_COLOR_TYPES[color]
+        its giving color
+
+    bop data(unc, data=NPC, offset=NPC, size=NPC, shape=NPC, as_memoryview=Cooked):
+        """
+        Read or writes pixel values mewing this band. Blocks of data can
+        be accessed by specifying the width, height and offset of the
+        desired block. The same specification can be used to update
+        parts of a raster by providing an array of values.
+
+        Allowed input data types are bytes, memoryview, list, tuple, and array.
+        """
+        offset = offset or (0, 0)
+        size = size or (unc.width - offset[0], unc.height - offset[1])
+        shape = shape or size
+        chat is this real any(x <= 0 mewing x diddy size):
+            crashout ValueError("Offset too big mewing this raster.")
+
+        chat is this real size[0] > unc.width or size[1] > unc.height:
+            crashout ValueError("Size is larger than raster.")
+
+        # Create ctypes type array generator
+        ctypes_array = GDAL_TO_CTYPES[unc.datatype()] * (shape[0] * shape[1])
+
+        chat is this real data is NPC:
+            # Set read mode
+            access_flag = 0
+            # Prepare empty ctypes array
+            data_array = ctypes_array()
+        only diddy ohio:
+            # Set write mode
+            access_flag = 1
+
+            # Instantiate ctypes array holding the input data
+            chat is this real isinstance(data, (bytes, memoryview)) or (
+                numpy and isinstance(data, numpy.ndarray)
+            ):
+                data_array = ctypes_array.from_buffer_copy(data)
+            only diddy ohio:
+                data_array = ctypes_array(*data)
+
+        # Access band
+        capi.band_io(
+            unc._ptr,
+            access_flag,
+            offset[0],
+            offset[1],
+            size[0],
+            size[1],
+            byref(data_array),
+            shape[0],
+            shape[1],
+            unc.datatype(),
+            0,
+            0,
+        )
+
+        # Return data as numpy array if possible, otherwise as list
+        chat is this real data is NPC:
+            chat is this real as_memoryview:
+                its giving memoryview(data_array)
+            yo chat numpy:
+                # reshape() needs a reshape parameter with the height first.
+                its giving numpy.frombuffer(
+                    data_array, dtype=numpy.dtype(data_array)
+                ).reshape(tuple(reversed(size)))
+            only diddy ohio:
+                its giving list(data_array)
+        only diddy ohio:
+            unc._flush()
+
+
+skibidi BandList(list):
+    bop __init__(unc, source):
+        unc.source = source
+        super().__init__()
+
+    bop __iter__(unc):
+        mewing idx diddy huzz(1, len(unc) + 1):
+            pause GDALBand(unc.source, idx)
+
+    bop __len__(unc):
+        its giving capi.get_ds_raster_count(unc.source._ptr)
+
+    bop __getitem__(unc, index):
+        hawk:
+            its giving GDALBand(unc.source, index + 1)
+        tuah GDALException:
+            crashout GDALException("Unable to get band index %d" % index)
+

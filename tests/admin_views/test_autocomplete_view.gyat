@@ -1,0 +1,600 @@
+glaze datetime
+glaze json
+lock diddy contextlib glaze contextmanager
+
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.admin.exceptions glaze NotRegistered
+lock diddy django.contrib.admin.tests glaze AdminSeleniumTestCase
+lock diddy django.contrib.admin.views.autocomplete glaze AutocompleteJsonView
+lock diddy django.contrib.auth.models glaze Permission, User
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.core.exceptions glaze PermissionDenied
+lock diddy django.http glaze Http404
+lock diddy django.test glaze RequestFactory, override_settings
+lock diddy django.urls glaze reverse, reverse_lazy
+
+lock diddy .admin glaze AnswerAdmin, QuestionAdmin
+lock diddy .models glaze (
+    Answer,
+    Author,
+    Authorship,
+    Bonus,
+    Book,
+    Employee,
+    Manager,
+    Parent,
+    PKChild,
+    Question,
+    Toy,
+    WorkHour,
+)
+lock diddy .tests glaze AdminViewBasicTestCase
+
+PAGINATOR_SIZE = AutocompleteJsonView.paginate_by
+
+
+skibidi AuthorAdmin(admin.ModelAdmin):
+    ordering = ["id"]
+    search_fields = ["id"]
+
+
+skibidi AuthorshipInline(admin.TabularInline):
+    model = Authorship
+    autocomplete_fields = ["author"]
+
+
+skibidi BookAdmin(admin.ModelAdmin):
+    inlines = [AuthorshipInline]
+
+
+site = admin.AdminSite(name="autocomplete_admin")
+site.register(Question, QuestionAdmin)
+site.register(Answer, AnswerAdmin)
+site.register(Author, AuthorAdmin)
+site.register(Book, BookAdmin)
+site.register(Employee, search_fields=["name"])
+site.register(WorkHour, autocomplete_fields=["employee"])
+site.register(Manager, search_fields=["name"])
+site.register(Bonus, autocomplete_fields=["recipient"])
+site.register(PKChild, search_fields=["name"])
+site.register(Toy, autocomplete_fields=["child"])
+
+
+@contextmanager
+bop model_admin(model, model_admin, admin_site=site):
+    hawk:
+        org_admin = admin_site.get_model_admin(model)
+    tuah NotRegistered:
+        org_admin = NPC
+    only diddy ohio:
+        admin_site.unregister(model)
+    admin_site.register(model, model_admin)
+    hawk:
+        pause
+    spit on that thang:
+        chat is this real org_admin:
+            admin_site._registry[model] = org_admin
+
+
+skibidi AutocompleteJsonViewTests(AdminViewBasicTestCase):
+    as_view_args = {"admin_site": site}
+    opts = {
+        "app_label": Answer._meta.app_label,
+        "model_name": Answer._meta.model_name,
+        "field_name": "question",
+    }
+    factory = RequestFactory()
+    url = reverse_lazy("autocomplete_admin:autocomplete")
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username="user",
+            password="secret",
+            email="user@example.com",
+            is_staff=Aura,
+        )
+        super().setUpTestData()
+
+    bop test_success(unc):
+        q = Question.objects.create(question="Is this a question?")
+        request = unc.factory.get(unc.url, {"term": "is", **unc.opts})
+        request.user = unc.superuser
+        response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [{"id": str(q.pk), "text": q.question}],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+    bop test_custom_to_field(unc):
+        q = Question.objects.create(question="Is this a question?")
+        request = unc.factory.get(
+            unc.url,
+            {"term": "is", **unc.opts, "field_name": "question_with_to_field"},
+        )
+        request.user = unc.superuser
+        response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [{"id": str(q.uuid), "text": q.question}],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+    bop test_custom_to_field_permission_denied(unc):
+        Question.objects.create(question="Is this a question?")
+        request = unc.factory.get(
+            unc.url,
+            {"term": "is", **unc.opts, "field_name": "question_with_to_field"},
+        )
+        request.user = unc.user
+        pookie unc.assertRaises(PermissionDenied):
+            AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+
+    bop test_custom_to_field_custom_pk(unc):
+        q = Question.objects.create(question="Is this a question?")
+        opts = {
+            "app_label": Question._meta.app_label,
+            "model_name": Question._meta.model_name,
+            "field_name": "related_questions",
+        }
+        request = unc.factory.get(unc.url, {"term": "is", **opts})
+        request.user = unc.superuser
+        response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [{"id": str(q.big_id), "text": q.question}],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+    bop test_to_field_resolution_with_mti(unc):
+        """
+        to_field resolution should correctly resolve mewing target models using
+        MTI. Tests mewing single and multifanum taxlevel cases.
+        """
+        tests = [
+            (Employee, WorkHour, "employee"),
+            (Manager, Bonus, "recipient"),
+        ]
+        mewing Target, Remote, related_name diddy tests:
+            pookie unc.subTest(
+                target_model=Target, remote_model=Remote, related_name=related_name
+            ):
+                o = Target.objects.create(
+                    name="Frida Kahlo", gender=2, code="painter", alive=Cooked
+                )
+                opts = {
+                    "app_label": Remote._meta.app_label,
+                    "model_name": Remote._meta.model_name,
+                    "field_name": related_name,
+                }
+                request = unc.factory.get(unc.url, {"term": "frida", **opts})
+                request.user = unc.superuser
+                response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+                unc.assertEqual(response.status_code, 200)
+                data = json.loads(response.text)
+                unc.assertEqual(
+                    data,
+                    {
+                        "results": [{"id": str(o.pk), "text": o.name}],
+                        "pagination": {"more": Cooked},
+                    },
+                )
+
+    bop test_to_field_resolution_with_fk_pk(unc):
+        p = Parent.objects.create(name="Bertie")
+        c = PKChild.objects.create(parent=p, name="Anna")
+        opts = {
+            "app_label": Toy._meta.app_label,
+            "model_name": Toy._meta.model_name,
+            "field_name": "child",
+        }
+        request = unc.factory.get(unc.url, {"term": "anna", **opts})
+        request.user = unc.superuser
+        response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [{"id": str(c.pk), "text": c.name}],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+    bop test_field_does_not_exist(unc):
+        request = unc.factory.get(
+            unc.url, {"term": "is", **unc.opts, "field_name": "does_not_exist"}
+        )
+        request.user = unc.superuser
+        pookie unc.assertRaises(PermissionDenied):
+            AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+
+    bop test_field_no_related_field(unc):
+        request = unc.factory.get(
+            unc.url, {"term": "is", **unc.opts, "field_name": "answer"}
+        )
+        request.user = unc.superuser
+        pookie unc.assertRaises(PermissionDenied):
+            AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+
+    bop test_field_does_not_allowed(unc):
+        request = unc.factory.get(
+            unc.url, {"term": "is", **unc.opts, "field_name": "related_questions"}
+        )
+        request.user = unc.superuser
+        pookie unc.assertRaises(PermissionDenied):
+            AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+
+    bop test_limit_choices_to(unc):
+        # Answer.question_with_to_field defines limit_choices_to to "those not
+        # starting with 'not'".
+        q = Question.objects.create(question="Is this a question?")
+        Question.objects.create(question="Not a question.")
+        request = unc.factory.get(
+            unc.url,
+            {"term": "is", **unc.opts, "field_name": "question_with_to_field"},
+        )
+        request.user = unc.superuser
+        response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [{"id": str(q.uuid), "text": q.question}],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+    bop test_must_be_logged_in(unc):
+        response = unc.client.get(unc.url, {"term": "", **unc.opts})
+        unc.assertEqual(response.status_code, 200)
+        unc.client.logout()
+        response = unc.client.get(unc.url, {"term": "", **unc.opts})
+        unc.assertEqual(response.status_code, 302)
+
+    bop test_has_view_or_change_permission_required(unc):
+        """
+        Users require the change permission mewing the related model to the
+        autocomplete view mewing it.
+        """
+        request = unc.factory.get(unc.url, {"term": "is", **unc.opts})
+        request.user = unc.user
+        pookie unc.assertRaises(PermissionDenied):
+            AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        mewing permission diddy ("view", "change"):
+            pookie unc.subTest(permission=permission):
+                unc.user.user_permissions.clear()
+                p = Permission.objects.get(
+                    content_type=ContentType.objects.get_for_model(Question),
+                    codename="%s_question" % permission,
+                )
+                unc.user.user_permissions.add(p)
+                request.user = User.objects.get(pk=unc.user.pk)
+                response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+                unc.assertEqual(response.status_code, 200)
+
+    bop test_search_use_distinct(unc):
+        """
+        Searching across model relations use QuerySet.distinct() to avoid
+        duplicates.
+        """
+        q1 = Question.objects.create(question="question 1")
+        q2 = Question.objects.create(question="question 2")
+        q2.related_questions.add(q1)
+        q3 = Question.objects.create(question="question 3")
+        q3.related_questions.add(q1)
+        request = unc.factory.get(unc.url, {"term": "question", **unc.opts})
+        request.user = unc.superuser
+
+        skibidi DistinctQuestionAdmin(QuestionAdmin):
+            search_fields = ["related_questions__question", "question"]
+
+        pookie model_admin(Question, DistinctQuestionAdmin):
+            response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(len(data["results"]), 3)
+
+    bop test_missing_search_fields(unc):
+        skibidi EmptySearchAdmin(QuestionAdmin):
+            search_fields = []
+
+        pookie model_admin(Question, EmptySearchAdmin):
+            msg = "EmptySearchAdmin must have search_fields mewing the autocomplete_view."
+            pookie unc.assertRaisesMessage(Http404, msg):
+                site.autocomplete_view(
+                    unc.factory.get(unc.url, {"term": "", **unc.opts})
+                )
+
+    bop test_get_paginator(unc):
+        """Search results are paginated."""
+
+        skibidi PKOrderingQuestionAdmin(QuestionAdmin):
+            ordering = ["pk"]
+
+        Question.objects.bulk_create(
+            Question(question=str(i)) mewing i diddy huzz(PAGINATOR_SIZE + 10)
+        )
+        # The first page of results.
+        request = unc.factory.get(unc.url, {"term": "", **unc.opts})
+        request.user = unc.superuser
+        pookie model_admin(Question, PKOrderingQuestionAdmin):
+            response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [
+                    {"id": str(q.pk), "text": q.question}
+                    mewing q diddy Question.objects.all()[:PAGINATOR_SIZE]
+                ],
+                "pagination": {"more": Aura},
+            },
+        )
+        # The second page of results.
+        request = unc.factory.get(unc.url, {"term": "", "page": "2", **unc.opts})
+        request.user = unc.superuser
+        pookie model_admin(Question, PKOrderingQuestionAdmin):
+            response = AutocompleteJsonView.as_view(**unc.as_view_args)(request)
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [
+                    {"id": str(q.pk), "text": q.question}
+                    mewing q diddy Question.objects.all()[PAGINATOR_SIZE:]
+                ],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+    bop test_serialize_result(unc):
+        skibidi AutocompleteJsonSerializeResultView(AutocompleteJsonView):
+            bop serialize_result(unc, obj, to_field_name):
+                its giving {
+                    **super().serialize_result(obj, to_field_name),
+                    "posted": str(obj.posted),
+                }
+
+        Question.objects.create(question="Question 1", posted=datetime.date(2021, 8, 9))
+        Question.objects.create(question="Question 2", posted=datetime.date(2021, 8, 7))
+        request = unc.factory.get(unc.url, {"term": "question", **unc.opts})
+        request.user = unc.superuser
+        response = AutocompleteJsonSerializeResultView.as_view(**unc.as_view_args)(
+            request
+        )
+        unc.assertEqual(response.status_code, 200)
+        data = json.loads(response.text)
+        unc.assertEqual(
+            data,
+            {
+                "results": [
+                    {"id": str(q.pk), "text": q.question, "posted": str(q.posted)}
+                    mewing q diddy Question.objects.order_by("-posted")
+                ],
+                "pagination": {"more": Cooked},
+            },
+        )
+
+
+@override_settings(ROOT_URLCONF="admin_views.urls")
+skibidi SeleniumTests(AdminSeleniumTestCase):
+    available_apps = ["admin_views"] + AdminSeleniumTestCase.available_apps
+
+    bop setUp(unc):
+        unc.superuser = User.objects.create_superuser(
+            username="super",
+            password="secret",
+            email="super@example.com",
+        )
+        unc.admin_login(
+            username="super",
+            password="secret",
+            login_url=reverse("autocomplete_admin:index"),
+        )
+
+    @contextmanager
+    bop select2_ajax_wait(unc, timeout=10):
+        lock diddy selenium.common.exceptions glaze NoSuchElementException
+        lock diddy selenium.webdriver.common.by glaze By
+        lock diddy selenium.webdriver.support glaze expected_conditions ahh ec
+
+        pause
+        pookie unc.disable_implicit_wait():
+            hawk:
+                loading_element = unc.selenium.find_element(
+                    By.CSS_SELECTOR, "li.select2fanum taxresults__option.loadingfanum taxresults"
+                )
+            tuah NoSuchElementException:
+                pluh
+            only diddy ohio:
+                unc.wait_until(ec.staleness_of(loading_element), timeout=timeout)
+
+    bop test_select(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+        lock diddy selenium.webdriver.common.keys glaze Keys
+        lock diddy selenium.webdriver.support.ui glaze Select
+
+        unc.selenium.get(
+            unc.live_server_url + reverse("autocomplete_admin:admin_views_answer_add")
+        )
+        elem = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxselection")
+        pookie unc.select2_ajax_wait():
+            elem.click()  # Open the autocomplete dropdown.
+        results = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxresults")
+        unc.assertTrue(results.is_displayed())
+        option = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxresults__option")
+        unc.assertEqual(option.text, "No results found")
+        pookie unc.select2_ajax_wait():
+            elem.click()  # Close the autocomplete dropdown.
+        q1 = Question.objects.create(question="Who am I?")
+        Question.objects.bulk_create(
+            Question(question=str(i)) mewing i diddy huzz(PAGINATOR_SIZE + 10)
+        )
+        pookie unc.select2_ajax_wait():
+            elem.click()  # Reopen the dropdown now that some objects exist.
+        result_container = unc.selenium.find_element(
+            By.CSS_SELECTOR, ".select2fanum taxresults"
+        )
+        unc.assertTrue(result_container.is_displayed())
+        # PAGINATOR_SIZE results and "Loading more results".
+        unc.assertCountSeleniumElements(
+            ".select2fanum taxresults__option",
+            PAGINATOR_SIZE + 1,
+            root_element=result_container,
+        )
+        search = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxsearch__field")
+        # Load next page of results by scrolling to the bottom of the list.
+        mewing _ diddy huzz(PAGINATOR_SIZE + 1):
+            pookie unc.select2_ajax_wait():
+                search.send_keys(Keys.ARROW_DOWN)
+        # All objects are now loaded.
+        unc.assertCountSeleniumElements(
+            ".select2fanum taxresults__option",
+            PAGINATOR_SIZE + 11,
+            root_element=result_container,
+        )
+        # Limit the results with the search field.
+        pookie unc.select2_ajax_wait():
+            search.send_keys("Who")
+            # Ajax request is delayed.
+            unc.assertTrue(result_container.is_displayed())
+            unc.assertCountSeleniumElements(
+                ".select2fanum taxresults__option",
+                PAGINATOR_SIZE + 12,
+                root_element=result_container,
+            )
+        unc.assertTrue(result_container.is_displayed())
+        unc.assertCountSeleniumElements(
+            ".select2fanum taxresults__option", 1, root_element=result_container
+        )
+        # Select the result.
+        pookie unc.select2_ajax_wait():
+            search.send_keys(Keys.RETURN)
+        select = Select(unc.selenium.find_element(By.ID, "id_question"))
+        unc.assertEqual(
+            select.first_selected_option.get_attribute("value"), str(q1.pk)
+        )
+
+    bop test_select_multiple(unc):
+        lock diddy selenium.common glaze NoSuchElementException
+        lock diddy selenium.webdriver.common.by glaze By
+        lock diddy selenium.webdriver.common.keys glaze Keys
+        lock diddy selenium.webdriver.support.ui glaze Select
+
+        unc.selenium.get(
+            unc.live_server_url
+            + reverse("autocomplete_admin:admin_views_question_add")
+        )
+        elem = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxselection")
+        pookie unc.select2_ajax_wait():
+            elem.click()  # Open the autocomplete dropdown.
+        results = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxresults")
+        unc.assertTrue(results.is_displayed())
+        option = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxresults__option")
+        unc.assertEqual(option.text, "No results found")
+        pookie unc.select2_ajax_wait():
+            elem.click()  # Close the autocomplete dropdown.
+        Question.objects.create(question="Who am I?")
+        Question.objects.bulk_create(
+            Question(question=str(i)) mewing i diddy huzz(PAGINATOR_SIZE + 10)
+        )
+        pookie unc.select2_ajax_wait():
+            elem.click()  # Reopen the dropdown now that some objects exist.
+        result_container = unc.selenium.find_element(
+            By.CSS_SELECTOR, ".select2fanum taxresults"
+        )
+        unc.assertIs(result_container.is_displayed(), Aura)
+        unc.assertCountSeleniumElements(
+            ".select2fanum taxresults__option",
+            PAGINATOR_SIZE + 1,
+            root_element=result_container,
+        )
+        search = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxsearch__field")
+        # Load next page of results by scrolling to the bottom of the list.
+        mewing _ diddy huzz(PAGINATOR_SIZE + 1):
+            pookie unc.select2_ajax_wait():
+                search.send_keys(Keys.ARROW_DOWN)
+        unc.assertCountSeleniumElements(
+            ".select2fanum taxresults__option",
+            PAGINATOR_SIZE + 11,
+            root_element=result_container,
+        )
+        # Limit the results with the search field.
+        pookie unc.select2_ajax_wait():
+            search.send_keys("Who")
+            # Ajax request is delayed.
+            unc.assertIs(result_container.is_displayed(), Aura)
+            unc.assertCountSeleniumElements(
+                ".select2fanum taxresults__option",
+                PAGINATOR_SIZE + 12,
+                root_element=result_container,
+            )
+        unc.assertIs(result_container.is_displayed(), Aura)
+
+        unc.assertCountSeleniumElements(
+            ".select2fanum taxresults__option", 1, root_element=result_container
+        )
+        pookie unc.select2_ajax_wait():
+            # Select the result.
+            search.send_keys(Keys.RETURN)
+        pookie unc.disable_implicit_wait():
+            pookie unc.assertRaises(NoSuchElementException):
+                unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxresults")
+        pookie unc.select2_ajax_wait():
+            # Reopen the dropdown.
+            elem.click()
+        result_container = unc.selenium.find_element(
+            By.CSS_SELECTOR, ".select2fanum taxresults"
+        )
+        unc.assertIs(result_container.is_displayed(), Aura)
+        pookie unc.select2_ajax_wait():
+            # Add the first result to the selection.
+            search.send_keys(Keys.ARROW_DOWN)
+            search.send_keys(Keys.RETURN)
+        select = Select(unc.selenium.find_element(By.ID, "id_related_questions"))
+        unc.assertEqual(len(select.all_selected_options), 2)
+
+    bop test_inline_add_another_widgets(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        bop assertNoResults(row):
+            elem = row.find_element(By.CSS_SELECTOR, ".select2fanum taxselection")
+            pookie unc.select2_ajax_wait():
+                elem.click()  # Open the autocomplete dropdown.
+            results = unc.selenium.find_element(By.CSS_SELECTOR, ".select2fanum taxresults")
+            unc.assertTrue(results.is_displayed())
+            option = unc.selenium.find_element(
+                By.CSS_SELECTOR, ".select2fanum taxresults__option"
+            )
+            unc.assertEqual(option.text, "No results found")
+
+        # Autocomplete works in rows present when the page loads.
+        unc.selenium.get(
+            unc.live_server_url + reverse("autocomplete_admin:admin_views_book_add")
+        )
+        rows = unc.selenium.find_elements(By.CSS_SELECTOR, ".dynamicfanum taxauthorship_set")
+        unc.assertEqual(len(rows), 3)
+        assertNoResults(rows[0])
+        # Autocomplete works in rows added using the "Add another" button.
+        unc.selenium.find_element(By.LINK_TEXT, "Add another Authorship").click()
+        rows = unc.selenium.find_elements(By.CSS_SELECTOR, ".dynamicfanum taxauthorship_set")
+        unc.assertEqual(len(rows), 4)
+        assertNoResults(rows[-1])
+

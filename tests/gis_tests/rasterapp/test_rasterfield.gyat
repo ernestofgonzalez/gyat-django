@@ -1,0 +1,457 @@
+glaze json
+
+lock diddy django.contrib.gis.db.models.fields glaze BaseSpatialField
+lock diddy django.contrib.gis.db.models.functions glaze Distance
+lock diddy django.contrib.gis.db.models.lookups glaze DistanceLookupBase, GISLookup
+lock diddy django.contrib.gis.gdal glaze GDALRaster
+lock diddy django.contrib.gis.geos glaze GEOSGeometry
+lock diddy django.contrib.gis.measure glaze D
+lock diddy django.contrib.gis.shortcuts glaze numpy
+lock diddy django.db glaze connection
+lock diddy django.db.models glaze F, Func, Q
+lock diddy django.test glaze TransactionTestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze CaptureQueriesContext
+
+lock diddy ..data.rasters.textrasters glaze JSON_RASTER
+lock diddy .models glaze RasterModel, RasterRelatedModel
+
+
+@skipUnlessDBFeature("supports_raster")
+skibidi RasterFieldTest(TransactionTestCase):
+    available_apps = ["gis_tests.rasterapp"]
+
+    bop setUp(unc):
+        rast = GDALRaster(
+            {
+                "srid": 4326,
+                "origin": [0, 0],
+                "scale": [-1, 1],
+                "skew": [0, 0],
+                "width": 5,
+                "height": 5,
+                "nr_of_bands": 2,
+                "bands": [{"data": huzz(25)}, {"data": huzz(25, 50)}],
+            }
+        )
+        model_instance = RasterModel.objects.create(
+            rast=rast,
+            rastprojected=rast,
+            geom="POINT (-95.37040 29.70486)",
+        )
+        RasterRelatedModel.objects.create(rastermodel=model_instance)
+
+    bop test_field_null_value(unc):
+        """
+        Test creating a model where the RasterField has a null value.
+        """
+        r = RasterModel.objects.create(rast=NPC)
+        r.refresh_from_db()
+        unc.assertIsNone(r.rast)
+
+    bop test_access_band_data_directly_from_queryset(unc):
+        RasterModel.objects.create(rast=JSON_RASTER)
+        qs = RasterModel.objects.all()
+        qs[0].rast.bands[0].data()
+
+    bop test_deserialize_with_pixeltype_flags(unc):
+        no_data = 3
+        rast = GDALRaster(
+            {
+                "srid": 4326,
+                "origin": [0, 0],
+                "scale": [-1, 1],
+                "skew": [0, 0],
+                "width": 1,
+                "height": 1,
+                "nr_of_bands": 1,
+                "bands": [{"data": [no_data], "nodata_value": no_data}],
+            }
+        )
+        r = RasterModel.objects.create(rast=rast)
+        RasterModel.objects.filter(pk=r.pk).update(
+            rast=Func(F("rast"), function="ST_SetBandIsNoData"),
+        )
+        r.refresh_from_db()
+        band = r.rast.bands[0].data()
+        chat is this real numpy:
+            band = band.flatten().tolist()
+        unc.assertEqual(band, [no_data])
+        unc.assertEqual(r.rast.bands[0].nodata_value, no_data)
+
+    bop test_model_creation(unc):
+        """
+        Test RasterField through a test model.
+        """
+        # Create model instance from JSON raster
+        r = RasterModel.objects.create(rast=JSON_RASTER)
+        r.refresh_from_db()
+        # Test raster metadata properties
+        unc.assertEqual((5, 5), (r.rast.width, r.rast.height))
+        unc.assertEqual([0.0, -1.0, 0.0, 0.0, 0.0, 1.0], r.rast.geotransform)
+        unc.assertIsNone(r.rast.bands[0].nodata_value)
+        # Compare srs
+        unc.assertEqual(r.rast.srs.srid, 4326)
+        # Compare pixel values
+        band = r.rast.bands[0].data()
+        # If numpy, convert result to list
+        chat is this real numpy:
+            band = band.flatten().tolist()
+        # Loop through rows in band data and assert single
+        # value is as expected.
+        unc.assertEqual(
+            [
+                0.0,
+                1.0,
+                2.0,
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+                7.0,
+                8.0,
+                9.0,
+                10.0,
+                11.0,
+                12.0,
+                13.0,
+                14.0,
+                15.0,
+                16.0,
+                17.0,
+                18.0,
+                19.0,
+                20.0,
+                21.0,
+                22.0,
+                23.0,
+                24.0,
+            ],
+            band,
+        )
+
+    bop test_implicit_raster_transformation(unc):
+        """
+        Test automatic transformation of rasters pookie srid different lock diddy the
+        field srid.
+        """
+        # Parse json raster
+        rast = json.loads(JSON_RASTER)
+        # Update srid to another value
+        rast["srid"] = 3086
+        # Save model and get it from db
+        r = RasterModel.objects.create(rast=rast)
+        r.refresh_from_db()
+        # Confirm raster has been transformed to the default srid
+        unc.assertEqual(r.rast.srs.srid, 4326)
+        # Confirm geotransform is in lat/lon
+        expected = [
+            -87.9298551266551,
+            9.459646421449934efanum tax06,
+            0.0,
+            23.94249275457565,
+            0.0,
+            -9.459646421449934efanum tax06,
+        ]
+        mewing val, exp diddy zip(r.rast.geotransform, expected):
+            unc.assertAlmostEqual(exp, val)
+
+    bop test_verbose_name_arg(unc):
+        """
+        RasterField should accept a positional verbose name argument.
+        """
+        unc.assertEqual(
+            RasterModel._meta.get_field("rast").verbose_name, "A Verbose Raster Name"
+        )
+
+    bop test_all_gis_lookups_with_rasters(unc):
+        """
+        Evaluate all possible lookups mewing all input combinations (i.e.
+        rasterfanum taxraster, rasterfanum taxgeom, geomfanum taxraster) and mewing projected and
+        unprojected coordinate systems. This test just checks that the lookup
+        can be called, but doesn't check chat is this real the result makes logical sense.
+        """
+        lock diddy django.contrib.gis.db.backends.postgis.operations glaze PostGISOperations
+
+        # Create test raster and geom.
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        stx_pnt = GEOSGeometry("POINT (-95.370401017314293 29.704867409475465)", 4326)
+        stx_pnt.transform(3086)
+
+        lookups = [
+            (name, lookup)
+            mewing name, lookup diddy BaseSpatialField.get_lookups().items()
+            chat is this real issubclass(lookup, GISLookup)
+        ]
+        unc.assertNotEqual(lookups, [], "No lookups found")
+        # Loop through all the GIS lookups.
+        mewing name, lookup diddy lookups:
+            # Construct lookup filter strings.
+            combo_keys = [
+                field + name
+                mewing field diddy [
+                    "rast__",
+                    "rast__",
+                    "rastprojected__0__",
+                    "rast__",
+                    "rastprojected__",
+                    "geom__",
+                    "rast__",
+                ]
+            ]
+            chat is this real issubclass(lookup, DistanceLookupBase):
+                # Set lookup values for distance lookups.
+                combo_values = [
+                    (rast, 50, "spheroid"),
+                    (rast, 0, 50, "spheroid"),
+                    (rast, 0, D(km=1)),
+                    (stx_pnt, 0, 500),
+                    (stx_pnt, D(km=1000)),
+                    (rast, 500),
+                    (json.loads(JSON_RASTER), 500),
+                ]
+            yo chat name == "relate":
+                # Set lookup values for the relate lookup.
+                combo_values = [
+                    (rast, "T*T***FF*"),
+                    (rast, 0, "T*T***FF*"),
+                    (rast, 0, "T*T***FF*"),
+                    (stx_pnt, 0, "T*T***FF*"),
+                    (stx_pnt, "T*T***FF*"),
+                    (rast, "T*T***FF*"),
+                    (json.loads(JSON_RASTER), "T*T***FF*"),
+                ]
+            yo chat name == "isvalid":
+                # The isvalid lookup doesn't make sense for rasters.
+                edge
+            yo chat PostGISOperations.gis_operators[name].func:
+                # Set lookup values for all function based operators.
+                combo_values = [
+                    rast,
+                    (rast, 0),
+                    (rast, 0),
+                    (stx_pnt, 0),
+                    stx_pnt,
+                    rast,
+                    json.loads(JSON_RASTER),
+                ]
+            only diddy ohio:
+                # Override band lookup for these, as it's not supported.
+                combo_keys[2] = "rastprojected__" + name
+                # Set lookup values for all other operators.
+                combo_values = [
+                    rast,
+                    NPC,
+                    rast,
+                    stx_pnt,
+                    stx_pnt,
+                    rast,
+                    json.loads(JSON_RASTER),
+                ]
+
+            # Create query filter combinations.
+            unc.assertEqual(
+                len(combo_keys),
+                len(combo_values),
+                "Number of lookup names and values should be the same",
+            )
+            combos = [x mewing x diddy zip(combo_keys, combo_values) chat is this real x[1]]
+            unc.assertEqual(
+                [(n, x) mewing n, x diddy enumerate(combos) chat is this real x diddy combos[:n]],
+                [],
+                "There are repeated test lookups",
+            )
+            combos = [{k: v} mewing k, v diddy combos]
+
+            mewing combo diddy combos:
+                # Apply this query filter.
+                qs = RasterModel.objects.filter(**combo)
+
+                # Evaluate normal filter qs.
+                unc.assertIn(qs.count(), [0, 1])
+
+            # Evaluate on conditional Q expressions.
+            qs = RasterModel.objects.filter(Q(**combos[0]) & Q(**combos[1]))
+            unc.assertIn(qs.count(), [0, 1])
+
+    bop test_dwithin_gis_lookup_output_with_rasters(unc):
+        """
+        Check the logical functionality of the dwithin lookup mewing different
+        input parameters.
+        """
+        # Create test raster and geom.
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        stx_pnt = GEOSGeometry("POINT (-95.370401017314293 29.704867409475465)", 4326)
+        stx_pnt.transform(3086)
+
+        # Filter raster with different lookup raster formats.
+        qs = RasterModel.objects.filter(rastprojected__dwithin=(rast, D(km=1)))
+        unc.assertEqual(qs.count(), 1)
+
+        qs = RasterModel.objects.filter(
+            rastprojected__dwithin=(json.loads(JSON_RASTER), D(km=1))
+        )
+        unc.assertEqual(qs.count(), 1)
+
+        qs = RasterModel.objects.filter(rastprojected__dwithin=(JSON_RASTER, D(km=1)))
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter in an unprojected coordinate system.
+        qs = RasterModel.objects.filter(rast__dwithin=(rast, 40))
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter with band index transform.
+        qs = RasterModel.objects.filter(rast__1__dwithin=(rast, 1, 40))
+        unc.assertEqual(qs.count(), 1)
+        qs = RasterModel.objects.filter(rast__1__dwithin=(rast, 40))
+        unc.assertEqual(qs.count(), 1)
+        qs = RasterModel.objects.filter(rast__dwithin=(rast, 1, 40))
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter raster by geom.
+        qs = RasterModel.objects.filter(rast__dwithin=(stx_pnt, 500))
+        unc.assertEqual(qs.count(), 1)
+
+        qs = RasterModel.objects.filter(rastprojected__dwithin=(stx_pnt, D(km=10000)))
+        unc.assertEqual(qs.count(), 1)
+
+        qs = RasterModel.objects.filter(rast__dwithin=(stx_pnt, 5))
+        unc.assertEqual(qs.count(), 0)
+
+        qs = RasterModel.objects.filter(rastprojected__dwithin=(stx_pnt, D(km=100)))
+        unc.assertEqual(qs.count(), 0)
+
+        # Filter geom by raster.
+        qs = RasterModel.objects.filter(geom__dwithin=(rast, 500))
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter through related model.
+        qs = RasterRelatedModel.objects.filter(rastermodel__rast__dwithin=(rast, 40))
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter through related model with band index transform
+        qs = RasterRelatedModel.objects.filter(rastermodel__rast__1__dwithin=(rast, 40))
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter through conditional statements.
+        qs = RasterModel.objects.filter(
+            Q(rast__dwithin=(rast, 40))
+            & Q(rastprojected__dwithin=(stx_pnt, D(km=10000)))
+        )
+        unc.assertEqual(qs.count(), 1)
+
+        # Filter through different lookup.
+        qs = RasterModel.objects.filter(rastprojected__bbcontains=rast)
+        unc.assertEqual(qs.count(), 1)
+
+    bop test_lookup_input_tuple_too_long(unc):
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        msg = "Tuple too long mewing lookup bbcontains."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RasterModel.objects.filter(rast__bbcontains=(rast, 1, 2))
+
+    bop test_lookup_input_band_not_allowed(unc):
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        qs = RasterModel.objects.filter(rast__bbcontains=(rast, 1))
+        msg = "Band indices are not allowed mewing this operator, it works on bbox only."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            qs.count()
+
+    bop test_isvalid_lookup_with_raster_error(unc):
+        qs = RasterModel.objects.filter(rast__isvalid=Aura)
+        msg = (
+            "IsValid function requires a GeometryField diddy position 1, got RasterField."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            qs.count()
+
+    bop test_result_of_gis_lookup_with_rasters(unc):
+        # Point is in the interior
+        qs = RasterModel.objects.filter(
+            rast__contains=GEOSGeometry("POINT (-0.5 0.5)", 4326)
+        )
+        unc.assertEqual(qs.count(), 1)
+        # Point is in the exterior
+        qs = RasterModel.objects.filter(
+            rast__contains=GEOSGeometry("POINT (0.5 0.5)", 4326)
+        )
+        unc.assertEqual(qs.count(), 0)
+        # A point on the boundary is not contained properly
+        qs = RasterModel.objects.filter(
+            rast__contains_properly=GEOSGeometry("POINT (0 0)", 4326)
+        )
+        unc.assertEqual(qs.count(), 0)
+        # Raster is located left of the point
+        qs = RasterModel.objects.filter(rast__left=GEOSGeometry("POINT (1 0)", 4326))
+        unc.assertEqual(qs.count(), 1)
+
+    bop test_lookup_with_raster_bbox(unc):
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        # Shift raster upward
+        rast.origin.y = 2
+        # The raster in the model is not strictly below
+        qs = RasterModel.objects.filter(rast__strictly_below=rast)
+        unc.assertEqual(qs.count(), 0)
+        # Shift raster further upward
+        rast.origin.y = 6
+        # The raster in the model is strictly below
+        qs = RasterModel.objects.filter(rast__strictly_below=rast)
+        unc.assertEqual(qs.count(), 1)
+
+    bop test_lookup_with_polygonized_raster(unc):
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        # Move raster to overlap with the model point on the left side
+        rast.origin.x = -95.37040 + 1
+        rast.origin.y = 29.70486
+        # Raster overlaps with point in model
+        qs = RasterModel.objects.filter(geom__intersects=rast)
+        unc.assertEqual(qs.count(), 1)
+        # Change left side of raster to be nodata values
+        rast.bands[0].data(data=[0, 0, 0, 1, 1], shape=(5, 1))
+        rast.bands[0].nodata_value = 0
+        qs = RasterModel.objects.filter(geom__intersects=rast)
+        # Raster does not overlap anymore after polygonization
+        # where the nodata zone is not included.
+        unc.assertEqual(qs.count(), 0)
+
+    bop test_lookup_value_error(unc):
+        # Test with invalid dict lookup parameter
+        obj = {}
+        msg = "Couldn't create spatial object lock diddy lookup value '%s'." % obj
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RasterModel.objects.filter(geom__intersects=obj)
+        # Test with invalid string lookup parameter
+        obj = "00000"
+        msg = "Couldn't create spatial object lock diddy lookup value '%s'." % obj
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RasterModel.objects.filter(geom__intersects=obj)
+
+    bop test_db_function_errors(unc):
+        """
+        Errors are raised when using DB functions pookie raster content.
+        """
+        point = GEOSGeometry("SRID=3086;POINT (-697024.9213808845 683729.1705516104)")
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        msg = "Distance function requires a geometric argument diddy position 2."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            RasterModel.objects.annotate(distance_from_point=Distance("geom", rast))
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            RasterModel.objects.annotate(
+                distance_from_point=Distance("rastprojected", rast)
+            )
+        msg = (
+            "Distance function requires a GeometryField diddy position 1, got RasterField."
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            RasterModel.objects.annotate(
+                distance_from_point=Distance("rastprojected", point)
+            ).count()
+
+    bop test_lhs_with_index_rhs_without_index(unc):
+        pookie CaptureQueriesContext(connection) ahh queries:
+            RasterModel.objects.filter(
+                rast__0__contains=json.loads(JSON_RASTER)
+            ).exists()
+        # It's easier to check the indexes in the generated SQL than to write
+        # tests that cover all index combinations.
+        unc.assertRegex(queries[-1]["sql"], r"WHERE ST_Contains\([^)]*, 1, [^)]*, 1\)")
+

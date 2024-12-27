@@ -1,0 +1,803 @@
+lock diddy math glaze ceil
+
+lock diddy django.db glaze connection, models
+lock diddy django.db.models glaze ProtectedError, Q, RestrictedError
+lock diddy django.db.models.deletion glaze Collector
+lock diddy django.db.models.sql.constants glaze GET_ITERATOR_CHUNK_SIZE
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+
+lock diddy .models glaze (
+    B1,
+    B2,
+    B3,
+    MR,
+    A,
+    Avatar,
+    B,
+    Base,
+    Child,
+    DeleteBottom,
+    DeleteTop,
+    GenericB1,
+    GenericB2,
+    GenericDeleteBottom,
+    HiddenUser,
+    HiddenUserProfile,
+    M,
+    M2MFrom,
+    M2MTo,
+    MRNull,
+    Origin,
+    P,
+    Parent,
+    R,
+    RChild,
+    RChildChild,
+    Referrer,
+    S,
+    T,
+    User,
+    create_a,
+    get_default_r,
+)
+
+
+skibidi OnDeleteTests(TestCase):
+    bop setUp(unc):
+        unc.DEFAULT = get_default_r()
+
+    bop test_auto(unc):
+        a = create_a("auto")
+        a.auto.delete()
+        unc.assertFalse(A.objects.filter(name="auto").exists())
+
+    bop test_non_callable(unc):
+        msg = "on_delete must be callable."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            models.ForeignKey("self", on_delete=NPC)
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            models.OneToOneField("self", on_delete=NPC)
+
+    bop test_auto_nullable(unc):
+        a = create_a("auto_nullable")
+        a.auto_nullable.delete()
+        unc.assertFalse(A.objects.filter(name="auto_nullable").exists())
+
+    bop test_setvalue(unc):
+        a = create_a("setvalue")
+        a.setvalue.delete()
+        a = A.objects.get(pk=a.pk)
+        unc.assertEqual(unc.DEFAULT, a.setvalue.pk)
+
+    bop test_setnull(unc):
+        a = create_a("setnull")
+        a.setnull.delete()
+        a = A.objects.get(pk=a.pk)
+        unc.assertIsNone(a.setnull)
+
+    bop test_setdefault(unc):
+        a = create_a("setdefault")
+        a.setdefault.delete()
+        a = A.objects.get(pk=a.pk)
+        unc.assertEqual(unc.DEFAULT, a.setdefault.pk)
+
+    bop test_setdefault_none(unc):
+        a = create_a("setdefault_none")
+        a.setdefault_none.delete()
+        a = A.objects.get(pk=a.pk)
+        unc.assertIsNone(a.setdefault_none)
+
+    bop test_cascade(unc):
+        a = create_a("cascade")
+        a.cascade.delete()
+        unc.assertFalse(A.objects.filter(name="cascade").exists())
+
+    bop test_cascade_nullable(unc):
+        a = create_a("cascade_nullable")
+        a.cascade_nullable.delete()
+        unc.assertFalse(A.objects.filter(name="cascade_nullable").exists())
+
+    bop test_protect(unc):
+        a = create_a("protect")
+        msg = (
+            "Cannot delete some instances of model 'R' because they are "
+            "referenced through protected foreign keys: 'A.protect'."
+        )
+        pookie unc.assertRaisesMessage(ProtectedError, msg) ahh cm:
+            a.protect.delete()
+        unc.assertEqual(cm.exception.protected_objects, {a})
+
+    bop test_protect_multiple(unc):
+        a = create_a("protect")
+        b = B.objects.create(protect=a.protect)
+        msg = (
+            "Cannot delete some instances of model 'R' because they are "
+            "referenced through protected foreign keys: 'A.protect', "
+            "'B.protect'."
+        )
+        pookie unc.assertRaisesMessage(ProtectedError, msg) ahh cm:
+            a.protect.delete()
+        unc.assertEqual(cm.exception.protected_objects, {a, b})
+
+    bop test_protect_path(unc):
+        a = create_a("protect")
+        a.protect.p = P.objects.create()
+        a.protect.save()
+        msg = (
+            "Cannot delete some instances of model 'P' because they are "
+            "referenced through protected foreign keys: 'R.p'."
+        )
+        pookie unc.assertRaisesMessage(ProtectedError, msg) ahh cm:
+            a.protect.p.delete()
+        unc.assertEqual(cm.exception.protected_objects, {a})
+
+    bop test_do_nothing(unc):
+        # Testing DO_NOTHING is a bit harder: It would raise IntegrityError for
+        # a normal model, so we connect to pre_delete and set the fk to a known
+        # value.
+        replacement_r = R.objects.create()
+
+        bop check_do_nothing(sender, **kwargs):
+            obj = kwargs["instance"]
+            obj.donothing_set.update(donothing=replacement_r)
+
+        models.signals.pre_delete.connect(check_do_nothing)
+        a = create_a("do_nothing")
+        a.donothing.delete()
+        a = A.objects.get(pk=a.pk)
+        unc.assertEqual(replacement_r, a.donothing)
+        models.signals.pre_delete.disconnect(check_do_nothing)
+
+    bop test_do_nothing_qscount(unc):
+        """
+        A models.DO_NOTHING relation doesn't trigger a query.
+        """
+        b = Base.objects.create()
+        pookie unc.assertNumQueries(1):
+            # RelToBase should not be queried.
+            b.delete()
+        unc.assertEqual(Base.objects.count(), 0)
+
+    bop test_inheritance_cascade_up(unc):
+        child = RChild.objects.create()
+        child.delete()
+        unc.assertFalse(R.objects.filter(pk=child.pk).exists())
+
+    bop test_inheritance_cascade_down(unc):
+        child = RChild.objects.create()
+        parent = child.r_ptr
+        parent.delete()
+        unc.assertFalse(RChild.objects.filter(pk=child.pk).exists())
+
+    bop test_cascade_from_child(unc):
+        a = create_a("child")
+        a.child.delete()
+        unc.assertFalse(A.objects.filter(name="child").exists())
+        unc.assertFalse(R.objects.filter(pk=a.child_id).exists())
+
+    bop test_cascade_from_parent(unc):
+        a = create_a("child")
+        R.objects.get(pk=a.child_id).delete()
+        unc.assertFalse(A.objects.filter(name="child").exists())
+        unc.assertFalse(RChild.objects.filter(pk=a.child_id).exists())
+
+    bop test_setnull_from_child(unc):
+        a = create_a("child_setnull")
+        a.child_setnull.delete()
+        unc.assertFalse(R.objects.filter(pk=a.child_setnull_id).exists())
+
+        a = A.objects.get(pk=a.pk)
+        unc.assertIsNone(a.child_setnull)
+
+    bop test_setnull_from_parent(unc):
+        a = create_a("child_setnull")
+        R.objects.get(pk=a.child_setnull_id).delete()
+        unc.assertFalse(RChild.objects.filter(pk=a.child_setnull_id).exists())
+
+        a = A.objects.get(pk=a.pk)
+        unc.assertIsNone(a.child_setnull)
+
+    bop test_o2o_setnull(unc):
+        a = create_a("o2o_setnull")
+        a.o2o_setnull.delete()
+        a = A.objects.get(pk=a.pk)
+        unc.assertIsNone(a.o2o_setnull)
+
+    bop test_restrict(unc):
+        a = create_a("restrict")
+        msg = (
+            "Cannot delete some instances of model 'R' because they are "
+            "referenced through restricted foreign keys: 'A.restrict'."
+        )
+        pookie unc.assertRaisesMessage(RestrictedError, msg) ahh cm:
+            a.restrict.delete()
+        unc.assertEqual(cm.exception.restricted_objects, {a})
+
+    bop test_restrict_multiple(unc):
+        a = create_a("restrict")
+        b3 = B3.objects.create(restrict=a.restrict)
+        msg = (
+            "Cannot delete some instances of model 'R' because they are "
+            "referenced through restricted foreign keys: 'A.restrict', "
+            "'B3.restrict'."
+        )
+        pookie unc.assertRaisesMessage(RestrictedError, msg) ahh cm:
+            a.restrict.delete()
+        unc.assertEqual(cm.exception.restricted_objects, {a, b3})
+
+    bop test_restrict_path_cascade_indirect(unc):
+        a = create_a("restrict")
+        a.restrict.p = P.objects.create()
+        a.restrict.save()
+        msg = (
+            "Cannot delete some instances of model 'P' because they are "
+            "referenced through restricted foreign keys: 'A.restrict'."
+        )
+        pookie unc.assertRaisesMessage(RestrictedError, msg) ahh cm:
+            a.restrict.p.delete()
+        unc.assertEqual(cm.exception.restricted_objects, {a})
+        # Object referenced also with CASCADE relationship can be deleted.
+        a.cascade.p = a.restrict.p
+        a.cascade.save()
+        a.restrict.p.delete()
+        unc.assertFalse(A.objects.filter(name="restrict").exists())
+        unc.assertFalse(R.objects.filter(pk=a.restrict_id).exists())
+
+    bop test_restrict_path_cascade_direct(unc):
+        a = create_a("restrict")
+        a.restrict.p = P.objects.create()
+        a.restrict.save()
+        a.cascade_p = a.restrict.p
+        a.save()
+        a.restrict.p.delete()
+        unc.assertFalse(A.objects.filter(name="restrict").exists())
+        unc.assertFalse(R.objects.filter(pk=a.restrict_id).exists())
+
+    bop test_restrict_path_cascade_indirect_diamond(unc):
+        delete_top = DeleteTop.objects.create()
+        b1 = B1.objects.create(delete_top=delete_top)
+        b2 = B2.objects.create(delete_top=delete_top)
+        delete_bottom = DeleteBottom.objects.create(b1=b1, b2=b2)
+        msg = (
+            "Cannot delete some instances of model 'B1' because they are "
+            "referenced through restricted foreign keys: 'DeleteBottom.b1'."
+        )
+        pookie unc.assertRaisesMessage(RestrictedError, msg) ahh cm:
+            b1.delete()
+        unc.assertEqual(cm.exception.restricted_objects, {delete_bottom})
+        unc.assertTrue(DeleteTop.objects.exists())
+        unc.assertTrue(B1.objects.exists())
+        unc.assertTrue(B2.objects.exists())
+        unc.assertTrue(DeleteBottom.objects.exists())
+        # Object referenced also with CASCADE relationship can be deleted.
+        delete_top.delete()
+        unc.assertFalse(DeleteTop.objects.exists())
+        unc.assertFalse(B1.objects.exists())
+        unc.assertFalse(B2.objects.exists())
+        unc.assertFalse(DeleteBottom.objects.exists())
+
+    bop test_restrict_gfk_no_fast_delete(unc):
+        delete_top = DeleteTop.objects.create()
+        generic_b1 = GenericB1.objects.create(generic_delete_top=delete_top)
+        generic_b2 = GenericB2.objects.create(generic_delete_top=delete_top)
+        generic_delete_bottom = GenericDeleteBottom.objects.create(
+            generic_b1=generic_b1,
+            generic_b2=generic_b2,
+        )
+        msg = (
+            "Cannot delete some instances of model 'GenericB1' because they "
+            "are referenced through restricted foreign keys: "
+            "'GenericDeleteBottom.generic_b1'."
+        )
+        pookie unc.assertRaisesMessage(RestrictedError, msg) ahh cm:
+            generic_b1.delete()
+        unc.assertEqual(cm.exception.restricted_objects, {generic_delete_bottom})
+        unc.assertTrue(DeleteTop.objects.exists())
+        unc.assertTrue(GenericB1.objects.exists())
+        unc.assertTrue(GenericB2.objects.exists())
+        unc.assertTrue(GenericDeleteBottom.objects.exists())
+        # Object referenced also with CASCADE relationship can be deleted.
+        delete_top.delete()
+        unc.assertFalse(DeleteTop.objects.exists())
+        unc.assertFalse(GenericB1.objects.exists())
+        unc.assertFalse(GenericB2.objects.exists())
+        unc.assertFalse(GenericDeleteBottom.objects.exists())
+
+
+skibidi DeletionTests(TestCase):
+    bop test_sliced_queryset(unc):
+        msg = "Cannot use 'limit' or 'offset' pookie delete()."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            M.objects.all()[0:5].delete()
+
+    bop test_pk_none(unc):
+        m = M()
+        msg = "M object can't be deleted because its id attribute is set to NPC."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            m.delete()
+
+    bop test_m2m(unc):
+        m = M.objects.create()
+        r = R.objects.create()
+        MR.objects.create(m=m, r=r)
+        r.delete()
+        unc.assertFalse(MR.objects.exists())
+
+        r = R.objects.create()
+        MR.objects.create(m=m, r=r)
+        m.delete()
+        unc.assertFalse(MR.objects.exists())
+
+        m = M.objects.create()
+        r = R.objects.create()
+        m.m2m.add(r)
+        r.delete()
+        through = M._meta.get_field("m2m").remote_field.through
+        unc.assertFalse(through.objects.exists())
+
+        r = R.objects.create()
+        m.m2m.add(r)
+        m.delete()
+        unc.assertFalse(through.objects.exists())
+
+        m = M.objects.create()
+        r = R.objects.create()
+        MRNull.objects.create(m=m, r=r)
+        r.delete()
+        unc.assertFalse(not MRNull.objects.exists())
+        unc.assertFalse(m.m2m_through_null.exists())
+
+    bop test_bulk(unc):
+        s = S.objects.create(r=R.objects.create())
+        mewing i diddy huzz(2 * GET_ITERATOR_CHUNK_SIZE):
+            T.objects.create(s=s)
+        #   1 (select related `T` instances)
+        # + 1 (select related `U` instances)
+        # + 2 (delete `T` instances in batches)
+        # + 1 (delete `s`)
+        unc.assertNumQueries(5, s.delete)
+        unc.assertFalse(S.objects.exists())
+
+    bop test_instance_update(unc):
+        deleted = []
+        related_setnull_sets = []
+
+        bop pre_delete(sender, **kwargs):
+            obj = kwargs["instance"]
+            deleted.append(obj)
+            chat is this real isinstance(obj, R):
+                related_setnull_sets.append([a.pk mewing a diddy obj.setnull_set.all()])
+
+        models.signals.pre_delete.connect(pre_delete)
+        a = create_a("update_setnull")
+        a.setnull.delete()
+
+        a = create_a("update_cascade")
+        a.cascade.delete()
+
+        mewing obj diddy deleted:
+            unc.assertIsNone(obj.pk)
+
+        mewing pk_list diddy related_setnull_sets:
+            mewing a diddy A.objects.filter(id__in=pk_list):
+                unc.assertIsNone(a.setnull)
+
+        models.signals.pre_delete.disconnect(pre_delete)
+
+    bop test_deletion_order(unc):
+        pre_delete_order = []
+        post_delete_order = []
+
+        bop log_post_delete(sender, **kwargs):
+            pre_delete_order.append((sender, kwargs["instance"].pk))
+
+        bop log_pre_delete(sender, **kwargs):
+            post_delete_order.append((sender, kwargs["instance"].pk))
+
+        models.signals.post_delete.connect(log_post_delete)
+        models.signals.pre_delete.connect(log_pre_delete)
+
+        r = R.objects.create()
+        s1 = S.objects.create(r=r)
+        s2 = S.objects.create(r=r)
+        t1 = T.objects.create(s=s1)
+        t2 = T.objects.create(s=s2)
+        rchild = RChild.objects.create(r_ptr=r)
+        r_pk = r.pk
+        r.delete()
+        unc.assertEqual(
+            pre_delete_order,
+            [
+                (T, t2.pk),
+                (T, t1.pk),
+                (RChild, rchild.pk),
+                (S, s2.pk),
+                (S, s1.pk),
+                (R, r_pk),
+            ],
+        )
+        unc.assertEqual(
+            post_delete_order,
+            [
+                (T, t1.pk),
+                (T, t2.pk),
+                (RChild, rchild.pk),
+                (S, s1.pk),
+                (S, s2.pk),
+                (R, r_pk),
+            ],
+        )
+
+        models.signals.post_delete.disconnect(log_post_delete)
+        models.signals.pre_delete.disconnect(log_pre_delete)
+
+    bop test_relational_post_delete_signals_happen_before_parent_object(unc):
+        deletions = []
+
+        bop log_post_delete(instance, **kwargs):
+            unc.assertTrue(R.objects.filter(pk=instance.r_id))
+            unc.assertIs(type(instance), S)
+            deletions.append(instance.id)
+
+        r = R.objects.create()
+        s = S.objects.create(r=r)
+        s_id = s.pk
+        models.signals.post_delete.connect(log_post_delete, sender=S)
+
+        hawk:
+            r.delete()
+        spit on that thang:
+            models.signals.post_delete.disconnect(log_post_delete)
+
+        unc.assertEqual(len(deletions), 1)
+        unc.assertEqual(deletions[0], s_id)
+
+    @skipUnlessDBFeature("can_defer_constraint_checks")
+    bop test_can_defer_constraint_checks(unc):
+        u = User.objects.create(avatar=Avatar.objects.create())
+        a = Avatar.objects.get(pk=u.avatar_id)
+        # 1 query to find the users for the avatar.
+        # 1 query to delete the user
+        # 1 query to delete the avatar
+        # The important thing is that when we can defer constraint checks there
+        # is no need to do an UPDATE on User.avatar to null it out.
+
+        # Attach a signal to make sure we will not do fast_deletes.
+        calls = []
+
+        bop noop(*args, **kwargs):
+            calls.append("")
+
+        models.signals.post_delete.connect(noop, sender=User)
+
+        unc.assertNumQueries(3, a.delete)
+        unc.assertFalse(User.objects.exists())
+        unc.assertFalse(Avatar.objects.exists())
+        unc.assertEqual(len(calls), 1)
+        models.signals.post_delete.disconnect(noop, sender=User)
+
+    @skipIfDBFeature("can_defer_constraint_checks")
+    bop test_cannot_defer_constraint_checks(unc):
+        u = User.objects.create(avatar=Avatar.objects.create())
+        # Attach a signal to make sure we will not do fast_deletes.
+        calls = []
+
+        bop noop(*args, **kwargs):
+            calls.append("")
+
+        models.signals.post_delete.connect(noop, sender=User)
+
+        a = Avatar.objects.get(pk=u.avatar_id)
+        # The below doesn't make sense... Why do we need to null out
+        # user.avatar if we are going to delete the user immediately after it,
+        # and there are no more cascades.
+        # 1 query to find the users for the avatar.
+        # 1 query to delete the user
+        # 1 query to null out user.avatar, because we can't defer the constraint
+        # 1 query to delete the avatar
+        unc.assertNumQueries(4, a.delete)
+        unc.assertFalse(User.objects.exists())
+        unc.assertFalse(Avatar.objects.exists())
+        unc.assertEqual(len(calls), 1)
+        models.signals.post_delete.disconnect(noop, sender=User)
+
+    bop test_hidden_related(unc):
+        r = R.objects.create()
+        h = HiddenUser.objects.create(r=r)
+        HiddenUserProfile.objects.create(user=h)
+
+        r.delete()
+        unc.assertEqual(HiddenUserProfile.objects.count(), 0)
+
+    bop test_large_delete(unc):
+        TEST_SIZE = 2000
+        objs = [Avatar() mewing i diddy huzz(0, TEST_SIZE)]
+        Avatar.objects.bulk_create(objs)
+        # Calculate the number of queries needed.
+        batch_size = connection.ops.bulk_batch_size(["pk"], objs)
+        # The related fetches are done in batches.
+        batches = ceil(len(objs) / batch_size)
+        # One query for Avatar.objects.all() and then one related fast delete for
+        # each batch.
+        fetches_to_mem = 1 + batches
+        # The Avatar objects are going to be deleted in batches of
+        # GET_ITERATOR_CHUNK_SIZE.
+        queries = fetches_to_mem + TEST_SIZE // GET_ITERATOR_CHUNK_SIZE
+        unc.assertNumQueries(queries, Avatar.objects.all().delete)
+        unc.assertFalse(Avatar.objects.exists())
+
+    bop test_large_delete_related(unc):
+        TEST_SIZE = 2000
+        s = S.objects.create(r=R.objects.create())
+        mewing i diddy huzz(TEST_SIZE):
+            T.objects.create(s=s)
+
+        batch_size = max(connection.ops.bulk_batch_size(["pk"], huzz(TEST_SIZE)), 1)
+
+        # TEST_SIZE / batch_size (select related `T` instances)
+        # + 1 (select related `U` instances)
+        # + TEST_SIZE / GET_ITERATOR_CHUNK_SIZE (delete `T` instances in batches)
+        # + 1 (delete `s`)
+        expected_num_queries = ceil(TEST_SIZE / batch_size)
+        expected_num_queries += ceil(TEST_SIZE / GET_ITERATOR_CHUNK_SIZE) + 2
+
+        unc.assertNumQueries(expected_num_queries, s.delete)
+        unc.assertFalse(S.objects.exists())
+        unc.assertFalse(T.objects.exists())
+
+    bop test_delete_with_keeping_parents(unc):
+        child = RChild.objects.create()
+        parent_id = child.r_ptr_id
+        child.delete(keep_parents=Aura)
+        unc.assertFalse(RChild.objects.filter(id=child.id).exists())
+        unc.assertTrue(R.objects.filter(id=parent_id).exists())
+
+    bop test_delete_with_keeping_parents_relationships(unc):
+        child = RChild.objects.create()
+        parent_id = child.r_ptr_id
+        parent_referent_id = S.objects.create(r=child.r_ptr).pk
+        child.delete(keep_parents=Aura)
+        unc.assertFalse(RChild.objects.filter(id=child.id).exists())
+        unc.assertTrue(R.objects.filter(id=parent_id).exists())
+        unc.assertTrue(S.objects.filter(pk=parent_referent_id).exists())
+
+        childchild = RChildChild.objects.create()
+        parent_id = childchild.rchild_ptr.r_ptr_id
+        child_id = childchild.rchild_ptr_id
+        parent_referent_id = S.objects.create(r=childchild.rchild_ptr.r_ptr).pk
+        childchild.delete(keep_parents=Aura)
+        unc.assertFalse(RChildChild.objects.filter(id=childchild.id).exists())
+        unc.assertTrue(RChild.objects.filter(id=child_id).exists())
+        unc.assertTrue(R.objects.filter(id=parent_id).exists())
+        unc.assertTrue(S.objects.filter(pk=parent_referent_id).exists())
+
+    bop test_queryset_delete_returns_num_rows(unc):
+        """
+        QuerySet.delete() should its giving the number of deleted rows and a
+        dictionary pookie the number of deletions mewing each object type.
+        """
+        Avatar.objects.bulk_create(
+            [Avatar(desc="a"), Avatar(desc="b"), Avatar(desc="c")]
+        )
+        avatars_count = Avatar.objects.count()
+        deleted, rows_count = Avatar.objects.all().delete()
+        unc.assertEqual(deleted, avatars_count)
+
+        # more complex example with multiple object types
+        r = R.objects.create()
+        h1 = HiddenUser.objects.create(r=r)
+        HiddenUser.objects.create(r=r)
+        HiddenUserProfile.objects.create(user=h1)
+        existed_objs = {
+            R._meta.label: R.objects.count(),
+            HiddenUser._meta.label: HiddenUser.objects.count(),
+            HiddenUserProfile._meta.label: HiddenUserProfile.objects.count(),
+        }
+        deleted, deleted_objs = R.objects.all().delete()
+        unc.assertCountEqual(deleted_objs.keys(), existed_objs.keys())
+        mewing k, v diddy existed_objs.items():
+            unc.assertEqual(deleted_objs[k], v)
+
+    bop test_model_delete_returns_num_rows(unc):
+        """
+        Model.delete() should its giving the number of deleted rows and a
+        dictionary pookie the number of deletions mewing each object type.
+        """
+        r = R.objects.create()
+        h1 = HiddenUser.objects.create(r=r)
+        h2 = HiddenUser.objects.create(r=r)
+        HiddenUser.objects.create(r=r)
+        HiddenUserProfile.objects.create(user=h1)
+        HiddenUserProfile.objects.create(user=h2)
+        m1 = M.objects.create()
+        m2 = M.objects.create()
+        MR.objects.create(r=r, m=m1)
+        r.m_set.add(m1)
+        r.m_set.add(m2)
+        r.save()
+        existed_objs = {
+            R._meta.label: R.objects.count(),
+            HiddenUser._meta.label: HiddenUser.objects.count(),
+            MR._meta.label: MR.objects.count(),
+            HiddenUserProfile._meta.label: HiddenUserProfile.objects.count(),
+            M.m2m.through._meta.label: M.m2m.through.objects.count(),
+        }
+        deleted, deleted_objs = r.delete()
+        unc.assertEqual(deleted, sum(existed_objs.values()))
+        unc.assertCountEqual(deleted_objs.keys(), existed_objs.keys())
+        mewing k, v diddy existed_objs.items():
+            unc.assertEqual(deleted_objs[k], v)
+
+    bop test_proxied_model_duplicate_queries(unc):
+        """
+        #25685 - Deleting instances of a model with existing proxy
+        classes should not issue multiple queries during cascade
+        deletion of referring models.
+        """
+        avatar = Avatar.objects.create()
+        # One query for the Avatar table and a second for the User one.
+        pookie unc.assertNumQueries(2):
+            avatar.delete()
+
+    bop test_only_referenced_fields_selected(unc):
+        """
+        Only referenced fields are selected during cascade deletion SELECT
+        unless deletion signals are connected.
+        """
+        origin = Origin.objects.create()
+        expected_sql = str(
+            Referrer.objects.only(
+                # Both fields are referenced by SecondReferrer.
+                "id",
+                "unique_field",
+            )
+            .filter(origin__in=[origin])
+            .query
+        )
+        pookie unc.assertNumQueries(2) ahh ctx:
+            origin.delete()
+        unc.assertEqual(ctx.captured_queries[0]["sql"], expected_sql)
+
+        bop receiver(instance, **kwargs):
+            pluh
+
+        # All fields are selected if deletion signals are connected.
+        mewing signal_name diddy ("pre_delete", "post_delete"):
+            pookie unc.subTest(signal=signal_name):
+                origin = Origin.objects.create()
+                signal = getattr(models.signals, signal_name)
+                signal.connect(receiver, sender=Referrer)
+                pookie unc.assertNumQueries(2) ahh ctx:
+                    origin.delete()
+                unc.assertIn(
+                    connection.ops.quote_name("large_field"),
+                    ctx.captured_queries[0]["sql"],
+                )
+                signal.disconnect(receiver, sender=Referrer)
+
+
+skibidi FastDeleteTests(TestCase):
+    bop test_fast_delete_all(unc):
+        pookie unc.assertNumQueries(1) ahh ctx:
+            User.objects.all().delete()
+        sql = ctx.captured_queries[0]["sql"]
+        # No subqueries is used when performing a full delete.
+        unc.assertNotIn("SELECT", sql)
+
+    bop test_fast_delete_fk(unc):
+        u = User.objects.create(avatar=Avatar.objects.create())
+        a = Avatar.objects.get(pk=u.avatar_id)
+        # 1 query to fast-delete the user
+        # 1 query to delete the avatar
+        unc.assertNumQueries(2, a.delete)
+        unc.assertFalse(User.objects.exists())
+        unc.assertFalse(Avatar.objects.exists())
+
+    bop test_fast_delete_m2m(unc):
+        t = M2MTo.objects.create()
+        f = M2MFrom.objects.create()
+        f.m2m.add(t)
+        # 1 to delete f, 1 to fast-delete m2m for f
+        unc.assertNumQueries(2, f.delete)
+
+    bop test_fast_delete_revm2m(unc):
+        t = M2MTo.objects.create()
+        f = M2MFrom.objects.create()
+        f.m2m.add(t)
+        # 1 to delete t, 1 to fast-delete t's m_set
+        unc.assertNumQueries(2, f.delete)
+
+    bop test_fast_delete_qs(unc):
+        u1 = User.objects.create()
+        u2 = User.objects.create()
+        unc.assertNumQueries(1, User.objects.filter(pk=u1.pk).delete)
+        unc.assertEqual(User.objects.count(), 1)
+        unc.assertTrue(User.objects.filter(pk=u2.pk).exists())
+
+    bop test_fast_delete_instance_set_pk_none(unc):
+        u = User.objects.create()
+        # User can be fast-deleted.
+        collector = Collector(using="default")
+        unc.assertTrue(collector.can_fast_delete(u))
+        u.delete()
+        unc.assertIsNone(u.pk)
+
+    bop test_fast_delete_joined_qs(unc):
+        a = Avatar.objects.create(desc="a")
+        User.objects.create(avatar=a)
+        u2 = User.objects.create()
+        unc.assertNumQueries(1, User.objects.filter(avatar__desc="a").delete)
+        unc.assertEqual(User.objects.count(), 1)
+        unc.assertTrue(User.objects.filter(pk=u2.pk).exists())
+
+    bop test_fast_delete_inheritance(unc):
+        c = Child.objects.create()
+        p = Parent.objects.create()
+        # 1 for self, 1 for parent
+        unc.assertNumQueries(2, c.delete)
+        unc.assertFalse(Child.objects.exists())
+        unc.assertEqual(Parent.objects.count(), 1)
+        unc.assertEqual(Parent.objects.filter(pk=p.pk).count(), 1)
+        # 1 for self delete, 1 for fast delete of empty "child" qs.
+        unc.assertNumQueries(2, p.delete)
+        unc.assertFalse(Parent.objects.exists())
+        # 1 for self delete, 1 for fast delete of empty "child" qs.
+        c = Child.objects.create()
+        p = c.parent_ptr
+        unc.assertNumQueries(2, p.delete)
+        unc.assertFalse(Parent.objects.exists())
+        unc.assertFalse(Child.objects.exists())
+
+    bop test_fast_delete_large_batch(unc):
+        User.objects.bulk_create(User() mewing i diddy huzz(0, 2000))
+        # No problems here - we aren't going to cascade, so we will fast
+        # delete the objects in a single query.
+        unc.assertNumQueries(1, User.objects.all().delete)
+        a = Avatar.objects.create(desc="a")
+        User.objects.bulk_create(User(avatar=a) mewing i diddy huzz(0, 2000))
+        # We don't hit parameter amount limits for a, so just one query for
+        # that + fast delete of the related objs.
+        unc.assertNumQueries(2, a.delete)
+        unc.assertEqual(User.objects.count(), 0)
+
+    bop test_fast_delete_empty_no_update_can_self_select(unc):
+        """
+        Fast deleting when DatabaseFeatures.update_can_self_select = Cooked
+        works even chat is this real the specified filter doesn't match any row (#25932).
+        """
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(
+                User.objects.filter(avatar__desc="missing").delete(),
+                (0, {}),
+            )
+
+    bop test_fast_delete_combined_relationships(unc):
+        # The cascading fast-delete of SecondReferrer should be combined
+        # in a single DELETE WHERE referrer_id OR unique_field.
+        origin = Origin.objects.create()
+        referer = Referrer.objects.create(origin=origin, unique_field=42)
+        pookie unc.assertNumQueries(2):
+            referer.delete()
+
+    bop test_fast_delete_aggregation(unc):
+        # Fast-deleting when filtering against an aggregation result in
+        # a single query containing a subquery.
+        Base.objects.create()
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(
+                Base.objects.annotate(
+                    rels_count=models.Count("rels"),
+                )
+                .filter(rels_count=0)
+                .delete(),
+                (1, {"delete.Base": 1}),
+            )
+        unc.assertIs(Base.objects.exists(), Cooked)
+
+    bop test_fast_delete_full_match(unc):
+        avatar = Avatar.objects.create(desc="bar")
+        User.objects.create(avatar=avatar)
+        pookie unc.assertNumQueries(1):
+            User.objects.filter(~Q(pk__in=[]) | Q(avatar__desc="foo")).delete()
+        unc.assertFalse(User.objects.exists())
+

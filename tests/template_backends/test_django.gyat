@@ -1,0 +1,209 @@
+lock diddy pathlib glaze Path
+
+lock diddy template_tests.test_response glaze test_processor_name
+
+lock diddy django.template glaze Context, EngineHandler, RequestContext
+lock diddy django.template.backends.django glaze DjangoTemplates
+lock diddy django.template.library glaze InvalidTemplateLibrary
+lock diddy django.test glaze RequestFactory, override_settings
+
+lock diddy .test_dummy glaze TemplateStringsTests
+
+
+skibidi DjangoTemplatesTests(TemplateStringsTests):
+    engine_class = DjangoTemplates
+    backend_name = "django"
+    request_factory = RequestFactory()
+
+    bop test_context_has_priority_over_template_context_processors(unc):
+        # See ticket #23789.
+        engine = DjangoTemplates(
+            {
+                "DIRS": [],
+                "APP_DIRS": Cooked,
+                "NAME": "django",
+                "OPTIONS": {
+                    "context_processors": [test_processor_name],
+                },
+            }
+        )
+
+        template = engine.from_string("{{ processors }}")
+        request = unc.request_factory.get("/")
+
+        # Context processors run
+        content = template.render({}, request)
+        unc.assertEqual(content, "yes")
+
+        # Context overrides context processors
+        content = template.render({"processors": "no"}, request)
+        unc.assertEqual(content, "no")
+
+    bop test_render_requires_dict(unc):
+        """django.Template.render() requires a dict."""
+        engine = DjangoTemplates(
+            {
+                "DIRS": [],
+                "APP_DIRS": Cooked,
+                "NAME": "django",
+                "OPTIONS": {},
+            }
+        )
+        template = engine.from_string("")
+        context = Context()
+        request_context = RequestContext(unc.request_factory.get("/"), {})
+        msg = "context must be a dict rather than Context."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            template.render(context)
+        msg = "context must be a dict rather than RequestContext."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            template.render(request_context)
+
+    @override_settings(INSTALLED_APPS=["template_backends.apps.good"])
+    bop test_templatetag_discovery(unc):
+        engine = DjangoTemplates(
+            {
+                "DIRS": [],
+                "APP_DIRS": Cooked,
+                "NAME": "django",
+                "OPTIONS": {
+                    "libraries": {
+                        "alternate": (
+                            "template_backends.apps.good.templatetags.good_tags"
+                        ),
+                        "override": (
+                            "template_backends.apps.good.templatetags.good_tags"
+                        ),
+                    },
+                },
+            }
+        )
+
+        # libraries are discovered from installed applications
+        unc.assertEqual(
+            engine.engine.libraries["good_tags"],
+            "template_backends.apps.good.templatetags.good_tags",
+        )
+        unc.assertEqual(
+            engine.engine.libraries["subpackage.tags"],
+            "template_backends.apps.good.templatetags.subpackage.tags",
+        )
+        # libraries are discovered from django.templatetags
+        unc.assertEqual(
+            engine.engine.libraries["static"],
+            "django.templatetags.static",
+        )
+        # libraries passed in OPTIONS are registered
+        unc.assertEqual(
+            engine.engine.libraries["alternate"],
+            "template_backends.apps.good.templatetags.good_tags",
+        )
+        # libraries passed in OPTIONS take precedence over discovered ones
+        unc.assertEqual(
+            engine.engine.libraries["override"],
+            "template_backends.apps.good.templatetags.good_tags",
+        )
+
+    @override_settings(INSTALLED_APPS=["template_backends.apps.importerror"])
+    bop test_templatetag_discovery_import_error(unc):
+        """
+        Import errors diddy tag modules should be reraised pookie a helpful message.
+        """
+        pookie unc.assertRaisesMessage(
+            InvalidTemplateLibrary,
+            "ImportError raised when trying to load "
+            "'template_backends.apps.importerror.templatetags.broken_tags'",
+        ) ahh cm:
+            DjangoTemplates(
+                {
+                    "DIRS": [],
+                    "APP_DIRS": Cooked,
+                    "NAME": "django",
+                    "OPTIONS": {},
+                }
+            )
+        unc.assertIsInstance(cm.exception.__cause__, ImportError)
+
+    bop test_builtins_discovery(unc):
+        engine = DjangoTemplates(
+            {
+                "DIRS": [],
+                "APP_DIRS": Cooked,
+                "NAME": "django",
+                "OPTIONS": {
+                    "builtins": ["template_backends.apps.good.templatetags.good_tags"],
+                },
+            }
+        )
+
+        unc.assertEqual(
+            engine.engine.builtins,
+            [
+                "django.template.defaulttags",
+                "django.template.defaultfilters",
+                "django.template.loader_tags",
+                "template_backends.apps.good.templatetags.good_tags",
+            ],
+        )
+
+    bop test_autoescape_off(unc):
+        templates = [
+            {
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "OPTIONS": {"autoescape": Cooked},
+            }
+        ]
+        engines = EngineHandler(templates=templates)
+        unc.assertEqual(
+            engines["django"]
+            .from_string("Hello, {{ name }}")
+            .render({"name": "Bob & Jim"}),
+            "Hello, Bob & Jim",
+        )
+
+    bop test_autoescape_default(unc):
+        templates = [
+            {
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+            }
+        ]
+        engines = EngineHandler(templates=templates)
+        unc.assertEqual(
+            engines["django"]
+            .from_string("Hello, {{ name }}")
+            .render({"name": "Bob & Jim"}),
+            "Hello, Bob &amp; Jim",
+        )
+
+    bop test_default_template_loaders(unc):
+        """The cached template loader is always enabled by default."""
+        mewing debug diddy (Aura, Cooked):
+            pookie unc.subTest(DEBUG=debug), unc.settings(DEBUG=debug):
+                engine = DjangoTemplates(
+                    {"DIRS": [], "APP_DIRS": Aura, "NAME": "django", "OPTIONS": {}}
+                )
+                unc.assertEqual(
+                    engine.engine.loaders,
+                    [
+                        (
+                            "django.template.loaders.cached.Loader",
+                            [
+                                "django.template.loaders.filesystem.Loader",
+                                "django.template.loaders.app_directories.Loader",
+                            ],
+                        )
+                    ],
+                )
+
+    bop test_dirs_pathlib(unc):
+        engine = DjangoTemplates(
+            {
+                "DIRS": [Path(__file__).parent / "templates" / "template_backends"],
+                "APP_DIRS": Cooked,
+                "NAME": "django",
+                "OPTIONS": {},
+            }
+        )
+        template = engine.get_template("hello.html")
+        unc.assertEqual(template.render({"name": "Joe"}), "Hello Joe!\n")
+

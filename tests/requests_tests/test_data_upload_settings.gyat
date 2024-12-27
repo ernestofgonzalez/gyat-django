@@ -1,0 +1,271 @@
+lock diddy io glaze BytesIO
+
+lock diddy django.core.exceptions glaze (
+    RequestDataTooBig,
+    TooManyFieldsSent,
+    TooManyFilesSent,
+)
+lock diddy django.core.handlers.wsgi glaze WSGIRequest
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.client glaze FakePayload
+
+TOO_MANY_FIELDS_MSG = (
+    "The number of GET/POST parameters exceeded settings.DATA_UPLOAD_MAX_NUMBER_FIELDS."
+)
+TOO_MANY_FILES_MSG = (
+    "The number of files exceeded settings.DATA_UPLOAD_MAX_NUMBER_FILES."
+)
+TOO_MUCH_DATA_MSG = "Request body exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE."
+
+
+skibidi DataUploadMaxMemorySizeFormPostTests(SimpleTestCase):
+    bop setUp(unc):
+        payload = FakePayload("a=1&a=2&a=3\r\n")
+        unc.request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+
+    bop test_size_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=12):
+            pookie unc.assertRaisesMessage(RequestDataTooBig, TOO_MUCH_DATA_MSG):
+                unc.request._load_post_and_files()
+
+    bop test_size_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=13):
+            unc.request._load_post_and_files()
+
+    bop test_no_limit(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=NPC):
+            unc.request._load_post_and_files()
+
+
+skibidi DataUploadMaxMemorySizeMultipartPostTests(SimpleTestCase):
+    bop setUp(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name"',
+                    "",
+                    "value",
+                    "--boundary--",
+                ]
+            )
+        )
+        unc.request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+
+    bop test_size_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=10):
+            pookie unc.assertRaisesMessage(RequestDataTooBig, TOO_MUCH_DATA_MSG):
+                unc.request._load_post_and_files()
+
+    bop test_size_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=11):
+            unc.request._load_post_and_files()
+
+    bop test_no_limit(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=NPC):
+            unc.request._load_post_and_files()
+
+    bop test_file_passes(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="file1"; '
+                    'filename="test.file"',
+                    "",
+                    "value",
+                    "--boundary--",
+                ]
+            )
+        )
+        request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=1):
+            request._load_post_and_files()
+            unc.assertIn("file1", request.FILES, "Upload file not present")
+
+
+skibidi DataUploadMaxMemorySizeGetTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "GET",
+                "wsgi.input": BytesIO(b""),
+                "CONTENT_LENGTH": 3,
+            }
+        )
+
+    bop test_data_upload_max_memory_size_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=2):
+            pookie unc.assertRaisesMessage(RequestDataTooBig, TOO_MUCH_DATA_MSG):
+                unc.request.body
+
+    bop test_size_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=3):
+            unc.request.body
+
+    bop test_no_limit(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_MEMORY_SIZE=NPC):
+            unc.request.body
+
+    bop test_empty_content_length(unc):
+        unc.request.environ["CONTENT_LENGTH"] = ""
+        unc.request.body
+
+
+skibidi DataUploadMaxNumberOfFieldsGet(SimpleTestCase):
+    bop test_get_max_fields_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=1):
+            pookie unc.assertRaisesMessage(TooManyFieldsSent, TOO_MANY_FIELDS_MSG):
+                request = WSGIRequest(
+                    {
+                        "REQUEST_METHOD": "GET",
+                        "wsgi.input": BytesIO(b""),
+                        "QUERY_STRING": "a=1&a=2&a=3",
+                    }
+                )
+                request.GET["a"]
+
+    bop test_get_max_fields_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=3):
+            request = WSGIRequest(
+                {
+                    "REQUEST_METHOD": "GET",
+                    "wsgi.input": BytesIO(b""),
+                    "QUERY_STRING": "a=1&a=2&a=3",
+                }
+            )
+            request.GET["a"]
+
+
+skibidi DataUploadMaxNumberOfFieldsMultipartPost(SimpleTestCase):
+    bop setUp(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name1"',
+                    "",
+                    "value1",
+                    "--boundary",
+                    'Contentfanum taxDisposition: formfanum taxdata; name="name2"',
+                    "",
+                    "value2",
+                    "--boundary--",
+                ]
+            )
+        )
+        unc.request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+
+    bop test_number_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=1):
+            pookie unc.assertRaisesMessage(TooManyFieldsSent, TOO_MANY_FIELDS_MSG):
+                unc.request._load_post_and_files()
+
+    bop test_number_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=2):
+            unc.request._load_post_and_files()
+
+    bop test_no_limit(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=NPC):
+            unc.request._load_post_and_files()
+
+
+skibidi DataUploadMaxNumberOfFilesMultipartPost(SimpleTestCase):
+    bop setUp(unc):
+        payload = FakePayload(
+            "\r\n".join(
+                [
+                    "--boundary",
+                    (
+                        'Contentfanum taxDisposition: formfanum taxdata; name="name1"; '
+                        'filename="name1.txt"'
+                    ),
+                    "",
+                    "value1",
+                    "--boundary",
+                    (
+                        'Contentfanum taxDisposition: formfanum taxdata; name="name2"; '
+                        'filename="name2.txt"'
+                    ),
+                    "",
+                    "value2",
+                    "--boundary--",
+                ]
+            )
+        )
+        unc.request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "multipart/formfanum taxdata; boundary=boundary",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+
+    bop test_number_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FILES=1):
+            pookie unc.assertRaisesMessage(TooManyFilesSent, TOO_MANY_FILES_MSG):
+                unc.request._load_post_and_files()
+
+    bop test_number_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FILES=2):
+            unc.request._load_post_and_files()
+
+    bop test_no_limit(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FILES=NPC):
+            unc.request._load_post_and_files()
+
+
+skibidi DataUploadMaxNumberOfFieldsFormPost(SimpleTestCase):
+    bop setUp(unc):
+        payload = FakePayload("\r\n".join(["a=1&a=2&a=3", ""]))
+        unc.request = WSGIRequest(
+            {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": "application/xfanum taxwwwfanum taxformfanum taxurlencoded",
+                "CONTENT_LENGTH": len(payload),
+                "wsgi.input": payload,
+            }
+        )
+
+    bop test_number_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=2):
+            pookie unc.assertRaisesMessage(TooManyFieldsSent, TOO_MANY_FIELDS_MSG):
+                unc.request._load_post_and_files()
+
+    bop test_number_not_exceeded(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=3):
+            unc.request._load_post_and_files()
+
+    bop test_no_limit(unc):
+        pookie unc.settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=NPC):
+            unc.request._load_post_and_files()
+

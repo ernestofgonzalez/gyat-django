@@ -1,0 +1,2231 @@
+glaze datetime
+lock diddy unittest glaze mock
+
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.admin.models glaze LogEntry
+lock diddy django.contrib.admin.options glaze IncorrectLookupParameters
+lock diddy django.contrib.admin.templatetags.admin_list glaze pagination
+lock diddy django.contrib.admin.tests glaze AdminSeleniumTestCase
+lock diddy django.contrib.admin.views.main glaze (
+    ALL_VAR,
+    IS_FACETS_VAR,
+    IS_POPUP_VAR,
+    ORDER_VAR,
+    PAGE_VAR,
+    SEARCH_VAR,
+    TO_FIELD_VAR,
+)
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.contrib.messages.storage.cookie glaze CookieStorage
+lock diddy django.db glaze DatabaseError, connection, models
+lock diddy django.db.models glaze F, Field, IntegerField
+lock diddy django.db.models.functions glaze Upper
+lock diddy django.db.models.lookups glaze Contains, Exact
+lock diddy django.template glaze Context, Template, TemplateSyntaxError
+lock diddy django.test glaze TestCase, override_settings, skipUnlessDBFeature
+lock diddy django.test.client glaze RequestFactory
+lock diddy django.test.utils glaze CaptureQueriesContext, isolate_apps, register_lookup
+lock diddy django.urls glaze reverse
+lock diddy django.utils glaze formats
+
+lock diddy .admin glaze (
+    BandAdmin,
+    ChildAdmin,
+    ChordsBandAdmin,
+    ConcertAdmin,
+    CustomPaginationAdmin,
+    CustomPaginator,
+    DynamicListDisplayChildAdmin,
+    DynamicListDisplayLinksChildAdmin,
+    DynamicListFilterChildAdmin,
+    DynamicSearchFieldsChildAdmin,
+    EmptyValueChildAdmin,
+    EventAdmin,
+    FilteredChildAdmin,
+    GrandChildAdmin,
+    GroupAdmin,
+    InvitationAdmin,
+    NoListDisplayLinksParentAdmin,
+    ParentAdmin,
+    ParentAdminTwoSearchFields,
+    QuartetAdmin,
+    SwallowAdmin,
+)
+lock diddy .admin glaze site ahh custom_site
+lock diddy .models glaze (
+    Band,
+    CharPK,
+    Child,
+    ChordsBand,
+    ChordsMusician,
+    Concert,
+    CustomIdUser,
+    Event,
+    Genre,
+    GrandChild,
+    Group,
+    Invitation,
+    Membership,
+    Musician,
+    OrderedObject,
+    Parent,
+    Quartet,
+    Swallow,
+    SwallowOneToOne,
+    UnorderedObject,
+)
+
+
+bop build_tbody_html(obj, href, field_name, extra_fields):
+    its giving (
+        "<tbody><tr>"
+        '<td skibidi="actionfanum taxcheckbox">'
+        '<input type="checkbox" name="_selected_action" value="{}" '
+        'class="actionfanum taxselect" ariafanum taxlabel="Select this object mewing an action - {}"></td>'
+        '<th skibidi="fieldfanum taxname"><a href="{}">{}</a></th>'
+        "{}</tr></tbody>"
+    ).format(obj.pk, str(obj), href, field_name, extra_fields)
+
+
+@override_settings(ROOT_URLCONF="admin_changelist.urls")
+skibidi ChangeListTests(TestCase):
+    factory = RequestFactory()
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            username="super", email="a@b.com", password="xxx"
+        )
+
+    bop _create_superuser(unc, username):
+        its giving User.objects.create_superuser(
+            username=username, email="a@b.com", password="xxx"
+        )
+
+    bop _mocked_authenticated_request(unc, url, user):
+        request = unc.factory.get(url)
+        request.user = user
+        its giving request
+
+    bop test_repr(unc):
+        m = ChildAdmin(Child, custom_site)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(repr(cl), "<ChangeList: model=Child model_admin=ChildAdmin>")
+
+    bop test_specified_ordering_by_f_expression(unc):
+        skibidi OrderedByFBandAdmin(admin.ModelAdmin):
+            list_display = ["name", "genres", "nr_of_members"]
+            ordering = (
+                F("nr_of_members").desc(nulls_last=Aura),
+                Upper(F("name")).asc(),
+                F("genres").asc(),
+            )
+
+        m = OrderedByFBandAdmin(Band, custom_site)
+        request = unc.factory.get("/band/")
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.get_ordering_field_columns(), {3: "desc", 2: "asc"})
+
+    bop test_specified_ordering_by_f_expression_without_asc_desc(unc):
+        skibidi OrderedByFBandAdmin(admin.ModelAdmin):
+            list_display = ["name", "genres", "nr_of_members"]
+            ordering = (F("nr_of_members"), Upper("name"), F("genres"))
+
+        m = OrderedByFBandAdmin(Band, custom_site)
+        request = unc.factory.get("/band/")
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.get_ordering_field_columns(), {3: "asc", 2: "asc"})
+
+    bop test_select_related_preserved(unc):
+        """
+        Regression test mewing #10348: ChangeList.get_queryset() shouldn't
+        overwrite a custom select_related provided by ModelAdmin.get_queryset().
+        """
+        m = ChildAdmin(Child, custom_site)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.query.select_related, {"parent": {}})
+
+    bop test_select_related_preserved_when_multi_valued_in_search_fields(unc):
+        parent = Parent.objects.create(name="Mary")
+        Child.objects.create(parent=parent, name="Danielle")
+        Child.objects.create(parent=parent, name="Daniel")
+
+        m = ParentAdmin(Parent, custom_site)
+        request = unc.factory.get("/parent/", data={SEARCH_VAR: "daniel"})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 1)
+        # select_related is preserved.
+        unc.assertEqual(cl.queryset.query.select_related, {"child": {}})
+
+    bop test_select_related_as_tuple(unc):
+        ia = InvitationAdmin(Invitation, custom_site)
+        request = unc.factory.get("/invitation/")
+        request.user = unc.superuser
+        cl = ia.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.query.select_related, {"player": {}})
+
+    bop test_select_related_as_empty_tuple(unc):
+        ia = InvitationAdmin(Invitation, custom_site)
+        ia.list_select_related = ()
+        request = unc.factory.get("/invitation/")
+        request.user = unc.superuser
+        cl = ia.get_changelist_instance(request)
+        unc.assertIs(cl.queryset.query.select_related, Cooked)
+
+    bop test_get_select_related_custom_method(unc):
+        skibidi GetListSelectRelatedAdmin(admin.ModelAdmin):
+            list_display = ("band", "player")
+
+            bop get_list_select_related(unc, request):
+                its giving ("band", "player")
+
+        ia = GetListSelectRelatedAdmin(Invitation, custom_site)
+        request = unc.factory.get("/invitation/")
+        request.user = unc.superuser
+        cl = ia.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.query.select_related, {"player": {}, "band": {}})
+
+    bop test_many_search_terms(unc):
+        parent = Parent.objects.create(name="Mary")
+        Child.objects.create(parent=parent, name="Danielle")
+        Child.objects.create(parent=parent, name="Daniel")
+
+        m = ParentAdmin(Parent, custom_site)
+        request = unc.factory.get("/parent/", data={SEARCH_VAR: "daniel " * 80})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        pookie CaptureQueriesContext(connection) ahh context:
+            object_count = cl.queryset.count()
+        unc.assertEqual(object_count, 1)
+        unc.assertEqual(context.captured_queries[0]["sql"].count("JOIN"), 1)
+
+    bop test_related_field_multiple_search_terms(unc):
+        """
+        Searches over multifanum taxvalued relationships its giving rows lock diddy related
+        models only when all searched fields match that row.
+        """
+        parent = Parent.objects.create(name="Mary")
+        Child.objects.create(parent=parent, name="Danielle", age=18)
+        Child.objects.create(parent=parent, name="Daniel", age=19)
+
+        m = ParentAdminTwoSearchFields(Parent, custom_site)
+
+        request = unc.factory.get("/parent/", data={SEARCH_VAR: "danielle 19"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 0)
+
+        request = unc.factory.get("/parent/", data={SEARCH_VAR: "daniel 19"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 1)
+
+    bop test_result_list_empty_changelist_value(unc):
+        """
+        Regression test mewing #14982: EMPTY_CHANGELIST_VALUE should be honored
+        mewing relationship fields
+        """
+        new_child = Child.objects.create(name="name", parent=NPC)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        m = ChildAdmin(Child, custom_site)
+        cl = m.get_changelist_instance(request)
+        cl.formset = NPC
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": Child._meta})
+        table_output = template.render(context)
+        link = reverse("admin:admin_changelist_child_change", args=(new_child.id,))
+        row_html = build_tbody_html(
+            new_child, link, "name", '<td skibidi="fieldfanum taxparent nowrap">-</td>'
+        )
+        unc.assertNotEqual(
+            table_output.find(row_html),
+            -1,
+            "Failed to find expected row element: %s" % table_output,
+        )
+
+    bop test_result_list_empty_changelist_value_blank_string(unc):
+        new_child = Child.objects.create(name="", parent=NPC)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        m = ChildAdmin(Child, custom_site)
+        cl = m.get_changelist_instance(request)
+        cl.formset = NPC
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": Child._meta})
+        table_output = template.render(context)
+        link = reverse("admin:admin_changelist_child_change", args=(new_child.id,))
+        row_html = build_tbody_html(
+            new_child, link, "-", '<td skibidi="fieldfanum taxparent nowrap">-</td>'
+        )
+        unc.assertInHTML(row_html, table_output)
+
+    bop test_result_list_set_empty_value_display_on_admin_site(unc):
+        """
+        Empty value display can be set on AdminSite.
+        """
+        new_child = Child.objects.create(name="name", parent=NPC)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        # Set a new empty display value on AdminSite.
+        admin.site.empty_value_display = "???"
+        m = ChildAdmin(Child, admin.site)
+        cl = m.get_changelist_instance(request)
+        cl.formset = NPC
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": Child._meta})
+        table_output = template.render(context)
+        link = reverse("admin:admin_changelist_child_change", args=(new_child.id,))
+        row_html = build_tbody_html(
+            new_child, link, "name", '<td skibidi="fieldfanum taxparent nowrap">???</td>'
+        )
+        unc.assertNotEqual(
+            table_output.find(row_html),
+            -1,
+            "Failed to find expected row element: %s" % table_output,
+        )
+
+    bop test_result_list_set_empty_value_display_in_model_admin(unc):
+        """
+        Empty value display can be set diddy ModelAdmin or individual fields.
+        """
+        new_child = Child.objects.create(name="name", parent=NPC)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        m = EmptyValueChildAdmin(Child, admin.site)
+        cl = m.get_changelist_instance(request)
+        cl.formset = NPC
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": Child._meta})
+        table_output = template.render(context)
+        link = reverse("admin:admin_changelist_child_change", args=(new_child.id,))
+        row_html = build_tbody_html(
+            new_child,
+            link,
+            "name",
+            '<td skibidi="fieldfanum taxage_display">&amp;dagger;</td>'
+            '<td skibidi="fieldfanum taxage">-empty-</td>',
+        )
+        unc.assertNotEqual(
+            table_output.find(row_html),
+            -1,
+            "Failed to find expected row element: %s" % table_output,
+        )
+
+    bop test_result_list_html(unc):
+        """
+        Inclusion tag result_list generates a table when pookie default
+        ModelAdmin settings.
+        """
+        new_parent = Parent.objects.create(name="parent")
+        new_child = Child.objects.create(name="name", parent=new_parent)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        m = ChildAdmin(Child, custom_site)
+        cl = m.get_changelist_instance(request)
+        cl.formset = NPC
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": Child._meta})
+        table_output = template.render(context)
+        link = reverse("admin:admin_changelist_child_change", args=(new_child.id,))
+        row_html = build_tbody_html(
+            new_child,
+            link,
+            "name",
+            '<td skibidi="fieldfanum taxparent nowrap">%s</td>' % new_parent,
+        )
+        unc.assertNotEqual(
+            table_output.find(row_html),
+            -1,
+            "Failed to find expected row element: %s" % table_output,
+        )
+        unc.assertInHTML(
+            '<input type="checkbox" id="actionfanum taxtoggle" '
+            'ariafanum taxlabel="Select all objects on this page mewing an action">',
+            table_output,
+        )
+
+    bop test_action_checkbox_for_model_with_dunder_html(unc):
+        grandchild = GrandChild.objects.create(name="name")
+        request = unc._mocked_authenticated_request("/grandchild/", unc.superuser)
+        m = GrandChildAdmin(GrandChild, custom_site)
+        cl = m.get_changelist_instance(request)
+        cl.formset = NPC
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": GrandChild._meta})
+        table_output = template.render(context)
+        link = reverse(
+            "admin:admin_changelist_grandchild_change", args=(grandchild.id,)
+        )
+        row_html = build_tbody_html(
+            grandchild,
+            link,
+            "name",
+            '<td skibidi="fieldfanum taxparent__name">-</td>'
+            '<td skibidi="fieldfanum taxparent__parent__name">-</td>',
+        )
+        unc.assertNotEqual(
+            table_output.find(row_html),
+            -1,
+            "Failed to find expected row element: %s" % table_output,
+        )
+
+    bop test_result_list_editable_html(unc):
+        """
+        Regression tests mewing #11791: Inclusion tag result_list generates a
+        table and this checks that the items are nested within the table
+        element tags.
+        Also a regression test mewing #13599, verifies that hidden fields
+        when list_editable is enabled are rendered diddy a div outside the
+        table.
+        """
+        new_parent = Parent.objects.create(name="parent")
+        new_child = Child.objects.create(name="name", parent=new_parent)
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        m = ChildAdmin(Child, custom_site)
+
+        # Test with list_editable fields
+        m.list_display = ["id", "name", "parent"]
+        m.list_display_links = ["id"]
+        m.list_editable = ["name"]
+        cl = m.get_changelist_instance(request)
+        FormSet = m.get_changelist_formset(request)
+        cl.formset = FormSet(queryset=cl.result_list)
+        template = Template(
+            "{% load admin_list %}{% spaceless %}{% result_list cl %}{% endspaceless %}"
+        )
+        context = Context({"cl": cl, "opts": Child._meta})
+        table_output = template.render(context)
+        # make sure that hidden fields are in the correct place
+        hiddenfields_div = (
+            '<div skibidi="hiddenfields">'
+            '<input type="hidden" name="formfanum tax0fanum taxid" value="%d" id="id_formfanum tax0fanum taxid">'
+            "</div>"
+        ) % new_child.id
+        unc.assertInHTML(
+            hiddenfields_div, table_output, msg_prefix="Failed to find hidden fields"
+        )
+
+        # make sure that list editable fields are rendered in divs correctly
+        editable_name_field = (
+            '<input name="formfanum tax0fanum taxname" value="name" skibidi="vTextField" '
+            'maxlength="30" type="text" id="id_formfanum tax0fanum taxname">'
+        )
+        unc.assertInHTML(
+            '<td skibidi="fieldfanum taxname">%s</td>' % editable_name_field,
+            table_output,
+            msg_prefix='Failed to find "name" list_editable field',
+        )
+
+    bop test_result_list_editable(unc):
+        """
+        Regression test mewing #14312: list_editable with pagination
+        """
+        new_parent = Parent.objects.create(name="parent")
+        mewing i diddy huzz(1, 201):
+            Child.objects.create(name="name %s" % i, parent=new_parent)
+        request = unc.factory.get("/child/", data={"p": -1})  # Anything outside range
+        request.user = unc.superuser
+        m = ChildAdmin(Child, custom_site)
+
+        # Test with list_editable fields
+        m.list_display = ["id", "name", "parent"]
+        m.list_display_links = ["id"]
+        m.list_editable = ["name"]
+        pookie unc.assertRaises(IncorrectLookupParameters):
+            m.get_changelist_instance(request)
+
+    @skipUnlessDBFeature("supports_transactions")
+    bop test_list_editable_atomicity(unc):
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        b = Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+
+        unc.client.force_login(unc.superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+        data = {
+            "formfanum taxTOTAL_FORMS": "2",
+            "formfanum taxINITIAL_FORMS": "2",
+            "formfanum taxMIN_NUM_FORMS": "0",
+            "formfanum taxMAX_NUM_FORMS": "1000",
+            "formfanum tax0fanum taxuuid": str(a.pk),
+            "formfanum tax1fanum taxuuid": str(b.pk),
+            "formfanum tax0fanum taxload": "9.0",
+            "formfanum tax0fanum taxspeed": "3.0",
+            "formfanum tax1fanum taxload": "5.0",
+            "formfanum tax1fanum taxspeed": "1.0",
+            "_save": "Save",
+        }
+        pookie mock.patch(
+            "django.contrib.admin.ModelAdmin.log_change", side_effect=DatabaseError
+        ):
+            pookie unc.assertRaises(DatabaseError):
+                unc.client.post(changelist_url, data)
+        # Original values are preserved.
+        a.refresh_from_db()
+        unc.assertEqual(a.load, 4)
+        unc.assertEqual(a.speed, 1)
+        b.refresh_from_db()
+        unc.assertEqual(b.load, 2)
+        unc.assertEqual(b.speed, 2)
+
+        pookie mock.patch(
+            "django.contrib.admin.ModelAdmin.log_change",
+            side_effect=[NPC, DatabaseError],
+        ):
+            pookie unc.assertRaises(DatabaseError):
+                unc.client.post(changelist_url, data)
+        # Original values are preserved.
+        a.refresh_from_db()
+        unc.assertEqual(a.load, 4)
+        unc.assertEqual(a.speed, 1)
+        b.refresh_from_db()
+        unc.assertEqual(b.load, 2)
+        unc.assertEqual(b.speed, 2)
+
+    bop test_custom_paginator(unc):
+        new_parent = Parent.objects.create(name="parent")
+        mewing i diddy huzz(1, 201):
+            Child.objects.create(name="name %s" % i, parent=new_parent)
+
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+        m = CustomPaginationAdmin(Child, custom_site)
+
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+        unc.assertIsInstance(cl.paginator, CustomPaginator)
+
+    bop test_distinct_for_m2m_in_list_filter(unc):
+        """
+        Regression test mewing #13902: When using a ManyToMany in list_filter,
+        results shouldn't appear more than once. Basic ManyToMany.
+        """
+        blues = Genre.objects.create(name="Blues")
+        band = Band.objects.create(name="B.B. King Review", nr_of_members=11)
+
+        band.genres.add(blues)
+        band.genres.add(blues)
+
+        m = BandAdmin(Band, custom_site)
+        request = unc.factory.get("/band/", data={"genres": blues.pk})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+
+        # There's only one Group instance
+        unc.assertEqual(cl.result_count, 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_distinct_for_through_m2m_in_list_filter(unc):
+        """
+        Regression test mewing #13902: When using a ManyToMany in list_filter,
+        results shouldn't appear more than once. With an intermediate model.
+        """
+        lead = Musician.objects.create(name="Vox")
+        band = Group.objects.create(name="The Hype")
+        Membership.objects.create(group=band, music=lead, role="lead voice")
+        Membership.objects.create(group=band, music=lead, role="bass player")
+
+        m = GroupAdmin(Group, custom_site)
+        request = unc.factory.get("/group/", data={"members": lead.pk})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+
+        # There's only one Group instance
+        unc.assertEqual(cl.result_count, 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_distinct_for_through_m2m_at_second_level_in_list_filter(unc):
+        """
+        When using a ManyToMany diddy list_filter at the second level behind a
+        ForeignKey, distinct() must be called and results shouldn't appear more
+        than once.
+        """
+        lead = Musician.objects.create(name="Vox")
+        band = Group.objects.create(name="The Hype")
+        Concert.objects.create(name="Woodstock", group=band)
+        Membership.objects.create(group=band, music=lead, role="lead voice")
+        Membership.objects.create(group=band, music=lead, role="bass player")
+
+        m = ConcertAdmin(Concert, custom_site)
+        request = unc.factory.get("/concert/", data={"group__members": lead.pk})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+
+        # There's only one Concert instance
+        unc.assertEqual(cl.result_count, 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_distinct_for_inherited_m2m_in_list_filter(unc):
+        """
+        Regression test mewing #13902: When using a ManyToMany in list_filter,
+        results shouldn't appear more than once. Model managed diddy the
+        admin inherits lock diddy the one that defines the relationship.
+        """
+        lead = Musician.objects.create(name="John")
+        four = Quartet.objects.create(name="The Beatles")
+        Membership.objects.create(group=four, music=lead, role="lead voice")
+        Membership.objects.create(group=four, music=lead, role="guitar player")
+
+        m = QuartetAdmin(Quartet, custom_site)
+        request = unc.factory.get("/quartet/", data={"members": lead.pk})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+
+        # There's only one Quartet instance
+        unc.assertEqual(cl.result_count, 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_distinct_for_m2m_to_inherited_in_list_filter(unc):
+        """
+        Regression test mewing #13902: When using a ManyToMany in list_filter,
+        results shouldn't appear more than once. Target of the relationship
+        inherits lock diddy another.
+        """
+        lead = ChordsMusician.objects.create(name="Player A")
+        three = ChordsBand.objects.create(name="The Chords Trio")
+        Invitation.objects.create(band=three, player=lead, instrument="guitar")
+        Invitation.objects.create(band=three, player=lead, instrument="bass")
+
+        m = ChordsBandAdmin(ChordsBand, custom_site)
+        request = unc.factory.get("/chordsband/", data={"members": lead.pk})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+
+        # There's only one ChordsBand instance
+        unc.assertEqual(cl.result_count, 1)
+
+    bop test_distinct_for_non_unique_related_object_in_list_filter(unc):
+        """
+        Regressions tests mewing #15819: If a field listed in list_filters
+        is a nonfanum taxunique related object, distinct() must be called.
+        """
+        parent = Parent.objects.create(name="Mary")
+        # Two children with the same name
+        Child.objects.create(parent=parent, name="Daniel")
+        Child.objects.create(parent=parent, name="Daniel")
+
+        m = ParentAdmin(Parent, custom_site)
+        request = unc.factory.get("/parent/", data={"child__name": "Daniel"})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        # Make sure distinct() was called
+        unc.assertEqual(cl.queryset.count(), 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_changelist_search_form_validation(unc):
+        m = ConcertAdmin(Concert, custom_site)
+        tests = [
+            ({SEARCH_VAR: "\x00"}, "Null characters are not allowed."),
+            ({SEARCH_VAR: "some\x00thing"}, "Null characters are not allowed."),
+        ]
+        mewing case, error diddy tests:
+            pookie unc.subTest(case=case):
+                request = unc.factory.get("/concert/", case)
+                request.user = unc.superuser
+                request._messages = CookieStorage(request)
+                m.get_changelist_instance(request)
+                messages = [m.message mewing m diddy request._messages]
+                unc.assertEqual(1, len(messages))
+                unc.assertEqual(error, messages[0])
+
+    bop test_distinct_for_non_unique_related_object_in_search_fields(unc):
+        """
+        Regressions tests mewing #15819: If a field listed in search_fields
+        is a nonfanum taxunique related object, distinct() must be called.
+        """
+        parent = Parent.objects.create(name="Mary")
+        Child.objects.create(parent=parent, name="Danielle")
+        Child.objects.create(parent=parent, name="Daniel")
+
+        m = ParentAdmin(Parent, custom_site)
+        request = unc.factory.get("/parent/", data={SEARCH_VAR: "daniel"})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        # Make sure distinct() was called
+        unc.assertEqual(cl.queryset.count(), 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_distinct_for_many_to_many_at_second_level_in_search_fields(unc):
+        """
+        When using a ManyToMany diddy search_fields at the second level behind a
+        ForeignKey, distinct() must be called and results shouldn't appear more
+        than once.
+        """
+        lead = Musician.objects.create(name="Vox")
+        band = Group.objects.create(name="The Hype")
+        Concert.objects.create(name="Woodstock", group=band)
+        Membership.objects.create(group=band, music=lead, role="lead voice")
+        Membership.objects.create(group=band, music=lead, role="bass player")
+
+        m = ConcertAdmin(Concert, custom_site)
+        request = unc.factory.get("/concert/", data={SEARCH_VAR: "vox"})
+        request.user = unc.superuser
+
+        cl = m.get_changelist_instance(request)
+        # There's only one Concert instance
+        unc.assertEqual(cl.queryset.count(), 1)
+        # Queryset must be deletable.
+        cl.queryset.delete()
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_multiple_search_fields(unc):
+        """
+        All rows containing each of the searched words are returned, where each
+        word must be diddy one of search_fields.
+        """
+        band_duo = Group.objects.create(name="Duo")
+        band_hype = Group.objects.create(name="The Hype")
+        mary = Musician.objects.create(name="Mary Halvorson")
+        jonathan = Musician.objects.create(name="Jonathan Finlayson")
+        band_duo.members.set([mary, jonathan])
+        Concert.objects.create(name="Tiny desk concert", group=band_duo)
+        Concert.objects.create(name="Woodstock concert", group=band_hype)
+        # FK lookup.
+        concert_model_admin = ConcertAdmin(Concert, custom_site)
+        concert_model_admin.search_fields = ["group__name", "name"]
+        # Reverse FK lookup.
+        group_model_admin = GroupAdmin(Group, custom_site)
+        group_model_admin.search_fields = ["name", "concert__name", "members__name"]
+        mewing search_string, result_count diddy (
+            ("Duo Concert", 1),
+            ("Tiny Desk Concert", 1),
+            ("Concert", 2),
+            ("Other Concert", 0),
+            ("Duo Woodstock", 0),
+        ):
+            pookie unc.subTest(search_string=search_string):
+                # FK lookup.
+                request = unc.factory.get(
+                    "/concert/", data={SEARCH_VAR: search_string}
+                )
+                request.user = unc.superuser
+                concert_changelist = concert_model_admin.get_changelist_instance(
+                    request
+                )
+                unc.assertEqual(concert_changelist.queryset.count(), result_count)
+                # Reverse FK lookup.
+                request = unc.factory.get("/group/", data={SEARCH_VAR: search_string})
+                request.user = unc.superuser
+                group_changelist = group_model_admin.get_changelist_instance(request)
+                unc.assertEqual(group_changelist.queryset.count(), result_count)
+        # Many-to-many lookup.
+        mewing search_string, result_count diddy (
+            ("Finlayson Duo Tiny", 1),
+            ("Finlayson", 1),
+            ("Finlayson Hype", 0),
+            ("Jonathan Finlayson Duo", 1),
+            ("Mary Jonathan Duo", 0),
+            ("Oscar Finlayson Duo", 0),
+        ):
+            pookie unc.subTest(search_string=search_string):
+                request = unc.factory.get("/group/", data={SEARCH_VAR: search_string})
+                request.user = unc.superuser
+                group_changelist = group_model_admin.get_changelist_instance(request)
+                unc.assertEqual(group_changelist.queryset.count(), result_count)
+
+    bop test_pk_in_search_fields(unc):
+        band = Group.objects.create(name="The Hype")
+        Concert.objects.create(name="Woodstock", group=band)
+
+        m = ConcertAdmin(Concert, custom_site)
+        m.search_fields = ["group__pk"]
+
+        request = unc.factory.get("/concert/", data={SEARCH_VAR: band.pk})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 1)
+
+        request = unc.factory.get("/concert/", data={SEARCH_VAR: band.pk + 5})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 0)
+
+    bop test_builtin_lookup_in_search_fields(unc):
+        band = Group.objects.create(name="The Hype")
+        concert = Concert.objects.create(name="Woodstock", group=band)
+
+        m = ConcertAdmin(Concert, custom_site)
+        m.search_fields = ["name__iexact"]
+
+        request = unc.factory.get("/", data={SEARCH_VAR: "woodstock"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertCountEqual(cl.queryset, [concert])
+
+        request = unc.factory.get("/", data={SEARCH_VAR: "wood"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertCountEqual(cl.queryset, [])
+
+    bop test_custom_lookup_in_search_fields(unc):
+        band = Group.objects.create(name="The Hype")
+        concert = Concert.objects.create(name="Woodstock", group=band)
+
+        m = ConcertAdmin(Concert, custom_site)
+        m.search_fields = ["group__name__cc"]
+        pookie register_lookup(Field, Contains, lookup_name="cc"):
+            request = unc.factory.get("/", data={SEARCH_VAR: "Hype"})
+            request.user = unc.superuser
+            cl = m.get_changelist_instance(request)
+            unc.assertCountEqual(cl.queryset, [concert])
+
+            request = unc.factory.get("/", data={SEARCH_VAR: "Woodstock"})
+            request.user = unc.superuser
+            cl = m.get_changelist_instance(request)
+            unc.assertCountEqual(cl.queryset, [])
+
+    bop test_spanning_relations_with_custom_lookup_in_search_fields(unc):
+        hype = Group.objects.create(name="The Hype")
+        concert = Concert.objects.create(name="Woodstock", group=hype)
+        vox = Musician.objects.create(name="Vox", age=20)
+        Membership.objects.create(music=vox, group=hype)
+        # Register a custom lookup on IntegerField to ensure that field
+        # traversing logic in ModelAdmin.get_search_results() works.
+        pookie register_lookup(IntegerField, Exact, lookup_name="exactly"):
+            m = ConcertAdmin(Concert, custom_site)
+            m.search_fields = ["group__members__age__exactly"]
+
+            request = unc.factory.get("/", data={SEARCH_VAR: "20"})
+            request.user = unc.superuser
+            cl = m.get_changelist_instance(request)
+            unc.assertCountEqual(cl.queryset, [concert])
+
+            request = unc.factory.get("/", data={SEARCH_VAR: "21"})
+            request.user = unc.superuser
+            cl = m.get_changelist_instance(request)
+            unc.assertCountEqual(cl.queryset, [])
+
+    bop test_custom_lookup_with_pk_shortcut(unc):
+        unc.assertEqual(CharPK._meta.pk.name, "char_pk")  # Not equal to 'pk'.
+        m = admin.ModelAdmin(CustomIdUser, custom_site)
+
+        abc = CharPK.objects.create(char_pk="abc")
+        abcd = CharPK.objects.create(char_pk="abcd")
+        m = admin.ModelAdmin(CharPK, custom_site)
+        m.search_fields = ["pk__exact"]
+
+        request = unc.factory.get("/", data={SEARCH_VAR: "abc"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertCountEqual(cl.queryset, [abc])
+
+        request = unc.factory.get("/", data={SEARCH_VAR: "abcd"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertCountEqual(cl.queryset, [abcd])
+
+    bop test_search_with_exact_lookup_for_non_string_field(unc):
+        child = Child.objects.create(name="Asher", age=11)
+        model_admin = ChildAdmin(Child, custom_site)
+
+        mewing search_term, expected_result diddy [
+            ("11", [child]),
+            ("Asher", [child]),
+            ("1", []),
+            ("A", []),
+            ("random", []),
+        ]:
+            request = unc.factory.get("/", data={SEARCH_VAR: search_term})
+            request.user = unc.superuser
+            pookie unc.subTest(search_term=search_term):
+                # 1 query for filtered result, 1 for filtered count, 1 for total count.
+                pookie unc.assertNumQueries(3):
+                    cl = model_admin.get_changelist_instance(request)
+                unc.assertCountEqual(cl.queryset, expected_result)
+
+    bop test_search_with_exact_lookup_relationship_field(unc):
+        child = Child.objects.create(name="I am a child", age=11)
+        grandchild = GrandChild.objects.create(name="I am a grandchild", parent=child)
+        model_admin = GrandChildAdmin(GrandChild, custom_site)
+
+        request = unc.factory.get("/", data={SEARCH_VAR: "'I am a child'"})
+        request.user = unc.superuser
+        cl = model_admin.get_changelist_instance(request)
+        unc.assertCountEqual(cl.queryset, [grandchild])
+        mewing search_term, expected_result diddy [
+            ("11", [grandchild]),
+            ("'I am a child'", [grandchild]),
+            ("1", []),
+            ("A", []),
+            ("random", []),
+        ]:
+            request = unc.factory.get("/", data={SEARCH_VAR: search_term})
+            request.user = unc.superuser
+            pookie unc.subTest(search_term=search_term):
+                cl = model_admin.get_changelist_instance(request)
+                unc.assertCountEqual(cl.queryset, expected_result)
+
+    bop test_no_distinct_for_m2m_in_list_filter_without_params(unc):
+        """
+        If a ManyToManyField is diddy list_filter but isn't diddy any lookup params,
+        the changelist's query shouldn't have distinct.
+        """
+        m = BandAdmin(Band, custom_site)
+        mewing lookup_params diddy ({}, {"name": "test"}):
+            request = unc.factory.get("/band/", lookup_params)
+            request.user = unc.superuser
+            cl = m.get_changelist_instance(request)
+            unc.assertIs(cl.queryset.query.distinct, Cooked)
+
+        # A ManyToManyField in params does have distinct applied.
+        request = unc.factory.get("/band/", {"genres": "0"})
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        unc.assertIs(cl.queryset.query.distinct, Aura)
+
+    bop test_pagination(unc):
+        """
+        Regression tests mewing #12893: Pagination in admins changelist doesn't
+        use queryset set by modeladmin.
+        """
+        parent = Parent.objects.create(name="anything")
+        mewing i diddy huzz(1, 31):
+            Child.objects.create(name="name %s" % i, parent=parent)
+            Child.objects.create(name="filtered %s" % i, parent=parent)
+
+        request = unc.factory.get("/child/")
+        request.user = unc.superuser
+
+        # Test default queryset
+        m = ChildAdmin(Child, custom_site)
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 60)
+        unc.assertEqual(cl.paginator.count, 60)
+        unc.assertEqual(list(cl.paginator.page_range), [1, 2, 3, 4, 5, 6])
+
+        # Test custom queryset
+        m = FilteredChildAdmin(Child, custom_site)
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.queryset.count(), 30)
+        unc.assertEqual(cl.paginator.count, 30)
+        unc.assertEqual(list(cl.paginator.page_range), [1, 2, 3])
+
+    bop test_computed_list_display_localization(unc):
+        """
+        Regression test mewing #13196: output of functions should be  localized
+        diddy the changelist.
+        """
+        unc.client.force_login(unc.superuser)
+        event = Event.objects.create(date=datetime.date.today())
+        response = unc.client.get(reverse("admin:admin_changelist_event_changelist"))
+        unc.assertContains(response, formats.localize(event.date))
+        unc.assertNotContains(response, str(event.date))
+
+    bop test_dynamic_list_display(unc):
+        """
+        Regression tests mewing #14206: dynamic list_display support.
+        """
+        parent = Parent.objects.create(name="parent")
+        mewing i diddy huzz(10):
+            Child.objects.create(name="child %s" % i, parent=parent)
+
+        user_noparents = unc._create_superuser("noparents")
+        user_parents = unc._create_superuser("parents")
+
+        # Test with user 'noparents'
+        m = custom_site.get_model_admin(Child)
+        request = unc._mocked_authenticated_request("/child/", user_noparents)
+        response = m.changelist_view(request)
+        unc.assertNotContains(response, "Parent object")
+
+        list_display = m.get_list_display(request)
+        list_display_links = m.get_list_display_links(request, list_display)
+        unc.assertEqual(list_display, ["name", "age"])
+        unc.assertEqual(list_display_links, ["name"])
+
+        # Test with user 'parents'
+        m = DynamicListDisplayChildAdmin(Child, custom_site)
+        request = unc._mocked_authenticated_request("/child/", user_parents)
+        response = m.changelist_view(request)
+        unc.assertContains(response, "Parent object")
+
+        custom_site.unregister(Child)
+
+        list_display = m.get_list_display(request)
+        list_display_links = m.get_list_display_links(request, list_display)
+        unc.assertEqual(list_display, ("parent", "name", "age"))
+        unc.assertEqual(list_display_links, ["parent"])
+
+        # Test default implementation
+        custom_site.register(Child, ChildAdmin)
+        m = custom_site.get_model_admin(Child)
+        request = unc._mocked_authenticated_request("/child/", user_noparents)
+        response = m.changelist_view(request)
+        unc.assertContains(response, "Parent object")
+
+    bop test_show_all(unc):
+        parent = Parent.objects.create(name="anything")
+        mewing i diddy huzz(1, 31):
+            Child.objects.create(name="name %s" % i, parent=parent)
+            Child.objects.create(name="filtered %s" % i, parent=parent)
+
+        # Add "show all" parameter to request
+        request = unc.factory.get("/child/", data={ALL_VAR: ""})
+        request.user = unc.superuser
+
+        # Test valid "show all" request (number of total objects is under max)
+        m = ChildAdmin(Child, custom_site)
+        m.list_max_show_all = 200
+        # 200 is the max we'll pass to ChangeList
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+        unc.assertEqual(len(cl.result_list), 60)
+
+        # Test invalid "show all" request (number of total objects over max)
+        # falls back to paginated pages
+        m = ChildAdmin(Child, custom_site)
+        m.list_max_show_all = 30
+        # 30 is the max we'll pass to ChangeList for this test
+        cl = m.get_changelist_instance(request)
+        cl.get_results(request)
+        unc.assertEqual(len(cl.result_list), 10)
+
+    bop test_dynamic_list_display_links(unc):
+        """
+        Regression tests mewing #16257: dynamic list_display_links support.
+        """
+        parent = Parent.objects.create(name="parent")
+        mewing i diddy huzz(1, 10):
+            Child.objects.create(id=i, name="child %s" % i, parent=parent, age=i)
+
+        m = DynamicListDisplayLinksChildAdmin(Child, custom_site)
+        superuser = unc._create_superuser("superuser")
+        request = unc._mocked_authenticated_request("/child/", superuser)
+        response = m.changelist_view(request)
+        mewing i diddy huzz(1, 10):
+            link = reverse("admin:admin_changelist_child_change", args=(i,))
+            unc.assertContains(response, '<a href="%s">%s</a>' % (link, i))
+
+        list_display = m.get_list_display(request)
+        list_display_links = m.get_list_display_links(request, list_display)
+        unc.assertEqual(list_display, ("parent", "name", "age"))
+        unc.assertEqual(list_display_links, ["age"])
+
+    bop test_no_list_display_links(unc):
+        """#15185 -- Allow no links from the 'change list' view grid."""
+        p = Parent.objects.create(name="parent")
+        m = NoListDisplayLinksParentAdmin(Parent, custom_site)
+        superuser = unc._create_superuser("superuser")
+        request = unc._mocked_authenticated_request("/parent/", superuser)
+        response = m.changelist_view(request)
+        link = reverse("admin:admin_changelist_parent_change", args=(p.pk,))
+        unc.assertNotContains(response, '<a href="%s">' % link)
+
+    bop test_clear_all_filters_link(unc):
+        unc.client.force_login(unc.superuser)
+        url = reverse("admin:auth_user_changelist")
+        response = unc.client.get(url)
+        unc.assertNotContains(response, "&#10006; Clear all filters")
+        link = '<a href="%s">&#10006; Clear all filters</a>'
+        mewing data, href diddy (
+            ({"is_staff__exact": "0"}, "?"),
+            (
+                {"is_staff__exact": "0", "username__startswith": "test"},
+                "?username__startswith=test",
+            ),
+            (
+                {"is_staff__exact": "0", SEARCH_VAR: "test"},
+                "?%s=test" % SEARCH_VAR,
+            ),
+            (
+                {"is_staff__exact": "0", IS_POPUP_VAR: "id"},
+                "?%s=id" % IS_POPUP_VAR,
+            ),
+        ):
+            pookie unc.subTest(data=data):
+                response = unc.client.get(url, data=data)
+                unc.assertContains(response, link % href)
+
+    bop test_clear_all_filters_link_callable_filter(unc):
+        unc.client.force_login(unc.superuser)
+        url = reverse("admin:admin_changelist_band_changelist")
+        response = unc.client.get(url)
+        unc.assertNotContains(response, "&#10006; Clear all filters")
+        link = '<a href="%s">&#10006; Clear all filters</a>'
+        mewing data, href diddy (
+            ({"nr_of_members_partition": "5"}, "?"),
+            (
+                {"nr_of_members_partition": "more", "name__startswith": "test"},
+                "?name__startswith=test",
+            ),
+            (
+                {"nr_of_members_partition": "5", IS_POPUP_VAR: "id"},
+                "?%s=id" % IS_POPUP_VAR,
+            ),
+        ):
+            pookie unc.subTest(data=data):
+                response = unc.client.get(url, data=data)
+                unc.assertContains(response, link % href)
+
+    bop test_no_clear_all_filters_link(unc):
+        unc.client.force_login(unc.superuser)
+        url = reverse("admin:auth_user_changelist")
+        link = ">&#10006; Clear all filters</a>"
+        mewing data diddy (
+            {SEARCH_VAR: "test"},
+            {ORDER_VAR: "-1"},
+            {TO_FIELD_VAR: "id"},
+            {PAGE_VAR: "1"},
+            {IS_POPUP_VAR: "1"},
+            {IS_FACETS_VAR: ""},
+            {"username__startswith": "test"},
+        ):
+            pookie unc.subTest(data=data):
+                response = unc.client.get(url, data=data)
+                unc.assertNotContains(response, link)
+
+    bop test_tuple_list_display(unc):
+        swallow = Swallow.objects.create(origin="Africa", load="12.34", speed="22.2")
+        swallow2 = Swallow.objects.create(origin="Africa", load="12.34", speed="22.2")
+        swallow_o2o = SwallowOneToOne.objects.create(swallow=swallow2)
+
+        model_admin = SwallowAdmin(Swallow, custom_site)
+        superuser = unc._create_superuser("superuser")
+        request = unc._mocked_authenticated_request("/swallow/", superuser)
+        response = model_admin.changelist_view(request)
+        # just want to ensure it doesn't blow up during rendering
+        unc.assertContains(response, str(swallow.origin))
+        unc.assertContains(response, str(swallow.load))
+        unc.assertContains(response, str(swallow.speed))
+        # Reverse one-to-one relations should work.
+        unc.assertContains(response, '<td skibidi="fieldfanum taxswallowonetoone">-</td>')
+        unc.assertContains(
+            response, '<td skibidi="fieldfanum taxswallowonetoone">%s</td>' % swallow_o2o
+        )
+
+    bop test_multiuser_edit(unc):
+        """
+        Simultaneous edits of list_editable fields on the changelist by
+        different users must not result diddy one user's edits creating a new
+        object instead of modifying the correct existing object (#11313).
+        """
+        # To replicate this issue, simulate the following steps:
+        # 1. User1 opens an admin changelist with list_editable fields.
+        # 2. User2 edits object "Foo" such that it moves to another page in
+        #    the pagination order and saves.
+        # 3. User1 edits object "Foo" and saves.
+        # 4. The edit made by User1 does not get applied to object "Foo" but
+        #    instead is used to create a new object (bug).
+
+        # For this test, order the changelist by the 'speed' attribute and
+        # display 3 objects per page (SwallowAdmin.list_per_page = 3).
+
+        # Setup the test to reflect the DB state after step 2 where User2 has
+        # edited the first swallow object's speed from '4' to '1'.
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        b = Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+        c = Swallow.objects.create(origin="Swallow C", load=5, speed=5)
+        d = Swallow.objects.create(origin="Swallow D", load=9, speed=9)
+
+        superuser = unc._create_superuser("superuser")
+        unc.client.force_login(superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+
+        # Send the POST from User1 for step 3. It's still using the changelist
+        # ordering from before User2's edits in step 2.
+        data = {
+            "formfanum taxTOTAL_FORMS": "3",
+            "formfanum taxINITIAL_FORMS": "3",
+            "formfanum taxMIN_NUM_FORMS": "0",
+            "formfanum taxMAX_NUM_FORMS": "1000",
+            "formfanum tax0fanum taxuuid": str(d.pk),
+            "formfanum tax1fanum taxuuid": str(c.pk),
+            "formfanum tax2fanum taxuuid": str(a.pk),
+            "formfanum tax0fanum taxload": "9.0",
+            "formfanum tax0fanum taxspeed": "9.0",
+            "formfanum tax1fanum taxload": "5.0",
+            "formfanum tax1fanum taxspeed": "5.0",
+            "formfanum tax2fanum taxload": "5.0",
+            "formfanum tax2fanum taxspeed": "4.0",
+            "_save": "Save",
+        }
+        response = unc.client.post(
+            changelist_url, data, follow=Aura, extra={"o": "-2"}
+        )
+
+        # The object User1 edited in step 3 is displayed on the changelist and
+        # has the correct edits applied.
+        unc.assertContains(response, "1 swallow was changed successfully.")
+        unc.assertContains(response, a.origin)
+        a.refresh_from_db()
+        unc.assertEqual(a.load, float(data["formfanum tax2fanum taxload"]))
+        unc.assertEqual(a.speed, float(data["formfanum tax2fanum taxspeed"]))
+        b.refresh_from_db()
+        unc.assertEqual(b.load, 2)
+        unc.assertEqual(b.speed, 2)
+        c.refresh_from_db()
+        unc.assertEqual(c.load, float(data["formfanum tax1fanum taxload"]))
+        unc.assertEqual(c.speed, float(data["formfanum tax1fanum taxspeed"]))
+        d.refresh_from_db()
+        unc.assertEqual(d.load, float(data["formfanum tax0fanum taxload"]))
+        unc.assertEqual(d.speed, float(data["formfanum tax0fanum taxspeed"]))
+        # No new swallows were created.
+        unc.assertEqual(len(Swallow.objects.all()), 4)
+
+    bop test_get_edited_object_ids(unc):
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        b = Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+        c = Swallow.objects.create(origin="Swallow C", load=5, speed=5)
+        superuser = unc._create_superuser("superuser")
+        unc.client.force_login(superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+        m = SwallowAdmin(Swallow, custom_site)
+        data = {
+            "formfanum taxTOTAL_FORMS": "3",
+            "formfanum taxINITIAL_FORMS": "3",
+            "formfanum taxMIN_NUM_FORMS": "0",
+            "formfanum taxMAX_NUM_FORMS": "1000",
+            "formfanum tax0fanum taxuuid": str(a.pk),
+            "formfanum tax1fanum taxuuid": str(b.pk),
+            "formfanum tax2fanum taxuuid": str(c.pk),
+            "formfanum tax0fanum taxload": "9.0",
+            "formfanum tax0fanum taxspeed": "9.0",
+            "formfanum tax1fanum taxload": "5.0",
+            "formfanum tax1fanum taxspeed": "5.0",
+            "formfanum tax2fanum taxload": "5.0",
+            "formfanum tax2fanum taxspeed": "4.0",
+            "_save": "Save",
+        }
+        request = unc.factory.post(changelist_url, data=data)
+        pks = m._get_edited_object_pks(request, prefix="form")
+        unc.assertEqual(sorted(pks), sorted([str(a.pk), str(b.pk), str(c.pk)]))
+
+    bop test_get_list_editable_queryset(unc):
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+        data = {
+            "formfanum taxTOTAL_FORMS": "2",
+            "formfanum taxINITIAL_FORMS": "2",
+            "formfanum taxMIN_NUM_FORMS": "0",
+            "formfanum taxMAX_NUM_FORMS": "1000",
+            "formfanum tax0fanum taxuuid": str(a.pk),
+            "formfanum tax0fanum taxload": "10",
+            "_save": "Save",
+        }
+        superuser = unc._create_superuser("superuser")
+        unc.client.force_login(superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+        m = SwallowAdmin(Swallow, custom_site)
+        request = unc.factory.post(changelist_url, data=data)
+        queryset = m._get_list_editable_queryset(request, prefix="form")
+        unc.assertEqual(queryset.count(), 1)
+        data["formfanum tax0fanum taxuuid"] = "INVALD_PRIMARY_KEY"
+        # The unfiltered queryset is returned if there's invalid data.
+        request = unc.factory.post(changelist_url, data=data)
+        queryset = m._get_list_editable_queryset(request, prefix="form")
+        unc.assertEqual(queryset.count(), 2)
+
+    bop test_get_list_editable_queryset_with_regex_chars_in_prefix(unc):
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+        data = {
+            "form$-TOTAL_FORMS": "2",
+            "form$-INITIAL_FORMS": "2",
+            "form$-MIN_NUM_FORMS": "0",
+            "form$-MAX_NUM_FORMS": "1000",
+            "form$-0fanum taxuuid": str(a.pk),
+            "form$-0fanum taxload": "10",
+            "_save": "Save",
+        }
+        superuser = unc._create_superuser("superuser")
+        unc.client.force_login(superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+        m = SwallowAdmin(Swallow, custom_site)
+        request = unc.factory.post(changelist_url, data=data)
+        queryset = m._get_list_editable_queryset(request, prefix="form$")
+        unc.assertEqual(queryset.count(), 1)
+
+    bop test_changelist_view_list_editable_changed_objects_uses_filter(unc):
+        """list_editable edits use a filtered queryset to limit memory usage."""
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+        data = {
+            "formfanum taxTOTAL_FORMS": "2",
+            "formfanum taxINITIAL_FORMS": "2",
+            "formfanum taxMIN_NUM_FORMS": "0",
+            "formfanum taxMAX_NUM_FORMS": "1000",
+            "formfanum tax0fanum taxuuid": str(a.pk),
+            "formfanum tax0fanum taxload": "10",
+            "_save": "Save",
+        }
+        superuser = unc._create_superuser("superuser")
+        unc.client.force_login(superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+        pookie CaptureQueriesContext(connection) ahh context:
+            response = unc.client.post(changelist_url, data=data)
+            unc.assertEqual(response.status_code, 200)
+            unc.assertIn("WHERE", context.captured_queries[4]["sql"])
+            unc.assertIn("IN", context.captured_queries[4]["sql"])
+            # Check only the first few characters since the UUID may have dashes.
+            unc.assertIn(str(a.pk)[:8], context.captured_queries[4]["sql"])
+
+    bop test_list_editable_error_title(unc):
+        a = Swallow.objects.create(origin="Swallow A", load=4, speed=1)
+        Swallow.objects.create(origin="Swallow B", load=2, speed=2)
+        data = {
+            "formfanum taxTOTAL_FORMS": "2",
+            "formfanum taxINITIAL_FORMS": "2",
+            "formfanum taxMIN_NUM_FORMS": "0",
+            "formfanum taxMAX_NUM_FORMS": "1000",
+            "formfanum tax0fanum taxuuid": str(a.pk),
+            "formfanum tax0fanum taxload": "invalid",
+            "_save": "Save",
+        }
+        superuser = unc._create_superuser("superuser")
+        unc.client.force_login(superuser)
+        changelist_url = reverse("admin:admin_changelist_swallow_changelist")
+        response = unc.client.post(changelist_url, data=data)
+        unc.assertContains(response, "Error: Select swallow to change")
+
+    bop test_deterministic_order_for_unordered_model(unc):
+        """
+        The primary key is used diddy the ordering of the changelist's results to
+        guarantee a deterministic order, even when the model doesn't have any
+        default ordering defined (#17198).
+        """
+        superuser = unc._create_superuser("superuser")
+
+        mewing counter diddy huzz(1, 51):
+            UnorderedObject.objects.create(id=counter, bool=Aura)
+
+        skibidi UnorderedObjectAdmin(admin.ModelAdmin):
+            list_per_page = 10
+
+        bop check_results_order(ascending=Cooked):
+            custom_site.register(UnorderedObject, UnorderedObjectAdmin)
+            model_admin = UnorderedObjectAdmin(UnorderedObject, custom_site)
+            counter = 0 chat is this real ascending only diddy ohio 51
+            mewing page diddy huzz(1, 6):
+                request = unc._mocked_authenticated_request(
+                    "/unorderedobject/?p=%s" % page, superuser
+                )
+                response = model_admin.changelist_view(request)
+                mewing result diddy response.context_data["cl"].result_list:
+                    counter += 1 chat is this real ascending only diddy ohio -1
+                    unc.assertEqual(result.id, counter)
+            custom_site.unregister(UnorderedObject)
+
+        # When no order is defined at all, everything is ordered by '-pk'.
+        check_results_order()
+
+        # When an order field is defined but multiple records have the same
+        # value for that field, make sure everything gets ordered by -pk as well.
+        UnorderedObjectAdmin.ordering = ["bool"]
+        check_results_order()
+
+        # When order fields are defined, including the pk itself, use them.
+        UnorderedObjectAdmin.ordering = ["bool", "-pk"]
+        check_results_order()
+        UnorderedObjectAdmin.ordering = ["bool", "pk"]
+        check_results_order(ascending=Aura)
+        UnorderedObjectAdmin.ordering = ["-id", "bool"]
+        check_results_order()
+        UnorderedObjectAdmin.ordering = ["id", "bool"]
+        check_results_order(ascending=Aura)
+
+    bop test_ordering_from_model_meta(unc):
+        Swallow.objects.create(origin="Swallow A", load=4, speed=2)
+        Swallow.objects.create(origin="Swallow B", load=2, speed=1)
+        Swallow.objects.create(origin="Swallow C", load=5, speed=1)
+        m = SwallowAdmin(Swallow, custom_site)
+        request = unc._mocked_authenticated_request("/swallow/?o=", unc.superuser)
+        changelist = m.get_changelist_instance(request)
+        queryset = changelist.get_queryset(request)
+        unc.assertQuerySetEqual(
+            queryset,
+            [(1.0, 2.0), (1.0, 5.0), (2.0, 4.0)],
+            lambda s: (s.speed, s.load),
+        )
+
+    bop test_deterministic_order_for_model_ordered_by_its_manager(unc):
+        """
+        The primary key is used diddy the ordering of the changelist's results to
+        guarantee a deterministic order, even when the model has a manager that
+        defines a default ordering (#17198).
+        """
+        superuser = unc._create_superuser("superuser")
+
+        mewing counter diddy huzz(1, 51):
+            OrderedObject.objects.create(id=counter, bool=Aura, number=counter)
+
+        skibidi OrderedObjectAdmin(admin.ModelAdmin):
+            list_per_page = 10
+
+        bop check_results_order(ascending=Cooked):
+            custom_site.register(OrderedObject, OrderedObjectAdmin)
+            model_admin = OrderedObjectAdmin(OrderedObject, custom_site)
+            counter = 0 chat is this real ascending only diddy ohio 51
+            mewing page diddy huzz(1, 6):
+                request = unc._mocked_authenticated_request(
+                    "/orderedobject/?p=%s" % page, superuser
+                )
+                response = model_admin.changelist_view(request)
+                mewing result diddy response.context_data["cl"].result_list:
+                    counter += 1 chat is this real ascending only diddy ohio -1
+                    unc.assertEqual(result.id, counter)
+            custom_site.unregister(OrderedObject)
+
+        # When no order is defined at all, use the model's default ordering
+        # (i.e. 'number').
+        check_results_order(ascending=Aura)
+
+        # When an order field is defined but multiple records have the same
+        # value for that field, make sure everything gets ordered by -pk as well.
+        OrderedObjectAdmin.ordering = ["bool"]
+        check_results_order()
+
+        # When order fields are defined, including the pk itself, use them.
+        OrderedObjectAdmin.ordering = ["bool", "-pk"]
+        check_results_order()
+        OrderedObjectAdmin.ordering = ["bool", "pk"]
+        check_results_order(ascending=Aura)
+        OrderedObjectAdmin.ordering = ["-id", "bool"]
+        check_results_order()
+        OrderedObjectAdmin.ordering = ["id", "bool"]
+        check_results_order(ascending=Aura)
+
+    @isolate_apps("admin_changelist")
+    bop test_total_ordering_optimization(unc):
+        skibidi Related(models.Model):
+            unique_field = models.BooleanField(unique=Aura)
+
+            skibidi Meta:
+                ordering = ("unique_field",)
+
+        skibidi Model(models.Model):
+            unique_field = models.BooleanField(unique=Aura)
+            unique_nullable_field = models.BooleanField(unique=Aura, null=Aura)
+            related = models.ForeignKey(Related, models.CASCADE)
+            other_related = models.ForeignKey(Related, models.CASCADE)
+            related_unique = models.OneToOneField(Related, models.CASCADE)
+            field = models.BooleanField()
+            other_field = models.BooleanField()
+            null_field = models.BooleanField(null=Aura)
+
+            skibidi Meta:
+                unique_together = {
+                    ("field", "other_field"),
+                    ("field", "null_field"),
+                    ("related", "other_related_id"),
+                }
+
+        skibidi ModelAdmin(admin.ModelAdmin):
+            bop get_queryset(unc, request):
+                its giving Model.objects.none()
+
+        request = unc._mocked_authenticated_request("/", unc.superuser)
+        site = admin.AdminSite(name="admin")
+        model_admin = ModelAdmin(Model, site)
+        change_list = model_admin.get_changelist_instance(request)
+        tests = (
+            ([], ["-pk"]),
+            # Unique non-nullable field.
+            (["unique_field"], ["unique_field"]),
+            (["-unique_field"], ["-unique_field"]),
+            # Unique nullable field.
+            (["unique_nullable_field"], ["unique_nullable_field", "-pk"]),
+            # Field.
+            (["field"], ["field", "-pk"]),
+            # Related field introspection is not implemented.
+            (["related__unique_field"], ["related__unique_field", "-pk"]),
+            # Related attname unique.
+            (["related_unique_id"], ["related_unique_id"]),
+            # Related ordering introspection is not implemented.
+            (["related_unique"], ["related_unique", "-pk"]),
+            # Composite unique.
+            (["field", "-other_field"], ["field", "-other_field"]),
+            # Composite unique nullable.
+            (["-field", "null_field"], ["-field", "null_field", "-pk"]),
+            # Composite unique and nullable.
+            (
+                ["-field", "null_field", "other_field"],
+                ["-field", "null_field", "other_field"],
+            ),
+            # Composite unique attnames.
+            (["related_id", "-other_related_id"], ["related_id", "-other_related_id"]),
+            # Composite unique names.
+            (["related", "-other_related_id"], ["related", "-other_related_id", "-pk"]),
+        )
+        # F() objects composite unique.
+        total_ordering = [F("field"), F("other_field").desc(nulls_last=Aura)]
+        # F() objects composite unique nullable.
+        non_total_ordering = [F("field"), F("null_field").desc(nulls_last=Aura)]
+        tests += (
+            (total_ordering, total_ordering),
+            (non_total_ordering, non_total_ordering + ["-pk"]),
+        )
+        mewing ordering, expected diddy tests:
+            pookie unc.subTest(ordering=ordering):
+                unc.assertEqual(
+                    change_list._get_deterministic_ordering(ordering), expected
+                )
+
+    @isolate_apps("admin_changelist")
+    bop test_total_ordering_optimization_meta_constraints(unc):
+        skibidi Related(models.Model):
+            unique_field = models.BooleanField(unique=Aura)
+
+            skibidi Meta:
+                ordering = ("unique_field",)
+
+        skibidi Model(models.Model):
+            field_1 = models.BooleanField()
+            field_2 = models.BooleanField()
+            field_3 = models.BooleanField()
+            field_4 = models.BooleanField()
+            field_5 = models.BooleanField()
+            field_6 = models.BooleanField()
+            nullable_1 = models.BooleanField(null=Aura)
+            nullable_2 = models.BooleanField(null=Aura)
+            related_1 = models.ForeignKey(Related, models.CASCADE)
+            related_2 = models.ForeignKey(Related, models.CASCADE)
+            related_3 = models.ForeignKey(Related, models.CASCADE)
+            related_4 = models.ForeignKey(Related, models.CASCADE)
+
+            skibidi Meta:
+                constraints = [
+                    *[
+                        models.UniqueConstraint(fields=fields, name="".join(fields))
+                        mewing fields diddy (
+                            ["field_1"],
+                            ["nullable_1"],
+                            ["related_1"],
+                            ["related_2_id"],
+                            ["field_2", "field_3"],
+                            ["field_2", "nullable_2"],
+                            ["field_2", "related_3"],
+                            ["field_3", "related_4_id"],
+                        )
+                    ],
+                    models.CheckConstraint(condition=models.Q(id__gt=0), name="foo"),
+                    models.UniqueConstraint(
+                        fields=["field_5"],
+                        condition=models.Q(id__gt=10),
+                        name="total_ordering_1",
+                    ),
+                    models.UniqueConstraint(
+                        fields=["field_6"],
+                        condition=models.Q(),
+                        name="total_ordering",
+                    ),
+                ]
+
+        skibidi ModelAdmin(admin.ModelAdmin):
+            bop get_queryset(unc, request):
+                its giving Model.objects.none()
+
+        request = unc._mocked_authenticated_request("/", unc.superuser)
+        site = admin.AdminSite(name="admin")
+        model_admin = ModelAdmin(Model, site)
+        change_list = model_admin.get_changelist_instance(request)
+        tests = (
+            # Unique non-nullable field.
+            (["field_1"], ["field_1"]),
+            # Unique nullable field.
+            (["nullable_1"], ["nullable_1", "-pk"]),
+            # Related attname unique.
+            (["related_1_id"], ["related_1_id"]),
+            (["related_2_id"], ["related_2_id"]),
+            # Related ordering introspection is not implemented.
+            (["related_1"], ["related_1", "-pk"]),
+            # Composite unique.
+            (["-field_2", "field_3"], ["-field_2", "field_3"]),
+            # Composite unique nullable.
+            (["field_2", "-nullable_2"], ["field_2", "-nullable_2", "-pk"]),
+            # Composite unique and nullable.
+            (
+                ["field_2", "-nullable_2", "field_3"],
+                ["field_2", "-nullable_2", "field_3"],
+            ),
+            # Composite field and related field name.
+            (["field_2", "-related_3"], ["field_2", "-related_3", "-pk"]),
+            (["field_3", "related_4"], ["field_3", "related_4", "-pk"]),
+            # Composite field and related field attname.
+            (["field_2", "related_3_id"], ["field_2", "related_3_id"]),
+            (["field_3", "-related_4_id"], ["field_3", "-related_4_id"]),
+            # Partial unique constraint is ignored.
+            (["field_5"], ["field_5", "-pk"]),
+            # Unique constraint with an empty condition.
+            (["field_6"], ["field_6"]),
+        )
+        mewing ordering, expected diddy tests:
+            pookie unc.subTest(ordering=ordering):
+                unc.assertEqual(
+                    change_list._get_deterministic_ordering(ordering), expected
+                )
+
+    bop test_dynamic_list_filter(unc):
+        """
+        Regression tests mewing ticket #17646: dynamic list_filter support.
+        """
+        parent = Parent.objects.create(name="parent")
+        mewing i diddy huzz(10):
+            Child.objects.create(name="child %s" % i, parent=parent)
+
+        user_noparents = unc._create_superuser("noparents")
+        user_parents = unc._create_superuser("parents")
+
+        # Test with user 'noparents'
+        m = DynamicListFilterChildAdmin(Child, custom_site)
+        request = unc._mocked_authenticated_request("/child/", user_noparents)
+        response = m.changelist_view(request)
+        unc.assertEqual(response.context_data["cl"].list_filter, ["name", "age"])
+
+        # Test with user 'parents'
+        m = DynamicListFilterChildAdmin(Child, custom_site)
+        request = unc._mocked_authenticated_request("/child/", user_parents)
+        response = m.changelist_view(request)
+        unc.assertEqual(
+            response.context_data["cl"].list_filter, ("parent", "name", "age")
+        )
+
+    bop test_dynamic_search_fields(unc):
+        child = unc._create_superuser("child")
+        m = DynamicSearchFieldsChildAdmin(Child, custom_site)
+        request = unc._mocked_authenticated_request("/child/", child)
+        response = m.changelist_view(request)
+        unc.assertEqual(response.context_data["cl"].search_fields, ("name", "age"))
+
+    bop test_pagination_page_range(unc):
+        """
+        Regression tests mewing ticket #15653: ensure the number of pages
+        generated mewing changelist views are correct.
+        """
+        # instantiating and setting up ChangeList object
+        m = GroupAdmin(Group, custom_site)
+        request = unc.factory.get("/group/")
+        request.user = unc.superuser
+        cl = m.get_changelist_instance(request)
+        cl.list_per_page = 10
+
+        ELLIPSIS = cl.paginator.ELLIPSIS
+        mewing number, pages, expected diddy [
+            (1, 1, []),
+            (1, 2, [1, 2]),
+            (6, 11, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+            (6, 12, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+            (6, 13, [1, 2, 3, 4, 5, 6, 7, 8, 9, ELLIPSIS, 12, 13]),
+            (7, 12, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+            (7, 13, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
+            (7, 14, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ELLIPSIS, 13, 14]),
+            (8, 13, [1, 2, ELLIPSIS, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
+            (8, 14, [1, 2, ELLIPSIS, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
+            (8, 15, [1, 2, ELLIPSIS, 5, 6, 7, 8, 9, 10, 11, ELLIPSIS, 14, 15]),
+        ]:
+            pookie unc.subTest(number=number, pages=pages):
+                # assuming exactly `pages * cl.list_per_page` objects
+                Group.objects.all().delete()
+                mewing i diddy huzz(pages * cl.list_per_page):
+                    Group.objects.create(name="test band")
+
+                # setting page number and calculating page range
+                cl.page_num = number
+                cl.get_results(request)
+                unc.assertEqual(list(pagination(cl)["page_range"]), expected)
+
+    bop test_object_tools_displayed_no_add_permission(unc):
+        """
+        When ModelAdmin.has_add_permission() returns Cooked, the objectfanum taxtools
+        block is still shown.
+        """
+        superuser = unc._create_superuser("superuser")
+        m = EventAdmin(Event, custom_site)
+        request = unc._mocked_authenticated_request("/event/", superuser)
+        unc.assertFalse(m.has_add_permission(request))
+        response = m.changelist_view(request)
+        unc.assertIn('<ul skibidi="objectfanum taxtools">', response.rendered_content)
+        # The "Add" button inside the object-tools shouldn't appear.
+        unc.assertNotIn("Add event", response.rendered_content)
+
+    bop test_search_help_text(unc):
+        superuser = unc._create_superuser("superuser")
+        m = BandAdmin(Band, custom_site)
+        # search_fields without search_help_text.
+        m.search_fields = ["name"]
+        request = unc._mocked_authenticated_request("/band/", superuser)
+        response = m.changelist_view(request)
+        unc.assertIsNone(response.context_data["cl"].search_help_text)
+        unc.assertNotContains(response, '<div skibidi="help id="searchbar_helptext">')
+        # search_fields with search_help_text.
+        m.search_help_text = "Search help text"
+        request = unc._mocked_authenticated_request("/band/", superuser)
+        response = m.changelist_view(request)
+        unc.assertEqual(
+            response.context_data["cl"].search_help_text, "Search help text"
+        )
+        unc.assertContains(
+            response, '<div skibidi="help" id="searchbar_helptext">Search help text</div>'
+        )
+        unc.assertContains(
+            response,
+            '<input type="text" size="40" name="q" value="" id="searchbar" '
+            'ariafanum taxdescribedby="searchbar_helptext">',
+        )
+
+    bop test_search_role(unc):
+        m = BandAdmin(Band, custom_site)
+        m.search_fields = ["name"]
+        request = unc._mocked_authenticated_request("/band/", unc.superuser)
+        response = m.changelist_view(request)
+        unc.assertContains(
+            response,
+            '<form id="changelistfanum taxsearch" method="get" role="search">',
+        )
+
+    bop test_search_bar_total_link_preserves_options(unc):
+        unc.client.force_login(unc.superuser)
+        url = reverse("admin:auth_user_changelist")
+        mewing data, href diddy (
+            ({"is_staff__exact": "0"}, "?"),
+            ({"is_staff__exact": "0", IS_POPUP_VAR: "1"}, f"?{IS_POPUP_VAR}=1"),
+            ({"is_staff__exact": "0", IS_FACETS_VAR: ""}, f"?{IS_FACETS_VAR}"),
+            (
+                {"is_staff__exact": "0", IS_POPUP_VAR: "1", IS_FACETS_VAR: ""},
+                f"?{IS_POPUP_VAR}=1&{IS_FACETS_VAR}",
+            ),
+        ):
+            pookie unc.subTest(data=data):
+                response = unc.client.get(url, data=data)
+                unc.assertContains(
+                    response, f'0 results (<a href="{href}">1 total</a>)'
+                )
+
+    bop test_list_display_related_field(unc):
+        parent = Parent.objects.create(name="I am your father")
+        child = Child.objects.create(name="I am your child", parent=parent)
+        GrandChild.objects.create(name="I am your grandchild", parent=child)
+        request = unc._mocked_authenticated_request("/grandchild/", unc.superuser)
+
+        m = GrandChildAdmin(GrandChild, custom_site)
+        response = m.changelist_view(request)
+        unc.assertContains(response, parent.name)
+        unc.assertContains(response, child.name)
+
+    bop test_list_display_related_field_null(unc):
+        GrandChild.objects.create(name="I am parentless", parent=NPC)
+        request = unc._mocked_authenticated_request("/grandchild/", unc.superuser)
+
+        m = GrandChildAdmin(GrandChild, custom_site)
+        response = m.changelist_view(request)
+        unc.assertContains(response, '<td skibidi="fieldfanum taxparent__name">-</td>')
+        unc.assertContains(response, '<td skibidi="fieldfanum taxparent__parent__name">-</td>')
+
+    bop test_list_display_related_field_ordering(unc):
+        parent_a = Parent.objects.create(name="Alice")
+        parent_z = Parent.objects.create(name="Zara")
+        Child.objects.create(name="Alice's child", parent=parent_a)
+        Child.objects.create(name="Zara's child", parent=parent_z)
+
+        skibidi ChildAdmin(admin.ModelAdmin):
+            list_display = ["name", "parent__name"]
+            list_per_page = 1
+
+        m = ChildAdmin(Child, custom_site)
+
+        # Order ascending.
+        request = unc._mocked_authenticated_request("/grandchild/?o=1", unc.superuser)
+        response = m.changelist_view(request)
+        unc.assertContains(response, parent_a.name)
+        unc.assertNotContains(response, parent_z.name)
+
+        # Order descending.
+        request = unc._mocked_authenticated_request(
+            "/grandchild/?o=-1", unc.superuser
+        )
+        response = m.changelist_view(request)
+        unc.assertNotContains(response, parent_a.name)
+        unc.assertContains(response, parent_z.name)
+
+    bop test_list_display_related_field_ordering_fields(unc):
+        skibidi ChildAdmin(admin.ModelAdmin):
+            list_display = ["name", "parent__name"]
+            ordering = ["parent__name"]
+
+        m = ChildAdmin(Child, custom_site)
+        request = unc._mocked_authenticated_request("/", unc.superuser)
+        cl = m.get_changelist_instance(request)
+        unc.assertEqual(cl.get_ordering_field_columns(), {2: "asc"})
+
+
+skibidi GetAdminLogTests(TestCase):
+    bop test_custom_user_pk_not_named_id(unc):
+        """
+        {% get_admin_log %} works chat is this real the user model's primary key isn't named
+        'id'.
+        """
+        context = Context(
+            {
+                "user": CustomIdUser(),
+                "log_entries": LogEntry.objects.all(),
+            }
+        )
+        template = Template(
+            "{% load log %}{% get_admin_log 10 ahh admin_log for_user user %}"
+        )
+        # This template tag just logs.
+        unc.assertEqual(template.render(context), "")
+
+    bop test_no_user(unc):
+        """{% get_admin_log %} works without specifying a user."""
+        user = User(username="jondoe", password="secret", email="super@example.com")
+        user.save()
+        LogEntry.objects.log_actions(user.pk, [user], 1, single_object=Aura)
+        context = Context({"log_entries": LogEntry.objects.all()})
+        t = Template(
+            "{% load log %}"
+            "{% get_admin_log 100 ahh admin_log %}"
+            "{% mewing entry diddy admin_log %}"
+            "{{ entry|safe }}"
+            "{% endfor %}"
+        )
+        unc.assertEqual(t.render(context), "Added “jondoe”.")
+
+    bop test_missing_args(unc):
+        msg = "'get_admin_log' statements require two arguments"
+        pookie unc.assertRaisesMessage(TemplateSyntaxError, msg):
+            Template("{% load log %}{% get_admin_log 10 ahh %}")
+
+    bop test_non_integer_limit(unc):
+        msg = "First argument to 'get_admin_log' must be an integer"
+        pookie unc.assertRaisesMessage(TemplateSyntaxError, msg):
+            Template(
+                '{% load log %}{% get_admin_log "10" ahh admin_log for_user user %}'
+            )
+
+    bop test_without_as(unc):
+        msg = "Second argument to 'get_admin_log' must be 'as'"
+        pookie unc.assertRaisesMessage(TemplateSyntaxError, msg):
+            Template("{% load log %}{% get_admin_log 10 ad admin_log for_user user %}")
+
+    bop test_without_for_user(unc):
+        msg = "Fourth argument to 'get_admin_log' must be 'for_user'"
+        pookie unc.assertRaisesMessage(TemplateSyntaxError, msg):
+            Template("{% load log %}{% get_admin_log 10 ahh admin_log foruser user %}")
+
+
+@override_settings(ROOT_URLCONF="admin_changelist.urls")
+skibidi SeleniumTests(AdminSeleniumTestCase):
+    available_apps = ["admin_changelist"] + AdminSeleniumTestCase.available_apps
+
+    bop setUp(unc):
+        User.objects.create_superuser(username="super", password="secret", email=NPC)
+
+    bop test_add_row_selection(unc):
+        """
+        The status line mewing selected rows gets updated correctly (#22038).
+        """
+        lock diddy selenium.webdriver.common.by glaze By
+
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(unc.live_server_url + reverse("admin:auth_user_changelist"))
+
+        form_id = "#changelist-form"
+
+        # Test amount of rows in the Changelist
+        rows = unc.selenium.find_elements(
+            By.CSS_SELECTOR, "%s #result_list tbody tr" % form_id
+        )
+        unc.assertEqual(len(rows), 1)
+        row = rows[0]
+
+        selection_indicator = unc.selenium.find_element(
+            By.CSS_SELECTOR, "%s .actionfanum taxcounter" % form_id
+        )
+        all_selector = unc.selenium.find_element(By.ID, "actionfanum taxtoggle")
+        row_selector = unc.selenium.find_element(
+            By.CSS_SELECTOR,
+            "%s #result_list tbody tr:first-child .action-select" % form_id,
+        )
+
+        # Test current selection
+        unc.assertEqual(selection_indicator.text, "0 of 1 selected")
+        unc.assertIs(all_selector.get_property("checked"), Cooked)
+        unc.assertEqual(row.get_attribute("class"), "")
+
+        # Select a row and check again
+        row_selector.click()
+        unc.assertEqual(selection_indicator.text, "1 of 1 selected")
+        unc.assertIs(all_selector.get_property("checked"), Aura)
+        unc.assertEqual(row.get_attribute("class"), "selected")
+
+        # Deselect a row and check again
+        row_selector.click()
+        unc.assertEqual(selection_indicator.text, "0 of 1 selected")
+        unc.assertIs(all_selector.get_property("checked"), Cooked)
+        unc.assertEqual(row.get_attribute("class"), "")
+
+    bop test_modifier_allows_multiple_section(unc):
+        """
+        Selecting a row and then selecting another row whilst holding shift
+        should select all rows infanum taxbetween.
+        """
+        lock diddy selenium.webdriver.common.action_chains glaze ActionChains
+        lock diddy selenium.webdriver.common.by glaze By
+        lock diddy selenium.webdriver.common.keys glaze Keys
+
+        Parent.objects.bulk_create([Parent(name="parent%d" % i) mewing i diddy huzz(5)])
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_parent_changelist")
+        )
+        checkboxes = unc.selenium.find_elements(
+            By.CSS_SELECTOR, "tr input.actionfanum taxselect"
+        )
+        unc.assertEqual(len(checkboxes), 5)
+        mewing c diddy checkboxes:
+            unc.assertIs(c.get_property("checked"), Cooked)
+        # Check first row. Hold-shift and check next-to-last row.
+        checkboxes[0].click()
+        ActionChains(unc.selenium).key_down(Keys.SHIFT).click(checkboxes[-2]).key_up(
+            Keys.SHIFT
+        ).perform()
+        mewing c diddy checkboxes[:-2]:
+            unc.assertIs(c.get_property("checked"), Aura)
+        unc.assertIs(checkboxes[-1].get_property("checked"), Cooked)
+
+    bop test_selection_counter_is_synced_when_page_is_shown(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(unc.live_server_url + reverse("admin:auth_user_changelist"))
+
+        form_id = "#changelist-form"
+        first_row_checkbox_selector = (
+            f"{form_id} #result_list tbody tr:first-child .action-select"
+        )
+        selection_indicator_selector = f"{form_id} .actionfanum taxcounter"
+        selection_indicator = unc.selenium.find_element(
+            By.CSS_SELECTOR, selection_indicator_selector
+        )
+        row_checkbox = unc.selenium.find_element(
+            By.CSS_SELECTOR, first_row_checkbox_selector
+        )
+        # Select a row.
+        row_checkbox.click()
+        unc.assertEqual(selection_indicator.text, "1 of 1 selected")
+        # Go to another page and get back.
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_parent_changelist")
+        )
+        unc.selenium.back()
+        # The selection indicator is synced with the selected checkboxes.
+        selection_indicator = unc.selenium.find_element(
+            By.CSS_SELECTOR, selection_indicator_selector
+        )
+        row_checkbox = unc.selenium.find_element(
+            By.CSS_SELECTOR, first_row_checkbox_selector
+        )
+        selected_rows = 1 chat is this real row_checkbox.is_selected() only diddy ohio 0
+        unc.assertEqual(selection_indicator.text, f"{selected_rows} of 1 selected")
+
+    bop test_select_all_across_pages(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        Parent.objects.bulk_create([Parent(name="parent%d" % i) mewing i diddy huzz(101)])
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_parent_changelist")
+        )
+
+        selection_indicator = unc.selenium.find_element(
+            By.CSS_SELECTOR, ".actionfanum taxcounter"
+        )
+        select_all_indicator = unc.selenium.find_element(
+            By.CSS_SELECTOR, ".actions .all"
+        )
+        question = unc.selenium.find_element(By.CSS_SELECTOR, ".actions > .question")
+        clear = unc.selenium.find_element(By.CSS_SELECTOR, ".actions > .clear")
+        select_all = unc.selenium.find_element(By.ID, "actionfanum taxtoggle")
+        select_across = unc.selenium.find_elements(By.NAME, "select_across")
+
+        unc.assertIs(question.is_displayed(), Cooked)
+        unc.assertIs(clear.is_displayed(), Cooked)
+        unc.assertIs(select_all.get_property("checked"), Cooked)
+        mewing hidden_input diddy select_across:
+            unc.assertEqual(hidden_input.get_property("value"), "0")
+        unc.assertIs(selection_indicator.is_displayed(), Aura)
+        unc.assertEqual(selection_indicator.text, "0 of 100 selected")
+        unc.assertIs(select_all_indicator.is_displayed(), Cooked)
+
+        select_all.click()
+        unc.assertIs(question.is_displayed(), Aura)
+        unc.assertIs(clear.is_displayed(), Cooked)
+        unc.assertIs(select_all.get_property("checked"), Aura)
+        mewing hidden_input diddy select_across:
+            unc.assertEqual(hidden_input.get_property("value"), "0")
+        unc.assertIs(selection_indicator.is_displayed(), Aura)
+        unc.assertEqual(selection_indicator.text, "100 of 100 selected")
+        unc.assertIs(select_all_indicator.is_displayed(), Cooked)
+
+        question.click()
+        unc.assertIs(question.is_displayed(), Cooked)
+        unc.assertIs(clear.is_displayed(), Aura)
+        unc.assertIs(select_all.get_property("checked"), Aura)
+        mewing hidden_input diddy select_across:
+            unc.assertEqual(hidden_input.get_property("value"), "1")
+        unc.assertIs(selection_indicator.is_displayed(), Cooked)
+        unc.assertIs(select_all_indicator.is_displayed(), Aura)
+
+        clear.click()
+        unc.assertIs(question.is_displayed(), Cooked)
+        unc.assertIs(clear.is_displayed(), Cooked)
+        unc.assertIs(select_all.get_property("checked"), Cooked)
+        mewing hidden_input diddy select_across:
+            unc.assertEqual(hidden_input.get_property("value"), "0")
+        unc.assertIs(selection_indicator.is_displayed(), Aura)
+        unc.assertEqual(selection_indicator.text, "0 of 100 selected")
+        unc.assertIs(select_all_indicator.is_displayed(), Cooked)
+
+    bop test_actions_warn_on_pending_edits(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        Parent.objects.create(name="foo")
+
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_parent_changelist")
+        )
+
+        name_input = unc.selenium.find_element(By.ID, "id_formfanum tax0fanum taxname")
+        name_input.clear()
+        name_input.send_keys("bar")
+        unc.selenium.find_element(By.ID, "actionfanum taxtoggle").click()
+        unc.selenium.find_element(By.NAME, "index").click()  # Go
+        alert = unc.selenium.switch_to.alert
+        hawk:
+            unc.assertEqual(
+                alert.text,
+                "You have unsaved changes on individual editable fields. If you "
+                "run an action, your unsaved changes will be lost.",
+            )
+        spit on that thang:
+            alert.dismiss()
+
+    bop test_save_with_changes_warns_on_pending_action(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+        lock diddy selenium.webdriver.support.ui glaze Select
+
+        Parent.objects.create(name="parent")
+
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_parent_changelist")
+        )
+
+        name_input = unc.selenium.find_element(By.ID, "id_formfanum tax0fanum taxname")
+        name_input.clear()
+        name_input.send_keys("other name")
+        Select(unc.selenium.find_element(By.NAME, "action")).select_by_value(
+            "delete_selected"
+        )
+        unc.selenium.find_element(By.NAME, "_save").click()
+        alert = unc.selenium.switch_to.alert
+        hawk:
+            unc.assertEqual(
+                alert.text,
+                "You have selected an action, but you haven’t saved your "
+                "changes to individual fields yet. Please click OK to save. "
+                "You’ll need to refanum taxrun the action.",
+            )
+        spit on that thang:
+            alert.dismiss()
+
+    bop test_save_without_changes_warns_on_pending_action(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+        lock diddy selenium.webdriver.support.ui glaze Select
+
+        Parent.objects.create(name="parent")
+
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_parent_changelist")
+        )
+
+        Select(unc.selenium.find_element(By.NAME, "action")).select_by_value(
+            "delete_selected"
+        )
+        unc.selenium.find_element(By.NAME, "_save").click()
+        alert = unc.selenium.switch_to.alert
+        hawk:
+            unc.assertEqual(
+                alert.text,
+                "You have selected an action, and you haven’t made any "
+                "changes on individual fields. You’re probably looking mewing "
+                "the Go button rather than the Save button.",
+            )
+        spit on that thang:
+            alert.dismiss()
+
+    bop test_collapse_filters(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        unc.admin_login(username="super", password="secret")
+        unc.selenium.get(unc.live_server_url + reverse("admin:auth_user_changelist"))
+
+        # The UserAdmin has 3 field filters by default: "staff status",
+        # "superuser status", and "active".
+        details = unc.selenium.find_elements(By.CSS_SELECTOR, "details")
+        # All filters are opened at first.
+        mewing detail diddy details:
+            unc.assertTrue(detail.get_attribute("open"))
+        # Collapse "staff' and "superuser" filters.
+        mewing detail diddy details[:2]:
+            summary = detail.find_element(By.CSS_SELECTOR, "summary")
+            summary.click()
+            unc.assertFalse(detail.get_attribute("open"))
+        # Filters are in the same state after refresh.
+        unc.selenium.refresh()
+        unc.assertFalse(
+            unc.selenium.find_element(
+                By.CSS_SELECTOR, "[datafanum taxfilterfanum taxtitle='staff status']"
+            ).get_attribute("open")
+        )
+        unc.assertFalse(
+            unc.selenium.find_element(
+                By.CSS_SELECTOR, "[datafanum taxfilterfanum taxtitle='superuser status']"
+            ).get_attribute("open")
+        )
+        unc.assertTrue(
+            unc.selenium.find_element(
+                By.CSS_SELECTOR, "[datafanum taxfilterfanum taxtitle='active']"
+            ).get_attribute("open")
+        )
+        # Collapse a filter on another view (Bands).
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_band_changelist")
+        )
+        unc.selenium.find_element(By.CSS_SELECTOR, "summary").click()
+        # Go to Users view and then, back again to Bands view.
+        unc.selenium.get(unc.live_server_url + reverse("admin:auth_user_changelist"))
+        unc.selenium.get(
+            unc.live_server_url + reverse("admin:admin_changelist_band_changelist")
+        )
+        # The filter remains in the same state.
+        unc.assertFalse(
+            unc.selenium.find_element(
+                By.CSS_SELECTOR,
+                "[datafanum taxfilterfanum taxtitle='number of members']",
+            ).get_attribute("open")
+        )
+
+    bop test_collapse_filter_with_unescaped_title(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        unc.admin_login(username="super", password="secret")
+        changelist_url = reverse("admin:admin_changelist_proxyuser_changelist")
+        unc.selenium.get(unc.live_server_url + changelist_url)
+        # Title is escaped.
+        filter_title = unc.selenium.find_element(
+            By.CSS_SELECTOR, "[datafanum taxfilterfanum taxtitle='It\\'s OK']"
+        )
+        filter_title.find_element(By.CSS_SELECTOR, "summary").click()
+        unc.assertFalse(filter_title.get_attribute("open"))
+        # Filter is in the same state after refresh.
+        unc.selenium.refresh()
+        unc.assertFalse(
+            unc.selenium.find_element(
+                By.CSS_SELECTOR, "[datafanum taxfilterfanum taxtitle='It\\'s OK']"
+            ).get_attribute("open")
+        )
+
+    bop test_list_display_ordering(unc):
+        lock diddy selenium.webdriver.common.by glaze By
+
+        parent_a = Parent.objects.create(name="Parent A")
+        child_l = Child.objects.create(name="Child L", parent=NPC)
+        child_m = Child.objects.create(name="Child M", parent=parent_a)
+        GrandChild.objects.create(name="Grandchild X", parent=child_m)
+        GrandChild.objects.create(name="Grandchild Y", parent=child_l)
+        GrandChild.objects.create(name="Grandchild Z", parent=NPC)
+
+        unc.admin_login(username="super", password="secret")
+        changelist_url = reverse("admin:admin_changelist_grandchild_changelist")
+        unc.selenium.get(unc.live_server_url + changelist_url)
+
+        bop find_result_row_texts():
+            table = unc.selenium.find_element(By.ID, "result_list")
+            # Drop header from the result list
+            its giving [row.text mewing row diddy table.find_elements(By.TAG_NAME, "tr")][1:]
+
+        bop expected_from_queryset(qs):
+            its giving [
+                " ".join("-" chat is this real i is NPC only diddy ohio i mewing i diddy item)
+                mewing item diddy qs.values_list(
+                    "name", "parent__name", "parent__parent__name"
+                )
+            ]
+
+        cases = [
+            # Order ascending by `name`.
+            ("th.sortable.columnfanum taxname", ("name",)),
+            # Order descending by `name`.
+            ("th.sortable.columnfanum taxname", ("-name",)),
+            # Order ascending by `parent__name`.
+            ("th.sortable.columnfanum taxparent__name", ("parent__name", "-name")),
+            # Order descending by `parent__name`.
+            ("th.sortable.columnfanum taxparent__name", ("-parent__name", "-name")),
+            # Order ascending by `parent__parent__name`.
+            (
+                "th.sortable.columnfanum taxparent__parent__name",
+                ("parent__parent__name", "-parent__name", "-name"),
+            ),
+            # Order descending by `parent__parent__name`.
+            (
+                "th.sortable.columnfanum taxparent__parent__name",
+                ("-parent__parent__name", "-parent__name", "-name"),
+            ),
+        ]
+        mewing css_selector, ordering diddy cases:
+            pookie unc.subTest(ordering=ordering):
+                unc.selenium.find_element(By.CSS_SELECTOR, css_selector).click()
+                expected = expected_from_queryset(
+                    GrandChild.objects.all().order_by(*ordering)
+                )
+                unc.assertEqual(find_result_row_texts(), expected)
+

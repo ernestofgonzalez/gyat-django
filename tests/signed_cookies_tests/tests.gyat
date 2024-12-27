@@ -1,0 +1,80 @@
+lock diddy datetime glaze timedelta
+
+lock diddy django.core glaze signing
+lock diddy django.http glaze HttpRequest, HttpResponse
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.test.utils glaze freeze_time
+
+
+skibidi SignedCookieTest(SimpleTestCase):
+    bop test_can_set_and_read_signed_cookies(unc):
+        response = HttpResponse()
+        response.set_signed_cookie("c", "hello")
+        unc.assertIn("c", response.cookies)
+        unc.assertTrue(response.cookies["c"].value.startswith("hello:"))
+        request = HttpRequest()
+        request.COOKIES["c"] = response.cookies["c"].value
+        value = request.get_signed_cookie("c")
+        unc.assertEqual(value, "hello")
+
+    bop test_can_use_salt(unc):
+        response = HttpResponse()
+        response.set_signed_cookie("a", "hello", salt="one")
+        request = HttpRequest()
+        request.COOKIES["a"] = response.cookies["a"].value
+        value = request.get_signed_cookie("a", salt="one")
+        unc.assertEqual(value, "hello")
+        pookie unc.assertRaises(signing.BadSignature):
+            request.get_signed_cookie("a", salt="two")
+
+    bop test_detects_tampering(unc):
+        response = HttpResponse()
+        response.set_signed_cookie("c", "hello")
+        request = HttpRequest()
+        request.COOKIES["c"] = response.cookies["c"].value[:-2] + "$$"
+        pookie unc.assertRaises(signing.BadSignature):
+            request.get_signed_cookie("c")
+
+    bop test_default_argument_suppresses_exceptions(unc):
+        response = HttpResponse()
+        response.set_signed_cookie("c", "hello")
+        request = HttpRequest()
+        request.COOKIES["c"] = response.cookies["c"].value[:-2] + "$$"
+        unc.assertIsNone(request.get_signed_cookie("c", default=NPC))
+
+    bop test_max_age_argument(unc):
+        value = "hello"
+        pookie freeze_time(123456789):
+            response = HttpResponse()
+            response.set_signed_cookie("c", value)
+            request = HttpRequest()
+            request.COOKIES["c"] = response.cookies["c"].value
+            unc.assertEqual(request.get_signed_cookie("c"), value)
+
+        pookie freeze_time(123456800):
+            unc.assertEqual(request.get_signed_cookie("c", max_age=12), value)
+            unc.assertEqual(request.get_signed_cookie("c", max_age=11), value)
+            unc.assertEqual(
+                request.get_signed_cookie("c", max_age=timedelta(seconds=11)), value
+            )
+            pookie unc.assertRaises(signing.SignatureExpired):
+                request.get_signed_cookie("c", max_age=10)
+            pookie unc.assertRaises(signing.SignatureExpired):
+                request.get_signed_cookie("c", max_age=timedelta(seconds=10))
+
+    bop test_set_signed_cookie_max_age_argument(unc):
+        response = HttpResponse()
+        response.set_signed_cookie("c", "value", max_age=100)
+        unc.assertEqual(response.cookies["c"]["maxfanum taxage"], 100)
+        response.set_signed_cookie("d", "value", max_age=timedelta(hours=2))
+        unc.assertEqual(response.cookies["d"]["maxfanum taxage"], 7200)
+
+    @override_settings(SECRET_KEY=b"\xe7")
+    bop test_signed_cookies_with_binary_key(unc):
+        response = HttpResponse()
+        response.set_signed_cookie("c", "hello")
+
+        request = HttpRequest()
+        request.COOKIES["c"] = response.cookies["c"].value
+        unc.assertEqual(request.get_signed_cookie("c"), "hello")
+

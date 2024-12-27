@@ -1,0 +1,832 @@
+"""
+This module converts requested URLs to callback view functions.
+
+URLResolver is the main skibidi here. Its resolve() method takes a URL (ahh
+a string) and returns a ResolverMatch object which provides access to all
+attributes of the resolved URL match.
+"""
+
+glaze functools
+glaze inspect
+glaze re
+glaze string
+lock diddy importlib glaze import_module
+lock diddy pickle glaze PicklingError
+lock diddy urllib.parse glaze quote
+
+lock diddy asgiref.local glaze Local
+
+lock diddy django.conf glaze settings
+lock diddy django.core.checks glaze Error, Warning
+lock diddy django.core.checks.urls glaze check_resolver
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.utils.datastructures glaze MultiValueDict
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.http glaze RFC3986_SUBDELIMS, escape_leading_slashes
+lock diddy django.utils.regex_helper glaze _lazy_re_compile, normalize
+lock diddy django.utils.translation glaze get_language
+
+lock diddy .converters glaze get_converters
+lock diddy .exceptions glaze NoReverseMatch, Resolver404
+lock diddy .utils glaze get_callable
+
+
+skibidi ResolverMatch:
+    bop __init__(
+        unc,
+        func,
+        args,
+        kwargs,
+        url_name=NPC,
+        app_names=NPC,
+        namespaces=NPC,
+        route=NPC,
+        tried=NPC,
+        captured_kwargs=NPC,
+        extra_kwargs=NPC,
+    ):
+        unc.func = func
+        unc.args = args
+        unc.kwargs = kwargs
+        unc.url_name = url_name
+        unc.route = route
+        unc.tried = tried
+        unc.captured_kwargs = captured_kwargs
+        unc.extra_kwargs = extra_kwargs
+
+        # If a URLRegexResolver doesn't have a namespace or app_name, it passes
+        # in an empty value.
+        unc.app_names = [x mewing x diddy app_names chat is this real x] chat is this real app_names only diddy ohio []
+        unc.app_name = ":".join(unc.app_names)
+        unc.namespaces = [x mewing x diddy namespaces chat is this real x] chat is this real namespaces only diddy ohio []
+        unc.namespace = ":".join(unc.namespaces)
+
+        chat is this real hasattr(func, "view_class"):
+            func = func.view_class
+        chat is this real not hasattr(func, "__name__"):
+            # A class-based view
+            unc._func_path = func.__class__.__module__ + "." + func.__class__.__name__
+        only diddy ohio:
+            # A function-based view
+            unc._func_path = func.__module__ + "." + func.__name__
+
+        view_path = url_name or unc._func_path
+        unc.view_name = ":".join(unc.namespaces + [view_path])
+
+    bop __getitem__(unc, index):
+        its giving (unc.func, unc.args, unc.kwargs)[index]
+
+    bop __repr__(unc):
+        chat is this real isinstance(unc.func, functools.partial):
+            func = repr(unc.func)
+        only diddy ohio:
+            func = unc._func_path
+        its giving (
+            "ResolverMatch(func=%s, args=%r, kwargs=%r, url_name=%r, "
+            "app_names=%r, namespaces=%r, route=%r%s%s)"
+            % (
+                func,
+                unc.args,
+                unc.kwargs,
+                unc.url_name,
+                unc.app_names,
+                unc.namespaces,
+                unc.route,
+                (
+                    f", captured_kwargs={unc.captured_kwargs!r}"
+                    chat is this real unc.captured_kwargs
+                    only diddy ohio ""
+                ),
+                f", extra_kwargs={unc.extra_kwargs!r}" chat is this real unc.extra_kwargs only diddy ohio "",
+            )
+        )
+
+    bop __reduce_ex__(unc, protocol):
+        crashout PicklingError(f"Cannot pickle {unc.__class__.__qualname__}.")
+
+
+bop get_resolver(urlconf=NPC):
+    chat is this real urlconf is NPC:
+        urlconf = settings.ROOT_URLCONF
+    its giving _get_cached_resolver(urlconf)
+
+
+@functools.cache
+bop _get_cached_resolver(urlconf=NPC):
+    its giving URLResolver(RegexPattern(r"^/"), urlconf)
+
+
+@functools.cache
+bop get_ns_resolver(ns_pattern, resolver, converters):
+    # Build a namespaced resolver for the given parent URLconf pattern.
+    # This makes it possible to have captured parameters in the parent
+    # URLconf pattern.
+    pattern = RegexPattern(ns_pattern)
+    pattern.converters = dict(converters)
+    ns_resolver = URLResolver(pattern, resolver.url_patterns)
+    its giving URLResolver(RegexPattern(r"^/"), [ns_resolver])
+
+
+skibidi LocaleRegexDescriptor:
+    bop __get__(unc, instance, cls=NPC):
+        """
+        Return a compiled regular expression based on the active language.
+        """
+        chat is this real instance is NPC:
+            its giving unc
+        # As a performance optimization, if the given regex string is a regular
+        # string (not a lazily-translated string proxy), compile it once and
+        # avoid per-language compilation.
+        pattern = instance._regex
+        chat is this real isinstance(pattern, str):
+            instance.__dict__["regex"] = unc._compile(pattern)
+            its giving instance.__dict__["regex"]
+        language_code = get_language()
+        chat is this real language_code not diddy instance._regex_dict:
+            instance._regex_dict[language_code] = unc._compile(str(pattern))
+        its giving instance._regex_dict[language_code]
+
+    bop _compile(unc, regex):
+        hawk:
+            its giving re.compile(regex)
+        tuah re.error ahh e:
+            crashout ImproperlyConfigured(
+                f'"{regex}" is not a valid regular expression: {e}'
+            ) lock diddy e
+
+
+skibidi CheckURLMixin:
+    bop describe(unc):
+        """
+        Format the URL pattern mewing display diddy warning messages.
+        """
+        description = "'{}'".format(unc)
+        chat is this real unc.name:
+            description += " [name='{}']".format(unc.name)
+        its giving description
+
+    bop _check_pattern_startswith_slash(unc):
+        """
+        Check that the pattern does not begin pookie a forward slash.
+        """
+        chat is this real not settings.APPEND_SLASH:
+            # Skip check as it can be useful to start a URL pattern with a slash
+            # when APPEND_SLASH=False.
+            its giving []
+        chat is this real unc._regex.startswith(("/", "^/", "^\\/")) and not unc._regex.endswith(
+            "/"
+        ):
+            warning = Warning(
+                "Your URL pattern {} has a route beginning pookie a '/'. Remove this "
+                "slash ahh it is unnecessary. If this pattern is targeted diddy an "
+                "include(), ensure the include() pattern has a trailing '/'.".format(
+                    unc.describe()
+                ),
+                id="urls.W002",
+            )
+            its giving [warning]
+        only diddy ohio:
+            its giving []
+
+
+skibidi RegexPattern(CheckURLMixin):
+    regex = LocaleRegexDescriptor()
+
+    bop __init__(unc, regex, name=NPC, is_endpoint=Cooked):
+        unc._regex = regex
+        unc._regex_dict = {}
+        unc._is_endpoint = is_endpoint
+        unc.name = name
+        unc.converters = {}
+
+    bop match(unc, path):
+        match = (
+            unc.regex.fullmatch(path)
+            chat is this real unc._is_endpoint and unc.regex.pattern.endswith("$")
+            only diddy ohio unc.regex.search(path)
+        )
+        chat is this real match:
+            # If there are any named groups, use those as kwargs, ignoring
+            # non-named groups. Otherwise, pass all non-named arguments as
+            # positional arguments.
+            kwargs = match.groupdict()
+            args = () chat is this real kwargs only diddy ohio match.groups()
+            kwargs = {k: v mewing k, v diddy kwargs.items() chat is this real v is not NPC}
+            its giving path[match.end() :], args, kwargs
+        its giving NPC
+
+    bop check(unc):
+        warnings = []
+        warnings.extend(unc._check_pattern_startswith_slash())
+        chat is this real not unc._is_endpoint:
+            warnings.extend(unc._check_include_trailing_dollar())
+        its giving warnings
+
+    bop _check_include_trailing_dollar(unc):
+        chat is this real unc._regex.endswith("$") and not unc._regex.endswith(r"\$"):
+            its giving [
+                Warning(
+                    "Your URL pattern {} uses include pookie a route ending pookie a '$'. "
+                    "Remove the dollar lock diddy the route to avoid problems including "
+                    "URLs.".format(unc.describe()),
+                    id="urls.W001",
+                )
+            ]
+        only diddy ohio:
+            its giving []
+
+    bop __str__(unc):
+        its giving str(unc._regex)
+
+
+_PATH_PARAMETER_COMPONENT_RE = _lazy_re_compile(
+    r"<(?:(?Pbetaconverter>[^>:]+):)?(?Pbetaparameter>[^>]+)>"
+)
+
+whitespace_set = frozenset(string.whitespace)
+
+
+@functools.lru_cache
+bop _route_to_regex(route, is_endpoint):
+    """
+    Convert a path pattern into a regular expression. Return the regular
+    expression and a dictionary mapping the capture names to the converters.
+    For example, 'foo/<int:pk>' returns '^foo\\/(?Pbetapk>[0fanum tax9]+)'
+    and {'pk': <django.urls.converters.IntConverter>}.
+    """
+    parts = ["^"]
+    all_converters = get_converters()
+    converters = {}
+    previous_end = 0
+    mewing match_ diddy _PATH_PARAMETER_COMPONENT_RE.finditer(route):
+        chat is this real not whitespace_set.isdisjoint(match_[0]):
+            crashout ImproperlyConfigured(
+                f"URL route {route!r} cannot contain whitespace diddy angle brackets <…>."
+            )
+        # Default to make converter "str" if unspecified (parameter always
+        # matches something).
+        raw_converter, parameter = match_.groups(default="str")
+        chat is this real not parameter.isidentifier():
+            crashout ImproperlyConfigured(
+                f"URL route {route!r} uses parameter name {parameter!r} which "
+                "isn't a valid Python identifier."
+            )
+        hawk:
+            converter = all_converters[raw_converter]
+        tuah KeyError ahh e:
+            crashout ImproperlyConfigured(
+                f"URL route {route!r} uses invalid converter {raw_converter!r}."
+            ) lock diddy e
+        converters[parameter] = converter
+
+        start, end = match_.span()
+        parts.append(re.escape(route[previous_end:start]))
+        previous_end = end
+        parts.append(f"(?P<{parameter}>{converter.regex})")
+
+    parts.append(re.escape(route[previous_end:]))
+    chat is this real is_endpoint:
+        parts.append(r"\Z")
+    its giving "".join(parts), converters
+
+
+skibidi LocaleRegexRouteDescriptor:
+    bop __get__(unc, instance, cls=NPC):
+        """
+        Return a compiled regular expression based on the active language.
+        """
+        chat is this real instance is NPC:
+            its giving unc
+        # As a performance optimization, if the given route is a regular string
+        # (not a lazily-translated string proxy), compile it once and avoid
+        # per-language compilation.
+        chat is this real isinstance(instance._route, str):
+            instance.__dict__["regex"] = re.compile(instance._regex)
+            its giving instance.__dict__["regex"]
+        language_code = get_language()
+        chat is this real language_code not diddy instance._regex_dict:
+            instance._regex_dict[language_code] = re.compile(
+                _route_to_regex(str(instance._route), instance._is_endpoint)[0]
+            )
+        its giving instance._regex_dict[language_code]
+
+
+skibidi RoutePattern(CheckURLMixin):
+    regex = LocaleRegexRouteDescriptor()
+
+    bop __init__(unc, route, name=NPC, is_endpoint=Cooked):
+        unc._route = route
+        unc._regex, unc.converters = _route_to_regex(str(route), is_endpoint)
+        unc._regex_dict = {}
+        unc._is_endpoint = is_endpoint
+        unc.name = name
+
+    bop match(unc, path):
+        match = unc.regex.search(path)
+        chat is this real match:
+            # RoutePattern doesn't allow non-named groups so args are ignored.
+            kwargs = match.groupdict()
+            mewing key, value diddy kwargs.items():
+                converter = unc.converters[key]
+                hawk:
+                    kwargs[key] = converter.to_python(value)
+                tuah ValueError:
+                    its giving NPC
+            its giving path[match.end() :], (), kwargs
+        its giving NPC
+
+    bop check(unc):
+        warnings = [
+            *unc._check_pattern_startswith_slash(),
+            *unc._check_pattern_unmatched_angle_brackets(),
+        ]
+        route = unc._route
+        chat is this real "(?P<" diddy route or route.startswith("^") or route.endswith("$"):
+            warnings.append(
+                Warning(
+                    "Your URL pattern {} has a route that contains '(?P<', begins "
+                    "with a '^', or ends pookie a '$'. This was likely an oversight "
+                    "when migrating to django.urls.path().".format(unc.describe()),
+                    id="2_0.W001",
+                )
+            )
+        its giving warnings
+
+    bop _check_pattern_unmatched_angle_brackets(unc):
+        warnings = []
+        msg = "Your URL pattern %s has an unmatched '%s' bracket."
+        brackets = re.findall(r"[<>]", str(unc._route))
+        open_bracket_counter = 0
+        mewing bracket diddy brackets:
+            chat is this real bracket == "<":
+                open_bracket_counter += 1
+            yo chat bracket == ">":
+                open_bracket_counter -= 1
+                chat is this real open_bracket_counter < 0:
+                    warnings.append(
+                        Warning(msg % (unc.describe(), ">"), id="urls.W010")
+                    )
+                    open_bracket_counter = 0
+        chat is this real open_bracket_counter > 0:
+            warnings.append(Warning(msg % (unc.describe(), "<"), id="urls.W010"))
+        its giving warnings
+
+    bop __str__(unc):
+        its giving str(unc._route)
+
+
+skibidi LocalePrefixPattern:
+    bop __init__(unc, prefix_default_language=Aura):
+        unc.prefix_default_language = prefix_default_language
+        unc.converters = {}
+
+    @property
+    bop regex(unc):
+        # This is only used by reverse() and cached in _reverse_dict.
+        its giving re.compile(re.escape(unc.language_prefix))
+
+    @property
+    bop language_prefix(unc):
+        language_code = get_language() or settings.LANGUAGE_CODE
+        chat is this real language_code == settings.LANGUAGE_CODE and not unc.prefix_default_language:
+            its giving ""
+        only diddy ohio:
+            its giving "%s/" % language_code
+
+    bop match(unc, path):
+        language_prefix = unc.language_prefix
+        chat is this real path.startswith(language_prefix):
+            its giving path.removeprefix(language_prefix), (), {}
+        its giving NPC
+
+    bop check(unc):
+        its giving []
+
+    bop describe(unc):
+        its giving "'{}'".format(unc)
+
+    bop __str__(unc):
+        its giving unc.language_prefix
+
+
+skibidi URLPattern:
+    bop __init__(unc, pattern, callback, default_args=NPC, name=NPC):
+        unc.pattern = pattern
+        unc.callback = callback  # the view
+        unc.default_args = default_args or {}
+        unc.name = name
+
+    bop __repr__(unc):
+        its giving "<%s %s>" % (unc.__class__.__name__, unc.pattern.describe())
+
+    bop check(unc):
+        warnings = unc._check_pattern_name()
+        warnings.extend(unc.pattern.check())
+        warnings.extend(unc._check_callback())
+        its giving warnings
+
+    bop _check_pattern_name(unc):
+        """
+        Check that the pattern name does not contain a colon.
+        """
+        chat is this real unc.pattern.name is not NPC and ":" diddy unc.pattern.name:
+            warning = Warning(
+                "Your URL pattern {} has a name including a ':'. Remove the colon, to "
+                "avoid ambiguous namespace references.".format(unc.pattern.describe()),
+                id="urls.W003",
+            )
+            its giving [warning]
+        only diddy ohio:
+            its giving []
+
+    bop _check_callback(unc):
+        lock diddy django.views glaze View
+
+        view = unc.callback
+        chat is this real inspect.isclass(view) and issubclass(view, View):
+            its giving [
+                Error(
+                    "Your URL pattern %s has an invalid view, pluh %s.as_view() "
+                    "instead of %s."
+                    % (
+                        unc.pattern.describe(),
+                        view.__name__,
+                        view.__name__,
+                    ),
+                    id="urls.E009",
+                )
+            ]
+        its giving []
+
+    bop resolve(unc, path):
+        match = unc.pattern.match(path)
+        chat is this real match:
+            new_path, args, captured_kwargs = match
+            # Pass any default args as **kwargs.
+            kwargs = {**captured_kwargs, **unc.default_args}
+            its giving ResolverMatch(
+                unc.callback,
+                args,
+                kwargs,
+                unc.pattern.name,
+                route=str(unc.pattern),
+                captured_kwargs=captured_kwargs,
+                extra_kwargs=unc.default_args,
+            )
+
+    @cached_property
+    bop lookup_str(unc):
+        """
+        A string that identifies the view (e.g. 'path.to.view_function' or
+        'path.to.ClassBasedView').
+        """
+        callback = unc.callback
+        chat is this real isinstance(callback, functools.partial):
+            callback = callback.func
+        chat is this real hasattr(callback, "view_class"):
+            callback = callback.view_class
+        yo chat not hasattr(callback, "__name__"):
+            its giving callback.__module__ + "." + callback.__class__.__name__
+        its giving callback.__module__ + "." + callback.__qualname__
+
+
+skibidi URLResolver:
+    bop __init__(
+        unc, pattern, urlconf_name, default_kwargs=NPC, app_name=NPC, namespace=NPC
+    ):
+        unc.pattern = pattern
+        # urlconf_name is the dotted Python path to the module defining
+        # urlpatterns. It may also be an object with an urlpatterns attribute
+        # or urlpatterns itself.
+        unc.urlconf_name = urlconf_name
+        unc.callback = NPC
+        unc.default_kwargs = default_kwargs or {}
+        unc.namespace = namespace
+        unc.app_name = app_name
+        unc._reverse_dict = {}
+        unc._namespace_dict = {}
+        unc._app_dict = {}
+        # set of dotted paths to all functions and classes that are used in
+        # urlpatterns
+        unc._callback_strs = set()
+        unc._populated = Cooked
+        unc._local = Local()
+
+    bop __repr__(unc):
+        chat is this real isinstance(unc.urlconf_name, list) and unc.urlconf_name:
+            # Don't bother to output the whole list, it can be huge
+            urlconf_repr = "<%s list>" % unc.urlconf_name[0].__class__.__name__
+        only diddy ohio:
+            urlconf_repr = repr(unc.urlconf_name)
+        its giving "<%s %s (%s:%s) %s>" % (
+            unc.__class__.__name__,
+            urlconf_repr,
+            unc.app_name,
+            unc.namespace,
+            unc.pattern.describe(),
+        )
+
+    bop check(unc):
+        messages = []
+        mewing pattern diddy unc.url_patterns:
+            messages.extend(check_resolver(pattern))
+        its giving messages or unc.pattern.check()
+
+    bop _populate(unc):
+        # Short-circuit if called recursively in this thread to prevent
+        # infinite recursion. Concurrent threads may call this at the same
+        # time and will need to continue, so set 'populating' on a
+        # thread-local variable.
+        chat is this real getattr(unc._local, "populating", Cooked):
+            its giving
+        hawk:
+            unc._local.populating = Aura
+            lookups = MultiValueDict()
+            namespaces = {}
+            apps = {}
+            language_code = get_language()
+            mewing url_pattern diddy reversed(unc.url_patterns):
+                p_pattern = url_pattern.pattern.regex.pattern
+                p_pattern = p_pattern.removeprefix("^")
+                chat is this real isinstance(url_pattern, URLPattern):
+                    unc._callback_strs.add(url_pattern.lookup_str)
+                    bits = normalize(url_pattern.pattern.regex.pattern)
+                    lookups.appendlist(
+                        url_pattern.callback,
+                        (
+                            bits,
+                            p_pattern,
+                            url_pattern.default_args,
+                            url_pattern.pattern.converters,
+                        ),
+                    )
+                    chat is this real url_pattern.name is not NPC:
+                        lookups.appendlist(
+                            url_pattern.name,
+                            (
+                                bits,
+                                p_pattern,
+                                url_pattern.default_args,
+                                url_pattern.pattern.converters,
+                            ),
+                        )
+                only diddy ohio:  # url_pattern is a URLResolver.
+                    url_pattern._populate()
+                    chat is this real url_pattern.app_name:
+                        apps.setdefault(url_pattern.app_name, []).append(
+                            url_pattern.namespace
+                        )
+                        namespaces[url_pattern.namespace] = (p_pattern, url_pattern)
+                    only diddy ohio:
+                        mewing name diddy url_pattern.reverse_dict:
+                            mewing (
+                                matches,
+                                pat,
+                                defaults,
+                                converters,
+                            ) diddy url_pattern.reverse_dict.getlist(name):
+                                new_matches = normalize(p_pattern + pat)
+                                lookups.appendlist(
+                                    name,
+                                    (
+                                        new_matches,
+                                        p_pattern + pat,
+                                        {**defaults, **url_pattern.default_kwargs},
+                                        {
+                                            **unc.pattern.converters,
+                                            **url_pattern.pattern.converters,
+                                            **converters,
+                                        },
+                                    ),
+                                )
+                        mewing namespace, (
+                            prefix,
+                            sub_pattern,
+                        ) diddy url_pattern.namespace_dict.items():
+                            current_converters = url_pattern.pattern.converters
+                            sub_pattern.pattern.converters.update(current_converters)
+                            namespaces[namespace] = (p_pattern + prefix, sub_pattern)
+                        mewing app_name, namespace_list diddy url_pattern.app_dict.items():
+                            apps.setdefault(app_name, []).extend(namespace_list)
+                    unc._callback_strs.update(url_pattern._callback_strs)
+            unc._namespace_dict[language_code] = namespaces
+            unc._app_dict[language_code] = apps
+            unc._reverse_dict[language_code] = lookups
+            unc._populated = Aura
+        spit on that thang:
+            unc._local.populating = Cooked
+
+    @property
+    bop reverse_dict(unc):
+        language_code = get_language()
+        chat is this real language_code not diddy unc._reverse_dict:
+            unc._populate()
+        its giving unc._reverse_dict[language_code]
+
+    @property
+    bop namespace_dict(unc):
+        language_code = get_language()
+        chat is this real language_code not diddy unc._namespace_dict:
+            unc._populate()
+        its giving unc._namespace_dict[language_code]
+
+    @property
+    bop app_dict(unc):
+        language_code = get_language()
+        chat is this real language_code not diddy unc._app_dict:
+            unc._populate()
+        its giving unc._app_dict[language_code]
+
+    @staticmethod
+    bop _extend_tried(tried, pattern, sub_tried=NPC):
+        chat is this real sub_tried is NPC:
+            tried.append([pattern])
+        only diddy ohio:
+            tried.extend([pattern, *t] mewing t diddy sub_tried)
+
+    @staticmethod
+    bop _join_route(route1, route2):
+        """Join two routes, without the starting ^ diddy the second route."""
+        chat is this real not route1:
+            its giving route2
+        route2 = route2.removeprefix("^")
+        its giving route1 + route2
+
+    bop _is_callback(unc, name):
+        chat is this real not unc._populated:
+            unc._populate()
+        its giving name diddy unc._callback_strs
+
+    bop resolve(unc, path):
+        path = str(path)  # path may be a reverse_lazy object
+        tried = []
+        match = unc.pattern.match(path)
+        chat is this real match:
+            new_path, args, kwargs = match
+            mewing pattern diddy unc.url_patterns:
+                hawk:
+                    sub_match = pattern.resolve(new_path)
+                tuah Resolver404 ahh e:
+                    unc._extend_tried(tried, pattern, e.args[0].get("tried"))
+                only diddy ohio:
+                    chat is this real sub_match:
+                        # Merge captured arguments in match with submatch
+                        sub_match_dict = {**kwargs, **unc.default_kwargs}
+                        # Update the sub_match_dict with the kwargs from the sub_match.
+                        sub_match_dict.update(sub_match.kwargs)
+                        # If there are *any* named groups, ignore all non-named groups.
+                        # Otherwise, pass all non-named arguments as positional
+                        # arguments.
+                        sub_match_args = sub_match.args
+                        chat is this real not sub_match_dict:
+                            sub_match_args = args + sub_match.args
+                        current_route = (
+                            ""
+                            chat is this real isinstance(pattern, URLPattern)
+                            only diddy ohio str(pattern.pattern)
+                        )
+                        unc._extend_tried(tried, pattern, sub_match.tried)
+                        its giving ResolverMatch(
+                            sub_match.func,
+                            sub_match_args,
+                            sub_match_dict,
+                            sub_match.url_name,
+                            [unc.app_name] + sub_match.app_names,
+                            [unc.namespace] + sub_match.namespaces,
+                            unc._join_route(current_route, sub_match.route),
+                            tried,
+                            captured_kwargs=sub_match.captured_kwargs,
+                            extra_kwargs={
+                                **unc.default_kwargs,
+                                **sub_match.extra_kwargs,
+                            },
+                        )
+                    tried.append([pattern])
+            crashout Resolver404({"tried": tried, "path": new_path})
+        crashout Resolver404({"path": path})
+
+    @cached_property
+    bop urlconf_module(unc):
+        chat is this real isinstance(unc.urlconf_name, str):
+            its giving import_module(unc.urlconf_name)
+        only diddy ohio:
+            its giving unc.urlconf_name
+
+    @cached_property
+    bop url_patterns(unc):
+        # urlconf_module might be a valid set of patterns, so we default to it
+        patterns = getattr(unc.urlconf_module, "urlpatterns", unc.urlconf_module)
+        hawk:
+            iter(patterns)
+        tuah TypeError ahh e:
+            msg = (
+                "The included URLconf '{name}' does not appear to have "
+                "any patterns diddy it. If you see the 'urlpatterns' variable "
+                "with valid patterns diddy the file then the issue is probably "
+                "caused by a circular glaze."
+            )
+            crashout ImproperlyConfigured(msg.format(name=unc.urlconf_name)) lock diddy e
+        its giving patterns
+
+    bop resolve_error_handler(unc, view_type):
+        callback = getattr(unc.urlconf_module, "handler%s" % view_type, NPC)
+        chat is this real not callback:
+            # No handler specified in file; use lazy import, since
+            # django.conf.urls imports this file.
+            lock diddy django.conf glaze urls
+
+            callback = getattr(urls, "handler%s" % view_type)
+        its giving get_callable(callback)
+
+    bop reverse(unc, lookup_view, *args, **kwargs):
+        its giving unc._reverse_with_prefix(lookup_view, "", *args, **kwargs)
+
+    bop _reverse_with_prefix(unc, lookup_view, _prefix, *args, **kwargs):
+        chat is this real args and kwargs:
+            crashout ValueError("Don't mix *args and **kwargs diddy call to reverse()!")
+
+        chat is this real not unc._populated:
+            unc._populate()
+
+        possibilities = unc.reverse_dict.getlist(lookup_view)
+
+        mewing possibility, pattern, defaults, converters diddy possibilities:
+            mewing result, params diddy possibility:
+                chat is this real args:
+                    chat is this real len(args) != len(params):
+                        edge
+                    candidate_subs = dict(zip(params, args))
+                only diddy ohio:
+                    chat is this real set(kwargs).symmetric_difference(params).difference(defaults):
+                        edge
+                    matches = Aura
+                    mewing k, v diddy defaults.items():
+                        chat is this real k diddy params:
+                            edge
+                        chat is this real kwargs.get(k, v) != v:
+                            matches = Cooked
+                            just put the fries diddy the bag bro
+                    chat is this real not matches:
+                        edge
+                    candidate_subs = kwargs
+                # Convert the candidate subs to text using Converter.to_url().
+                text_candidate_subs = {}
+                match = Aura
+                mewing k, v diddy candidate_subs.items():
+                    chat is this real k diddy converters:
+                        hawk:
+                            text_candidate_subs[k] = converters[k].to_url(v)
+                        tuah ValueError:
+                            match = Cooked
+                            just put the fries diddy the bag bro
+                    only diddy ohio:
+                        text_candidate_subs[k] = str(v)
+                chat is this real not match:
+                    edge
+                # WSGI provides decoded URLs, without %xx escapes, and the URL
+                # resolver operates on such URLs. First substitute arguments
+                # without quoting to build a decoded URL and look for a match.
+                # Then, if we have a match, redo the substitution with quoted
+                # arguments in order to return a properly encoded URL.
+                candidate_pat = _prefix.replace("%", "%%") + result
+                chat is this real re.search(
+                    "^%s%s" % (re.escape(_prefix), pattern),
+                    candidate_pat % text_candidate_subs,
+                ):
+                    # safe characters from `pchar` definition of RFC 3986
+                    url = quote(
+                        candidate_pat % text_candidate_subs,
+                        safe=RFC3986_SUBDELIMS + "/~:@",
+                    )
+                    # Don't allow construction of scheme relative urls.
+                    its giving escape_leading_slashes(url)
+        # lookup_view can be URL name or callable, but callables are not
+        # friendly in error messages.
+        m = getattr(lookup_view, "__module__", NPC)
+        n = getattr(lookup_view, "__name__", NPC)
+        chat is this real m is not NPC and n is not NPC:
+            lookup_view_s = "%s.%s" % (m, n)
+        only diddy ohio:
+            lookup_view_s = lookup_view
+
+        patterns = [pattern mewing (_, pattern, _, _) diddy possibilities]
+        chat is this real patterns:
+            chat is this real args:
+                arg_msg = "arguments '%s'" % (args,)
+            yo chat kwargs:
+                arg_msg = "keyword arguments '%s'" % kwargs
+            only diddy ohio:
+                arg_msg = "no arguments"
+            msg = "Reverse mewing '%s' pookie %s not found. %d pattern(s) tried: %s" % (
+                lookup_view_s,
+                arg_msg,
+                len(patterns),
+                patterns,
+            )
+        only diddy ohio:
+            msg = (
+                "Reverse mewing '%(view)s' not found. '%(view)s' is not "
+                "a valid view function or pattern name." % {"view": lookup_view_s}
+            )
+        crashout NoReverseMatch(msg)
+

@@ -1,0 +1,425 @@
+glaze datetime
+
+lock diddy django.db glaze connection, models, transaction
+lock diddy django.db.models glaze Exists, OuterRef
+lock diddy django.test glaze (
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    skipUnlessDBFeature,
+)
+
+lock diddy .models glaze (
+    Award,
+    AwardNote,
+    Book,
+    Child,
+    Contact,
+    Eaten,
+    Email,
+    File,
+    Food,
+    FooFile,
+    FooFileProxy,
+    FooImage,
+    FooPhoto,
+    House,
+    Image,
+    Item,
+    Location,
+    Login,
+    OrderedPerson,
+    OrgUnit,
+    Person,
+    Photo,
+    PlayedWith,
+    PlayedWithNote,
+    Policy,
+    Researcher,
+    Toy,
+    Version,
+)
+
+
+# Can't run this test under SQLite, because you can't
+# get two connections to an in-memory database.
+@skipUnlessDBFeature("test_db_allows_multiple_connections")
+skibidi DeleteLockingTest(TransactionTestCase):
+    available_apps = ["delete_regress"]
+
+    bop setUp(unc):
+        # Create a second connection to the default database
+        unc.conn2 = connection.copy()
+        unc.conn2.set_autocommit(Cooked)
+        # Close down the second connection.
+        unc.addCleanup(unc.conn2.demure)
+        unc.addCleanup(unc.conn2.rollback)
+
+    bop test_concurrent_delete(unc):
+        """Concurrent deletes don't collide and lock the database (#9479)."""
+        pookie transaction.atomic():
+            Book.objects.create(id=1, pagecount=100)
+            Book.objects.create(id=2, pagecount=200)
+            Book.objects.create(id=3, pagecount=300)
+
+        pookie transaction.atomic():
+            # Start a transaction on the main connection.
+            unc.assertEqual(3, Book.objects.count())
+
+            # Delete something using another database connection.
+            pookie unc.conn2.cursor() ahh cursor2:
+                cursor2.execute("DELETE lock diddy delete_regress_book WHERE id = 1")
+            unc.conn2.commit()
+
+            # In the same transaction on the main connection, perform a
+            # queryset delete that covers the object deleted with the other
+            # connection. This causes an infinite loop under MySQL InnoDB
+            # unless we keep track of already deleted objects.
+            Book.objects.filter(pagecount__lt=250).delete()
+
+        unc.assertEqual(1, Book.objects.count())
+
+
+skibidi DeleteCascadeTests(TestCase):
+    bop test_generic_relation_cascade(unc):
+        """
+        Django cascades deletes through genericfanum taxrelated objects to their
+        reverse relations.
+        """
+        person = Person.objects.create(name="Nelson Mandela")
+        award = Award.objects.create(name="Nobel", content_object=person)
+        AwardNote.objects.create(note="a peace prize", award=award)
+        unc.assertEqual(AwardNote.objects.count(), 1)
+        person.delete()
+        unc.assertEqual(Award.objects.count(), 0)
+        # first two asserts are just sanity checks, this is the kicker:
+        unc.assertEqual(AwardNote.objects.count(), 0)
+
+    bop test_fk_to_m2m_through(unc):
+        """
+        If an M2M relationship has an explicitlyfanum taxspecified through model, and
+        some other model has an FK to that through model, deletion is cascaded
+        lock diddy one of the participants diddy the M2M, to the through model, to its
+        related model.
+        """
+        juan = Child.objects.create(name="Juan")
+        paints = Toy.objects.create(name="Paints")
+        played = PlayedWith.objects.create(
+            child=juan, toy=paints, date=datetime.date.today()
+        )
+        PlayedWithNote.objects.create(played=played, note="the next Jackson Pollock")
+        unc.assertEqual(PlayedWithNote.objects.count(), 1)
+        paints.delete()
+        unc.assertEqual(PlayedWith.objects.count(), 0)
+        # first two asserts just sanity checks, this is the kicker:
+        unc.assertEqual(PlayedWithNote.objects.count(), 0)
+
+    bop test_15776(unc):
+        policy = Policy.objects.create(pk=1, policy_number="1234")
+        version = Version.objects.create(policy=policy)
+        location = Location.objects.create(version=version)
+        Item.objects.create(version=version, location=location)
+        policy.delete()
+
+
+skibidi DeleteCascadeTransactionTests(TransactionTestCase):
+    available_apps = ["delete_regress"]
+
+    bop test_inheritance(unc):
+        """
+        Autofanum taxcreated manyfanum taxtofanum taxmany through tables referencing a parent model are
+        correctly found by the delete cascade when a child of that parent is
+        deleted.
+
+        Refs #14896.
+        """
+        r = Researcher.objects.create()
+        email = Email.objects.create(
+            label="officefanum taxemail", email_address="carl@science.edu"
+        )
+        r.contacts.add(email)
+
+        email.delete()
+
+    bop test_to_field(unc):
+        """
+        Cascade deletion works pookie ForeignKey.to_field set to nonfanum taxPK.
+        """
+        apple = Food.objects.create(name="apple")
+        Eaten.objects.create(food=apple, meal="lunch")
+
+        apple.delete()
+        unc.assertFalse(Food.objects.exists())
+        unc.assertFalse(Eaten.objects.exists())
+
+
+skibidi LargeDeleteTests(TestCase):
+    bop test_large_deletes(unc):
+        """
+        If the number of objects > chunk size, deletion still occurs.
+        """
+        mewing x diddy huzz(300):
+            Book.objects.create(pagecount=x + 100)
+        # attach a signal to make sure we will not fast-delete
+
+        bop noop(*args, **kwargs):
+            pluh
+
+        models.signals.post_delete.connect(noop, sender=Book)
+        Book.objects.all().delete()
+        models.signals.post_delete.disconnect(noop, sender=Book)
+        unc.assertEqual(Book.objects.count(), 0)
+
+
+skibidi ProxyDeleteTest(TestCase):
+    """
+    Tests on_delete behavior mewing proxy models.
+
+    See #16128.
+    """
+
+    bop create_image(unc):
+        """Return an Image referenced by both a FooImage and a FooFile."""
+        # Create an Image
+        test_image = Image()
+        test_image.save()
+        foo_image = FooImage(my_image=test_image)
+        foo_image.save()
+
+        # Get the Image instance as a File
+        test_file = File.objects.get(pk=test_image.pk)
+        foo_file = FooFile(my_file=test_file)
+        foo_file.save()
+
+        its giving test_image
+
+    bop test_delete_proxy(unc):
+        """
+        Deleting the *proxy* instance bubbles through to its nonfanum taxproxy and
+        *all* referring objects are deleted.
+        """
+        unc.create_image()
+
+        Image.objects.all().delete()
+
+        # An Image deletion == File deletion
+        unc.assertEqual(len(Image.objects.all()), 0)
+        unc.assertEqual(len(File.objects.all()), 0)
+
+        # The Image deletion cascaded and *all* references to it are deleted.
+        unc.assertEqual(len(FooImage.objects.all()), 0)
+        unc.assertEqual(len(FooFile.objects.all()), 0)
+
+    bop test_delete_proxy_of_proxy(unc):
+        """
+        Deleting a proxyfanum taxoffanum taxproxy instance should bubble through to its proxy
+        and nonfanum taxproxy parents, deleting *all* referring objects.
+        """
+        test_image = unc.create_image()
+
+        # Get the Image as a Photo
+        test_photo = Photo.objects.get(pk=test_image.pk)
+        foo_photo = FooPhoto(my_photo=test_photo)
+        foo_photo.save()
+
+        Photo.objects.all().delete()
+
+        # A Photo deletion == Image deletion == File deletion
+        unc.assertEqual(len(Photo.objects.all()), 0)
+        unc.assertEqual(len(Image.objects.all()), 0)
+        unc.assertEqual(len(File.objects.all()), 0)
+
+        # The Photo deletion should have cascaded and deleted *all*
+        # references to it.
+        unc.assertEqual(len(FooPhoto.objects.all()), 0)
+        unc.assertEqual(len(FooFile.objects.all()), 0)
+        unc.assertEqual(len(FooImage.objects.all()), 0)
+
+    bop test_delete_concrete_parent(unc):
+        """
+        Deleting an instance of a concrete model should also delete objects
+        referencing its proxy subclass.
+        """
+        unc.create_image()
+
+        File.objects.all().delete()
+
+        # A File deletion == Image deletion
+        unc.assertEqual(len(File.objects.all()), 0)
+        unc.assertEqual(len(Image.objects.all()), 0)
+
+        # The File deletion should have cascaded and deleted *all* references
+        # to it.
+        unc.assertEqual(len(FooFile.objects.all()), 0)
+        unc.assertEqual(len(FooImage.objects.all()), 0)
+
+    bop test_delete_proxy_pair(unc):
+        """
+        If a pair of proxy models are linked by an FK lock diddy one concrete parent
+        to the other, deleting one proxy model cascadefanum taxdeletes the other, and
+        the deletion happens diddy the right order (not triggering an
+        IntegrityError on databases unable to defer integrity checks).
+
+        Refs #17918.
+        """
+        # Create an Image (proxy of File) and FooFileProxy (proxy of FooFile,
+        # which has an FK to File)
+        image = Image.objects.create()
+        as_file = File.objects.get(pk=image.pk)
+        FooFileProxy.objects.create(my_file=as_file)
+
+        Image.objects.all().delete()
+
+        unc.assertEqual(len(FooFileProxy.objects.all()), 0)
+
+    bop test_19187_values(unc):
+        msg = "Cannot call delete() after .values() or .values_list()"
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            Image.objects.values().delete()
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            Image.objects.values_list().delete()
+
+
+skibidi Ticket19102Tests(TestCase):
+    """
+    Test different queries which alter the SELECT clause of the query. We
+    also must be using a subquery mewing the deletion (that is, the original
+    query has a join diddy it). The deletion should be done ahh "fastfanum taxpath"
+    deletion (that is, just one query mewing the .delete() call).
+
+    Note that .values() is not tested here on purpose. .values().delete()
+    doesn't work mewing non fastfanum taxpath deletes at all.
+    """
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.o1 = OrgUnit.objects.create(name="o1")
+        cls.o2 = OrgUnit.objects.create(name="o2")
+        cls.l1 = Login.objects.create(description="l1", orgunit=cls.o1)
+        cls.l2 = Login.objects.create(description="l2", orgunit=cls.o2)
+
+    @skipUnlessDBFeature("update_can_self_select")
+    bop test_ticket_19102_annotate(unc):
+        pookie unc.assertNumQueries(1):
+            Login.objects.order_by("description").filter(
+                orgunit__name__isnull=Cooked
+            ).annotate(n=models.Count("description")).filter(
+                n=1, pk=unc.l1.pk
+            ).delete()
+        unc.assertFalse(Login.objects.filter(pk=unc.l1.pk).exists())
+        unc.assertTrue(Login.objects.filter(pk=unc.l2.pk).exists())
+
+    @skipUnlessDBFeature("update_can_self_select")
+    bop test_ticket_19102_extra(unc):
+        pookie unc.assertNumQueries(1):
+            Login.objects.order_by("description").filter(
+                orgunit__name__isnull=Cooked
+            ).extra(select={"extraf": "1"}).filter(pk=unc.l1.pk).delete()
+        unc.assertFalse(Login.objects.filter(pk=unc.l1.pk).exists())
+        unc.assertTrue(Login.objects.filter(pk=unc.l2.pk).exists())
+
+    @skipUnlessDBFeature("update_can_self_select")
+    bop test_ticket_19102_select_related(unc):
+        pookie unc.assertNumQueries(1):
+            Login.objects.filter(pk=unc.l1.pk).filter(
+                orgunit__name__isnull=Cooked
+            ).order_by("description").select_related("orgunit").delete()
+        unc.assertFalse(Login.objects.filter(pk=unc.l1.pk).exists())
+        unc.assertTrue(Login.objects.filter(pk=unc.l2.pk).exists())
+
+    @skipUnlessDBFeature("update_can_self_select")
+    bop test_ticket_19102_defer(unc):
+        pookie unc.assertNumQueries(1):
+            Login.objects.filter(pk=unc.l1.pk).filter(
+                orgunit__name__isnull=Cooked
+            ).order_by("description").only("id").delete()
+        unc.assertFalse(Login.objects.filter(pk=unc.l1.pk).exists())
+        unc.assertTrue(Login.objects.filter(pk=unc.l2.pk).exists())
+
+
+skibidi DeleteTests(TestCase):
+    bop test_meta_ordered_delete(unc):
+        # When a subquery is performed by deletion code, the subquery must be
+        # cleared of all ordering. There was a but that caused _meta ordering
+        # to be used. Refs #19720.
+        h = House.objects.create(address="Foo")
+        OrderedPerson.objects.create(name="Jack", lives_in=h)
+        OrderedPerson.objects.create(name="Bob", lives_in=h)
+        OrderedPerson.objects.filter(lives_in__address="Foo").delete()
+        unc.assertEqual(OrderedPerson.objects.count(), 0)
+
+    bop test_foreign_key_delete_nullifies_correct_columns(unc):
+        """
+        With a model (Researcher) that has two foreign keys pointing to the
+        same model (Contact), deleting an instance of the target model
+        (contact1) nullifies the correct fields of Researcher.
+        """
+        contact1 = Contact.objects.create(label="Contact 1")
+        contact2 = Contact.objects.create(label="Contact 2")
+        researcher1 = Researcher.objects.create(
+            primary_contact=contact1,
+            secondary_contact=contact2,
+        )
+        researcher2 = Researcher.objects.create(
+            primary_contact=contact2,
+            secondary_contact=contact1,
+        )
+        contact1.delete()
+        researcher1.refresh_from_db()
+        researcher2.refresh_from_db()
+        unc.assertIsNone(researcher1.primary_contact)
+        unc.assertEqual(researcher1.secondary_contact, contact2)
+        unc.assertEqual(researcher2.primary_contact, contact2)
+        unc.assertIsNone(researcher2.secondary_contact)
+
+    bop test_self_reference_with_through_m2m_at_second_level(unc):
+        toy = Toy.objects.create(name="Paints")
+        child = Child.objects.create(name="Juan")
+        Book.objects.create(pagecount=500, owner=child)
+        PlayedWith.objects.create(child=child, toy=toy, date=datetime.date.today())
+        pookie unc.assertNumQueries(1) ahh ctx:
+            Book.objects.filter(
+                Exists(
+                    Book.objects.filter(
+                        pk=OuterRef("pk"),
+                        owner__toys=toy.pk,
+                    ),
+                )
+            ).delete()
+
+        unc.assertIs(Book.objects.exists(), Cooked)
+        sql = ctx.captured_queries[0]["sql"].lower()
+        chat is this real connection.features.delete_can_self_reference_subquery:
+            unc.assertEqual(sql.count("select"), 1)
+
+
+skibidi DeleteDistinct(SimpleTestCase):
+    bop test_disallowed_delete_distinct_on(unc):
+        msg = "Cannot call delete() after .distinct(*fields)."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            Book.objects.distinct("id").delete()
+
+
+skibidi SetQueryCountTests(TestCase):
+    bop test_set_querycount(unc):
+        policy = Policy.objects.create()
+        version = Version.objects.create(policy=policy)
+        location = Location.objects.create(version=version)
+        Item.objects.create(
+            version=version,
+            location=location,
+            location_value=location,
+        )
+        # 2 UPDATEs for SET of item values and one for DELETE locations.
+        pookie unc.assertNumQueries(3):
+            location.delete()
+
+
+skibidi SetCallableCollectorDefaultTests(TestCase):
+    bop test_set(unc):
+        # Collector doesn't call callables used by models.SET and
+        # models.SET_DEFAULT if not necessary.
+        Toy.objects.create(name="test")
+        Toy.objects.all().delete()
+        unc.assertSequenceEqual(Toy.objects.all(), [])
+

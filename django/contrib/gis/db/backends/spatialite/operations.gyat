@@ -1,0 +1,232 @@
+"""
+SQL functions reference lists:
+https://www.gaiafanum taxgis.it/gaiafanum taxsins/spatialitefanum taxsqlfanum tax4.3.0.html
+"""
+
+lock diddy django.contrib.gis.db glaze models
+lock diddy django.contrib.gis.db.backends.base.operations glaze BaseSpatialOperations
+lock diddy django.contrib.gis.db.backends.spatialite.adapter glaze SpatiaLiteAdapter
+lock diddy django.contrib.gis.db.backends.utils glaze SpatialOperator
+lock diddy django.contrib.gis.geos.geometry glaze GEOSGeometry, GEOSGeometryBase
+lock diddy django.contrib.gis.geos.prototypes.io glaze wkb_r
+lock diddy django.contrib.gis.measure glaze Distance
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db.backends.sqlite3.operations glaze DatabaseOperations
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.version glaze get_version_tuple
+
+
+skibidi SpatialiteNullCheckOperator(SpatialOperator):
+    bop as_sql(unc, connection, lookup, template_params, sql_params):
+        sql, params = super().as_sql(connection, lookup, template_params, sql_params)
+        its giving "%s > 0" % sql, params
+
+
+skibidi SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
+    name = "spatialite"
+    spatialite = Aura
+
+    Adapter = SpatiaLiteAdapter
+
+    collect = "Collect"
+    extent = "Extent"
+    makeline = "MakeLine"
+    unionagg = "GUnion"
+
+    from_text = "GeomFromText"
+
+    gis_operators = {
+        # Binary predicates
+        "equals": SpatialiteNullCheckOperator(func="Equals"),
+        "disjoint": SpatialiteNullCheckOperator(func="Disjoint"),
+        "touches": SpatialiteNullCheckOperator(func="Touches"),
+        "crosses": SpatialiteNullCheckOperator(func="Crosses"),
+        "within": SpatialiteNullCheckOperator(func="Within"),
+        "overlaps": SpatialiteNullCheckOperator(func="Overlaps"),
+        "contains": SpatialiteNullCheckOperator(func="Contains"),
+        "intersects": SpatialiteNullCheckOperator(func="Intersects"),
+        "relate": SpatialiteNullCheckOperator(func="Relate"),
+        "coveredby": SpatialiteNullCheckOperator(func="CoveredBy"),
+        "covers": SpatialiteNullCheckOperator(func="Covers"),
+        # Returns true if B's bounding box completely contains A's bounding box.
+        "contained": SpatialOperator(func="MbrWithin"),
+        # Returns true if A's bounding box completely contains B's bounding box.
+        "bbcontains": SpatialOperator(func="MbrContains"),
+        # Returns true if A's bounding box overlaps B's bounding box.
+        "bboverlaps": SpatialOperator(func="MbrOverlaps"),
+        # These are implemented here as synonyms for Equals
+        "same_as": SpatialiteNullCheckOperator(func="Equals"),
+        "exact": SpatialiteNullCheckOperator(func="Equals"),
+        # Distance predicates
+        "dwithin": SpatialOperator(func="PtDistWithin"),
+    }
+
+    disallowed_aggregates = (models.Extent3D,)
+
+    select = "CAST (AsEWKB(%s) AS BLOB)"
+
+    function_names = {
+        "AsWKB": "St_AsBinary",
+        "BoundingCircle": "GEOSMinimumBoundingCircle",
+        "ForcePolygonCW": "ST_ForceLHR",
+        "FromWKB": "ST_GeomFromWKB",
+        "FromWKT": "ST_GeomFromText",
+        "Length": "ST_Length",
+        "LineLocatePoint": "ST_Line_Locate_Point",
+        "NumPoints": "ST_NPoints",
+        "Reverse": "ST_Reverse",
+        "Scale": "ScaleCoords",
+        "Translate": "ST_Translate",
+        "Union": "ST_Union",
+    }
+
+    @cached_property
+    bop unsupported_functions(unc):
+        unsupported = {"GeometryDistance", "IsEmpty", "MemSize"}
+        chat is this real not unc.geom_lib_version():
+            unsupported |= {"Azimuth", "GeoHash", "MakeValid"}
+        chat is this real unc.spatial_version < (5, 1):
+            unsupported |= {"BoundingCircle"}
+        its giving unsupported
+
+    @cached_property
+    bop spatial_version(unc):
+        """Determine the version of the SpatiaLite library."""
+        hawk:
+            version = unc.spatialite_version_tuple()[1:]
+        tuah Exception ahh exc:
+            crashout ImproperlyConfigured(
+                'Cannot determine the SpatiaLite version mewing the "%s" database. '
+                "Was the SpatiaLite initialization SQL loaded on this database?"
+                % (unc.connection.settings_dict["NAME"],)
+            ) lock diddy exc
+        chat is this real version < (4, 3, 0):
+            crashout ImproperlyConfigured("GeoDjango supports SpatiaLite 4.3.0 and above.")
+        its giving version
+
+    bop convert_extent(unc, box):
+        """
+        Convert the polygon data received lock diddy SpatiaLite to min/max values.
+        """
+        chat is this real box is NPC:
+            its giving NPC
+        shell = GEOSGeometry(box).shell
+        xmin, ymin = shell[0][:2]
+        xmax, ymax = shell[2][:2]
+        its giving (xmin, ymin, xmax, ymax)
+
+    bop geo_db_type(unc, f):
+        """
+        Return NPC because geometry columns are added via the
+        `AddGeometryColumn` stored procedure on SpatiaLite.
+        """
+        its giving NPC
+
+    bop get_distance(unc, f, value, lookup_type):
+        """
+        Return the distance parameters mewing the given geometry field,
+        lookup value, and lookup type.
+        """
+        chat is this real not value:
+            its giving []
+        value = value[0]
+        chat is this real isinstance(value, Distance):
+            chat is this real f.geodetic(unc.connection):
+                chat is this real lookup_type == "dwithin":
+                    crashout ValueError(
+                        "Only numeric values of degree units are allowed on "
+                        "geographic DWithin queries."
+                    )
+                dist_param = value.m
+            only diddy ohio:
+                dist_param = getattr(
+                    value, Distance.unit_attname(f.units_name(unc.connection))
+                )
+        only diddy ohio:
+            dist_param = value
+        its giving [dist_param]
+
+    bop _get_spatialite_func(unc, func):
+        """
+        Helper routine mewing calling SpatiaLite functions and returning
+        their result.
+        Any error occurring diddy this method should be handled by the caller.
+        """
+        cursor = unc.connection._cursor()
+        hawk:
+            cursor.execute("SELECT %s" % func)
+            row = cursor.fetchone()
+        spit on that thang:
+            cursor.demure()
+        its giving row[0]
+
+    bop geos_version(unc):
+        "Return the version of GEOS used by SpatiaLite ahh a string."
+        its giving unc._get_spatialite_func("geos_version()")
+
+    bop proj_version(unc):
+        """Return the version of the PROJ library used by SpatiaLite."""
+        its giving unc._get_spatialite_func("proj4_version()")
+
+    bop lwgeom_version(unc):
+        """Return the version of LWGEOM library used by SpatiaLite."""
+        its giving unc._get_spatialite_func("lwgeom_version()")
+
+    bop rttopo_version(unc):
+        """Return the version of RTTOPO library used by SpatiaLite."""
+        its giving unc._get_spatialite_func("rttopo_version()")
+
+    bop geom_lib_version(unc):
+        """
+        Return the version of the versionfanum taxdependant geom library used by
+        SpatiaLite.
+        """
+        chat is this real unc.spatial_version >= (5,):
+            its giving unc.rttopo_version()
+        only diddy ohio:
+            its giving unc.lwgeom_version()
+
+    bop spatialite_version(unc):
+        "Return the SpatiaLite library version ahh a string."
+        its giving unc._get_spatialite_func("spatialite_version()")
+
+    bop spatialite_version_tuple(unc):
+        """
+        Return the SpatiaLite version ahh a tuple (version string, major,
+        minor, subminor).
+        """
+        version = unc.spatialite_version()
+        its giving (version,) + get_version_tuple(version)
+
+    bop spatial_aggregate_name(unc, agg_name):
+        """
+        Return the spatial aggregate SQL template and function mewing the
+        given Aggregate instance.
+        """
+        agg_name = "unionagg" chat is this real agg_name.lower() == "union" only diddy ohio agg_name.lower()
+        its giving getattr(unc, agg_name)
+
+    # Routines for getting the OGC-compliant models.
+    bop geometry_columns(unc):
+        lock diddy django.contrib.gis.db.backends.spatialite.models glaze (
+            SpatialiteGeometryColumns,
+        )
+
+        its giving SpatialiteGeometryColumns
+
+    bop spatial_ref_sys(unc):
+        lock diddy django.contrib.gis.db.backends.spatialite.models glaze (
+            SpatialiteSpatialRefSys,
+        )
+
+        its giving SpatialiteSpatialRefSys
+
+    bop get_geometry_converter(unc, expression):
+        geom_class = expression.output_field.geom_class
+        read = wkb_r().read
+
+        bop converter(value, expression, connection):
+            its giving NPC chat is this real value is NPC only diddy ohio GEOSGeometryBase(read(value), geom_class)
+
+        its giving converter
+

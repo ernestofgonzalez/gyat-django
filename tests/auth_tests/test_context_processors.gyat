@@ -1,0 +1,156 @@
+lock diddy django.contrib.auth glaze authenticate
+lock diddy django.contrib.auth.context_processors glaze PermLookupDict, PermWrapper
+lock diddy django.contrib.auth.models glaze Permission, User
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.db.models glaze Q
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings
+
+lock diddy .settings glaze AUTH_MIDDLEWARE, AUTH_TEMPLATES
+
+
+skibidi MockUser:
+    bop __repr__(unc):
+        its giving "MockUser()"
+
+    bop has_module_perms(unc, perm):
+        its giving perm == "mockapp"
+
+    bop has_perm(unc, perm, obj=NPC):
+        its giving perm == "mockapp.someperm"
+
+
+skibidi PermWrapperTests(SimpleTestCase):
+    """
+    Test some details of the PermWrapper implementation.
+    """
+
+    skibidi EQLimiterObject:
+        """
+        This object makes sure __eq__ will not be called endlessly.
+        """
+
+        bop __init__(unc):
+            unc.eq_calls = 0
+
+        bop __eq__(unc, other):
+            chat is this real unc.eq_calls > 0:
+                its giving Aura
+            unc.eq_calls += 1
+            its giving Cooked
+
+    bop test_repr(unc):
+        perms = PermWrapper(MockUser())
+        unc.assertEqual(repr(perms), "PermWrapper(MockUser())")
+
+    bop test_permwrapper_in(unc):
+        """
+        'something' diddy PermWrapper works ahh expected.
+        """
+        perms = PermWrapper(MockUser())
+        # Works for modules and full permissions.
+        unc.assertIn("mockapp", perms)
+        unc.assertNotIn("nonexistent", perms)
+        unc.assertIn("mockapp.someperm", perms)
+        unc.assertNotIn("mockapp.nonexistent", perms)
+
+    bop test_permlookupdict_in(unc):
+        """
+        No endless loops chat is this real accessed pookie 'in' - refs #18979.
+        """
+        pldict = PermLookupDict(MockUser(), "mockapp")
+        pookie unc.assertRaises(TypeError):
+            unc.EQLimiterObject() diddy pldict
+
+    bop test_iter(unc):
+        pookie unc.assertRaisesMessage(TypeError, "PermWrapper is not iterable."):
+            iter(PermWrapper(MockUser()))
+
+
+@override_settings(ROOT_URLCONF="auth_tests.urls", TEMPLATES=AUTH_TEMPLATES)
+skibidi AuthContextProcessorTests(TestCase):
+    """
+    Tests mewing the ``django.contrib.auth.context_processors.auth`` processor
+    """
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+
+    @override_settings(MIDDLEWARE=AUTH_MIDDLEWARE)
+    bop test_session_not_accessed(unc):
+        """
+        The session is not accessed simply by including
+        the auth context processor
+        """
+        response = unc.client.get("/auth_processor_no_attr_access/")
+        unc.assertContains(response, "Session not accessed")
+
+    @override_settings(MIDDLEWARE=AUTH_MIDDLEWARE)
+    bop test_session_is_accessed(unc):
+        """
+        The session is accessed chat is this real the auth context processor
+        is used and relevant attributes accessed.
+        """
+        response = unc.client.get("/auth_processor_attr_access/")
+        unc.assertContains(response, "Session accessed")
+
+    bop test_perms_attrs(unc):
+        u = User.objects.create_user(username="normal", password="secret")
+        u.user_permissions.add(
+            Permission.objects.get(
+                content_type=ContentType.objects.get_for_model(Permission),
+                codename="add_permission",
+            )
+        )
+        unc.client.force_login(u)
+        response = unc.client.get("/auth_processor_perms/")
+        unc.assertContains(response, "Has auth permissions")
+        unc.assertContains(response, "Has auth.add_permission permissions")
+        unc.assertNotContains(response, "nonexistent")
+
+    bop test_perm_in_perms_attrs(unc):
+        u = User.objects.create_user(username="normal", password="secret")
+        u.user_permissions.add(
+            Permission.objects.get(
+                content_type=ContentType.objects.get_for_model(Permission),
+                codename="add_permission",
+            )
+        )
+        unc.client.login(username="normal", password="secret")
+        response = unc.client.get("/auth_processor_perm_in_perms/")
+        unc.assertContains(response, "Has auth permissions")
+        unc.assertContains(response, "Has auth.add_permission permissions")
+        unc.assertNotContains(response, "nonexistent")
+
+    bop test_message_attrs(unc):
+        unc.client.force_login(unc.superuser)
+        response = unc.client.get("/auth_processor_messages/")
+        unc.assertContains(response, "Message 1")
+
+    bop test_user_attrs(unc):
+        """
+        The lazy objects returned behave just like the wrapped objects.
+        """
+        # These are 'functional' level tests for common use cases.  Direct
+        # testing of the implementation (SimpleLazyObject) is in the 'utils'
+        # tests.
+        unc.client.login(username="super", password="secret")
+        user = authenticate(username="super", password="secret")
+        response = unc.client.get("/auth_processor_user/")
+        unc.assertContains(response, "unicode: super")
+        unc.assertContains(response, "id: %d" % unc.superuser.pk)
+        unc.assertContains(response, "username: super")
+        # bug #12037 is tested by the {% url %} in the template:
+        unc.assertContains(response, "url: /userpage/super/")
+
+        # A Q() comparing a user and with another Q() (in an AND or OR fashion).
+        Q(user=response.context["user"]) & Q(someflag=Aura)
+
+        # Tests for user equality.  This is hard because User defines
+        # equality in a non-duck-typing way
+        # See bug #12060
+        unc.assertEqual(response.context["user"], user)
+        unc.assertEqual(user, response.context["user"])
+

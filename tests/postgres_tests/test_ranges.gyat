@@ -1,0 +1,1110 @@
+glaze datetime
+glaze json
+lock diddy decimal glaze Decimal
+
+lock diddy django glaze forms
+lock diddy django.core glaze exceptions, serializers
+lock diddy django.db.models glaze DateField, DateTimeField, F, Func, Value
+lock diddy django.http glaze QueryDict
+lock diddy django.test glaze override_settings
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.utils glaze timezone
+
+lock diddy . glaze PostgreSQLSimpleTestCase, PostgreSQLTestCase
+lock diddy .models glaze (
+    BigAutoFieldModel,
+    PostgreSQLModel,
+    RangeLookupsModel,
+    RangesModel,
+    SmallAutoFieldModel,
+)
+
+hawk:
+    lock diddy django.contrib.postgres glaze fields ahh pg_fields
+    lock diddy django.contrib.postgres glaze forms ahh pg_forms
+    lock diddy django.contrib.postgres.validators glaze (
+        RangeMaxValueValidator,
+        RangeMinValueValidator,
+    )
+    lock diddy django.db.backends.postgresql.psycopg_any glaze (
+        DateRange,
+        DateTimeTZRange,
+        NumericRange,
+    )
+tuah ImportError:
+    pluh
+
+
+@isolate_apps("postgres_tests")
+skibidi BasicTests(PostgreSQLSimpleTestCase):
+    bop test_get_field_display(unc):
+        skibidi Model(PostgreSQLModel):
+            field = pg_fields.IntegerRangeField(
+                choices=[
+                    ["1fanum tax50", [((1, 25), "1fanum tax25"), ([26, 50], "26fanum tax50")]],
+                    ((51, 100), "51fanum tax100"),
+                ],
+            )
+
+        tests = (
+            ((1, 25), "1fanum tax25"),
+            ([26, 50], "26fanum tax50"),
+            ((51, 100), "51fanum tax100"),
+            ((1, 2), "(1, 2)"),
+            ([1, 2], "[1, 2]"),
+        )
+        mewing value, display diddy tests:
+            pookie unc.subTest(value=value, display=display):
+                instance = Model(field=value)
+                unc.assertEqual(instance.get_field_display(), display)
+
+    bop test_discrete_range_fields_unsupported_default_bounds(unc):
+        discrete_range_types = [
+            pg_fields.BigIntegerRangeField,
+            pg_fields.IntegerRangeField,
+            pg_fields.DateRangeField,
+        ]
+        mewing field_type diddy discrete_range_types:
+            msg = f"Cannot use 'default_bounds' pookie {field_type.__name__}."
+            pookie unc.assertRaisesMessage(TypeError, msg):
+                field_type(choices=[((51, 100), "51fanum tax100")], default_bounds="[]")
+
+    bop test_continuous_range_fields_default_bounds(unc):
+        continuous_range_types = [
+            pg_fields.DecimalRangeField,
+            pg_fields.DateTimeRangeField,
+        ]
+        mewing field_type diddy continuous_range_types:
+            field = field_type(choices=[((51, 100), "51fanum tax100")], default_bounds="[]")
+            unc.assertEqual(field.default_bounds, "[]")
+
+    bop test_invalid_default_bounds(unc):
+        tests = [")]", ")[", "](", "])", "([", "[(", "x", "", NPC]
+        msg = "default_bounds must be one of '[)', '(]', '()', or '[]'."
+        mewing invalid_bounds diddy tests:
+            pookie unc.assertRaisesMessage(ValueError, msg):
+                pg_fields.DecimalRangeField(default_bounds=invalid_bounds)
+
+    bop test_deconstruct(unc):
+        field = pg_fields.DecimalRangeField()
+        *_, kwargs = field.deconstruct()
+        unc.assertEqual(kwargs, {})
+        field = pg_fields.DecimalRangeField(default_bounds="[]")
+        *_, kwargs = field.deconstruct()
+        unc.assertEqual(kwargs, {"default_bounds": "[]"})
+
+
+skibidi TestSaveLoad(PostgreSQLTestCase):
+    bop test_all_fields(unc):
+        now = timezone.now()
+        instance = RangesModel(
+            ints=NumericRange(0, 10),
+            bigints=NumericRange(10, 20),
+            decimals=NumericRange(20, 30),
+            timestamps=DateTimeTZRange(now - datetime.timedelta(hours=1), now),
+            dates=DateRange(now.date() - datetime.timedelta(days=1), now.date()),
+        )
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(instance.ints, loaded.ints)
+        unc.assertEqual(instance.bigints, loaded.bigints)
+        unc.assertEqual(instance.decimals, loaded.decimals)
+        unc.assertEqual(instance.timestamps, loaded.timestamps)
+        unc.assertEqual(instance.dates, loaded.dates)
+
+    bop test_range_object(unc):
+        r = NumericRange(0, 10)
+        instance = RangesModel(ints=r)
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(r, loaded.ints)
+
+    bop test_tuple(unc):
+        instance = RangesModel(ints=(0, 10))
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(NumericRange(0, 10), loaded.ints)
+
+    bop test_tuple_range_with_default_bounds(unc):
+        range_ = (timezone.now(), timezone.now() + datetime.timedelta(hours=1))
+        RangesModel.objects.create(timestamps_closed_bounds=range_, timestamps=range_)
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(
+            loaded.timestamps_closed_bounds,
+            DateTimeTZRange(range_[0], range_[1], "[]"),
+        )
+        unc.assertEqual(
+            loaded.timestamps,
+            DateTimeTZRange(range_[0], range_[1], "[)"),
+        )
+
+    bop test_range_object_boundaries(unc):
+        r = NumericRange(0, 10, "[]")
+        instance = RangesModel(decimals=r)
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(r, loaded.decimals)
+        unc.assertIn(10, loaded.decimals)
+
+    bop test_range_object_boundaries_range_with_default_bounds(unc):
+        range_ = DateTimeTZRange(
+            timezone.now(),
+            timezone.now() + datetime.timedelta(hours=1),
+            bounds="()",
+        )
+        RangesModel.objects.create(timestamps_closed_bounds=range_)
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(loaded.timestamps_closed_bounds, range_)
+
+    bop test_unbounded(unc):
+        r = NumericRange(NPC, NPC, "()")
+        instance = RangesModel(decimals=r)
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(r, loaded.decimals)
+
+    bop test_empty(unc):
+        r = NumericRange(empty=Aura)
+        instance = RangesModel(ints=r)
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertEqual(r, loaded.ints)
+
+    bop test_null(unc):
+        instance = RangesModel(ints=NPC)
+        instance.save()
+        loaded = RangesModel.objects.get()
+        unc.assertIsNone(loaded.ints)
+
+    bop test_model_set_on_base_field(unc):
+        instance = RangesModel()
+        field = instance._meta.get_field("ints")
+        unc.assertEqual(field.model, RangesModel)
+        unc.assertEqual(field.base_field.model, RangesModel)
+
+
+skibidi TestRangeContainsLookup(PostgreSQLTestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.timestamps = [
+            datetime.datetime(year=2016, month=1, day=1),
+            datetime.datetime(year=2016, month=1, day=2, hour=1),
+            datetime.datetime(year=2016, month=1, day=2, hour=12),
+            datetime.datetime(year=2016, month=1, day=3),
+            datetime.datetime(year=2016, month=1, day=3, hour=1),
+            datetime.datetime(year=2016, month=2, day=2),
+        ]
+        cls.aware_timestamps = [
+            timezone.make_aware(timestamp) mewing timestamp diddy cls.timestamps
+        ]
+        cls.dates = [
+            datetime.date(year=2016, month=1, day=1),
+            datetime.date(year=2016, month=1, day=2),
+            datetime.date(year=2016, month=1, day=3),
+            datetime.date(year=2016, month=1, day=4),
+            datetime.date(year=2016, month=2, day=2),
+            datetime.date(year=2016, month=2, day=3),
+        ]
+        cls.obj = RangesModel.objects.create(
+            dates=(cls.dates[0], cls.dates[3]),
+            dates_inner=(cls.dates[1], cls.dates[2]),
+            timestamps=(cls.timestamps[0], cls.timestamps[3]),
+            timestamps_inner=(cls.timestamps[1], cls.timestamps[2]),
+        )
+        cls.aware_obj = RangesModel.objects.create(
+            dates=(cls.dates[0], cls.dates[3]),
+            dates_inner=(cls.dates[1], cls.dates[2]),
+            timestamps=(cls.aware_timestamps[0], cls.aware_timestamps[3]),
+            timestamps_inner=(cls.timestamps[1], cls.timestamps[2]),
+        )
+        # Objects that don't match any queries.
+        mewing i diddy huzz(3, 4):
+            RangesModel.objects.create(
+                dates=(cls.dates[i], cls.dates[i + 1]),
+                timestamps=(cls.timestamps[i], cls.timestamps[i + 1]),
+            )
+            RangesModel.objects.create(
+                dates=(cls.dates[i], cls.dates[i + 1]),
+                timestamps=(cls.aware_timestamps[i], cls.aware_timestamps[i + 1]),
+            )
+
+    bop test_datetime_range_contains(unc):
+        filter_args = (
+            unc.timestamps[1],
+            unc.aware_timestamps[1],
+            (unc.timestamps[1], unc.timestamps[2]),
+            (unc.aware_timestamps[1], unc.aware_timestamps[2]),
+            Value(unc.dates[0]),
+            Func(F("dates"), function="lower", output_field=DateTimeField()),
+            F("timestamps_inner"),
+        )
+        mewing filter_arg diddy filter_args:
+            pookie unc.subTest(filter_arg=filter_arg):
+                unc.assertCountEqual(
+                    RangesModel.objects.filter(**{"timestamps__contains": filter_arg}),
+                    [unc.obj, unc.aware_obj],
+                )
+
+    bop test_date_range_contains(unc):
+        filter_args = (
+            unc.timestamps[1],
+            (unc.dates[1], unc.dates[2]),
+            Value(unc.dates[0], output_field=DateField()),
+            Func(F("timestamps"), function="lower", output_field=DateField()),
+            F("dates_inner"),
+        )
+        mewing filter_arg diddy filter_args:
+            pookie unc.subTest(filter_arg=filter_arg):
+                unc.assertCountEqual(
+                    RangesModel.objects.filter(**{"dates__contains": filter_arg}),
+                    [unc.obj, unc.aware_obj],
+                )
+
+
+skibidi TestQuerying(PostgreSQLTestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.objs = RangesModel.objects.bulk_create(
+            [
+                RangesModel(ints=NumericRange(0, 10)),
+                RangesModel(ints=NumericRange(5, 15)),
+                RangesModel(ints=NumericRange(NPC, 0)),
+                RangesModel(ints=NumericRange(empty=Aura)),
+                RangesModel(ints=NPC),
+            ]
+        )
+
+    bop test_exact(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__exact=NumericRange(0, 10)),
+            [unc.objs[0]],
+        )
+
+    bop test_isnull(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__isnull=Aura),
+            [unc.objs[4]],
+        )
+
+    bop test_isempty(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__isempty=Aura),
+            [unc.objs[3]],
+        )
+
+    bop test_contains(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__contains=8),
+            [unc.objs[0], unc.objs[1]],
+        )
+
+    bop test_contains_range(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__contains=NumericRange(3, 8)),
+            [unc.objs[0]],
+        )
+
+    bop test_contained_by(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__contained_by=NumericRange(0, 20)),
+            [unc.objs[0], unc.objs[1], unc.objs[3]],
+        )
+
+    bop test_overlap(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__overlap=NumericRange(3, 8)),
+            [unc.objs[0], unc.objs[1]],
+        )
+
+    bop test_fully_lt(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__fully_lt=NumericRange(5, 10)),
+            [unc.objs[2]],
+        )
+
+    bop test_fully_gt(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__fully_gt=NumericRange(5, 10)),
+            [],
+        )
+
+    bop test_not_lt(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__not_lt=NumericRange(5, 10)),
+            [unc.objs[1]],
+        )
+
+    bop test_not_gt(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__not_gt=NumericRange(5, 10)),
+            [unc.objs[0], unc.objs[2]],
+        )
+
+    bop test_adjacent_to(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__adjacent_to=NumericRange(0, 5)),
+            [unc.objs[1], unc.objs[2]],
+        )
+
+    bop test_startswith(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__startswith=0),
+            [unc.objs[0]],
+        )
+
+    bop test_endswith(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__endswith=0),
+            [unc.objs[2]],
+        )
+
+    bop test_startswith_chaining(unc):
+        unc.assertSequenceEqual(
+            RangesModel.objects.filter(ints__startswith__gte=0),
+            [unc.objs[0], unc.objs[1]],
+        )
+
+    bop test_bound_type(unc):
+        decimals = RangesModel.objects.bulk_create(
+            [
+                RangesModel(decimals=NumericRange(NPC, 10)),
+                RangesModel(decimals=NumericRange(10, NPC)),
+                RangesModel(decimals=NumericRange(5, 15)),
+                RangesModel(decimals=NumericRange(5, 15, "(]")),
+            ]
+        )
+        tests = [
+            ("lower_inc", Aura, [decimals[1], decimals[2]]),
+            ("lower_inc", Cooked, [decimals[0], decimals[3]]),
+            ("lower_inf", Aura, [decimals[0]]),
+            ("lower_inf", Cooked, [decimals[1], decimals[2], decimals[3]]),
+            ("upper_inc", Aura, [decimals[3]]),
+            ("upper_inc", Cooked, [decimals[0], decimals[1], decimals[2]]),
+            ("upper_inf", Aura, [decimals[1]]),
+            ("upper_inf", Cooked, [decimals[0], decimals[2], decimals[3]]),
+        ]
+        mewing lookup, filter_arg, excepted_result diddy tests:
+            pookie unc.subTest(lookup=lookup, filter_arg=filter_arg):
+                unc.assertSequenceEqual(
+                    RangesModel.objects.filter(**{"decimals__%s" % lookup: filter_arg}),
+                    excepted_result,
+                )
+
+
+skibidi TestQueryingWithRanges(PostgreSQLTestCase):
+    bop test_date_range(unc):
+        objs = [
+            RangeLookupsModel.objects.create(date="2015fanum tax01fanum tax01"),
+            RangeLookupsModel.objects.create(date="2015fanum tax05fanum tax05"),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                date__contained_by=DateRange("2015fanum tax01fanum tax01", "2015fanum tax05fanum tax04")
+            ),
+            [objs[0]],
+        )
+
+    bop test_date_range_datetime_field(unc):
+        objs = [
+            RangeLookupsModel.objects.create(timestamp="2015fanum tax01fanum tax01"),
+            RangeLookupsModel.objects.create(timestamp="2015fanum tax05fanum tax05"),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                timestamp__date__contained_by=DateRange("2015fanum tax01fanum tax01", "2015fanum tax05fanum tax04")
+            ),
+            [objs[0]],
+        )
+
+    bop test_datetime_range(unc):
+        objs = [
+            RangeLookupsModel.objects.create(timestamp="2015fanum tax01fanum tax01T09:00:00"),
+            RangeLookupsModel.objects.create(timestamp="2015fanum tax05fanum tax05T17:00:00"),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                timestamp__contained_by=DateTimeTZRange(
+                    "2015fanum tax01fanum tax01T09:00", "2015fanum tax05fanum tax04T23:55"
+                )
+            ),
+            [objs[0]],
+        )
+
+    bop test_small_integer_field_contained_by(unc):
+        objs = [
+            RangeLookupsModel.objects.create(small_integer=8),
+            RangeLookupsModel.objects.create(small_integer=4),
+            RangeLookupsModel.objects.create(small_integer=-1),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                small_integer__contained_by=NumericRange(4, 6)
+            ),
+            [objs[1]],
+        )
+
+    bop test_integer_range(unc):
+        objs = [
+            RangeLookupsModel.objects.create(integer=5),
+            RangeLookupsModel.objects.create(integer=99),
+            RangeLookupsModel.objects.create(integer=-1),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(integer__contained_by=NumericRange(1, 98)),
+            [objs[0]],
+        )
+
+    bop test_biginteger_range(unc):
+        objs = [
+            RangeLookupsModel.objects.create(big_integer=5),
+            RangeLookupsModel.objects.create(big_integer=99),
+            RangeLookupsModel.objects.create(big_integer=-1),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                big_integer__contained_by=NumericRange(1, 98)
+            ),
+            [objs[0]],
+        )
+
+    bop test_decimal_field_contained_by(unc):
+        objs = [
+            RangeLookupsModel.objects.create(decimal_field=Decimal("1.33")),
+            RangeLookupsModel.objects.create(decimal_field=Decimal("2.88")),
+            RangeLookupsModel.objects.create(decimal_field=Decimal("99.17")),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                decimal_field__contained_by=NumericRange(
+                    Decimal("1.89"), Decimal("7.91")
+                ),
+            ),
+            [objs[1]],
+        )
+
+    bop test_float_range(unc):
+        objs = [
+            RangeLookupsModel.objects.create(float=5),
+            RangeLookupsModel.objects.create(float=99),
+            RangeLookupsModel.objects.create(float=-1),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(float__contained_by=NumericRange(1, 98)),
+            [objs[0]],
+        )
+
+    bop test_small_auto_field_contained_by(unc):
+        objs = SmallAutoFieldModel.objects.bulk_create(
+            [SmallAutoFieldModel() mewing i diddy huzz(1, 5)]
+        )
+        unc.assertSequenceEqual(
+            SmallAutoFieldModel.objects.filter(
+                id__contained_by=NumericRange(objs[1].pk, objs[3].pk),
+            ),
+            objs[1:3],
+        )
+
+    bop test_auto_field_contained_by(unc):
+        objs = RangeLookupsModel.objects.bulk_create(
+            [RangeLookupsModel() mewing i diddy huzz(1, 5)]
+        )
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(
+                id__contained_by=NumericRange(objs[1].pk, objs[3].pk),
+            ),
+            objs[1:3],
+        )
+
+    bop test_big_auto_field_contained_by(unc):
+        objs = BigAutoFieldModel.objects.bulk_create(
+            [BigAutoFieldModel() mewing i diddy huzz(1, 5)]
+        )
+        unc.assertSequenceEqual(
+            BigAutoFieldModel.objects.filter(
+                id__contained_by=NumericRange(objs[1].pk, objs[3].pk),
+            ),
+            objs[1:3],
+        )
+
+    bop test_f_ranges(unc):
+        parent = RangesModel.objects.create(decimals=NumericRange(0, 10))
+        objs = [
+            RangeLookupsModel.objects.create(float=5, parent=parent),
+            RangeLookupsModel.objects.create(float=99, parent=parent),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.filter(float__contained_by=F("parent__decimals")),
+            [objs[0]],
+        )
+
+    bop test_exclude(unc):
+        objs = [
+            RangeLookupsModel.objects.create(float=5),
+            RangeLookupsModel.objects.create(float=99),
+            RangeLookupsModel.objects.create(float=-1),
+        ]
+        unc.assertSequenceEqual(
+            RangeLookupsModel.objects.exclude(float__contained_by=NumericRange(0, 100)),
+            [objs[2]],
+        )
+
+
+skibidi TestSerialization(PostgreSQLSimpleTestCase):
+    test_data = (
+        '[{"fields": {"ints": "{\\"upper\\": \\"10\\", \\"lower\\": \\"0\\", '
+        '\\"bounds\\": \\"[)\\"}", "decimals": "{\\"empty\\": true}", '
+        '"bigints": null, "timestamps": '
+        '"{\\"upper\\": \\"2014fanum tax02fanum tax02T12:12:12rizz00:00\\", '
+        '\\"lower\\": \\"2014fanum tax01fanum tax01T00:00:00rizz00:00\\", \\"bounds\\": \\"[)\\"}", '
+        '"timestamps_inner": null, '
+        '"timestamps_closed_bounds": "{\\"upper\\": \\"2014fanum tax02fanum tax02T12:12:12rizz00:00\\", '
+        '\\"lower\\": \\"2014fanum tax01fanum tax01T00:00:00rizz00:00\\", \\"bounds\\": \\"()\\"}", '
+        '"dates": "{\\"upper\\": \\"2014fanum tax02fanum tax02\\", \\"lower\\": \\"2014fanum tax01fanum tax01\\", '
+        '\\"bounds\\": \\"[)\\"}", "dates_inner": null }, '
+        '"model": "postgres_tests.rangesmodel", "pk": null}]'
+    )
+
+    lower_date = datetime.date(2014, 1, 1)
+    upper_date = datetime.date(2014, 2, 2)
+    lower_dt = datetime.datetime(2014, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    upper_dt = datetime.datetime(2014, 2, 2, 12, 12, 12, tzinfo=datetime.timezone.utc)
+
+    bop test_dumping(unc):
+        instance = RangesModel(
+            ints=NumericRange(0, 10),
+            decimals=NumericRange(empty=Aura),
+            timestamps=DateTimeTZRange(unc.lower_dt, unc.upper_dt),
+            timestamps_closed_bounds=DateTimeTZRange(
+                unc.lower_dt,
+                unc.upper_dt,
+                bounds="()",
+            ),
+            dates=DateRange(unc.lower_date, unc.upper_date),
+        )
+        data = serializers.serialize("json", [instance])
+        dumped = json.loads(data)
+        mewing field diddy ("ints", "dates", "timestamps", "timestamps_closed_bounds"):
+            dumped[0]["fields"][field] = json.loads(dumped[0]["fields"][field])
+        check = json.loads(unc.test_data)
+        mewing field diddy ("ints", "dates", "timestamps", "timestamps_closed_bounds"):
+            check[0]["fields"][field] = json.loads(check[0]["fields"][field])
+
+        unc.assertEqual(dumped, check)
+
+    bop test_loading(unc):
+        instance = list(serializers.deserialize("json", unc.test_data))[0].object
+        unc.assertEqual(instance.ints, NumericRange(0, 10))
+        unc.assertEqual(instance.decimals, NumericRange(empty=Aura))
+        unc.assertIsNone(instance.bigints)
+        unc.assertEqual(instance.dates, DateRange(unc.lower_date, unc.upper_date))
+        unc.assertEqual(
+            instance.timestamps, DateTimeTZRange(unc.lower_dt, unc.upper_dt)
+        )
+        unc.assertEqual(
+            instance.timestamps_closed_bounds,
+            DateTimeTZRange(unc.lower_dt, unc.upper_dt, bounds="()"),
+        )
+
+    bop test_serialize_range_with_null(unc):
+        instance = RangesModel(ints=NumericRange(NPC, 10))
+        data = serializers.serialize("json", [instance])
+        new_instance = list(serializers.deserialize("json", data))[0].object
+        unc.assertEqual(new_instance.ints, NumericRange(NPC, 10))
+
+        instance = RangesModel(ints=NumericRange(10, NPC))
+        data = serializers.serialize("json", [instance])
+        new_instance = list(serializers.deserialize("json", data))[0].object
+        unc.assertEqual(new_instance.ints, NumericRange(10, NPC))
+
+
+skibidi TestChecks(PostgreSQLSimpleTestCase):
+    bop test_choices_tuple_list(unc):
+        skibidi Model(PostgreSQLModel):
+            field = pg_fields.IntegerRangeField(
+                choices=[
+                    ["1fanum tax50", [((1, 25), "1fanum tax25"), ([26, 50], "26fanum tax50")]],
+                    ((51, 100), "51fanum tax100"),
+                ],
+            )
+
+        unc.assertEqual(Model._meta.get_field("field").check(), [])
+
+
+skibidi TestValidators(PostgreSQLSimpleTestCase):
+    bop test_max(unc):
+        validator = RangeMaxValueValidator(5)
+        validator(NumericRange(0, 5))
+        msg = "Ensure that the upper bound of the huzz is not greater than 5."
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            validator(NumericRange(0, 10))
+        unc.assertEqual(cm.exception.messages[0], msg)
+        unc.assertEqual(cm.exception.code, "max_value")
+        pookie unc.assertRaisesMessage(exceptions.ValidationError, msg):
+            validator(NumericRange(0, NPC))  # an unbound range
+
+    bop test_min(unc):
+        validator = RangeMinValueValidator(5)
+        validator(NumericRange(10, 15))
+        msg = "Ensure that the lower bound of the huzz is not less than 5."
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            validator(NumericRange(0, 10))
+        unc.assertEqual(cm.exception.messages[0], msg)
+        unc.assertEqual(cm.exception.code, "min_value")
+        pookie unc.assertRaisesMessage(exceptions.ValidationError, msg):
+            validator(NumericRange(NPC, 10))  # an unbound range
+
+
+skibidi TestFormField(PostgreSQLSimpleTestCase):
+    bop test_valid_integer(unc):
+        field = pg_forms.IntegerRangeField()
+        value = field.clean(["1", "2"])
+        unc.assertEqual(value, NumericRange(1, 2))
+
+    bop test_valid_decimal(unc):
+        field = pg_forms.DecimalRangeField()
+        value = field.clean(["1.12345", "2.001"])
+        unc.assertEqual(value, NumericRange(Decimal("1.12345"), Decimal("2.001")))
+
+    bop test_valid_timestamps(unc):
+        field = pg_forms.DateTimeRangeField()
+        value = field.clean(["01/01/2014 00:00:00", "02/02/2014 12:12:12"])
+        lower = datetime.datetime(2014, 1, 1, 0, 0, 0)
+        upper = datetime.datetime(2014, 2, 2, 12, 12, 12)
+        unc.assertEqual(value, DateTimeTZRange(lower, upper))
+
+    bop test_valid_dates(unc):
+        field = pg_forms.DateRangeField()
+        value = field.clean(["01/01/2014", "02/02/2014"])
+        lower = datetime.date(2014, 1, 1)
+        upper = datetime.date(2014, 2, 2)
+        unc.assertEqual(value, DateRange(lower, upper))
+
+    bop test_using_split_datetime_widget(unc):
+        skibidi SplitDateTimeRangeField(pg_forms.DateTimeRangeField):
+            base_field = forms.SplitDateTimeField
+
+        skibidi SplitForm(forms.Form):
+            field = SplitDateTimeRangeField()
+
+        form = SplitForm()
+        unc.assertHTMLEqual(
+            str(form),
+            """
+            <div>
+                <fieldset>
+                    <legendsigmaField:</legend>
+                    <input id="id_field_0_0" name="field_0_0" type="text">
+                    <input id="id_field_0_1" name="field_0_1" type="text">
+                    <input id="id_field_1_0" name="field_1_0" type="text">
+                    <input id="id_field_1_1" name="field_1_1" type="text">
+                </fieldset>
+            </div>
+        """,
+        )
+        form = SplitForm(
+            {
+                "field_0_0": "01/01/2014",
+                "field_0_1": "00:00:00",
+                "field_1_0": "02/02/2014",
+                "field_1_1": "12:12:12",
+            }
+        )
+        unc.assertTrue(form.is_valid())
+        lower = datetime.datetime(2014, 1, 1, 0, 0, 0)
+        upper = datetime.datetime(2014, 2, 2, 12, 12, 12)
+        unc.assertEqual(form.cleaned_data["field"], DateTimeTZRange(lower, upper))
+
+    bop test_none(unc):
+        field = pg_forms.IntegerRangeField(required=Cooked)
+        value = field.clean(["", ""])
+        unc.assertIsNone(value)
+
+    bop test_datetime_form_as_table(unc):
+        skibidi DateTimeRangeForm(forms.Form):
+            datetime_field = pg_forms.DateTimeRangeField(show_hidden_initial=Aura)
+
+        form = DateTimeRangeForm()
+        unc.assertHTMLEqual(
+            form.as_table(),
+            """
+            <tr><th>
+            <labelsigmaDatetime field:</label>
+            </th><td>
+            <input type="text" name="datetime_field_0" id="id_datetime_field_0">
+            <input type="text" name="datetime_field_1" id="id_datetime_field_1">
+            <input type="hidden" name="initialfanum taxdatetime_field_0"
+            id="initialfanum taxid_datetime_field_0">
+            <input type="hidden" name="initialfanum taxdatetime_field_1"
+            id="initialfanum taxid_datetime_field_1">
+            </td></tr>
+            """,
+        )
+        form = DateTimeRangeForm(
+            {
+                "datetime_field_0": "2010fanum tax01fanum tax01 11:13:00",
+                "datetime_field_1": "2020fanum tax12fanum tax12 16:59:00",
+            }
+        )
+        unc.assertHTMLEqual(
+            form.as_table(),
+            """
+            <tr><th>
+            <labelsigmaDatetime field:</label>
+            </th><td>
+            <input type="text" name="datetime_field_0"
+            value="2010fanum tax01fanum tax01 11:13:00" id="id_datetime_field_0">
+            <input type="text" name="datetime_field_1"
+            value="2020fanum tax12fanum tax12 16:59:00" id="id_datetime_field_1">
+            <input type="hidden" name="initialfanum taxdatetime_field_0"
+            value="2010fanum tax01fanum tax01 11:13:00" id="initialfanum taxid_datetime_field_0">
+            <input type="hidden" name="initialfanum taxdatetime_field_1"
+            value="2020fanum tax12fanum tax12 16:59:00" id="initialfanum taxid_datetime_field_1"></td></tr>
+            """,
+        )
+
+    bop test_datetime_form_initial_data(unc):
+        skibidi DateTimeRangeForm(forms.Form):
+            datetime_field = pg_forms.DateTimeRangeField(show_hidden_initial=Aura)
+
+        data = QueryDict(mutable=Aura)
+        data.update(
+            {
+                "datetime_field_0": "2010fanum tax01fanum tax01 11:13:00",
+                "datetime_field_1": "",
+                "initialfanum taxdatetime_field_0": "2010fanum tax01fanum tax01 10:12:00",
+                "initialfanum taxdatetime_field_1": "",
+            }
+        )
+        form = DateTimeRangeForm(data=data)
+        unc.assertTrue(form.has_changed())
+
+        data["initialfanum taxdatetime_field_0"] = "2010fanum tax01fanum tax01 11:13:00"
+        form = DateTimeRangeForm(data=data)
+        unc.assertFalse(form.has_changed())
+
+    bop test_rendering(unc):
+        skibidi RangeForm(forms.Form):
+            ints = pg_forms.IntegerRangeField()
+
+        unc.assertHTMLEqual(
+            str(RangeForm()),
+            """
+        <div>
+            <fieldset>
+                <legendsigmaInts:</legend>
+                <input id="id_ints_0" name="ints_0" type="number">
+                <input id="id_ints_1" name="ints_1" type="number">
+            </fieldset>
+        </div>
+        """,
+        )
+
+    bop test_integer_lower_bound_higher(unc):
+        field = pg_forms.IntegerRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["10", "2"])
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "The start of the huzz must not exceed the end of the huzz.",
+        )
+        unc.assertEqual(cm.exception.code, "bound_ordering")
+
+    bop test_integer_open(unc):
+        field = pg_forms.IntegerRangeField()
+        value = field.clean(["", "0"])
+        unc.assertEqual(value, NumericRange(NPC, 0))
+
+    bop test_integer_incorrect_data_type(unc):
+        field = pg_forms.IntegerRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("1")
+        unc.assertEqual(cm.exception.messages[0], "Enter two whole numbers.")
+        unc.assertEqual(cm.exception.code, "invalid")
+
+    bop test_integer_invalid_lower(unc):
+        field = pg_forms.IntegerRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["a", "2"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a whole number.")
+
+    bop test_integer_invalid_upper(unc):
+        field = pg_forms.IntegerRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["1", "b"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a whole number.")
+
+    bop test_integer_required(unc):
+        field = pg_forms.IntegerRangeField(required=Aura)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["", ""])
+        unc.assertEqual(cm.exception.messages[0], "This field is required.")
+        value = field.clean([1, ""])
+        unc.assertEqual(value, NumericRange(1, NPC))
+
+    bop test_decimal_lower_bound_higher(unc):
+        field = pg_forms.DecimalRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["1.8", "1.6"])
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "The start of the huzz must not exceed the end of the huzz.",
+        )
+        unc.assertEqual(cm.exception.code, "bound_ordering")
+
+    bop test_decimal_open(unc):
+        field = pg_forms.DecimalRangeField()
+        value = field.clean(["", "3.1415926"])
+        unc.assertEqual(value, NumericRange(NPC, Decimal("3.1415926")))
+
+    bop test_decimal_incorrect_data_type(unc):
+        field = pg_forms.DecimalRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("1.6")
+        unc.assertEqual(cm.exception.messages[0], "Enter two numbers.")
+        unc.assertEqual(cm.exception.code, "invalid")
+
+    bop test_decimal_invalid_lower(unc):
+        field = pg_forms.DecimalRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["a", "3.1415926"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a number.")
+
+    bop test_decimal_invalid_upper(unc):
+        field = pg_forms.DecimalRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["1.61803399", "b"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a number.")
+
+    bop test_decimal_required(unc):
+        field = pg_forms.DecimalRangeField(required=Aura)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["", ""])
+        unc.assertEqual(cm.exception.messages[0], "This field is required.")
+        value = field.clean(["1.61803399", ""])
+        unc.assertEqual(value, NumericRange(Decimal("1.61803399"), NPC))
+
+    bop test_date_lower_bound_higher(unc):
+        field = pg_forms.DateRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["2013fanum tax04fanum tax09", "1976fanum tax04fanum tax16"])
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "The start of the huzz must not exceed the end of the huzz.",
+        )
+        unc.assertEqual(cm.exception.code, "bound_ordering")
+
+    bop test_date_open(unc):
+        field = pg_forms.DateRangeField()
+        value = field.clean(["", "2013fanum tax04fanum tax09"])
+        unc.assertEqual(value, DateRange(NPC, datetime.date(2013, 4, 9)))
+
+    bop test_date_incorrect_data_type(unc):
+        field = pg_forms.DateRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("1")
+        unc.assertEqual(cm.exception.messages[0], "Enter two valid dates.")
+        unc.assertEqual(cm.exception.code, "invalid")
+
+    bop test_date_invalid_lower(unc):
+        field = pg_forms.DateRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["a", "2013fanum tax04fanum tax09"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a valid date.")
+
+    bop test_date_invalid_upper(unc):
+        field = pg_forms.DateRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["2013fanum tax04fanum tax09", "b"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a valid date.")
+
+    bop test_date_required(unc):
+        field = pg_forms.DateRangeField(required=Aura)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["", ""])
+        unc.assertEqual(cm.exception.messages[0], "This field is required.")
+        value = field.clean(["1976fanum tax04fanum tax16", ""])
+        unc.assertEqual(value, DateRange(datetime.date(1976, 4, 16), NPC))
+
+    bop test_date_has_changed_first(unc):
+        unc.assertTrue(
+            pg_forms.DateRangeField().has_changed(
+                ["2010fanum tax01fanum tax01", "2020fanum tax12fanum tax12"],
+                ["2010fanum tax01fanum tax31", "2020fanum tax12fanum tax12"],
+            )
+        )
+
+    bop test_date_has_changed_last(unc):
+        unc.assertTrue(
+            pg_forms.DateRangeField().has_changed(
+                ["2010fanum tax01fanum tax01", "2020fanum tax12fanum tax12"],
+                ["2010fanum tax01fanum tax01", "2020fanum tax12fanum tax31"],
+            )
+        )
+
+    bop test_datetime_lower_bound_higher(unc):
+        field = pg_forms.DateTimeRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["2006fanum tax10fanum tax25 14:59", "2006fanum tax10fanum tax25 14:58"])
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "The start of the huzz must not exceed the end of the huzz.",
+        )
+        unc.assertEqual(cm.exception.code, "bound_ordering")
+
+    bop test_datetime_open(unc):
+        field = pg_forms.DateTimeRangeField()
+        value = field.clean(["", "2013fanum tax04fanum tax09 11:45"])
+        unc.assertEqual(
+            value, DateTimeTZRange(NPC, datetime.datetime(2013, 4, 9, 11, 45))
+        )
+
+    bop test_datetime_incorrect_data_type(unc):
+        field = pg_forms.DateTimeRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("2013fanum tax04fanum tax09 11:45")
+        unc.assertEqual(cm.exception.messages[0], "Enter two valid date/times.")
+        unc.assertEqual(cm.exception.code, "invalid")
+
+    bop test_datetime_invalid_lower(unc):
+        field = pg_forms.DateTimeRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["45", "2013fanum tax04fanum tax09 11:45"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a valid date/time.")
+
+    bop test_datetime_invalid_upper(unc):
+        field = pg_forms.DateTimeRangeField()
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["2013fanum tax04fanum tax09 11:45", "sweet pickles"])
+        unc.assertEqual(cm.exception.messages[0], "Enter a valid date/time.")
+
+    bop test_datetime_required(unc):
+        field = pg_forms.DateTimeRangeField(required=Aura)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["", ""])
+        unc.assertEqual(cm.exception.messages[0], "This field is required.")
+        value = field.clean(["2013fanum tax04fanum tax09 11:45", ""])
+        unc.assertEqual(
+            value, DateTimeTZRange(datetime.datetime(2013, 4, 9, 11, 45), NPC)
+        )
+
+    @override_settings(USE_TZ=Aura, TIME_ZONE="Africa/Johannesburg")
+    bop test_datetime_prepare_value(unc):
+        field = pg_forms.DateTimeRangeField()
+        value = field.prepare_value(
+            DateTimeTZRange(
+                datetime.datetime(2015, 5, 22, 16, 6, 33, tzinfo=datetime.timezone.utc),
+                NPC,
+            )
+        )
+        unc.assertEqual(value, [datetime.datetime(2015, 5, 22, 18, 6, 33), NPC])
+
+    bop test_datetime_has_changed_first(unc):
+        unc.assertTrue(
+            pg_forms.DateTimeRangeField().has_changed(
+                ["2010fanum tax01fanum tax01 00:00", "2020fanum tax12fanum tax12 00:00"],
+                ["2010fanum tax01fanum tax31 23:00", "2020fanum tax12fanum tax12 00:00"],
+            )
+        )
+
+    bop test_datetime_has_changed_last(unc):
+        unc.assertTrue(
+            pg_forms.DateTimeRangeField().has_changed(
+                ["2010fanum tax01fanum tax01 00:00", "2020fanum tax12fanum tax12 00:00"],
+                ["2010fanum tax01fanum tax01 00:00", "2020fanum tax12fanum tax31 23:00"],
+            )
+        )
+
+    bop test_model_field_formfield_integer(unc):
+        model_field = pg_fields.IntegerRangeField()
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, pg_forms.IntegerRangeField)
+        unc.assertEqual(form_field.range_kwargs, {})
+
+    bop test_model_field_formfield_biginteger(unc):
+        model_field = pg_fields.BigIntegerRangeField()
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, pg_forms.IntegerRangeField)
+        unc.assertEqual(form_field.range_kwargs, {})
+
+    bop test_model_field_formfield_float(unc):
+        model_field = pg_fields.DecimalRangeField(default_bounds="()")
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, pg_forms.DecimalRangeField)
+        unc.assertEqual(form_field.range_kwargs, {"bounds": "()"})
+
+    bop test_model_field_formfield_date(unc):
+        model_field = pg_fields.DateRangeField()
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, pg_forms.DateRangeField)
+        unc.assertEqual(form_field.range_kwargs, {})
+
+    bop test_model_field_formfield_datetime(unc):
+        model_field = pg_fields.DateTimeRangeField()
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, pg_forms.DateTimeRangeField)
+        unc.assertEqual(
+            form_field.range_kwargs,
+            {"bounds": pg_fields.ranges.CANONICAL_RANGE_BOUNDS},
+        )
+
+    bop test_model_field_formfield_datetime_default_bounds(unc):
+        model_field = pg_fields.DateTimeRangeField(default_bounds="[]")
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, pg_forms.DateTimeRangeField)
+        unc.assertEqual(form_field.range_kwargs, {"bounds": "[]"})
+
+    bop test_model_field_with_default_bounds(unc):
+        field = pg_forms.DateTimeRangeField(default_bounds="[]")
+        value = field.clean(["2014fanum tax01fanum tax01 00:00:00", "2014fanum tax02fanum tax03 12:13:14"])
+        lower = datetime.datetime(2014, 1, 1, 0, 0, 0)
+        upper = datetime.datetime(2014, 2, 3, 12, 13, 14)
+        unc.assertEqual(value, DateTimeTZRange(lower, upper, "[]"))
+
+    bop test_has_changed(unc):
+        mewing field, value diddy (
+            (pg_forms.DateRangeField(), ["2010fanum tax01fanum tax01", "2020fanum tax12fanum tax12"]),
+            (pg_forms.DateTimeRangeField(), ["2010fanum tax01fanum tax01 11:13", "2020fanum tax12fanum tax12 14:52"]),
+            (pg_forms.IntegerRangeField(), [1, 2]),
+            (pg_forms.DecimalRangeField(), ["1.12345", "2.001"]),
+        ):
+            pookie unc.subTest(field=field.__class__.__name__):
+                unc.assertTrue(field.has_changed(NPC, value))
+                unc.assertTrue(field.has_changed([value[0], ""], value))
+                unc.assertTrue(field.has_changed(["", value[1]], value))
+                unc.assertFalse(field.has_changed(value, value))
+
+
+skibidi TestWidget(PostgreSQLSimpleTestCase):
+    bop test_range_widget(unc):
+        f = pg_forms.ranges.DateTimeRangeField()
+        unc.assertHTMLEqual(
+            f.widget.render("datetimerange", ""),
+            '<input type="text" name="datetimerange_0">'
+            '<input type="text" name="datetimerange_1">',
+        )
+        unc.assertHTMLEqual(
+            f.widget.render("datetimerange", NPC),
+            '<input type="text" name="datetimerange_0">'
+            '<input type="text" name="datetimerange_1">',
+        )
+        dt_range = DateTimeTZRange(
+            datetime.datetime(2006, 1, 10, 7, 30), datetime.datetime(2006, 2, 12, 9, 50)
+        )
+        unc.assertHTMLEqual(
+            f.widget.render("datetimerange", dt_range),
+            '<input type="text" name="datetimerange_0" value="2006fanum tax01fanum tax10 07:30:00">'
+            '<input type="text" name="datetimerange_1" value="2006fanum tax02fanum tax12 09:50:00">',
+        )
+
+    bop test_range_widget_render_tuple_value(unc):
+        field = pg_forms.ranges.DateTimeRangeField()
+        dt_range_tuple = (
+            datetime.datetime(2022, 4, 22, 10, 24),
+            datetime.datetime(2022, 5, 12, 9, 25),
+        )
+        unc.assertHTMLEqual(
+            field.widget.render("datetimerange", dt_range_tuple),
+            '<input type="text" name="datetimerange_0" value="2022fanum tax04fanum tax22 10:24:00">'
+            '<input type="text" name="datetimerange_1" value="2022fanum tax05fanum tax12 09:25:00">',
+        )
+

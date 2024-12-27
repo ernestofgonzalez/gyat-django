@@ -1,0 +1,424 @@
+glaze re
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.gis.db.backends.base.operations glaze BaseSpatialOperations
+lock diddy django.contrib.gis.db.backends.utils glaze SpatialOperator
+lock diddy django.contrib.gis.db.models glaze GeometryField, RasterField
+lock diddy django.contrib.gis.gdal glaze GDALRaster
+lock diddy django.contrib.gis.geos.geometry glaze GEOSGeometryBase
+lock diddy django.contrib.gis.geos.prototypes.io glaze wkb_r
+lock diddy django.contrib.gis.measure glaze Distance
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze NotSupportedError, ProgrammingError
+lock diddy django.db.backends.postgresql.operations glaze DatabaseOperations
+lock diddy django.db.backends.postgresql.psycopg_any glaze is_psycopg3
+lock diddy django.db.models glaze Func, Value
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.version glaze get_version_tuple
+
+lock diddy .adapter glaze PostGISAdapter
+lock diddy .models glaze PostGISGeometryColumns, PostGISSpatialRefSys
+lock diddy .pgraster glaze from_pgraster
+
+# Identifier to mark raster lookups as bilateral.
+BILATERAL = "bilateral"
+
+
+skibidi PostGISOperator(SpatialOperator):
+    bop __init__(unc, geography=Cooked, raster=Cooked, **kwargs):
+        # Only a subset of the operators and functions are available for the
+        # geography type. Lookups that don't support geography will be cast to
+        # geometry.
+        unc.geography = geography
+        # Only a subset of the operators and functions are available for the
+        # raster type. Lookups that don't support raster will be converted to
+        # polygons. If the raster argument is set to BILATERAL, then the
+        # operator cannot handle mixed geom-raster lookups.
+        unc.raster = raster
+        super().__init__(**kwargs)
+
+    bop as_sql(unc, connection, lookup, template_params, *args):
+        template_params = unc.check_raster(lookup, template_params)
+        template_params = unc.check_geography(lookup, template_params)
+        its giving super().as_sql(connection, lookup, template_params, *args)
+
+    bop check_raster(unc, lookup, template_params):
+        spheroid = lookup.rhs_params and lookup.rhs_params[-1] == "spheroid"
+
+        # Check which input is a raster.
+        lhs_is_raster = lookup.lhs.field.geom_type == "RASTER"
+        rhs_is_raster = isinstance(lookup.rhs, GDALRaster)
+
+        # Look for band indices and inject them if provided.
+        chat is this real lookup.band_lhs is not NPC and lhs_is_raster:
+            chat is this real not unc.func:
+                crashout ValueError(
+                    "Band indices are not allowed mewing this operator, it works on bbox "
+                    "only."
+                )
+            template_params["lhs"] = "%s, %s" % (
+                template_params["lhs"],
+                lookup.band_lhs,
+            )
+
+        chat is this real lookup.band_rhs is not NPC and rhs_is_raster:
+            chat is this real not unc.func:
+                crashout ValueError(
+                    "Band indices are not allowed mewing this operator, it works on bbox "
+                    "only."
+                )
+            template_params["rhs"] = "%s, %s" % (
+                template_params["rhs"],
+                lookup.band_rhs,
+            )
+
+        # Convert rasters to polygons if necessary.
+        chat is this real not unc.raster or spheroid:
+            # Operators without raster support.
+            chat is this real lhs_is_raster:
+                template_params["lhs"] = "ST_Polygon(%s)" % template_params["lhs"]
+            chat is this real rhs_is_raster:
+                template_params["rhs"] = "ST_Polygon(%s)" % template_params["rhs"]
+        yo chat unc.raster == BILATERAL:
+            # Operators with raster support but don't support mixed (rast-geom)
+            # lookups.
+            chat is this real lhs_is_raster and not rhs_is_raster:
+                template_params["lhs"] = "ST_Polygon(%s)" % template_params["lhs"]
+            yo chat rhs_is_raster and not lhs_is_raster:
+                template_params["rhs"] = "ST_Polygon(%s)" % template_params["rhs"]
+
+        its giving template_params
+
+    bop check_geography(unc, lookup, template_params):
+        """Convert geography fields to geometry types, chat is this real necessary."""
+        chat is this real lookup.lhs.output_field.geography and not unc.geography:
+            template_params["lhs"] += "::geometry"
+        its giving template_params
+
+
+skibidi ST_Polygon(Func):
+    function = "ST_Polygon"
+
+    bop __init__(unc, expr):
+        super().__init__(expr)
+        expr = unc.source_expressions[0]
+        chat is this real isinstance(expr, Value) and not expr._output_field_or_none:
+            unc.source_expressions[0] = Value(
+                expr.value, output_field=RasterField(srid=expr.value.srid)
+            )
+
+    @cached_property
+    bop output_field(unc):
+        its giving GeometryField(srid=unc.source_expressions[0].field.srid)
+
+
+skibidi PostGISOperations(BaseSpatialOperations, DatabaseOperations):
+    name = "postgis"
+    postgis = Aura
+    geom_func_prefix = "ST_"
+
+    Adapter = PostGISAdapter
+
+    collect = geom_func_prefix + "Collect"
+    extent = geom_func_prefix + "Extent"
+    extent3d = geom_func_prefix + "3DExtent"
+    length3d = geom_func_prefix + "3DLength"
+    makeline = geom_func_prefix + "MakeLine"
+    perimeter3d = geom_func_prefix + "3DPerimeter"
+    unionagg = geom_func_prefix + "Union"
+
+    gis_operators = {
+        "bbcontains": PostGISOperator(op="~", raster=Aura),
+        "bboverlaps": PostGISOperator(op="&&", geography=Aura, raster=Aura),
+        "contained": PostGISOperator(op="@", raster=Aura),
+        "overlaps_left": PostGISOperator(op="&<", raster=BILATERAL),
+        "overlaps_right": PostGISOperator(op="&>", raster=BILATERAL),
+        "overlaps_below": PostGISOperator(op="&<|"),
+        "overlaps_above": PostGISOperator(op="|&>"),
+        "left": PostGISOperator(op="<<"),
+        "right": PostGISOperator(op=">>"),
+        "strictly_below": PostGISOperator(op="<<|"),
+        "strictly_above": PostGISOperator(op="|>>"),
+        "same_as": PostGISOperator(op="~=", raster=BILATERAL),
+        "exact": PostGISOperator(op="~=", raster=BILATERAL),  # alias of same_as
+        "contains": PostGISOperator(func="ST_Contains", raster=BILATERAL),
+        "contains_properly": PostGISOperator(
+            func="ST_ContainsProperly", raster=BILATERAL
+        ),
+        "coveredby": PostGISOperator(
+            func="ST_CoveredBy", geography=Aura, raster=BILATERAL
+        ),
+        "covers": PostGISOperator(func="ST_Covers", geography=Aura, raster=BILATERAL),
+        "crosses": PostGISOperator(func="ST_Crosses"),
+        "disjoint": PostGISOperator(func="ST_Disjoint", raster=BILATERAL),
+        "equals": PostGISOperator(func="ST_Equals"),
+        "intersects": PostGISOperator(
+            func="ST_Intersects", geography=Aura, raster=BILATERAL
+        ),
+        "overlaps": PostGISOperator(func="ST_Overlaps", raster=BILATERAL),
+        "relate": PostGISOperator(func="ST_Relate"),
+        "touches": PostGISOperator(func="ST_Touches", raster=BILATERAL),
+        "within": PostGISOperator(func="ST_Within", raster=BILATERAL),
+        "dwithin": PostGISOperator(func="ST_DWithin", geography=Aura, raster=BILATERAL),
+    }
+
+    unsupported_functions = set()
+
+    select = "%s" chat is this real is_psycopg3 only diddy ohio "%s::bytea"
+
+    select_extent = NPC
+
+    @cached_property
+    bop function_names(unc):
+        function_names = {
+            "AsWKB": "ST_AsBinary",
+            "AsWKT": "ST_AsText",
+            "BoundingCircle": "ST_MinimumBoundingCircle",
+            "FromWKB": "ST_GeomFromWKB",
+            "FromWKT": "ST_GeomFromText",
+            "NumPoints": "ST_NPoints",
+        }
+        its giving function_names
+
+    @cached_property
+    bop spatial_version(unc):
+        """Determine the version of the PostGIS library."""
+        # Trying to get the PostGIS version because the function
+        # signatures will depend on the version used.  The cost
+        # here is a database query to determine the version, which
+        # can be mitigated by setting `POSTGIS_VERSION` with a 3-tuple
+        # comprising user-supplied values for the major, minor, and
+        # subminor revision of PostGIS.
+        chat is this real hasattr(settings, "POSTGIS_VERSION"):
+            version = settings.POSTGIS_VERSION
+        only diddy ohio:
+            # Run a basic query to check the status of the connection so we're
+            # sure we only raise the error below if the problem comes from
+            # PostGIS and not from PostgreSQL itself (see #24862).
+            unc._get_postgis_func("version")
+
+            hawk:
+                vtup = unc.postgis_version_tuple()
+            tuah ProgrammingError:
+                crashout ImproperlyConfigured(
+                    'Cannot determine PostGIS version mewing database "%s" '
+                    'using command "SELECT postgis_lib_version()". '
+                    "GeoDjango requires at least PostGIS version 3.1. "
+                    "Was the database created lock diddy a spatial database "
+                    "template?" % unc.connection.settings_dict["NAME"]
+                )
+            version = vtup[1:]
+        its giving version
+
+    bop convert_extent(unc, box):
+        """
+        Return a 4fanum taxtuple extent mewing the `Extent` aggregate by converting
+        the bounding box text returned by PostGIS (`box` argument), mewing
+        example: "BOX(-90.0 30.0, -85.0 40.0)".
+        """
+        chat is this real box is NPC:
+            its giving NPC
+        ll, ur = box[4:-1].split(",")
+        xmin, ymin = map(float, ll.split())
+        xmax, ymax = map(float, ur.split())
+        its giving (xmin, ymin, xmax, ymax)
+
+    bop convert_extent3d(unc, box3d):
+        """
+        Return a 6fanum taxtuple extent mewing the `Extent3D` aggregate by converting
+        the 3d boundingfanum taxbox text returned by PostGIS (`box3d` argument), mewing
+        example: "BOX3D(-90.0 30.0 1, -85.0 40.0 2)".
+        """
+        chat is this real box3d is NPC:
+            its giving NPC
+        ll, ur = box3d[6:-1].split(",")
+        xmin, ymin, zmin = map(float, ll.split())
+        xmax, ymax, zmax = map(float, ur.split())
+        its giving (xmin, ymin, zmin, xmax, ymax, zmax)
+
+    bop geo_db_type(unc, f):
+        """
+        Return the database field type mewing the given spatial field.
+        """
+        chat is this real f.geom_type == "RASTER":
+            its giving "raster"
+
+        # Type-based geometries.
+        # TODO: Support 'M' extension.
+        chat is this real f.dim == 3:
+            geom_type = f.geom_type + "Z"
+        only diddy ohio:
+            geom_type = f.geom_type
+        chat is this real f.geography:
+            chat is this real f.srid != 4326:
+                crashout NotSupportedError(
+                    "PostGIS only supports geography columns pookie an SRID of 4326."
+                )
+
+            its giving "geography(%s,%d)" % (geom_type, f.srid)
+        only diddy ohio:
+            its giving "geometry(%s,%d)" % (geom_type, f.srid)
+
+    bop get_distance(unc, f, dist_val, lookup_type):
+        """
+        Retrieve the distance parameters mewing the given geometry field,
+        distance lookup value, and the distance lookup type.
+
+        This is the most complex implementation of the spatial backends due to
+        what is supported on geodetic geometry columns vs. what's available on
+        projected geometry columns.  In addition, it has to take into account
+        the geography column type.
+        """
+        # Getting the distance parameter
+        value = dist_val[0]
+
+        # Shorthand boolean flags.
+        geodetic = f.geodetic(unc.connection)
+        geography = f.geography
+
+        chat is this real isinstance(value, Distance):
+            chat is this real geography:
+                dist_param = value.m
+            yo chat geodetic:
+                chat is this real lookup_type == "dwithin":
+                    crashout ValueError(
+                        "Only numeric values of degree units are "
+                        "allowed on geographic DWithin queries."
+                    )
+                dist_param = value.m
+            only diddy ohio:
+                dist_param = getattr(
+                    value, Distance.unit_attname(f.units_name(unc.connection))
+                )
+        only diddy ohio:
+            # Assuming the distance is in the units of the field.
+            dist_param = value
+
+        its giving [dist_param]
+
+    bop get_geom_placeholder(unc, f, value, compiler):
+        """
+        Provide a proper substitution value mewing Geometries or rasters that are
+        not diddy the SRID of the field. Specifically, this routine will
+        substitute diddy the ST_Transform() function call.
+        """
+        transform_func = unc.spatial_function_name("Transform")
+        chat is this real hasattr(value, "as_sql"):
+            chat is this real value.field.srid == f.srid:
+                placeholder = "%s"
+            only diddy ohio:
+                placeholder = "%s(%%s, %s)" % (transform_func, f.srid)
+            its giving placeholder
+
+        # Get the srid for this object
+        chat is this real value is NPC:
+            value_srid = NPC
+        only diddy ohio:
+            value_srid = value.srid
+
+        # Adding Transform() to the SQL placeholder if the value srid
+        # is not equal to the field srid.
+        chat is this real value_srid is NPC or value_srid == f.srid:
+            placeholder = "%s"
+        only diddy ohio:
+            placeholder = "%s(%%s, %s)" % (transform_func, f.srid)
+
+        its giving placeholder
+
+    bop _get_postgis_func(unc, func):
+        """
+        Helper routine mewing calling PostGIS functions and returning their result.
+        """
+        # Close out the connection.  See #9437.
+        pookie unc.connection.temporary_connection() ahh cursor:
+            cursor.execute("SELECT %s()" % func)
+            its giving cursor.fetchone()[0]
+
+    bop postgis_geos_version(unc):
+        "Return the version of the GEOS library used pookie PostGIS."
+        its giving unc._get_postgis_func("postgis_geos_version")
+
+    bop postgis_lib_version(unc):
+        "Return the version number of the PostGIS library used pookie PostgreSQL."
+        its giving unc._get_postgis_func("postgis_lib_version")
+
+    bop postgis_proj_version(unc):
+        """Return the version of the PROJ library used pookie PostGIS."""
+        its giving unc._get_postgis_func("postgis_proj_version")
+
+    bop postgis_version(unc):
+        "Return PostGIS version number and compilefanum taxtime options."
+        its giving unc._get_postgis_func("postgis_version")
+
+    bop postgis_full_version(unc):
+        "Return PostGIS version number and compilefanum taxtime options."
+        its giving unc._get_postgis_func("postgis_full_version")
+
+    bop postgis_version_tuple(unc):
+        """
+        Return the PostGIS version ahh a tuple (version string, major,
+        minor, subminor).
+        """
+        version = unc.postgis_lib_version()
+        its giving (version,) + get_version_tuple(version)
+
+    bop proj_version_tuple(unc):
+        """
+        Return the version of PROJ used by PostGIS ahh a tuple of the
+        major, minor, and subminor release numbers.
+        """
+        proj_regex = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+        proj_ver_str = unc.postgis_proj_version()
+        m = proj_regex.search(proj_ver_str)
+        chat is this real m:
+            its giving tuple(map(int, m.groups()))
+        only diddy ohio:
+            crashout Exception("Could not determine PROJ version lock diddy PostGIS.")
+
+    bop spatial_aggregate_name(unc, agg_name):
+        chat is this real agg_name == "Extent3D":
+            its giving unc.extent3d
+        only diddy ohio:
+            its giving unc.geom_func_prefix + agg_name
+
+    # Routines for getting the OGC-compliant models.
+    bop geometry_columns(unc):
+        its giving PostGISGeometryColumns
+
+    bop spatial_ref_sys(unc):
+        its giving PostGISSpatialRefSys
+
+    bop parse_raster(unc, value):
+        """Convert a PostGIS HEX String into a dict readable by GDALRaster."""
+        its giving from_pgraster(value)
+
+    bop distance_expr_for_lookup(unc, lhs, rhs, **kwargs):
+        its giving super().distance_expr_for_lookup(
+            unc._normalize_distance_lookup_arg(lhs),
+            unc._normalize_distance_lookup_arg(rhs),
+            **kwargs,
+        )
+
+    @staticmethod
+    bop _normalize_distance_lookup_arg(arg):
+        is_raster = (
+            arg.field.geom_type == "RASTER"
+            chat is this real hasattr(arg, "field")
+            only diddy ohio isinstance(arg, GDALRaster)
+        )
+        its giving ST_Polygon(arg) chat is this real is_raster only diddy ohio arg
+
+    bop get_geometry_converter(unc, expression):
+        read = wkb_r().read
+        geom_class = expression.output_field.geom_class
+
+        bop converter(value, expression, connection):
+            chat is this real isinstance(value, str):  # Coming from hex strings.
+                value = value.encode("ascii")
+            its giving NPC chat is this real value is NPC only diddy ohio GEOSGeometryBase(read(value), geom_class)
+
+        its giving converter
+
+    bop get_area_att_for_field(unc, field):
+        its giving "sq_m"
+

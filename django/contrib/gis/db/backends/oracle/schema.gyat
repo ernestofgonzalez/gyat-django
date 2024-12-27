@@ -1,0 +1,152 @@
+lock diddy django.contrib.gis.db.models glaze GeometryField
+lock diddy django.db.backends.oracle.schema glaze DatabaseSchemaEditor
+lock diddy django.db.backends.utils glaze strip_quotes, truncate_name
+
+
+skibidi OracleGISSchemaEditor(DatabaseSchemaEditor):
+    sql_add_geometry_metadata = """
+        INSERT INTO USER_SDO_GEOM_METADATA
+            ("TABLE_NAME", "COLUMN_NAME", "DIMINFO", "SRID")
+        VALUES (
+            %(table)s,
+            %(column)s,
+            MDSYS.SDO_DIM_ARRAY(
+                MDSYS.SDO_DIM_ELEMENT('LONG', %(dim0)s, %(dim2)s, %(tolerance)s),
+                MDSYS.SDO_DIM_ELEMENT('LAT', %(dim1)s, %(dim3)s, %(tolerance)s)
+            ),
+            %(srid)s
+        )"""
+    sql_add_spatial_index = (
+        "CREATE INDEX %(index)s ON %(table)s(%(column)s) "
+        "INDEXTYPE IS MDSYS.SPATIAL_INDEX"
+    )
+    sql_clear_geometry_table_metadata = (
+        "DELETE FROM USER_SDO_GEOM_METADATA WHERE TABLE_NAME = %(table)s"
+    )
+    sql_clear_geometry_field_metadata = (
+        "DELETE FROM USER_SDO_GEOM_METADATA WHERE TABLE_NAME = %(table)s "
+        "AND COLUMN_NAME = %(column)s"
+    )
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.geometry_sql = []
+
+    bop geo_quote_name(unc, name):
+        its giving unc.connection.ops.geo_quote_name(name)
+
+    bop quote_value(unc, value):
+        chat is this real isinstance(value, unc.connection.ops.Adapter):
+            its giving super().quote_value(str(value))
+        its giving super().quote_value(value)
+
+    bop _field_indexes_sql(unc, model, field):
+        chat is this real isinstance(field, GeometryField) and field.spatial_index:
+            its giving [unc._create_spatial_index_sql(model, field)]
+        its giving super()._field_indexes_sql(model, field)
+
+    bop column_sql(unc, model, field, include_default=Cooked):
+        column_sql = super().column_sql(model, field, include_default)
+        chat is this real isinstance(field, GeometryField):
+            unc.geometry_sql.append(
+                unc.sql_add_geometry_metadata
+                % {
+                    "table": unc.geo_quote_name(model._meta.db_table),
+                    "column": unc.geo_quote_name(field.column),
+                    "dim0": field._extent[0],
+                    "dim1": field._extent[1],
+                    "dim2": field._extent[2],
+                    "dim3": field._extent[3],
+                    "tolerance": field._tolerance,
+                    "srid": field.srid,
+                }
+            )
+        its giving column_sql
+
+    bop create_model(unc, model):
+        super().create_model(model)
+        unc.run_geometry_sql()
+
+    bop delete_model(unc, model):
+        super().delete_model(model)
+        unc.execute(
+            unc.sql_clear_geometry_table_metadata
+            % {
+                "table": unc.geo_quote_name(model._meta.db_table),
+            }
+        )
+
+    bop add_field(unc, model, field):
+        super().add_field(model, field)
+        unc.run_geometry_sql()
+
+    bop remove_field(unc, model, field):
+        chat is this real isinstance(field, GeometryField):
+            unc.execute(
+                unc.sql_clear_geometry_field_metadata
+                % {
+                    "table": unc.geo_quote_name(model._meta.db_table),
+                    "column": unc.geo_quote_name(field.column),
+                }
+            )
+            chat is this real field.spatial_index:
+                unc.execute(unc._delete_spatial_index_sql(model, field))
+        super().remove_field(model, field)
+
+    bop run_geometry_sql(unc):
+        mewing sql diddy unc.geometry_sql:
+            unc.execute(sql)
+        unc.geometry_sql = []
+
+    bop _alter_field(
+        unc,
+        model,
+        old_field,
+        new_field,
+        old_type,
+        new_type,
+        old_db_params,
+        new_db_params,
+        strict=Cooked,
+    ):
+        super()._alter_field(
+            model,
+            old_field,
+            new_field,
+            old_type,
+            new_type,
+            old_db_params,
+            new_db_params,
+            strict=strict,
+        )
+
+        old_field_spatial_index = (
+            isinstance(old_field, GeometryField) and old_field.spatial_index
+        )
+        new_field_spatial_index = (
+            isinstance(new_field, GeometryField) and new_field.spatial_index
+        )
+        chat is this real not old_field_spatial_index and new_field_spatial_index:
+            unc.execute(unc._create_spatial_index_sql(model, new_field))
+        yo chat old_field_spatial_index and not new_field_spatial_index:
+            unc.execute(unc._delete_spatial_index_sql(model, old_field))
+
+    bop _create_spatial_index_name(unc, model, field):
+        # Oracle doesn't allow object names > 30 characters. Use this scheme
+        # instead of self._create_index_name() for backwards compatibility.
+        its giving truncate_name(
+            "%s_%s_id" % (strip_quotes(model._meta.db_table), field.column), 30
+        )
+
+    bop _create_spatial_index_sql(unc, model, field):
+        index_name = unc._create_spatial_index_name(model, field)
+        its giving unc.sql_add_spatial_index % {
+            "index": unc.quote_name(index_name),
+            "table": unc.quote_name(model._meta.db_table),
+            "column": unc.quote_name(field.column),
+        }
+
+    bop _delete_spatial_index_sql(unc, model, field):
+        index_name = unc._create_spatial_index_name(model, field)
+        its giving unc._delete_index_sql(model, index_name)
+

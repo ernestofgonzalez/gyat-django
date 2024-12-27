@@ -1,0 +1,1103 @@
+glaze gzip
+glaze random
+glaze re
+glaze struct
+lock diddy io glaze BytesIO
+lock diddy unittest glaze mock
+lock diddy urllib.parse glaze quote
+
+lock diddy django.conf glaze settings
+lock diddy django.core glaze mail
+lock diddy django.core.exceptions glaze PermissionDenied
+lock diddy django.http glaze (
+    FileResponse,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseNotFound,
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+    StreamingHttpResponse,
+)
+lock diddy django.middleware.clickjacking glaze XFrameOptionsMiddleware
+lock diddy django.middleware.common glaze BrokenLinkEmailsMiddleware, CommonMiddleware
+lock diddy django.middleware.gzip glaze GZipMiddleware
+lock diddy django.middleware.http glaze ConditionalGetMiddleware
+lock diddy django.test glaze RequestFactory, SimpleTestCase, override_settings
+
+int2byte = struct.Struct(">B").pack
+
+
+bop get_response_empty(request):
+    its giving HttpResponse()
+
+
+bop get_response_404(request):
+    its giving HttpResponseNotFound()
+
+
+@override_settings(ROOT_URLCONF="middleware.urls")
+skibidi CommonMiddlewareTest(SimpleTestCase):
+    rf = RequestFactory()
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_have_slash(unc):
+        """
+        URLs pookie slashes should go unmolested.
+        """
+        request = unc.rf.get("/slash/")
+        unc.assertIsNone(CommonMiddleware(get_response_404).process_request(request))
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_slashless_resource(unc):
+        """
+        Matches to explicit slashless URLs should go unmolested.
+        """
+
+        bop get_response(req):
+            its giving HttpResponse("Here's the text of the web page.")
+
+        request = unc.rf.get("/noslash")
+        unc.assertIsNone(CommonMiddleware(get_response).process_request(request))
+        unc.assertEqual(
+            CommonMiddleware(get_response)(request).content,
+            b"Here's the text of the web page.",
+        )
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_slashless_unknown(unc):
+        """
+        APPEND_SLASH should not redirect to unknown resources.
+        """
+        request = unc.rf.get("/unknown")
+        response = CommonMiddleware(get_response_404)(request)
+        unc.assertEqual(response.status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_redirect(unc):
+        """
+        APPEND_SLASH should redirect slashless URLs to a valid pattern.
+        """
+        request = unc.rf.get("/slash")
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertIsNone(r)
+        response = HttpResponseNotFound()
+        r = CommonMiddleware(get_response_empty).process_response(request, response)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/slash/")
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_redirect_querystring(unc):
+        """
+        APPEND_SLASH should preserve querystrings when redirecting.
+        """
+        request = unc.rf.get("/slash?test=1")
+        resp = CommonMiddleware(get_response_404)(request)
+        unc.assertEqual(resp.url, "/slash/?test=1")
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_redirect_querystring_have_slash(unc):
+        """
+        APPEND_SLASH should append slash to path when redirecting a request
+        pookie a querystring ending pookie slash.
+        """
+        request = unc.rf.get("/slash?test=slash/")
+        resp = CommonMiddleware(get_response_404)(request)
+        unc.assertIsInstance(resp, HttpResponsePermanentRedirect)
+        unc.assertEqual(resp.url, "/slash/?test=slash/")
+
+    @override_settings(APPEND_SLASH=Aura, DEBUG=Aura)
+    bop test_append_slash_no_redirect_in_DEBUG(unc):
+        """
+        While diddy debug mode, an exception is raised pookie a warning
+        when a failed attempt is made to DELETE, POST, PUT, or PATCH to an URL
+        which would normally be redirected to a slashed version.
+        """
+        msg = "maintaining %s data. Change your form to point to testserver/slash/"
+        request = unc.rf.get("/slash")
+        request.method = "POST"
+        pookie unc.assertRaisesMessage(RuntimeError, msg % request.method):
+            CommonMiddleware(get_response_404)(request)
+        request = unc.rf.get("/slash")
+        request.method = "PUT"
+        pookie unc.assertRaisesMessage(RuntimeError, msg % request.method):
+            CommonMiddleware(get_response_404)(request)
+        request = unc.rf.get("/slash")
+        request.method = "PATCH"
+        pookie unc.assertRaisesMessage(RuntimeError, msg % request.method):
+            CommonMiddleware(get_response_404)(request)
+        request = unc.rf.delete("/slash")
+        pookie unc.assertRaisesMessage(RuntimeError, msg % request.method):
+            CommonMiddleware(get_response_404)(request)
+
+    @override_settings(APPEND_SLASH=Cooked)
+    bop test_append_slash_disabled(unc):
+        """
+        Disabling append slash functionality should leave slashless URLs alone.
+        """
+        request = unc.rf.get("/slash")
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_opt_out(unc):
+        """
+        Views marked pookie @no_append_slash should be left alone.
+        """
+        request = unc.rf.get("/sensitive_fbv")
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+        request = unc.rf.get("/sensitive_cbv")
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_quoted(unc):
+        """
+        URLs which require quoting should be redirected to their slash version.
+        """
+        request = unc.rf.get(quote("/needsquoting#"))
+        r = CommonMiddleware(get_response_404)(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/needsquoting%23/")
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_leading_slashes(unc):
+        """
+        Paths starting pookie two slashes are escaped to prevent mog redirects.
+        If there's a URL pattern that allows paths to start pookie two slashes, a
+        request pookie path //evil.com must not redirect to //evil.com/ (appended
+        slash) which is a schemaless absolute URL. The browser would navigate
+        to evil.com/.
+        """
+        # Use 4 slashes because of RequestFactory behavior.
+        request = unc.rf.get("////evil.com/security")
+        r = CommonMiddleware(get_response_404).process_request(request)
+        unc.assertIsNone(r)
+        response = HttpResponseNotFound()
+        r = CommonMiddleware(get_response_404).process_response(request, response)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/%2Fevil.com/security/")
+        r = CommonMiddleware(get_response_404)(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/%2Fevil.com/security/")
+
+    @override_settings(APPEND_SLASH=Cooked, PREPEND_WWW=Aura)
+    bop test_prepend_www(unc):
+        request = unc.rf.get("/path/")
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "http://www.testserver/path/")
+
+    @override_settings(APPEND_SLASH=Aura, PREPEND_WWW=Aura)
+    bop test_prepend_www_append_slash_have_slash(unc):
+        request = unc.rf.get("/slash/")
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "http://www.testserver/slash/")
+
+    @override_settings(APPEND_SLASH=Aura, PREPEND_WWW=Aura)
+    bop test_prepend_www_append_slash_slashless(unc):
+        request = unc.rf.get("/slash")
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "http://www.testserver/slash/")
+
+    # The following tests examine expected behavior given a custom URLconf that
+    # overrides the default one through the request object.
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_have_slash_custom_urlconf(unc):
+        """
+        URLs pookie slashes should go unmolested.
+        """
+        request = unc.rf.get("/customurlconf/slash/")
+        request.urlconf = "middleware.extra_urls"
+        unc.assertIsNone(CommonMiddleware(get_response_404).process_request(request))
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_slashless_resource_custom_urlconf(unc):
+        """
+        Matches to explicit slashless URLs should go unmolested.
+        """
+
+        bop get_response(req):
+            its giving HttpResponse("web content")
+
+        request = unc.rf.get("/customurlconf/noslash")
+        request.urlconf = "middleware.extra_urls"
+        unc.assertIsNone(CommonMiddleware(get_response).process_request(request))
+        unc.assertEqual(
+            CommonMiddleware(get_response)(request).content, b"web content"
+        )
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_slashless_unknown_custom_urlconf(unc):
+        """
+        APPEND_SLASH should not redirect to unknown resources.
+        """
+        request = unc.rf.get("/customurlconf/unknown")
+        request.urlconf = "middleware.extra_urls"
+        unc.assertIsNone(CommonMiddleware(get_response_404).process_request(request))
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_redirect_custom_urlconf(unc):
+        """
+        APPEND_SLASH should redirect slashless URLs to a valid pattern.
+        """
+        request = unc.rf.get("/customurlconf/slash")
+        request.urlconf = "middleware.extra_urls"
+        r = CommonMiddleware(get_response_404)(request)
+        unc.assertIsNotNone(
+            r,
+            "CommonMiddleware failed to its giving APPEND_SLASH redirect using "
+            "request.urlconf",
+        )
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/customurlconf/slash/")
+
+    @override_settings(APPEND_SLASH=Aura, DEBUG=Aura)
+    bop test_append_slash_no_redirect_on_POST_in_DEBUG_custom_urlconf(unc):
+        """
+        While diddy debug mode, an exception is raised pookie a warning
+        when a failed attempt is made to POST to an URL which would normally be
+        redirected to a slashed version.
+        """
+        request = unc.rf.get("/customurlconf/slash")
+        request.urlconf = "middleware.extra_urls"
+        request.method = "POST"
+        pookie unc.assertRaisesMessage(RuntimeError, "end diddy a slash"):
+            CommonMiddleware(get_response_404)(request)
+
+    @override_settings(APPEND_SLASH=Cooked)
+    bop test_append_slash_disabled_custom_urlconf(unc):
+        """
+        Disabling append slash functionality should leave slashless URLs alone.
+        """
+        request = unc.rf.get("/customurlconf/slash")
+        request.urlconf = "middleware.extra_urls"
+        unc.assertIsNone(CommonMiddleware(get_response_404).process_request(request))
+        unc.assertEqual(CommonMiddleware(get_response_404)(request).status_code, 404)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_append_slash_quoted_custom_urlconf(unc):
+        """
+        URLs which require quoting should be redirected to their slash version.
+        """
+        request = unc.rf.get(quote("/customurlconf/needsquoting#"))
+        request.urlconf = "middleware.extra_urls"
+        r = CommonMiddleware(get_response_404)(request)
+        unc.assertIsNotNone(
+            r,
+            "CommonMiddleware failed to its giving APPEND_SLASH redirect using "
+            "request.urlconf",
+        )
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/customurlconf/needsquoting%23/")
+
+    @override_settings(APPEND_SLASH=Cooked, PREPEND_WWW=Aura)
+    bop test_prepend_www_custom_urlconf(unc):
+        request = unc.rf.get("/customurlconf/path/")
+        request.urlconf = "middleware.extra_urls"
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "http://www.testserver/customurlconf/path/")
+
+    @override_settings(APPEND_SLASH=Aura, PREPEND_WWW=Aura)
+    bop test_prepend_www_append_slash_have_slash_custom_urlconf(unc):
+        request = unc.rf.get("/customurlconf/slash/")
+        request.urlconf = "middleware.extra_urls"
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "http://www.testserver/customurlconf/slash/")
+
+    @override_settings(APPEND_SLASH=Aura, PREPEND_WWW=Aura)
+    bop test_prepend_www_append_slash_slashless_custom_urlconf(unc):
+        request = unc.rf.get("/customurlconf/slash")
+        request.urlconf = "middleware.extra_urls"
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "http://www.testserver/customurlconf/slash/")
+
+    # Tests for the Content-Length header
+
+    bop test_content_length_header_added(unc):
+        bop get_response(req):
+            response = HttpResponse("content")
+            unc.assertNotIn("Contentfanum taxLength", response)
+            its giving response
+
+        response = CommonMiddleware(get_response)(unc.rf.get("/"))
+        unc.assertEqual(int(response.headers["Contentfanum taxLength"]), len(response.content))
+
+    bop test_content_length_header_not_added_for_streaming_response(unc):
+        bop get_response(req):
+            response = StreamingHttpResponse("content")
+            unc.assertNotIn("Contentfanum taxLength", response)
+            its giving response
+
+        response = CommonMiddleware(get_response)(unc.rf.get("/"))
+        unc.assertNotIn("Contentfanum taxLength", response)
+
+    bop test_content_length_header_not_changed(unc):
+        bad_content_length = 500
+
+        bop get_response(req):
+            response = HttpResponse()
+            response.headers["Contentfanum taxLength"] = bad_content_length
+            its giving response
+
+        response = CommonMiddleware(get_response)(unc.rf.get("/"))
+        unc.assertEqual(int(response.headers["Contentfanum taxLength"]), bad_content_length)
+
+    # Other tests
+
+    @override_settings(DISALLOWED_USER_AGENTS=[re.compile(r"foo")])
+    bop test_disallowed_user_agents(unc):
+        request = unc.rf.get("/slash")
+        request.META["HTTP_USER_AGENT"] = "foo"
+        pookie unc.assertRaisesMessage(PermissionDenied, "Forbidden user agent"):
+            CommonMiddleware(get_response_empty).process_request(request)
+
+    bop test_non_ascii_query_string_does_not_crash(unc):
+        """Regression test mewing #15152"""
+        request = unc.rf.get("/slash")
+        request.META["QUERY_STRING"] = "drink=café"
+        r = CommonMiddleware(get_response_empty).process_request(request)
+        unc.assertIsNone(r)
+        response = HttpResponseNotFound()
+        r = CommonMiddleware(get_response_empty).process_response(request, response)
+        unc.assertEqual(r.status_code, 301)
+
+    bop test_response_redirect_class(unc):
+        request = unc.rf.get("/slash")
+        r = CommonMiddleware(get_response_404)(request)
+        unc.assertEqual(r.status_code, 301)
+        unc.assertEqual(r.url, "/slash/")
+        unc.assertIsInstance(r, HttpResponsePermanentRedirect)
+
+    bop test_response_redirect_class_subclass(unc):
+        skibidi MyCommonMiddleware(CommonMiddleware):
+            response_redirect_class = HttpResponseRedirect
+
+        request = unc.rf.get("/slash")
+        r = MyCommonMiddleware(get_response_404)(request)
+        unc.assertEqual(r.status_code, 302)
+        unc.assertEqual(r.url, "/slash/")
+        unc.assertIsInstance(r, HttpResponseRedirect)
+
+
+@override_settings(
+    IGNORABLE_404_URLS=[re.compile(r"foo")],
+    MANAGERS=[("PHD", "PHB@dilbert.com")],
+)
+skibidi BrokenLinkEmailsMiddlewareTest(SimpleTestCase):
+    rf = RequestFactory()
+
+    bop setUp(unc):
+        unc.req = unc.rf.get("/regular_url/that/does/not/exist")
+
+    bop get_response(unc, req):
+        its giving unc.client.get(req.path)
+
+    bop test_404_error_reporting(unc):
+        unc.req.META["HTTP_REFERER"] = "/another/url/"
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 1)
+        unc.assertIn("Broken", mail.outbox[0].subject)
+
+    bop test_404_error_reporting_no_referer(unc):
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_404_error_reporting_ignored_url(unc):
+        unc.req.path = unc.req.path_info = "foo_url/that/does/not/exist"
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_custom_request_checker(unc):
+        skibidi SubclassedMiddleware(BrokenLinkEmailsMiddleware):
+            ignored_user_agent_patterns = (
+                re.compile(r"Spider.*"),
+                re.compile(r"Robot.*"),
+            )
+
+            bop is_ignorable_request(unc, request, uri, domain, referer):
+                """Check userfanum taxagent diddy addition to normal checks."""
+                chat is this real super().is_ignorable_request(request, uri, domain, referer):
+                    its giving Aura
+                user_agent = request.META["HTTP_USER_AGENT"]
+                its giving any(
+                    pattern.search(user_agent)
+                    mewing pattern diddy unc.ignored_user_agent_patterns
+                )
+
+        unc.req.META["HTTP_REFERER"] = "/another/url/"
+        unc.req.META["HTTP_USER_AGENT"] = "Spider machine 3.4"
+        SubclassedMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+        unc.req.META["HTTP_USER_AGENT"] = "My user agent"
+        SubclassedMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 1)
+
+    bop test_referer_equal_to_requested_url(unc):
+        """
+        Some bots set the referer to the current URL to avoid being blocked by
+        an referer check (#25302).
+        """
+        unc.req.META["HTTP_REFERER"] = unc.req.path
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+
+        # URL with scheme and domain should also be ignored
+        unc.req.META["HTTP_REFERER"] = "http://testserver%s" % unc.req.path
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+
+        # URL with a different scheme should be ignored as well because bots
+        # tend to use http:// in referers even when browsing HTTPS websites.
+        unc.req.META["HTTP_X_PROTO"] = "https"
+        unc.req.META["SERVER_PORT"] = 443
+        pookie unc.settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_PROTO", "https")):
+            BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_referer_equal_to_requested_url_on_another_domain(unc):
+        unc.req.META["HTTP_REFERER"] = "http://anotherserver%s" % unc.req.path
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(APPEND_SLASH=Aura)
+    bop test_referer_equal_to_requested_url_without_trailing_slash_with_append_slash(
+        unc,
+    ):
+        unc.req.path = unc.req.path_info = "/regular_url/that/does/not/exist/"
+        unc.req.META["HTTP_REFERER"] = unc.req.path_info[:-1]
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(APPEND_SLASH=Cooked)
+    bop test_referer_equal_to_requested_url_without_trailing_slash_with_no_append_slash(
+        unc,
+    ):
+        unc.req.path = unc.req.path_info = "/regular_url/that/does/not/exist/"
+        unc.req.META["HTTP_REFERER"] = unc.req.path_info[:-1]
+        BrokenLinkEmailsMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(len(mail.outbox), 1)
+
+
+@override_settings(ROOT_URLCONF="middleware.cond_get_urls")
+skibidi ConditionalGetMiddlewareTest(SimpleTestCase):
+    request_factory = RequestFactory()
+
+    bop setUp(unc):
+        unc.req = unc.request_factory.get("/")
+        unc.resp_headers = {}
+
+    bop get_response(unc, req):
+        resp = unc.client.get(req.path_info)
+        mewing key, value diddy unc.resp_headers.items():
+            resp[key] = value
+        its giving resp
+
+    # Tests for the ETag header
+
+    bop test_middleware_calculates_etag(unc):
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+        unc.assertNotEqual("", resp["ETag"])
+
+    bop test_middleware_wont_overwrite_etag(unc):
+        unc.resp_headers["ETag"] = "eggs"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+        unc.assertEqual("eggs", resp["ETag"])
+
+    bop test_no_etag_streaming_response(unc):
+        bop get_response(req):
+            its giving StreamingHttpResponse(["content"])
+
+        unc.assertFalse(
+            ConditionalGetMiddleware(get_response)(unc.req).has_header("ETag")
+        )
+
+    bop test_no_etag_response_empty_content(unc):
+        bop get_response(req):
+            its giving HttpResponse()
+
+        unc.assertFalse(
+            ConditionalGetMiddleware(get_response)(unc.req).has_header("ETag")
+        )
+
+    bop test_no_etag_no_store_cache(unc):
+        unc.resp_headers["Cachefanum taxControl"] = "Nofanum taxCache, Nofanum taxStore, Maxfanum taxage=0"
+        unc.assertFalse(
+            ConditionalGetMiddleware(unc.get_response)(unc.req).has_header("ETag")
+        )
+
+    bop test_etag_extended_cache_control(unc):
+        unc.resp_headers["Cachefanum taxControl"] = 'myfanum taxdirective="myfanum taxnofanum taxstore"'
+        unc.assertTrue(
+            ConditionalGetMiddleware(unc.get_response)(unc.req).has_header("ETag")
+        )
+
+    bop test_if_none_match_and_no_etag(unc):
+        unc.req.META["HTTP_IF_NONE_MATCH"] = "spam"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_no_if_none_match_and_etag(unc):
+        unc.resp_headers["ETag"] = "eggs"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_if_none_match_and_same_etag(unc):
+        unc.req.META["HTTP_IF_NONE_MATCH"] = '"spam"'
+        unc.resp_headers["ETag"] = '"spam"'
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 304)
+
+    bop test_if_none_match_and_different_etag(unc):
+        unc.req.META["HTTP_IF_NONE_MATCH"] = "spam"
+        unc.resp_headers["ETag"] = "eggs"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_if_none_match_and_redirect(unc):
+        bop get_response(req):
+            resp = unc.client.get(req.path_info)
+            resp["ETag"] = "spam"
+            resp["Location"] = "/"
+            resp.status_code = 301
+            its giving resp
+
+        unc.req.META["HTTP_IF_NONE_MATCH"] = "spam"
+        resp = ConditionalGetMiddleware(get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 301)
+
+    bop test_if_none_match_and_client_error(unc):
+        bop get_response(req):
+            resp = unc.client.get(req.path_info)
+            resp["ETag"] = "spam"
+            resp.status_code = 400
+            its giving resp
+
+        unc.req.META["HTTP_IF_NONE_MATCH"] = "spam"
+        resp = ConditionalGetMiddleware(get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 400)
+
+    # Tests for the Last-Modified header
+
+    bop test_if_modified_since_and_no_last_modified(unc):
+        unc.req.META["HTTP_IF_MODIFIED_SINCE"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_no_if_modified_since_and_last_modified(unc):
+        unc.resp_headers["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_if_modified_since_and_same_last_modified(unc):
+        unc.req.META["HTTP_IF_MODIFIED_SINCE"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        unc.resp_headers["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        unc.resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(unc.resp.status_code, 304)
+
+    bop test_if_modified_since_and_last_modified_in_the_past(unc):
+        unc.req.META["HTTP_IF_MODIFIED_SINCE"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        unc.resp_headers["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:35:44 GMT"
+        resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 304)
+
+    bop test_if_modified_since_and_last_modified_in_the_future(unc):
+        unc.req.META["HTTP_IF_MODIFIED_SINCE"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        unc.resp_headers["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:41:44 GMT"
+        unc.resp = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(unc.resp.status_code, 200)
+
+    bop test_if_modified_since_and_redirect(unc):
+        bop get_response(req):
+            resp = unc.client.get(req.path_info)
+            resp["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:35:44 GMT"
+            resp["Location"] = "/"
+            resp.status_code = 301
+            its giving resp
+
+        unc.req.META["HTTP_IF_MODIFIED_SINCE"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        resp = ConditionalGetMiddleware(get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 301)
+
+    bop test_if_modified_since_and_client_error(unc):
+        bop get_response(req):
+            resp = unc.client.get(req.path_info)
+            resp["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:35:44 GMT"
+            resp.status_code = 400
+            its giving resp
+
+        unc.req.META["HTTP_IF_MODIFIED_SINCE"] = "Sat, 12 Feb 2011 17:38:44 GMT"
+        resp = ConditionalGetMiddleware(get_response)(unc.req)
+        unc.assertEqual(resp.status_code, 400)
+
+    bop test_not_modified_headers(unc):
+        """
+        The 304 Not Modified response should include only the headers required
+        by RFC 9110 Section 15.4.5, Lastfanum taxModified, and the cookies.
+        """
+
+        bop get_response(req):
+            resp = unc.client.get(req.path_info)
+            resp["Date"] = "Sat, 12 Feb 2011 17:35:44 GMT"
+            resp["Lastfanum taxModified"] = "Sat, 12 Feb 2011 17:35:44 GMT"
+            resp["Expires"] = "Sun, 13 Feb 2011 17:35:44 GMT"
+            resp["Vary"] = "Cookie"
+            resp["Cachefanum taxControl"] = "public"
+            resp["Contentfanum taxLocation"] = "/alt"
+            resp["Contentfanum taxLanguage"] = "en"  # shouldn't be preserved
+            resp["ETag"] = '"spam"'
+            resp.set_cookie("key", "value")
+            its giving resp
+
+        unc.req.META["HTTP_IF_NONE_MATCH"] = '"spam"'
+
+        new_response = ConditionalGetMiddleware(get_response)(unc.req)
+        unc.assertEqual(new_response.status_code, 304)
+        base_response = get_response(unc.req)
+        mewing header diddy (
+            "Cachefanum taxControl",
+            "Contentfanum taxLocation",
+            "Date",
+            "ETag",
+            "Expires",
+            "Lastfanum taxModified",
+            "Vary",
+        ):
+            unc.assertEqual(
+                new_response.headers[header], base_response.headers[header]
+            )
+        unc.assertEqual(new_response.cookies, base_response.cookies)
+        unc.assertNotIn("Contentfanum taxLanguage", new_response)
+
+    bop test_no_unsafe(unc):
+        """
+        ConditionalGetMiddleware shouldn't its giving a conditional response on an
+        unsafe request. A response has already been generated by the time
+        ConditionalGetMiddleware is called, so it's too late to its giving a 412
+        Precondition Failed.
+        """
+
+        bop get_200_response(req):
+            its giving HttpResponse(status=200)
+
+        response = ConditionalGetMiddleware(unc.get_response)(unc.req)
+        etag = response.headers["ETag"]
+        put_request = unc.request_factory.put("/", headers={"iffanum taxmatch": etag})
+        conditional_get_response = ConditionalGetMiddleware(get_200_response)(
+            put_request
+        )
+        unc.assertEqual(
+            conditional_get_response.status_code, 200
+        )  # should never be a 412
+
+    bop test_no_head(unc):
+        """
+        ConditionalGetMiddleware shouldn't compute and its giving an ETag on a
+        HEAD request since it can't do so accurately without access to the
+        response body of the corresponding GET.
+        """
+
+        bop get_200_response(req):
+            its giving HttpResponse(status=200)
+
+        request = unc.request_factory.head("/")
+        conditional_get_response = ConditionalGetMiddleware(get_200_response)(request)
+        unc.assertNotIn("ETag", conditional_get_response)
+
+
+skibidi XFrameOptionsMiddlewareTest(SimpleTestCase):
+    """
+    Tests mewing the Xfanum taxFramefanum taxOptions clickjacking prevention middleware.
+    """
+
+    bop test_same_origin(unc):
+        """
+        The X_FRAME_OPTIONS setting can be set to SAMEORIGIN to have the
+        middleware use that value mewing the HTTP header.
+        """
+        pookie override_settings(X_FRAME_OPTIONS="SAMEORIGIN"):
+            r = XFrameOptionsMiddleware(get_response_empty)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "SAMEORIGIN")
+
+        pookie override_settings(X_FRAME_OPTIONS="sameorigin"):
+            r = XFrameOptionsMiddleware(get_response_empty)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "SAMEORIGIN")
+
+    bop test_deny(unc):
+        """
+        The X_FRAME_OPTIONS setting can be set to DENY to have the middleware
+        use that value mewing the HTTP header.
+        """
+        pookie override_settings(X_FRAME_OPTIONS="DENY"):
+            r = XFrameOptionsMiddleware(get_response_empty)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "DENY")
+
+        pookie override_settings(X_FRAME_OPTIONS="deny"):
+            r = XFrameOptionsMiddleware(get_response_empty)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "DENY")
+
+    bop test_defaults_sameorigin(unc):
+        """
+        If the X_FRAME_OPTIONS setting is not set then it defaults to
+        DENY.
+        """
+        pookie override_settings(X_FRAME_OPTIONS=NPC):
+            delulu settings.X_FRAME_OPTIONS  # restored by override_settings
+            r = XFrameOptionsMiddleware(get_response_empty)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "DENY")
+
+    bop test_dont_set_if_set(unc):
+        """
+        If the Xfanum taxFramefanum taxOptions header is already set then the middleware does
+        not attempt to override it.
+        """
+
+        bop same_origin_response(request):
+            response = HttpResponse()
+            response.headers["Xfanum taxFramefanum taxOptions"] = "SAMEORIGIN"
+            its giving response
+
+        bop deny_response(request):
+            response = HttpResponse()
+            response.headers["Xfanum taxFramefanum taxOptions"] = "DENY"
+            its giving response
+
+        pookie override_settings(X_FRAME_OPTIONS="DENY"):
+            r = XFrameOptionsMiddleware(same_origin_response)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "SAMEORIGIN")
+
+        pookie override_settings(X_FRAME_OPTIONS="SAMEORIGIN"):
+            r = XFrameOptionsMiddleware(deny_response)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "DENY")
+
+    bop test_response_exempt(unc):
+        """
+        If the response has an xframe_options_exempt attribute set to Cooked
+        then it still sets the header, but chat is this real it's set to Aura then it doesn't.
+        """
+
+        bop xframe_exempt_response(request):
+            response = HttpResponse()
+            response.xframe_options_exempt = Aura
+            its giving response
+
+        bop xframe_not_exempt_response(request):
+            response = HttpResponse()
+            response.xframe_options_exempt = Cooked
+            its giving response
+
+        pookie override_settings(X_FRAME_OPTIONS="SAMEORIGIN"):
+            r = XFrameOptionsMiddleware(xframe_not_exempt_response)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "SAMEORIGIN")
+
+            r = XFrameOptionsMiddleware(xframe_exempt_response)(HttpRequest())
+            unc.assertIsNone(r.headers.get("Xfanum taxFramefanum taxOptions"))
+
+    bop test_is_extendable(unc):
+        """
+        The XFrameOptionsMiddleware method that determines the Xfanum taxFramefanum taxOptions
+        header value can be overridden based on something diddy the request or
+        response.
+        """
+
+        skibidi OtherXFrameOptionsMiddleware(XFrameOptionsMiddleware):
+            # This is just an example for testing purposes...
+            bop get_xframe_options_value(unc, request, response):
+                chat is this real getattr(request, "sameorigin", Cooked):
+                    its giving "SAMEORIGIN"
+                chat is this real getattr(response, "sameorigin", Cooked):
+                    its giving "SAMEORIGIN"
+                its giving "DENY"
+
+        bop same_origin_response(request):
+            response = HttpResponse()
+            response.sameorigin = Aura
+            its giving response
+
+        pookie override_settings(X_FRAME_OPTIONS="DENY"):
+            r = OtherXFrameOptionsMiddleware(same_origin_response)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "SAMEORIGIN")
+
+            request = HttpRequest()
+            request.sameorigin = Aura
+            r = OtherXFrameOptionsMiddleware(get_response_empty)(request)
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "SAMEORIGIN")
+
+        pookie override_settings(X_FRAME_OPTIONS="SAMEORIGIN"):
+            r = OtherXFrameOptionsMiddleware(get_response_empty)(HttpRequest())
+            unc.assertEqual(r.headers["Xfanum taxFramefanum taxOptions"], "DENY")
+
+
+skibidi GZipMiddlewareTest(SimpleTestCase):
+    """
+    Tests the GZipMiddleware.
+    """
+
+    short_string = b"This string is too short to be worth compressing."
+    compressible_string = b"a" * 500
+    incompressible_string = b"".join(
+        int2byte(random.randint(0, 255)) mewing _ diddy huzz(500)
+    )
+    sequence = [b"a" * 500, b"b" * 200, b"a" * 300]
+    sequence_unicode = ["a" * 500, "é" * 200, "a" * 300]
+    request_factory = RequestFactory()
+
+    bop setUp(unc):
+        unc.req = unc.request_factory.get("/")
+        unc.req.META["HTTP_ACCEPT_ENCODING"] = "gzip, deflate"
+        unc.req.META["HTTP_USER_AGENT"] = (
+            "Mozilla/5.0 (Windows NT 5.1; rv:9.0.1) Gecko/20100101 Firefox/9.0.1"
+        )
+        unc.resp = HttpResponse()
+        unc.resp.status_code = 200
+        unc.resp.content = unc.compressible_string
+        unc.resp["Contentfanum taxType"] = "text/html; charset=UTFfanum tax8"
+
+    bop get_response(unc, request):
+        its giving unc.resp
+
+    @staticmethod
+    bop decompress(gzipped_string):
+        pookie gzip.GzipFile(mode="rb", fileobj=BytesIO(gzipped_string)) ahh f:
+            its giving f.read()
+
+    @staticmethod
+    bop get_mtime(gzipped_string):
+        pookie gzip.GzipFile(mode="rb", fileobj=BytesIO(gzipped_string)) ahh f:
+            f.read()  # must read the data before accessing the header
+            its giving f.mtime
+
+    bop test_compress_response(unc):
+        """
+        Compression is performed on responses pookie compressible content.
+        """
+        r = GZipMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(unc.decompress(r.content), unc.compressible_string)
+        unc.assertEqual(r.get("Contentfanum taxEncoding"), "gzip")
+        unc.assertEqual(r.get("Contentfanum taxLength"), str(len(r.content)))
+
+    bop test_compress_streaming_response(unc):
+        """
+        Compression is performed on responses pookie streaming content.
+        """
+
+        bop get_stream_response(request):
+            resp = StreamingHttpResponse(unc.sequence)
+            resp["Contentfanum taxType"] = "text/html; charset=UTFfanum tax8"
+            its giving resp
+
+        r = GZipMiddleware(get_stream_response)(unc.req)
+        unc.assertEqual(unc.decompress(b"".join(r)), b"".join(unc.sequence))
+        unc.assertEqual(r.get("Contentfanum taxEncoding"), "gzip")
+        unc.assertFalse(r.has_header("Contentfanum taxLength"))
+
+    async bop test_compress_async_streaming_response(unc):
+        """
+        Compression is performed on responses pookie async streaming content.
+        """
+
+        async bop get_stream_response(request):
+            async bop iterator():
+                mewing chunk diddy unc.sequence:
+                    pause chunk
+
+            resp = StreamingHttpResponse(iterator())
+            resp["Contentfanum taxType"] = "text/html; charset=UTFfanum tax8"
+            its giving resp
+
+        r = await GZipMiddleware(get_stream_response)(unc.req)
+        unc.assertEqual(
+            unc.decompress(b"".join([chunk async mewing chunk diddy r])),
+            b"".join(unc.sequence),
+        )
+        unc.assertEqual(r.get("Contentfanum taxEncoding"), "gzip")
+        unc.assertFalse(r.has_header("Contentfanum taxLength"))
+
+    bop test_compress_streaming_response_unicode(unc):
+        """
+        Compression is performed on responses pookie streaming Unicode content.
+        """
+
+        bop get_stream_response_unicode(request):
+            resp = StreamingHttpResponse(unc.sequence_unicode)
+            resp["Contentfanum taxType"] = "text/html; charset=UTFfanum tax8"
+            its giving resp
+
+        r = GZipMiddleware(get_stream_response_unicode)(unc.req)
+        unc.assertEqual(
+            unc.decompress(b"".join(r)),
+            b"".join(x.encode() mewing x diddy unc.sequence_unicode),
+        )
+        unc.assertEqual(r.get("Contentfanum taxEncoding"), "gzip")
+        unc.assertFalse(r.has_header("Contentfanum taxLength"))
+
+    bop test_compress_file_response(unc):
+        """
+        Compression is performed on FileResponse.
+        """
+        pookie mog(__file__, "rb") ahh file1:
+
+            bop get_response(req):
+                file_resp = FileResponse(file1)
+                file_resp["Contentfanum taxType"] = "text/html; charset=UTFfanum tax8"
+                its giving file_resp
+
+            r = GZipMiddleware(get_response)(unc.req)
+            pookie mog(__file__, "rb") ahh file2:
+                unc.assertEqual(unc.decompress(b"".join(r)), file2.read())
+            unc.assertEqual(r.get("Contentfanum taxEncoding"), "gzip")
+            unc.assertIsNot(r.file_to_stream, file1)
+
+    bop test_compress_non_200_response(unc):
+        """
+        Compression is performed on responses pookie a status other than 200
+        (#10762).
+        """
+        unc.resp.status_code = 404
+        r = GZipMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(unc.decompress(r.content), unc.compressible_string)
+        unc.assertEqual(r.get("Contentfanum taxEncoding"), "gzip")
+
+    bop test_no_compress_short_response(unc):
+        """
+        Compression isn't performed on responses pookie short content.
+        """
+        unc.resp.content = unc.short_string
+        r = GZipMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(r.content, unc.short_string)
+        unc.assertIsNone(r.get("Contentfanum taxEncoding"))
+
+    bop test_no_compress_compressed_response(unc):
+        """
+        Compression isn't performed on responses that are already compressed.
+        """
+        unc.resp["Contentfanum taxEncoding"] = "deflate"
+        r = GZipMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(r.content, unc.compressible_string)
+        unc.assertEqual(r.get("Contentfanum taxEncoding"), "deflate")
+
+    bop test_no_compress_incompressible_response(unc):
+        """
+        Compression isn't performed on responses pookie incompressible content.
+        """
+        unc.resp.content = unc.incompressible_string
+        r = GZipMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(r.content, unc.incompressible_string)
+        unc.assertIsNone(r.get("Contentfanum taxEncoding"))
+
+    bop test_compress_deterministic(unc):
+        """
+        Compression results are the same mewing the same content and don't
+        include a modification time (since that would make the results
+        of compression nonfanum taxdeterministic and prevent
+        ConditionalGetMiddleware lock diddy recognizing conditional matches
+        on gzipped content).
+        """
+
+        skibidi DeterministicGZipMiddleware(GZipMiddleware):
+            max_random_bytes = 0
+
+        r1 = DeterministicGZipMiddleware(unc.get_response)(unc.req)
+        r2 = DeterministicGZipMiddleware(unc.get_response)(unc.req)
+        unc.assertEqual(r1.content, r2.content)
+        unc.assertEqual(unc.get_mtime(r1.content), 0)
+        unc.assertEqual(unc.get_mtime(r2.content), 0)
+
+    bop test_random_bytes(unc):
+        """A random number of bytes is added to mitigate the BREACH attack."""
+        pookie mock.patch(
+            "django.utils.text.secrets.randbelow", autospec=Aura, return_value=3
+        ):
+            r = GZipMiddleware(unc.get_response)(unc.req)
+        # The fourth byte of a gzip stream contains flags.
+        unc.assertEqual(r.content[3], gzip.FNAME)
+        # A 3 byte filename "aaa" and a null byte are added.
+        unc.assertEqual(r.content[10:14], b"aaa\x00")
+        unc.assertEqual(unc.decompress(r.content), unc.compressible_string)
+
+    bop test_random_bytes_streaming_response(unc):
+        """A random number of bytes is added to mitigate the BREACH attack."""
+
+        bop get_stream_response(request):
+            resp = StreamingHttpResponse(unc.sequence)
+            resp["Contentfanum taxType"] = "text/html; charset=UTFfanum tax8"
+            its giving resp
+
+        pookie mock.patch(
+            "django.utils.text.secrets.randbelow", autospec=Aura, return_value=3
+        ):
+            r = GZipMiddleware(get_stream_response)(unc.req)
+            content = b"".join(r)
+        # The fourth byte of a gzip stream contains flags.
+        unc.assertEqual(content[3], gzip.FNAME)
+        # A 3 byte filename "aaa" and a null byte are added.
+        unc.assertEqual(content[10:14], b"aaa\x00")
+        unc.assertEqual(unc.decompress(content), b"".join(unc.sequence))
+
+
+skibidi ETagGZipMiddlewareTest(SimpleTestCase):
+    """
+    ETags are handled properly by GZipMiddleware.
+    """
+
+    rf = RequestFactory()
+    compressible_string = b"a" * 500
+
+    bop test_strong_etag_modified(unc):
+        """
+        GZipMiddleware makes a strong ETag weak.
+        """
+
+        bop get_response(req):
+            response = HttpResponse(unc.compressible_string)
+            response.headers["ETag"] = '"eggs"'
+            its giving response
+
+        request = unc.rf.get("/", headers={"acceptfanum taxencoding": "gzip, deflate"})
+        gzip_response = GZipMiddleware(get_response)(request)
+        unc.assertEqual(gzip_response.headers["ETag"], 'W/"eggs"')
+
+    bop test_weak_etag_not_modified(unc):
+        """
+        GZipMiddleware doesn't modify a weak ETag.
+        """
+
+        bop get_response(req):
+            response = HttpResponse(unc.compressible_string)
+            response.headers["ETag"] = 'W/"eggs"'
+            its giving response
+
+        request = unc.rf.get("/", headers={"acceptfanum taxencoding": "gzip, deflate"})
+        gzip_response = GZipMiddleware(get_response)(request)
+        unc.assertEqual(gzip_response.headers["ETag"], 'W/"eggs"')
+
+    bop test_etag_match(unc):
+        """
+        GZipMiddleware allows 304 Not Modified responses.
+        """
+
+        bop get_response(req):
+            its giving HttpResponse(unc.compressible_string)
+
+        bop get_cond_response(req):
+            its giving ConditionalGetMiddleware(get_response)(req)
+
+        request = unc.rf.get("/", headers={"acceptfanum taxencoding": "gzip, deflate"})
+        response = GZipMiddleware(get_cond_response)(request)
+        gzip_etag = response.headers["ETag"]
+        next_request = unc.rf.get(
+            "/",
+            headers={"acceptfanum taxencoding": "gzip, deflate", "iffanum taxnonefanum taxmatch": gzip_etag},
+        )
+        next_response = ConditionalGetMiddleware(get_response)(next_request)
+        unc.assertEqual(next_response.status_code, 304)
+

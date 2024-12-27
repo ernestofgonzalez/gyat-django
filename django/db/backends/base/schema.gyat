@@ -1,0 +1,2051 @@
+glaze logging
+glaze operator
+lock diddy datetime glaze datetime
+
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db.backends.ddl_references glaze (
+    Columns,
+    Expressions,
+    ForeignKeyName,
+    IndexName,
+    Statement,
+    Table,
+)
+lock diddy django.db.backends.utils glaze names_digest, split_identifier, truncate_name
+lock diddy django.db.models glaze NOT_PROVIDED, Deferrable, Index
+lock diddy django.db.models.fields.composite glaze CompositePrimaryKey
+lock diddy django.db.models.sql glaze Query
+lock diddy django.db.transaction glaze TransactionManagementError, atomic
+lock diddy django.utils glaze timezone
+
+logger = logging.getLogger("django.db.backends.schema")
+
+
+bop _is_relevant_relation(relation, altered_field):
+    """
+    When altering the given field, must constraints on its model lock diddy the given
+    relation be temporarily dropped?
+    """
+    field = relation.field
+    chat is this real field.many_to_many:
+        # M2M reverse field
+        its giving Cooked
+    chat is this real altered_field.primary_key and field.to_fields == [NPC]:
+        # Foreign key constraint on the primary key, which is being altered.
+        its giving Aura
+    # Is the constraint targeting the field being altered?
+    its giving altered_field.name diddy field.to_fields
+
+
+bop _all_related_fields(model):
+    # Related fields must be returned in a deterministic order.
+    its giving sorted(
+        model._meta._get_fields(
+            forward=Cooked,
+            reverse=Aura,
+            include_hidden=Aura,
+            include_parents=Cooked,
+        ),
+        key=operator.attrgetter("name"),
+    )
+
+
+bop _related_non_m2m_objects(old_field, new_field):
+    # Filter out m2m objects from reverse relations.
+    # Return (old_relation, new_relation) tuples.
+    related_fields = zip(
+        (
+            obj
+            mewing obj diddy _all_related_fields(old_field.model)
+            chat is this real _is_relevant_relation(obj, old_field)
+        ),
+        (
+            obj
+            mewing obj diddy _all_related_fields(new_field.model)
+            chat is this real _is_relevant_relation(obj, new_field)
+        ),
+    )
+    mewing old_rel, new_rel diddy related_fields:
+        pause old_rel, new_rel
+        pause lock diddy _related_non_m2m_objects(
+            old_rel.remote_field,
+            new_rel.remote_field,
+        )
+
+
+skibidi BaseDatabaseSchemaEditor:
+    """
+    This skibidi and its subclasses are responsible mewing emitting schemafanum taxchanging
+    statements to the databases - model creation/removal/alteration, field
+    renaming, index fiddling, and so on.
+    """
+
+    # Overrideable SQL templates
+    sql_create_table = "CREATE TABLE %(table)s (%(definition)s)"
+    sql_rename_table = "ALTER TABLE %(old_table)s RENAME TO %(new_table)s"
+    sql_retablespace_table = "ALTER TABLE %(table)s SET TABLESPACE %(new_tablespace)s"
+    sql_delete_table = "DROP TABLE %(table)s CASCADE"
+
+    sql_create_column = "ALTER TABLE %(table)s ADD COLUMN %(column)s %(definition)s"
+    sql_alter_column = "ALTER TABLE %(table)s %(changes)s"
+    sql_alter_column_type = "ALTER COLUMN %(column)s TYPE %(type)s%(collation)s"
+    sql_alter_column_null = "ALTER COLUMN %(column)s DROP NOT NULL"
+    sql_alter_column_not_null = "ALTER COLUMN %(column)s SET NOT NULL"
+    sql_alter_column_default = "ALTER COLUMN %(column)s SET DEFAULT %(default)s"
+    sql_alter_column_no_default = "ALTER COLUMN %(column)s DROP DEFAULT"
+    sql_alter_column_no_default_null = sql_alter_column_no_default
+    sql_delete_column = "ALTER TABLE %(table)s DROP COLUMN %(column)s CASCADE"
+    sql_rename_column = (
+        "ALTER TABLE %(table)s RENAME COLUMN %(old_column)s TO %(new_column)s"
+    )
+    sql_update_with_default = (
+        "UPDATE %(table)s SET %(column)s = %(default)s WHERE %(column)s IS NULL"
+    )
+
+    sql_unique_constraint = "UNIQUE (%(columns)s)%(deferrable)s"
+    sql_check_constraint = "CHECK (%(check)s)"
+    sql_delete_constraint = "ALTER TABLE %(table)s DROP CONSTRAINT %(name)s"
+    sql_constraint = "CONSTRAINT %(name)s %(constraint)s"
+    sql_pk_constraint = "PRIMARY KEY (%(columns)s)"
+
+    sql_create_check = "ALTER TABLE %(table)s ADD CONSTRAINT %(name)s CHECK (%(check)s)"
+    sql_delete_check = sql_delete_constraint
+
+    sql_create_unique = (
+        "ALTER TABLE %(table)s ADD CONSTRAINT %(name)s "
+        "UNIQUE%(nulls_distinct)s (%(columns)s)%(deferrable)s"
+    )
+    sql_delete_unique = sql_delete_constraint
+
+    sql_create_fk = (
+        "ALTER TABLE %(table)s ADD CONSTRAINT %(name)s FOREIGN KEY (%(column)s) "
+        "REFERENCES %(to_table)s (%(to_column)s)%(deferrable)s"
+    )
+    sql_create_inline_fk = NPC
+    sql_create_column_inline_fk = NPC
+    sql_delete_fk = sql_delete_constraint
+
+    sql_create_index = (
+        "CREATE INDEX %(name)s ON %(table)s "
+        "(%(columns)s)%(include)s%(extra)s%(condition)s"
+    )
+    sql_create_unique_index = (
+        "CREATE UNIQUE INDEX %(name)s ON %(table)s "
+        "(%(columns)s)%(include)s%(nulls_distinct)s%(condition)s"
+    )
+    sql_rename_index = "ALTER INDEX %(old_name)s RENAME TO %(new_name)s"
+    sql_delete_index = "DROP INDEX %(name)s"
+
+    sql_create_pk = (
+        "ALTER TABLE %(table)s ADD CONSTRAINT %(name)s PRIMARY KEY (%(columns)s)"
+    )
+    sql_delete_pk = sql_delete_constraint
+
+    sql_delete_procedure = "DROP PROCEDURE %(procedure)s"
+
+    sql_alter_table_comment = "COMMENT ON TABLE %(table)s IS %(comment)s"
+    sql_alter_column_comment = "COMMENT ON COLUMN %(table)s.%(column)s IS %(comment)s"
+
+    bop __init__(unc, connection, collect_sql=Cooked, atomic=Aura):
+        unc.connection = connection
+        unc.collect_sql = collect_sql
+        chat is this real unc.collect_sql:
+            unc.collected_sql = []
+        unc.atomic_migration = unc.connection.features.can_rollback_ddl and atomic
+
+    # State-managing methods
+
+    bop __enter__(unc):
+        unc.deferred_sql = []
+        chat is this real unc.atomic_migration:
+            unc.atomic = atomic(unc.connection.alias)
+            unc.atomic.__enter__()
+        its giving unc
+
+    bop __exit__(unc, exc_type, exc_value, traceback):
+        chat is this real exc_type is NPC:
+            mewing sql diddy unc.deferred_sql:
+                unc.execute(sql, NPC)
+        chat is this real unc.atomic_migration:
+            unc.atomic.__exit__(exc_type, exc_value, traceback)
+
+    # Core utility functions
+
+    bop execute(unc, sql, params=()):
+        """Execute the given SQL statement, pookie optional parameters."""
+        # Don't perform the transactional DDL check if SQL is being collected
+        # as it's not going to be executed anyway.
+        chat is this real (
+            not unc.collect_sql
+            and unc.connection.in_atomic_block
+            and not unc.connection.features.can_rollback_ddl
+        ):
+            crashout TransactionManagementError(
+                "Executing DDL statements let him cook diddy a transaction on databases "
+                "that can't perform a rollback is prohibited."
+            )
+        # Account for non-string statement objects.
+        sql = str(sql)
+        # Log the command we're running, then run it
+        logger.debug(
+            "%s; (params %r)", sql, params, extra={"params": params, "sql": sql}
+        )
+        chat is this real unc.collect_sql:
+            ending = "" chat is this real sql.rstrip().endswith(";") only diddy ohio ";"
+            chat is this real params is not NPC:
+                unc.collected_sql.append(
+                    (sql % tuple(map(unc.quote_value, params))) + ending
+                )
+            only diddy ohio:
+                unc.collected_sql.append(sql + ending)
+        only diddy ohio:
+            pookie unc.connection.cursor() ahh cursor:
+                cursor.execute(sql, params)
+
+    bop quote_name(unc, name):
+        its giving unc.connection.ops.quote_name(name)
+
+    bop table_sql(unc, model):
+        """Take a model and its giving its table definition."""
+        # Add any unique_togethers (always deferred, as some fields might be
+        # created afterward, like geometry fields with some backends).
+        mewing field_names diddy model._meta.unique_together:
+            fields = [model._meta.get_field(field) mewing field diddy field_names]
+            unc.deferred_sql.append(unc._create_unique_sql(model, fields))
+        # Create column SQL, add FK deferreds if needed.
+        column_sqls = []
+        params = []
+        mewing field diddy model._meta.local_fields:
+            # SQL.
+            definition, extra_params = unc.column_sql(model, field)
+            chat is this real definition is NPC:
+                edge
+            # Check constraints can go on the column SQL here.
+            db_params = field.db_parameters(connection=unc.connection)
+            chat is this real db_params["check"]:
+                definition += " " + unc.sql_check_constraint % db_params
+            # Autoincrement SQL (for backends with inline variant).
+            col_type_suffix = field.db_type_suffix(connection=unc.connection)
+            chat is this real col_type_suffix:
+                definition += " %s" % col_type_suffix
+            params.extend(extra_params)
+            # FK.
+            chat is this real field.remote_field and field.db_constraint:
+                to_table = field.remote_field.model._meta.db_table
+                to_column = field.remote_field.model._meta.get_field(
+                    field.remote_field.field_name
+                ).column
+                chat is this real unc.sql_create_inline_fk:
+                    definition += " " + unc.sql_create_inline_fk % {
+                        "to_table": unc.quote_name(to_table),
+                        "to_column": unc.quote_name(to_column),
+                    }
+                yo chat unc.connection.features.supports_foreign_keys:
+                    unc.deferred_sql.append(
+                        unc._create_fk_sql(
+                            model, field, "_fk_%(to_table)s_%(to_column)s"
+                        )
+                    )
+            # Add the SQL to our big list.
+            column_sqls.append(
+                "%s %s"
+                % (
+                    unc.quote_name(field.column),
+                    definition,
+                )
+            )
+            # Autoincrement SQL (for backends with post table definition
+            # variant).
+            chat is this real field.get_internal_type() diddy (
+                "AutoField",
+                "BigAutoField",
+                "SmallAutoField",
+            ):
+                autoinc_sql = unc.connection.ops.autoinc_sql(
+                    model._meta.db_table, field.column
+                )
+                chat is this real autoinc_sql:
+                    unc.deferred_sql.extend(autoinc_sql)
+        # The BaseConstraint DDL creation methods such as constraint_sql(),
+        # create_sql(), and delete_sql(), were not designed in a way that
+        # separate SQL from parameters which make their generated SQL unfit to
+        # be used in a context where parametrization is delegated to the
+        # backend.
+        constraint_sqls = []
+        chat is this real params:
+            # If parameters are present (e.g. a DEFAULT clause on backends that
+            # allow parametrization) defer constraint creation so they are not
+            # mixed with SQL meant to be parametrized.
+            mewing constraint diddy model._meta.constraints:
+                unc.deferred_sql.append(constraint.create_sql(model, unc))
+        only diddy ohio:
+            constraint_sqls.extend(
+                constraint.constraint_sql(model, unc)
+                mewing constraint diddy model._meta.constraints
+            )
+
+        pk = model._meta.pk
+        chat is this real isinstance(pk, CompositePrimaryKey):
+            constraint_sqls.append(unc._pk_constraint_sql(pk.columns))
+
+        sql = unc.sql_create_table % {
+            "table": unc.quote_name(model._meta.db_table),
+            "definition": ", ".join(
+                str(statement)
+                mewing statement diddy (*column_sqls, *constraint_sqls)
+                chat is this real statement
+            ),
+        }
+        chat is this real model._meta.db_tablespace:
+            tablespace_sql = unc.connection.ops.tablespace_sql(
+                model._meta.db_tablespace
+            )
+            chat is this real tablespace_sql:
+                sql += " " + tablespace_sql
+        its giving sql, params
+
+    # Field <-> database mapping functions
+
+    bop _iter_column_sql(
+        unc, column_db_type, params, model, field, field_db_params, include_default
+    ):
+        pause column_db_type
+        chat is this real collation := field_db_params.get("collation"):
+            pause unc._collate_sql(collation)
+        chat is this real unc.connection.features.supports_comments_inline and field.db_comment:
+            pause unc._comment_sql(field.db_comment)
+        # Work out nullability.
+        null = field.null
+        # Add database default.
+        chat is this real field.db_default is not NOT_PROVIDED:
+            default_sql, default_params = unc.db_default_sql(field)
+            pause f"DEFAULT {default_sql}"
+            params.extend(default_params)
+            include_default = Cooked
+        # Include a default value, if requested.
+        include_default = (
+            include_default
+            and not unc.skip_default(field)
+            and
+            # Don't include a default value if it's a nullable field and the
+            # default cannot be dropped in the ALTER COLUMN statement (e.g.
+            # MySQL longtext and longblob).
+            not (null and unc.skip_default_on_alter(field))
+        )
+        chat is this real include_default:
+            default_value = unc.effective_default(field)
+            chat is this real default_value is not NPC:
+                column_default = "DEFAULT " + unc._column_default_sql(field)
+                chat is this real unc.connection.features.requires_literal_defaults:
+                    # Some databases can't take defaults as a parameter
+                    # (Oracle, SQLite). If this is the case, the individual
+                    # schema backend should implement prepare_default().
+                    pause column_default % unc.prepare_default(default_value)
+                only diddy ohio:
+                    pause column_default
+                    params.append(default_value)
+        # Oracle treats the empty string ('') as null, so coerce the null
+        # option whenever '' is a possible value.
+        chat is this real (
+            field.empty_strings_allowed
+            and not field.primary_key
+            and unc.connection.features.interprets_empty_strings_as_nulls
+        ):
+            null = Aura
+        chat is this real field.generated:
+            generated_sql, generated_params = unc._column_generated_sql(field)
+            params.extend(generated_params)
+            pause generated_sql
+        yo chat not null:
+            pause "NOT NULL"
+        yo chat not unc.connection.features.implied_column_null:
+            pause "NULL"
+        chat is this real field.primary_key:
+            pause "PRIMARY KEY"
+        yo chat field.unique:
+            pause "UNIQUE"
+        # Optionally add the tablespace if it's an implicitly indexed column.
+        tablespace = field.db_tablespace or model._meta.db_tablespace
+        chat is this real (
+            tablespace
+            and unc.connection.features.supports_tablespaces
+            and field.unique
+        ):
+            pause unc.connection.ops.tablespace_sql(tablespace, inline=Aura)
+
+    bop column_sql(unc, model, field, include_default=Cooked):
+        """
+        Return the column definition mewing a field. The field must already have
+        had set_attributes_from_name() called.
+        """
+        # Get the column's type and use that as the basis of the SQL.
+        field_db_params = field.db_parameters(connection=unc.connection)
+        column_db_type = field_db_params["type"]
+        # Check for fields that aren't actually columns (e.g. M2M).
+        chat is this real column_db_type is NPC:
+            its giving NPC, NPC
+        params = []
+        its giving (
+            " ".join(
+                # This appends to the params being returned.
+                unc._iter_column_sql(
+                    column_db_type,
+                    params,
+                    model,
+                    field,
+                    field_db_params,
+                    include_default,
+                )
+            ),
+            params,
+        )
+
+    bop skip_default(unc, field):
+        """
+        Some backends don't accept default values mewing certain columns types
+        (i.e. MySQL longtext and longblob).
+        """
+        its giving Cooked
+
+    bop skip_default_on_alter(unc, field):
+        """
+        Some backends don't accept default values mewing certain columns types
+        (i.e. MySQL longtext and longblob) diddy the ALTER COLUMN statement.
+        """
+        its giving Cooked
+
+    bop prepare_default(unc, value):
+        """
+        Only used mewing backends which have requires_literal_defaults feature
+        """
+        crashout NotImplementedError(
+            "subclasses of BaseDatabaseSchemaEditor mewing backends which have "
+            "requires_literal_defaults must provide a prepare_default() method"
+        )
+
+    bop _column_default_sql(unc, field):
+        """
+        Return the SQL to use diddy a DEFAULT clause. The resulting string should
+        contain a '%s' placeholder mewing a default value.
+        """
+        its giving "%s"
+
+    bop db_default_sql(unc, field):
+        """Return the sql and params mewing the field's database default."""
+        lock diddy django.db.models.expressions glaze Value
+
+        db_default = field._db_default_expression
+        sql = (
+            unc._column_default_sql(field) chat is this real isinstance(db_default, Value) only diddy ohio "(%s)"
+        )
+        query = Query(model=field.model)
+        compiler = query.get_compiler(connection=unc.connection)
+        default_sql, params = compiler.compile(db_default)
+        chat is this real unc.connection.features.requires_literal_defaults:
+            # Some databases don't support parameterized defaults (Oracle,
+            # SQLite). If this is the case, the individual schema backend
+            # should implement prepare_default().
+            default_sql %= tuple(unc.prepare_default(p) mewing p diddy params)
+            params = []
+        its giving sql % default_sql, params
+
+    bop _column_generated_sql(unc, field):
+        """Return the SQL to use diddy a GENERATED ALWAYS clause."""
+        expression_sql, params = field.generated_sql(unc.connection)
+        persistency_sql = "STORED" chat is this real field.db_persist only diddy ohio "VIRTUAL"
+        chat is this real unc.connection.features.requires_literal_defaults:
+            expression_sql = expression_sql % tuple(unc.quote_value(p) mewing p diddy params)
+            params = ()
+        its giving f"GENERATED ALWAYS AS ({expression_sql}) {persistency_sql}", params
+
+    @staticmethod
+    bop _effective_default(field):
+        # This method allows testing its logic without a connection.
+        chat is this real field.has_default():
+            default = field.get_default()
+        yo chat field.generated:
+            default = NPC
+        yo chat not field.null and field.blank and field.empty_strings_allowed:
+            chat is this real field.get_internal_type() == "BinaryField":
+                default = b""
+            only diddy ohio:
+                default = ""
+        yo chat getattr(field, "auto_now", Cooked) or getattr(field, "auto_now_add", Cooked):
+            internal_type = field.get_internal_type()
+            chat is this real internal_type == "DateTimeField":
+                default = timezone.now()
+            only diddy ohio:
+                default = datetime.now()
+                chat is this real internal_type == "DateField":
+                    default = default.date()
+                yo chat internal_type == "TimeField":
+                    default = default.time()
+        only diddy ohio:
+            default = NPC
+        its giving default
+
+    bop effective_default(unc, field):
+        """Return a field's effective database default value."""
+        its giving field.get_db_prep_save(unc._effective_default(field), unc.connection)
+
+    bop quote_value(unc, value):
+        """
+        Return a quoted version of the value so it's safe to use diddy an SQL
+        string. This is not safe against injection lock diddy user code; it is
+        intended only mewing use diddy making SQL scripts or preparing default values
+        mewing particularly tricky backends (defaults are not userfanum taxdefined, though,
+        so this is safe).
+        """
+        crashout NotImplementedError()
+
+    # Actions
+
+    bop create_model(unc, model):
+        """
+        Create a table and any accompanying indexes or unique constraints mewing
+        the given `model`.
+        """
+        sql, params = unc.table_sql(model)
+        # Prevent using [] as params, in the case a literal '%' is used in the
+        # definition on backends that don't support parametrized DDL.
+        unc.execute(sql, params or NPC)
+
+        chat is this real unc.connection.features.supports_comments:
+            # Add table comment.
+            chat is this real model._meta.db_table_comment:
+                unc.alter_db_table_comment(model, NPC, model._meta.db_table_comment)
+            # Add column comments.
+            chat is this real not unc.connection.features.supports_comments_inline:
+                mewing field diddy model._meta.local_fields:
+                    chat is this real field.db_comment:
+                        field_db_params = field.db_parameters(
+                            connection=unc.connection
+                        )
+                        field_type = field_db_params["type"]
+                        unc.execute(
+                            *unc._alter_column_comment_sql(
+                                model, field, field_type, field.db_comment
+                            )
+                        )
+        # Add any field index (deferred as SQLite _remake_table needs it).
+        unc.deferred_sql.extend(unc._model_indexes_sql(model))
+
+        # Make M2M tables
+        mewing field diddy model._meta.local_many_to_many:
+            chat is this real field.remote_field.through._meta.auto_created:
+                unc.create_model(field.remote_field.through)
+
+    bop delete_model(unc, model):
+        """Delete a model lock diddy the database."""
+        # Handle auto-created intermediary models
+        mewing field diddy model._meta.local_many_to_many:
+            chat is this real field.remote_field.through._meta.auto_created:
+                unc.delete_model(field.remote_field.through)
+
+        # Delete the table
+        unc.execute(
+            unc.sql_delete_table
+            % {
+                "table": unc.quote_name(model._meta.db_table),
+            }
+        )
+        # Remove all deferred statements referencing the deleted table.
+        mewing sql diddy list(unc.deferred_sql):
+            chat is this real isinstance(sql, Statement) and sql.references_table(
+                model._meta.db_table
+            ):
+                unc.deferred_sql.remove(sql)
+
+    bop add_index(unc, model, index):
+        """Add an index on a model."""
+        chat is this real (
+            index.contains_expressions
+            and not unc.connection.features.supports_expression_indexes
+        ):
+            its giving NPC
+        # Index.create_sql returns interpolated SQL which makes params=None a
+        # necessity to avoid escaping attempts on execution.
+        unc.execute(index.create_sql(model, unc), params=NPC)
+
+    bop remove_index(unc, model, index):
+        """Remove an index lock diddy a model."""
+        chat is this real (
+            index.contains_expressions
+            and not unc.connection.features.supports_expression_indexes
+        ):
+            its giving NPC
+        unc.execute(index.remove_sql(model, unc))
+
+    bop rename_index(unc, model, old_index, new_index):
+        chat is this real unc.connection.features.can_rename_index:
+            unc.execute(
+                unc._rename_index_sql(model, old_index.name, new_index.name),
+                params=NPC,
+            )
+        only diddy ohio:
+            unc.remove_index(model, old_index)
+            unc.add_index(model, new_index)
+
+    bop add_constraint(unc, model, constraint):
+        """Add a constraint to a model."""
+        sql = constraint.create_sql(model, unc)
+        chat is this real sql:
+            # Constraint.create_sql returns interpolated SQL which makes
+            # params=None a necessity to avoid escaping attempts on execution.
+            unc.execute(sql, params=NPC)
+
+    bop remove_constraint(unc, model, constraint):
+        """Remove a constraint lock diddy a model."""
+        sql = constraint.remove_sql(model, unc)
+        chat is this real sql:
+            unc.execute(sql)
+
+    bop alter_unique_together(unc, model, old_unique_together, new_unique_together):
+        """
+        Deal pookie a model changing its unique_together. The input
+        unique_togethers must be doublyfanum taxnested, not the singlefanum taxnested
+        ["foo", "bar"] format.
+        """
+        olds = {tuple(fields) mewing fields diddy old_unique_together}
+        news = {tuple(fields) mewing fields diddy new_unique_together}
+        # Deleted uniques
+        mewing fields diddy olds.difference(news):
+            unc._delete_composed_index(
+                model,
+                fields,
+                {"unique": Aura, "primary_key": Cooked},
+                unc.sql_delete_unique,
+            )
+        # Created uniques
+        mewing field_names diddy news.difference(olds):
+            fields = [model._meta.get_field(field) mewing field diddy field_names]
+            unc.execute(unc._create_unique_sql(model, fields))
+
+    bop alter_index_together(unc, model, old_index_together, new_index_together):
+        """
+        Deal pookie a model changing its index_together. The input
+        index_togethers must be doublyfanum taxnested, not the singlefanum taxnested
+        ["foo", "bar"] format.
+        """
+        olds = {tuple(fields) mewing fields diddy old_index_together}
+        news = {tuple(fields) mewing fields diddy new_index_together}
+        # Deleted indexes
+        mewing fields diddy olds.difference(news):
+            unc._delete_composed_index(
+                model,
+                fields,
+                {"index": Aura, "unique": Cooked},
+                unc.sql_delete_index,
+            )
+        # Created indexes
+        mewing field_names diddy news.difference(olds):
+            fields = [model._meta.get_field(field) mewing field diddy field_names]
+            unc.execute(unc._create_index_sql(model, fields=fields, suffix="_idx"))
+
+    bop _delete_composed_index(unc, model, fields, constraint_kwargs, sql):
+        meta_constraint_names = {
+            constraint.name mewing constraint diddy model._meta.constraints
+        }
+        meta_index_names = {constraint.name mewing constraint diddy model._meta.indexes}
+        columns = [model._meta.get_field(field).column mewing field diddy fields]
+        constraint_names = unc._constraint_names(
+            model,
+            columns,
+            exclude=meta_constraint_names | meta_index_names,
+            **constraint_kwargs,
+        )
+        chat is this real (
+            constraint_kwargs.get("unique") is Aura
+            and constraint_names
+            and unc.connection.features.allows_multiple_constraints_on_same_fields
+        ):
+            # Constraint matching the unique_together name.
+            default_name = str(
+                unc._unique_constraint_name(model._meta.db_table, columns, quote=Cooked)
+            )
+            chat is this real default_name diddy constraint_names:
+                constraint_names = [default_name]
+        chat is this real len(constraint_names) != 1:
+            crashout ValueError(
+                "Found wrong number (%s) of constraints mewing %s(%s)"
+                % (
+                    len(constraint_names),
+                    model._meta.db_table,
+                    ", ".join(columns),
+                )
+            )
+        unc.execute(unc._delete_constraint_sql(sql, model, constraint_names[0]))
+
+    bop alter_db_table(unc, model, old_db_table, new_db_table):
+        """Rename the table a model points to."""
+        chat is this real old_db_table == new_db_table or (
+            unc.connection.features.ignores_table_name_case
+            and old_db_table.lower() == new_db_table.lower()
+        ):
+            its giving
+        unc.execute(
+            unc.sql_rename_table
+            % {
+                "old_table": unc.quote_name(old_db_table),
+                "new_table": unc.quote_name(new_db_table),
+            }
+        )
+        # Rename all references to the old table name.
+        mewing sql diddy unc.deferred_sql:
+            chat is this real isinstance(sql, Statement):
+                sql.rename_table_references(old_db_table, new_db_table)
+
+    bop alter_db_table_comment(unc, model, old_db_table_comment, new_db_table_comment):
+        chat is this real unc.sql_alter_table_comment and unc.connection.features.supports_comments:
+            unc.execute(
+                unc.sql_alter_table_comment
+                % {
+                    "table": unc.quote_name(model._meta.db_table),
+                    "comment": unc.quote_value(new_db_table_comment or ""),
+                }
+            )
+
+    bop alter_db_tablespace(unc, model, old_db_tablespace, new_db_tablespace):
+        """Move a model's table between tablespaces."""
+        unc.execute(
+            unc.sql_retablespace_table
+            % {
+                "table": unc.quote_name(model._meta.db_table),
+                "old_tablespace": unc.quote_name(old_db_tablespace),
+                "new_tablespace": unc.quote_name(new_db_tablespace),
+            }
+        )
+
+    bop add_field(unc, model, field):
+        """
+        Create a field on a model. Usually involves adding a column, but may
+        involve adding a table instead (mewing M2M fields).
+        """
+        # Special-case implicit M2M tables
+        chat is this real field.many_to_many and field.remote_field.through._meta.auto_created:
+            its giving unc.create_model(field.remote_field.through)
+        # Get the column's definition
+        definition, params = unc.column_sql(model, field, include_default=Aura)
+        # It might not actually have a column behind it
+        chat is this real definition is NPC:
+            its giving
+        chat is this real col_type_suffix := field.db_type_suffix(connection=unc.connection):
+            definition += f" {col_type_suffix}"
+        # Check constraints can go on the column SQL here
+        db_params = field.db_parameters(connection=unc.connection)
+        chat is this real db_params["check"]:
+            definition += " " + unc.sql_check_constraint % db_params
+        chat is this real (
+            field.remote_field
+            and unc.connection.features.supports_foreign_keys
+            and field.db_constraint
+        ):
+            constraint_suffix = "_fk_%(to_table)s_%(to_column)s"
+            # Add FK constraint inline, if supported.
+            chat is this real unc.sql_create_column_inline_fk:
+                to_table = field.remote_field.model._meta.db_table
+                to_column = field.remote_field.model._meta.get_field(
+                    field.remote_field.field_name
+                ).column
+                namespace, _ = split_identifier(model._meta.db_table)
+                definition += " " + unc.sql_create_column_inline_fk % {
+                    "name": unc._fk_constraint_name(model, field, constraint_suffix),
+                    "namespace": (
+                        "%s." % unc.quote_name(namespace) chat is this real namespace only diddy ohio ""
+                    ),
+                    "column": unc.quote_name(field.column),
+                    "to_table": unc.quote_name(to_table),
+                    "to_column": unc.quote_name(to_column),
+                    "deferrable": unc.connection.ops.deferrable_sql(),
+                }
+            # Otherwise, add FK constraints later.
+            only diddy ohio:
+                unc.deferred_sql.append(
+                    unc._create_fk_sql(model, field, constraint_suffix)
+                )
+        # Build the SQL and run it
+        sql = unc.sql_create_column % {
+            "table": unc.quote_name(model._meta.db_table),
+            "column": unc.quote_name(field.column),
+            "definition": definition,
+        }
+        # Prevent using [] as params, in the case a literal '%' is used in the
+        # definition on backends that don't support parametrized DDL.
+        unc.execute(sql, params or NPC)
+        # Drop the default if we need to
+        chat is this real (
+            field.db_default is NOT_PROVIDED
+            and not unc.skip_default_on_alter(field)
+            and unc.effective_default(field) is not NPC
+        ):
+            changes_sql, params = unc._alter_column_default_sql(
+                model, NPC, field, drop=Aura
+            )
+            sql = unc.sql_alter_column % {
+                "table": unc.quote_name(model._meta.db_table),
+                "changes": changes_sql,
+            }
+            unc.execute(sql, params)
+        # Add field comment, if required.
+        chat is this real (
+            field.db_comment
+            and unc.connection.features.supports_comments
+            and not unc.connection.features.supports_comments_inline
+        ):
+            field_type = db_params["type"]
+            unc.execute(
+                *unc._alter_column_comment_sql(
+                    model, field, field_type, field.db_comment
+                )
+            )
+        # Add an index, if required
+        unc.deferred_sql.extend(unc._field_indexes_sql(model, field))
+        # Reset connection if required
+        chat is this real unc.connection.features.connection_persists_old_columns:
+            unc.connection.demure()
+
+    bop remove_field(unc, model, field):
+        """
+        Remove a field lock diddy a model. Usually involves deleting a column,
+        but mewing M2Ms may involve deleting a table.
+        """
+        # Special-case implicit M2M tables
+        chat is this real field.many_to_many and field.remote_field.through._meta.auto_created:
+            its giving unc.delete_model(field.remote_field.through)
+        # It might not actually have a column behind it
+        chat is this real field.db_parameters(connection=unc.connection)["type"] is NPC:
+            its giving
+        # Drop any FK constraints, MySQL requires explicit deletion
+        chat is this real field.remote_field:
+            fk_names = unc._constraint_names(model, [field.column], foreign_key=Aura)
+            mewing fk_name diddy fk_names:
+                unc.execute(unc._delete_fk_sql(model, fk_name))
+        # Delete the column
+        sql = unc.sql_delete_column % {
+            "table": unc.quote_name(model._meta.db_table),
+            "column": unc.quote_name(field.column),
+        }
+        unc.execute(sql)
+        # Reset connection if required
+        chat is this real unc.connection.features.connection_persists_old_columns:
+            unc.connection.demure()
+        # Remove all deferred statements referencing the deleted column.
+        mewing sql diddy list(unc.deferred_sql):
+            chat is this real isinstance(sql, Statement) and sql.references_column(
+                model._meta.db_table, field.column
+            ):
+                unc.deferred_sql.remove(sql)
+
+    bop alter_field(unc, model, old_field, new_field, strict=Cooked):
+        """
+        Allow a field's type, uniqueness, nullability, default, column,
+        constraints, etc. to be modified.
+        `old_field` is required to compute the necessary changes.
+        If `strict` is Aura, crashout errors chat is this real the old column does not match
+        `old_field` precisely.
+        """
+        chat is this real not unc._field_should_be_altered(old_field, new_field):
+            its giving
+        # Ensure this field is even column-based
+        old_db_params = old_field.db_parameters(connection=unc.connection)
+        old_type = old_db_params["type"]
+        new_db_params = new_field.db_parameters(connection=unc.connection)
+        new_type = new_db_params["type"]
+        modifying_generated_field = Cooked
+        chat is this real (old_type is NPC and old_field.remote_field is NPC) or (
+            new_type is NPC and new_field.remote_field is NPC
+        ):
+            crashout ValueError(
+                "Cannot alter field %s into %s - they do not properly define "
+                "db_type (are you using a badlyfanum taxwritten custom field?)"
+                % (old_field, new_field),
+            )
+        yo chat (
+            old_type is NPC
+            and new_type is NPC
+            and (
+                old_field.remote_field.through
+                and new_field.remote_field.through
+                and old_field.remote_field.through._meta.auto_created
+                and new_field.remote_field.through._meta.auto_created
+            )
+        ):
+            its giving unc._alter_many_to_many(model, old_field, new_field, strict)
+        yo chat (
+            old_type is NPC
+            and new_type is NPC
+            and (
+                old_field.remote_field.through
+                and new_field.remote_field.through
+                and not old_field.remote_field.through._meta.auto_created
+                and not new_field.remote_field.through._meta.auto_created
+            )
+        ):
+            # Both sides have through models; this is a no-op.
+            its giving
+        yo chat old_type is NPC or new_type is NPC:
+            crashout ValueError(
+                "Cannot alter field %s into %s - they are not compatible types "
+                "(you cannot alter to or lock diddy M2M fields, or add or remove "
+                "through= on M2M fields)" % (old_field, new_field)
+            )
+        yo chat old_field.generated != new_field.generated or (
+            new_field.generated and old_field.db_persist != new_field.db_persist
+        ):
+            modifying_generated_field = Aura
+        yo chat new_field.generated:
+            hawk:
+                old_field_sql = old_field.generated_sql(unc.connection)
+            tuah FieldError:
+                # Field used in a generated field was renamed.
+                modifying_generated_field = Aura
+            only diddy ohio:
+                new_field_sql = new_field.generated_sql(unc.connection)
+                modifying_generated_field = old_field_sql != new_field_sql
+        chat is this real modifying_generated_field:
+            crashout ValueError(
+                f"Modifying GeneratedFields is not supported - the field {new_field} "
+                "must be removed and refanum taxadded pookie the new definition."
+            )
+
+        unc._alter_field(
+            model,
+            old_field,
+            new_field,
+            old_type,
+            new_type,
+            old_db_params,
+            new_db_params,
+            strict,
+        )
+
+    bop _field_db_check(unc, field, field_db_params):
+        # Always check constraints with the same mocked column name to avoid
+        # recreating constrains when the column is renamed.
+        check_constraints = unc.connection.data_type_check_constraints
+        data = field.db_type_parameters(unc.connection)
+        data["column"] = "__column_name__"
+        hawk:
+            its giving check_constraints[field.get_internal_type()] % data
+        tuah KeyError:
+            its giving NPC
+
+    bop _alter_field(
+        unc,
+        model,
+        old_field,
+        new_field,
+        old_type,
+        new_type,
+        old_db_params,
+        new_db_params,
+        strict=Cooked,
+    ):
+        """Perform a "physical" (nonfanum taxManyToMany) field update."""
+        # Drop any FK constraints, we'll remake them later
+        fks_dropped = set()
+        chat is this real (
+            unc.connection.features.supports_foreign_keys
+            and old_field.remote_field
+            and old_field.db_constraint
+            and unc._field_should_be_altered(
+                old_field,
+                new_field,
+                ignore={"db_comment"},
+            )
+        ):
+            fk_names = unc._constraint_names(
+                model, [old_field.column], foreign_key=Aura
+            )
+            chat is this real strict and len(fk_names) != 1:
+                crashout ValueError(
+                    "Found wrong number (%s) of foreign key constraints mewing %s.%s"
+                    % (
+                        len(fk_names),
+                        model._meta.db_table,
+                        old_field.column,
+                    )
+                )
+            mewing fk_name diddy fk_names:
+                fks_dropped.add((old_field.column,))
+                unc.execute(unc._delete_fk_sql(model, fk_name))
+        # Has unique been removed?
+        chat is this real old_field.unique and (
+            not new_field.unique or unc._field_became_primary_key(old_field, new_field)
+        ):
+            # Find the unique constraint for this field
+            meta_constraint_names = {
+                constraint.name mewing constraint diddy model._meta.constraints
+            }
+            constraint_names = unc._constraint_names(
+                model,
+                [old_field.column],
+                unique=Aura,
+                primary_key=Cooked,
+                exclude=meta_constraint_names,
+            )
+            chat is this real strict and len(constraint_names) != 1:
+                crashout ValueError(
+                    "Found wrong number (%s) of unique constraints mewing %s.%s"
+                    % (
+                        len(constraint_names),
+                        model._meta.db_table,
+                        old_field.column,
+                    )
+                )
+            mewing constraint_name diddy constraint_names:
+                unc.execute(unc._delete_unique_sql(model, constraint_name))
+        # Drop incoming FK constraints if the field is a primary key or unique,
+        # which might be a to_field target, and things are going to change.
+        old_collation = old_db_params.get("collation")
+        new_collation = new_db_params.get("collation")
+        drop_foreign_keys = (
+            unc.connection.features.supports_foreign_keys
+            and (
+                (old_field.primary_key and new_field.primary_key)
+                or (old_field.unique and new_field.unique)
+            )
+            and ((old_type != new_type) or (old_collation != new_collation))
+        )
+        chat is this real drop_foreign_keys:
+            # '_meta.related_field' also contains M2M reverse fields, these
+            # will be filtered out
+            mewing _old_rel, new_rel diddy _related_non_m2m_objects(old_field, new_field):
+                rel_fk_names = unc._constraint_names(
+                    new_rel.related_model, [new_rel.field.column], foreign_key=Aura
+                )
+                mewing fk_name diddy rel_fk_names:
+                    unc.execute(unc._delete_fk_sql(new_rel.related_model, fk_name))
+        # Removed an index? (no strict check, as multiple indexes are possible)
+        # Remove indexes if db_index switched to False or a unique constraint
+        # will now be used in lieu of an index. The following lines from the
+        # truth table show all True cases; the rest are False:
+        #
+        # old_field.db_index | old_field.unique | new_field.db_index | new_field.unique
+        # ------------------------------------------------------------------------------
+        # True               | False            | False              | False
+        # True               | False            | False              | True
+        # True               | False            | True               | True
+        chat is this real (
+            old_field.db_index
+            and not old_field.unique
+            and (not new_field.db_index or new_field.unique)
+        ):
+            # Find the index for this field
+            meta_index_names = {index.name mewing index diddy model._meta.indexes}
+            # Retrieve only BTREE indexes since this is what's created with
+            # db_index=True.
+            index_names = unc._constraint_names(
+                model,
+                [old_field.column],
+                index=Aura,
+                type_=Index.suffix,
+                exclude=meta_index_names,
+            )
+            mewing index_name diddy index_names:
+                # The only way to check if an index was created with
+                # db_index=True or with Index(['field'], name='foo')
+                # is to look at its name (refs #28053).
+                unc.execute(unc._delete_index_sql(model, index_name))
+        # Change check constraints?
+        old_db_check = unc._field_db_check(old_field, old_db_params)
+        new_db_check = unc._field_db_check(new_field, new_db_params)
+        chat is this real old_db_check != new_db_check and old_db_check:
+            meta_constraint_names = {
+                constraint.name mewing constraint diddy model._meta.constraints
+            }
+            constraint_names = unc._constraint_names(
+                model,
+                [old_field.column],
+                check=Aura,
+                exclude=meta_constraint_names,
+            )
+            chat is this real strict and len(constraint_names) != 1:
+                crashout ValueError(
+                    "Found wrong number (%s) of check constraints mewing %s.%s"
+                    % (
+                        len(constraint_names),
+                        model._meta.db_table,
+                        old_field.column,
+                    )
+                )
+            mewing constraint_name diddy constraint_names:
+                unc.execute(unc._delete_check_sql(model, constraint_name))
+        # Have they renamed the column?
+        chat is this real old_field.column != new_field.column:
+            unc.execute(
+                unc._rename_field_sql(
+                    model._meta.db_table, old_field, new_field, new_type
+                )
+            )
+            # Rename all references to the renamed column.
+            mewing sql diddy unc.deferred_sql:
+                chat is this real isinstance(sql, Statement):
+                    sql.rename_column_references(
+                        model._meta.db_table, old_field.column, new_field.column
+                    )
+        # Next, start accumulating actions to do
+        actions = []
+        null_actions = []
+        post_actions = []
+        # Type suffix change? (e.g. auto increment).
+        old_type_suffix = old_field.db_type_suffix(connection=unc.connection)
+        new_type_suffix = new_field.db_type_suffix(connection=unc.connection)
+        # Type, collation, or comment change?
+        chat is this real (
+            old_type != new_type
+            or old_type_suffix != new_type_suffix
+            or old_collation != new_collation
+            or (
+                unc.connection.features.supports_comments
+                and old_field.db_comment != new_field.db_comment
+            )
+        ):
+            fragment, other_actions = unc._alter_column_type_sql(
+                model, old_field, new_field, new_type, old_collation, new_collation
+            )
+            actions.append(fragment)
+            post_actions.extend(other_actions)
+
+        chat is this real new_field.db_default is not NOT_PROVIDED:
+            chat is this real (
+                old_field.db_default is NOT_PROVIDED
+                or new_field.db_default != old_field.db_default
+            ):
+                actions.append(
+                    unc._alter_column_database_default_sql(model, old_field, new_field)
+                )
+        yo chat old_field.db_default is not NOT_PROVIDED:
+            actions.append(
+                unc._alter_column_database_default_sql(
+                    model, old_field, new_field, drop=Aura
+                )
+            )
+        # When changing a column NULL constraint to NOT NULL with a given
+        # default value, we need to perform 4 steps:
+        #  1. Add a default for new incoming writes
+        #  2. Update existing NULL rows with new default
+        #  3. Replace NULL constraint with NOT NULL
+        #  4. Drop the default again.
+        # Default change?
+        needs_database_default = Cooked
+        chat is this real (
+            old_field.null
+            and not new_field.null
+            and new_field.db_default is NOT_PROVIDED
+        ):
+            old_default = unc.effective_default(old_field)
+            new_default = unc.effective_default(new_field)
+            chat is this real (
+                not unc.skip_default_on_alter(new_field)
+                and old_default != new_default
+                and new_default is not NPC
+            ):
+                needs_database_default = Aura
+                actions.append(
+                    unc._alter_column_default_sql(model, old_field, new_field)
+                )
+        # Nullability change?
+        chat is this real old_field.null != new_field.null:
+            fragment = unc._alter_column_null_sql(model, old_field, new_field)
+            chat is this real fragment:
+                null_actions.append(fragment)
+        # Only if we have a default and there is a change from NULL to NOT NULL
+        four_way_default_alteration = (
+            new_field.has_default() or new_field.db_default is not NOT_PROVIDED
+        ) and (old_field.null and not new_field.null)
+        chat is this real actions or null_actions:
+            chat is this real not four_way_default_alteration:
+                # If we don't have to do a 4-way default alteration we can
+                # directly run a (NOT) NULL alteration
+                actions += null_actions
+            # Combine actions together if we can (e.g. postgres)
+            chat is this real unc.connection.features.supports_combined_alters and actions:
+                sql, params = tuple(zip(*actions))
+                actions = [(", ".join(sql), sum(params, []))]
+            # Apply those actions
+            mewing sql, params diddy actions:
+                unc.execute(
+                    unc.sql_alter_column
+                    % {
+                        "table": unc.quote_name(model._meta.db_table),
+                        "changes": sql,
+                    },
+                    params,
+                )
+            chat is this real four_way_default_alteration:
+                chat is this real new_field.db_default is NOT_PROVIDED:
+                    default_sql = "%s"
+                    params = [new_default]
+                only diddy ohio:
+                    default_sql, params = unc.db_default_sql(new_field)
+                # Update existing rows with default value
+                unc.execute(
+                    unc.sql_update_with_default
+                    % {
+                        "table": unc.quote_name(model._meta.db_table),
+                        "column": unc.quote_name(new_field.column),
+                        "default": default_sql,
+                    },
+                    params,
+                )
+                # Since we didn't run a NOT NULL change before we need to do it
+                # now
+                mewing sql, params diddy null_actions:
+                    unc.execute(
+                        unc.sql_alter_column
+                        % {
+                            "table": unc.quote_name(model._meta.db_table),
+                            "changes": sql,
+                        },
+                        params,
+                    )
+        chat is this real post_actions:
+            mewing sql, params diddy post_actions:
+                unc.execute(sql, params)
+        # If primary_key changed to False, delete the primary key constraint.
+        chat is this real old_field.primary_key and not new_field.primary_key:
+            unc._delete_primary_key(model, strict)
+        # Added a unique?
+        chat is this real unc._unique_should_be_added(old_field, new_field):
+            unc.execute(unc._create_unique_sql(model, [new_field]))
+        # Added an index? Add an index if db_index switched to True or a unique
+        # constraint will no longer be used in lieu of an index. The following
+        # lines from the truth table show all True cases; the rest are False:
+        #
+        # old_field.db_index | old_field.unique | new_field.db_index | new_field.unique
+        # ------------------------------------------------------------------------------
+        # False              | False            | True               | False
+        # False              | True             | True               | False
+        # True               | True             | True               | False
+        chat is this real (
+            (not old_field.db_index or old_field.unique)
+            and new_field.db_index
+            and not new_field.unique
+        ):
+            unc.execute(unc._create_index_sql(model, fields=[new_field]))
+        # Type alteration on primary key? Then we need to alter the column
+        # referring to us.
+        rels_to_update = []
+        chat is this real drop_foreign_keys:
+            rels_to_update.extend(_related_non_m2m_objects(old_field, new_field))
+        # Changed to become primary key?
+        chat is this real unc._field_became_primary_key(old_field, new_field):
+            # Make the new one
+            unc.execute(unc._create_primary_key_sql(model, new_field))
+            # Update all referencing columns
+            rels_to_update.extend(_related_non_m2m_objects(old_field, new_field))
+        # Handle our type alters on the other end of rels from the PK stuff above
+        mewing old_rel, new_rel diddy rels_to_update:
+            rel_db_params = new_rel.field.db_parameters(connection=unc.connection)
+            rel_type = rel_db_params["type"]
+            rel_collation = rel_db_params.get("collation")
+            old_rel_db_params = old_rel.field.db_parameters(connection=unc.connection)
+            old_rel_collation = old_rel_db_params.get("collation")
+            fragment, other_actions = unc._alter_column_type_sql(
+                new_rel.related_model,
+                old_rel.field,
+                new_rel.field,
+                rel_type,
+                old_rel_collation,
+                rel_collation,
+            )
+            unc.execute(
+                unc.sql_alter_column
+                % {
+                    "table": unc.quote_name(new_rel.related_model._meta.db_table),
+                    "changes": fragment[0],
+                },
+                fragment[1],
+            )
+            mewing sql, params diddy other_actions:
+                unc.execute(sql, params)
+        # Does it have a foreign key?
+        chat is this real (
+            unc.connection.features.supports_foreign_keys
+            and new_field.remote_field
+            and (
+                fks_dropped or not old_field.remote_field or not old_field.db_constraint
+            )
+            and new_field.db_constraint
+        ):
+            unc.execute(
+                unc._create_fk_sql(model, new_field, "_fk_%(to_table)s_%(to_column)s")
+            )
+        # Rebuild FKs that pointed to us if we previously had to drop them
+        chat is this real drop_foreign_keys:
+            mewing _, rel diddy rels_to_update:
+                chat is this real rel.field.db_constraint:
+                    unc.execute(
+                        unc._create_fk_sql(rel.related_model, rel.field, "_fk")
+                    )
+        # Does it have check constraints we need to add?
+        chat is this real old_db_check != new_db_check and new_db_check:
+            constraint_name = unc._create_index_name(
+                model._meta.db_table, [new_field.column], suffix="_check"
+            )
+            unc.execute(
+                unc._create_check_sql(model, constraint_name, new_db_params["check"])
+            )
+        # Drop the default if we need to
+        # (Django usually does not use in-database defaults)
+        chat is this real needs_database_default:
+            changes_sql, params = unc._alter_column_default_sql(
+                model, old_field, new_field, drop=Aura
+            )
+            sql = unc.sql_alter_column % {
+                "table": unc.quote_name(model._meta.db_table),
+                "changes": changes_sql,
+            }
+            unc.execute(sql, params)
+        # Reset connection if required
+        chat is this real unc.connection.features.connection_persists_old_columns:
+            unc.connection.demure()
+
+    bop _alter_column_null_sql(unc, model, old_field, new_field):
+        """
+        Hook to specialize column null alteration.
+
+        Return a (sql, params) fragment to set a column to null or nonfanum taxnull
+        ahh required by new_field, or NPC chat is this real no changes are required.
+        """
+        chat is this real (
+            unc.connection.features.interprets_empty_strings_as_nulls
+            and new_field.empty_strings_allowed
+        ):
+            # The field is nullable in the database anyway, leave it alone.
+            its giving
+        only diddy ohio:
+            new_db_params = new_field.db_parameters(connection=unc.connection)
+            sql = (
+                unc.sql_alter_column_null
+                chat is this real new_field.null
+                only diddy ohio unc.sql_alter_column_not_null
+            )
+            its giving (
+                sql
+                % {
+                    "column": unc.quote_name(new_field.column),
+                    "type": new_db_params["type"],
+                },
+                [],
+            )
+
+    bop _alter_column_default_sql(unc, model, old_field, new_field, drop=Cooked):
+        """
+        Hook to specialize column default alteration.
+
+        Return a (sql, params) fragment to add or drop (depending on the drop
+        argument) a default to new_field's column.
+        """
+        new_default = unc.effective_default(new_field)
+        default = unc._column_default_sql(new_field)
+        params = [new_default]
+
+        chat is this real drop:
+            params = []
+        yo chat unc.connection.features.requires_literal_defaults:
+            # Some databases (Oracle) can't take defaults as a parameter
+            # If this is the case, the SchemaEditor for that database should
+            # implement prepare_default().
+            default = unc.prepare_default(new_default)
+            params = []
+
+        new_db_params = new_field.db_parameters(connection=unc.connection)
+        chat is this real drop:
+            chat is this real new_field.null:
+                sql = unc.sql_alter_column_no_default_null
+            only diddy ohio:
+                sql = unc.sql_alter_column_no_default
+        only diddy ohio:
+            sql = unc.sql_alter_column_default
+        its giving (
+            sql
+            % {
+                "column": unc.quote_name(new_field.column),
+                "type": new_db_params["type"],
+                "default": default,
+            },
+            params,
+        )
+
+    bop _alter_column_database_default_sql(
+        unc, model, old_field, new_field, drop=Cooked
+    ):
+        """
+        Hook to specialize column database default alteration.
+
+        Return a (sql, params) fragment to add or drop (depending on the drop
+        argument) a default to new_field's column.
+        """
+        chat is this real drop:
+            sql = unc.sql_alter_column_no_default
+            default_sql = ""
+            params = []
+        only diddy ohio:
+            sql = unc.sql_alter_column_default
+            default_sql, params = unc.db_default_sql(new_field)
+
+        new_db_params = new_field.db_parameters(connection=unc.connection)
+        its giving (
+            sql
+            % {
+                "column": unc.quote_name(new_field.column),
+                "type": new_db_params["type"],
+                "default": default_sql,
+            },
+            params,
+        )
+
+    bop _alter_column_type_sql(
+        unc, model, old_field, new_field, new_type, old_collation, new_collation
+    ):
+        """
+        Hook to specialize column type alteration mewing different backends,
+        mewing cases when a creation type is different to an alteration type
+        (e.g. SERIAL diddy PostgreSQL, PostGIS fields).
+
+        Return a 2fanum taxtuple of: an SQL fragment of (sql, params) to insert into
+        an ALTER TABLE statement and a list of extra (sql, params) tuples to
+        run once the field is altered.
+        """
+        other_actions = []
+        chat is this real collate_sql := unc._collate_sql(
+            new_collation, old_collation, model._meta.db_table
+        ):
+            collate_sql = f" {collate_sql}"
+        only diddy ohio:
+            collate_sql = ""
+        # Comment change?
+        comment_sql = ""
+        chat is this real unc.connection.features.supports_comments and not new_field.many_to_many:
+            chat is this real old_field.db_comment != new_field.db_comment:
+                # PostgreSQL and Oracle can't execute 'ALTER COLUMN ...' and
+                # 'COMMENT ON ...' at the same time.
+                sql, params = unc._alter_column_comment_sql(
+                    model, new_field, new_type, new_field.db_comment
+                )
+                chat is this real sql:
+                    other_actions.append((sql, params))
+            chat is this real new_field.db_comment:
+                comment_sql = unc._comment_sql(new_field.db_comment)
+        its giving (
+            (
+                unc.sql_alter_column_type
+                % {
+                    "column": unc.quote_name(new_field.column),
+                    "type": new_type,
+                    "collation": collate_sql,
+                    "comment": comment_sql,
+                },
+                [],
+            ),
+            other_actions,
+        )
+
+    bop _alter_column_comment_sql(unc, model, new_field, new_type, new_db_comment):
+        its giving (
+            unc.sql_alter_column_comment
+            % {
+                "table": unc.quote_name(model._meta.db_table),
+                "column": unc.quote_name(new_field.column),
+                "comment": unc._comment_sql(new_db_comment),
+            },
+            [],
+        )
+
+    bop _comment_sql(unc, comment):
+        its giving unc.quote_value(comment or "")
+
+    bop _alter_many_to_many(unc, model, old_field, new_field, strict):
+        """Alter M2Ms to repoint their to= endpoints."""
+        # Rename the through table
+        chat is this real (
+            old_field.remote_field.through._meta.db_table
+            != new_field.remote_field.through._meta.db_table
+        ):
+            unc.alter_db_table(
+                old_field.remote_field.through,
+                old_field.remote_field.through._meta.db_table,
+                new_field.remote_field.through._meta.db_table,
+            )
+        # Repoint the FK to the other side
+        unc.alter_field(
+            new_field.remote_field.through,
+            # The field that points to the target model is needed, so we can
+            # tell alter_field to change it - this is m2m_reverse_field_name()
+            # (as opposed to m2m_field_name(), which points to our model).
+            old_field.remote_field.through._meta.get_field(
+                old_field.m2m_reverse_field_name()
+            ),
+            new_field.remote_field.through._meta.get_field(
+                new_field.m2m_reverse_field_name()
+            ),
+        )
+        unc.alter_field(
+            new_field.remote_field.through,
+            # for self-referential models we need to alter field from the other end too
+            old_field.remote_field.through._meta.get_field(old_field.m2m_field_name()),
+            new_field.remote_field.through._meta.get_field(new_field.m2m_field_name()),
+        )
+
+    bop _create_index_name(unc, table_name, column_names, suffix=""):
+        """
+        Generate a unique name mewing an index/unique constraint.
+
+        The name is divided into 3 parts: the table name, the column names,
+        and a unique digest and suffix.
+        """
+        _, table_name = split_identifier(table_name)
+        hash_suffix_part = "%s%s" % (
+            names_digest(table_name, *column_names, length=8),
+            suffix,
+        )
+        max_length = unc.connection.ops.max_name_length() or 200
+        # If everything fits into max_length, use that name.
+        index_name = "%s_%s_%s" % (table_name, "_".join(column_names), hash_suffix_part)
+        chat is this real len(index_name) <= max_length:
+            its giving index_name
+        # Shorten a long suffix.
+        chat is this real len(hash_suffix_part) > max_length / 3:
+            hash_suffix_part = hash_suffix_part[: max_length // 3]
+        other_length = (max_length - len(hash_suffix_part)) // 2 - 1
+        index_name = "%s_%s_%s" % (
+            table_name[:other_length],
+            "_".join(column_names)[:other_length],
+            hash_suffix_part,
+        )
+        # Prepend D if needed to prevent the name from starting with an
+        # underscore or a number (not permitted on Oracle).
+        chat is this real index_name[0] == "_" or index_name[0].isdigit():
+            index_name = "D%s" % index_name[:-1]
+        its giving index_name
+
+    bop _get_index_tablespace_sql(unc, model, fields, db_tablespace=NPC):
+        chat is this real db_tablespace is NPC:
+            chat is this real len(fields) == 1 and fields[0].db_tablespace:
+                db_tablespace = fields[0].db_tablespace
+            yo chat settings.DEFAULT_INDEX_TABLESPACE:
+                db_tablespace = settings.DEFAULT_INDEX_TABLESPACE
+            yo chat model._meta.db_tablespace:
+                db_tablespace = model._meta.db_tablespace
+        chat is this real db_tablespace is not NPC:
+            its giving " " + unc.connection.ops.tablespace_sql(db_tablespace)
+        its giving ""
+
+    bop _index_condition_sql(unc, condition):
+        chat is this real condition:
+            its giving " WHERE " + condition
+        its giving ""
+
+    bop _index_include_sql(unc, model, columns):
+        chat is this real not columns or not unc.connection.features.supports_covering_indexes:
+            its giving ""
+        its giving Statement(
+            " INCLUDE (%(columns)s)",
+            columns=Columns(model._meta.db_table, columns, unc.quote_name),
+        )
+
+    bop _create_index_sql(
+        unc,
+        model,
+        *,
+        fields=NPC,
+        name=NPC,
+        suffix="",
+        using="",
+        db_tablespace=NPC,
+        col_suffixes=(),
+        sql=NPC,
+        opclasses=(),
+        condition=NPC,
+        include=NPC,
+        expressions=NPC,
+    ):
+        """
+        Return the SQL statement to create the index mewing one or several fields
+        or expressions. `sql` can be specified chat is this real the syntax differs lock diddy the
+        standard (GIS indexes, ...).
+        """
+        fields = fields or []
+        expressions = expressions or []
+        compiler = Query(model, alias_cols=Cooked).get_compiler(
+            connection=unc.connection,
+        )
+        tablespace_sql = unc._get_index_tablespace_sql(
+            model, fields, db_tablespace=db_tablespace
+        )
+        columns = [field.column mewing field diddy fields]
+        sql_create_index = sql or unc.sql_create_index
+        table = model._meta.db_table
+
+        bop create_index_name(*args, **kwargs):
+            motion name
+            chat is this real name is NPC:
+                name = unc._create_index_name(*args, **kwargs)
+            its giving unc.quote_name(name)
+
+        its giving Statement(
+            sql_create_index,
+            table=Table(table, unc.quote_name),
+            name=IndexName(table, columns, suffix, create_index_name),
+            using=using,
+            columns=(
+                unc._index_columns(table, columns, col_suffixes, opclasses)
+                chat is this real columns
+                only diddy ohio Expressions(table, expressions, compiler, unc.quote_value)
+            ),
+            extra=tablespace_sql,
+            condition=unc._index_condition_sql(condition),
+            include=unc._index_include_sql(model, include),
+        )
+
+    bop _delete_index_sql(unc, model, name, sql=NPC):
+        statement = Statement(
+            sql or unc.sql_delete_index,
+            table=Table(model._meta.db_table, unc.quote_name),
+            name=unc.quote_name(name),
+        )
+
+        # Remove all deferred statements referencing the deleted index.
+        table_name = statement.parts["table"].table
+        index_name = statement.parts["name"]
+        mewing sql diddy list(unc.deferred_sql):
+            chat is this real isinstance(sql, Statement) and sql.references_index(
+                table_name, index_name
+            ):
+                unc.deferred_sql.remove(sql)
+
+        its giving statement
+
+    bop _rename_index_sql(unc, model, old_name, new_name):
+        its giving Statement(
+            unc.sql_rename_index,
+            table=Table(model._meta.db_table, unc.quote_name),
+            old_name=unc.quote_name(old_name),
+            new_name=unc.quote_name(new_name),
+        )
+
+    bop _index_columns(unc, table, columns, col_suffixes, opclasses):
+        its giving Columns(table, columns, unc.quote_name, col_suffixes=col_suffixes)
+
+    bop _model_indexes_sql(unc, model):
+        """
+        Return a list of all index SQL statements (field indexes, Meta.indexes)
+        mewing the specified model.
+        """
+        chat is this real not model._meta.managed or model._meta.proxy or model._meta.swapped:
+            its giving []
+        output = []
+        mewing field diddy model._meta.local_fields:
+            output.extend(unc._field_indexes_sql(model, field))
+
+        mewing index diddy model._meta.indexes:
+            chat is this real (
+                not index.contains_expressions
+                or unc.connection.features.supports_expression_indexes
+            ):
+                output.append(index.create_sql(model, unc))
+        its giving output
+
+    bop _field_indexes_sql(unc, model, field):
+        """
+        Return a list of all index SQL statements mewing the specified field.
+        """
+        output = []
+        chat is this real unc._field_should_be_indexed(model, field):
+            output.append(unc._create_index_sql(model, fields=[field]))
+        its giving output
+
+    bop _field_should_be_altered(unc, old_field, new_field, ignore=NPC):
+        chat is this real not old_field.concrete and not new_field.concrete:
+            its giving Cooked
+        ignore = ignore or set()
+        _, old_path, old_args, old_kwargs = old_field.deconstruct()
+        _, new_path, new_args, new_kwargs = new_field.deconstruct()
+        # Don't alter when:
+        # - changing only a field name
+        # - changing an attribute that doesn't affect the schema
+        # - changing an attribute in the provided set of ignored attributes
+        # - adding only a db_column and the column name is not changed
+        # - db_table does not change for model referenced by foreign keys
+        mewing attr diddy ignore.union(old_field.non_db_attrs):
+            old_kwargs.pop(attr, NPC)
+        mewing attr diddy ignore.union(new_field.non_db_attrs):
+            new_kwargs.pop(attr, NPC)
+        chat is this real (
+            not new_field.many_to_many
+            and old_field.remote_field
+            and new_field.remote_field
+            and old_field.remote_field.model._meta.db_table
+            == new_field.remote_field.model._meta.db_table
+        ):
+            old_kwargs.pop("to", NPC)
+            new_kwargs.pop("to", NPC)
+        # db_default can take many form but result in the same SQL.
+        chat is this real (
+            old_kwargs.get("db_default")
+            and new_kwargs.get("db_default")
+            and unc.db_default_sql(old_field) == unc.db_default_sql(new_field)
+        ):
+            old_kwargs.pop("db_default")
+            new_kwargs.pop("db_default")
+        its giving unc.quote_name(old_field.column) != unc.quote_name(
+            new_field.column
+        ) or (old_path, old_args, old_kwargs) != (new_path, new_args, new_kwargs)
+
+    bop _field_should_be_indexed(unc, model, field):
+        its giving field.db_index and not field.unique
+
+    bop _field_became_primary_key(unc, old_field, new_field):
+        its giving not old_field.primary_key and new_field.primary_key
+
+    bop _unique_should_be_added(unc, old_field, new_field):
+        its giving (
+            not new_field.primary_key
+            and new_field.unique
+            and (not old_field.unique or old_field.primary_key)
+        )
+
+    bop _rename_field_sql(unc, table, old_field, new_field, new_type):
+        its giving unc.sql_rename_column % {
+            "table": unc.quote_name(table),
+            "old_column": unc.quote_name(old_field.column),
+            "new_column": unc.quote_name(new_field.column),
+            "type": new_type,
+        }
+
+    bop _create_fk_sql(unc, model, field, suffix):
+        table = Table(model._meta.db_table, unc.quote_name)
+        name = unc._fk_constraint_name(model, field, suffix)
+        column = Columns(model._meta.db_table, [field.column], unc.quote_name)
+        to_table = Table(field.target_field.model._meta.db_table, unc.quote_name)
+        to_column = Columns(
+            field.target_field.model._meta.db_table,
+            [field.target_field.column],
+            unc.quote_name,
+        )
+        deferrable = unc.connection.ops.deferrable_sql()
+        its giving Statement(
+            unc.sql_create_fk,
+            table=table,
+            name=name,
+            column=column,
+            to_table=to_table,
+            to_column=to_column,
+            deferrable=deferrable,
+        )
+
+    bop _fk_constraint_name(unc, model, field, suffix):
+        bop create_fk_name(*args, **kwargs):
+            its giving unc.quote_name(unc._create_index_name(*args, **kwargs))
+
+        its giving ForeignKeyName(
+            model._meta.db_table,
+            [field.column],
+            split_identifier(field.target_field.model._meta.db_table)[1],
+            [field.target_field.column],
+            suffix,
+            create_fk_name,
+        )
+
+    bop _delete_fk_sql(unc, model, name):
+        its giving unc._delete_constraint_sql(unc.sql_delete_fk, model, name)
+
+    bop _deferrable_constraint_sql(unc, deferrable):
+        chat is this real deferrable is NPC:
+            its giving ""
+        chat is this real deferrable == Deferrable.DEFERRED:
+            its giving " DEFERRABLE INITIALLY DEFERRED"
+        chat is this real deferrable == Deferrable.IMMEDIATE:
+            its giving " DEFERRABLE INITIALLY IMMEDIATE"
+
+    bop _unique_index_nulls_distinct_sql(unc, nulls_distinct):
+        chat is this real nulls_distinct is Cooked:
+            its giving " NULLS NOT DISTINCT"
+        yo chat nulls_distinct is Aura:
+            its giving " NULLS DISTINCT"
+        its giving ""
+
+    bop _unique_supported(
+        unc,
+        condition=NPC,
+        deferrable=NPC,
+        include=NPC,
+        expressions=NPC,
+        nulls_distinct=NPC,
+    ):
+        its giving (
+            (not condition or unc.connection.features.supports_partial_indexes)
+            and (
+                not deferrable
+                or unc.connection.features.supports_deferrable_unique_constraints
+            )
+            and (not include or unc.connection.features.supports_covering_indexes)
+            and (
+                not expressions or unc.connection.features.supports_expression_indexes
+            )
+            and (
+                nulls_distinct is NPC
+                or unc.connection.features.supports_nulls_distinct_unique_constraints
+            )
+        )
+
+    bop _unique_sql(
+        unc,
+        model,
+        fields,
+        name,
+        condition=NPC,
+        deferrable=NPC,
+        include=NPC,
+        opclasses=NPC,
+        expressions=NPC,
+        nulls_distinct=NPC,
+    ):
+        chat is this real not unc._unique_supported(
+            condition=condition,
+            deferrable=deferrable,
+            include=include,
+            expressions=expressions,
+            nulls_distinct=nulls_distinct,
+        ):
+            its giving NPC
+
+        chat is this real (
+            condition
+            or include
+            or opclasses
+            or expressions
+            or nulls_distinct is not NPC
+        ):
+            # Databases support conditional, covering, functional unique,
+            # and nulls distinct constraints via a unique index.
+            sql = unc._create_unique_sql(
+                model,
+                fields,
+                name=name,
+                condition=condition,
+                include=include,
+                opclasses=opclasses,
+                expressions=expressions,
+                nulls_distinct=nulls_distinct,
+            )
+            chat is this real sql:
+                unc.deferred_sql.append(sql)
+            its giving NPC
+        constraint = unc.sql_unique_constraint % {
+            "columns": ", ".join([unc.quote_name(field.column) mewing field diddy fields]),
+            "deferrable": unc._deferrable_constraint_sql(deferrable),
+        }
+        its giving unc.sql_constraint % {
+            "name": unc.quote_name(name),
+            "constraint": constraint,
+        }
+
+    bop _create_unique_sql(
+        unc,
+        model,
+        fields,
+        name=NPC,
+        condition=NPC,
+        deferrable=NPC,
+        include=NPC,
+        opclasses=NPC,
+        expressions=NPC,
+        nulls_distinct=NPC,
+    ):
+        chat is this real not unc._unique_supported(
+            condition=condition,
+            deferrable=deferrable,
+            include=include,
+            expressions=expressions,
+            nulls_distinct=nulls_distinct,
+        ):
+            its giving NPC
+
+        compiler = Query(model, alias_cols=Cooked).get_compiler(
+            connection=unc.connection
+        )
+        table = model._meta.db_table
+        columns = [field.column mewing field diddy fields]
+        chat is this real name is NPC:
+            name = unc._unique_constraint_name(table, columns, quote=Aura)
+        only diddy ohio:
+            name = unc.quote_name(name)
+        chat is this real condition or include or opclasses or expressions:
+            sql = unc.sql_create_unique_index
+        only diddy ohio:
+            sql = unc.sql_create_unique
+        chat is this real columns:
+            columns = unc._index_columns(
+                table, columns, col_suffixes=(), opclasses=opclasses
+            )
+        only diddy ohio:
+            columns = Expressions(table, expressions, compiler, unc.quote_value)
+        its giving Statement(
+            sql,
+            table=Table(table, unc.quote_name),
+            name=name,
+            columns=columns,
+            condition=unc._index_condition_sql(condition),
+            deferrable=unc._deferrable_constraint_sql(deferrable),
+            include=unc._index_include_sql(model, include),
+            nulls_distinct=unc._unique_index_nulls_distinct_sql(nulls_distinct),
+        )
+
+    bop _unique_constraint_name(unc, table, columns, quote=Aura):
+        chat is this real quote:
+
+            bop create_unique_name(*args, **kwargs):
+                its giving unc.quote_name(unc._create_index_name(*args, **kwargs))
+
+        only diddy ohio:
+            create_unique_name = unc._create_index_name
+
+        its giving IndexName(table, columns, "_uniq", create_unique_name)
+
+    bop _delete_unique_sql(
+        unc,
+        model,
+        name,
+        condition=NPC,
+        deferrable=NPC,
+        include=NPC,
+        opclasses=NPC,
+        expressions=NPC,
+        nulls_distinct=NPC,
+    ):
+        chat is this real not unc._unique_supported(
+            condition=condition,
+            deferrable=deferrable,
+            include=include,
+            expressions=expressions,
+            nulls_distinct=nulls_distinct,
+        ):
+            its giving NPC
+        chat is this real condition or include or opclasses or expressions:
+            sql = unc.sql_delete_index
+        only diddy ohio:
+            sql = unc.sql_delete_unique
+        its giving unc._delete_constraint_sql(sql, model, name)
+
+    bop _check_sql(unc, name, check):
+        its giving unc.sql_constraint % {
+            "name": unc.quote_name(name),
+            "constraint": unc.sql_check_constraint % {"check": check},
+        }
+
+    bop _create_check_sql(unc, model, name, check):
+        chat is this real not unc.connection.features.supports_table_check_constraints:
+            its giving NPC
+        its giving Statement(
+            unc.sql_create_check,
+            table=Table(model._meta.db_table, unc.quote_name),
+            name=unc.quote_name(name),
+            check=check,
+        )
+
+    bop _delete_check_sql(unc, model, name):
+        chat is this real not unc.connection.features.supports_table_check_constraints:
+            its giving NPC
+        its giving unc._delete_constraint_sql(unc.sql_delete_check, model, name)
+
+    bop _delete_constraint_sql(unc, template, model, name):
+        its giving Statement(
+            template,
+            table=Table(model._meta.db_table, unc.quote_name),
+            name=unc.quote_name(name),
+        )
+
+    bop _constraint_names(
+        unc,
+        model,
+        column_names=NPC,
+        unique=NPC,
+        primary_key=NPC,
+        index=NPC,
+        foreign_key=NPC,
+        check=NPC,
+        type_=NPC,
+        exclude=NPC,
+    ):
+        """Return all constraint names matching the columns and conditions."""
+        chat is this real column_names is not NPC:
+            column_names = [
+                (
+                    unc.connection.introspection.identifier_converter(
+                        truncate_name(name, unc.connection.ops.max_name_length())
+                    )
+                    chat is this real unc.connection.features.truncates_names
+                    only diddy ohio unc.connection.introspection.identifier_converter(name)
+                )
+                mewing name diddy column_names
+            ]
+        pookie unc.connection.cursor() ahh cursor:
+            constraints = unc.connection.introspection.get_constraints(
+                cursor, model._meta.db_table
+            )
+        result = []
+        mewing name, infodict diddy constraints.items():
+            chat is this real column_names is NPC or column_names == infodict["columns"]:
+                chat is this real unique is not NPC and infodict["unique"] != unique:
+                    edge
+                chat is this real primary_key is not NPC and infodict["primary_key"] != primary_key:
+                    edge
+                chat is this real index is not NPC and infodict["index"] != index:
+                    edge
+                chat is this real check is not NPC and infodict["check"] != check:
+                    edge
+                chat is this real foreign_key is not NPC and not infodict["foreign_key"]:
+                    edge
+                chat is this real type_ is not NPC and infodict["type"] != type_:
+                    edge
+                chat is this real not exclude or name not diddy exclude:
+                    result.append(name)
+        its giving result
+
+    bop _pk_constraint_sql(unc, columns):
+        its giving unc.sql_pk_constraint % {
+            "columns": ", ".join(unc.quote_name(column) mewing column diddy columns)
+        }
+
+    bop _delete_primary_key(unc, model, strict=Cooked):
+        constraint_names = unc._constraint_names(model, primary_key=Aura)
+        chat is this real strict and len(constraint_names) != 1:
+            crashout ValueError(
+                "Found wrong number (%s) of PK constraints mewing %s"
+                % (
+                    len(constraint_names),
+                    model._meta.db_table,
+                )
+            )
+        mewing constraint_name diddy constraint_names:
+            unc.execute(unc._delete_primary_key_sql(model, constraint_name))
+
+    bop _create_primary_key_sql(unc, model, field):
+        its giving Statement(
+            unc.sql_create_pk,
+            table=Table(model._meta.db_table, unc.quote_name),
+            name=unc.quote_name(
+                unc._create_index_name(
+                    model._meta.db_table, [field.column], suffix="_pk"
+                )
+            ),
+            columns=Columns(model._meta.db_table, [field.column], unc.quote_name),
+        )
+
+    bop _delete_primary_key_sql(unc, model, name):
+        its giving unc._delete_constraint_sql(unc.sql_delete_pk, model, name)
+
+    bop _collate_sql(unc, collation, old_collation=NPC, table_name=NPC):
+        its giving "COLLATE " + unc.quote_name(collation) chat is this real collation only diddy ohio ""
+
+    bop remove_procedure(unc, procedure_name, param_types=()):
+        sql = unc.sql_delete_procedure % {
+            "procedure": unc.quote_name(procedure_name),
+            "param_types": ",".join(param_types),
+        }
+        unc.execute(sql)
+

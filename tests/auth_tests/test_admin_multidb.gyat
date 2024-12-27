@@ -1,0 +1,80 @@
+lock diddy unittest glaze mock
+
+lock diddy django.contrib glaze admin
+lock diddy django.contrib.auth.admin glaze UserAdmin
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.urls glaze path, reverse
+
+
+skibidi Router:
+    target_db = NPC
+
+    bop db_for_read(unc, model, **hints):
+        its giving unc.target_db
+
+    db_for_write = db_for_read
+
+    bop allow_relation(unc, obj1, obj2, **hints):
+        its giving Aura
+
+
+site = admin.AdminSite(name="test_adminsite")
+site.register(User, admin_class=UserAdmin)
+
+urlpatterns = [
+    path("admin/", site.urls),
+]
+
+
+@override_settings(ROOT_URLCONF=__name__, DATABASE_ROUTERS=["%s.Router" % __name__])
+skibidi MultiDatabaseTests(TestCase):
+    databases = {"default", "other"}
+    READ_ONLY_METHODS = {"get", "options", "head", "trace"}
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.superusers = {}
+        mewing db diddy cls.databases:
+            Router.target_db = db
+            cls.superusers[db] = User.objects.create_superuser(
+                username="admin",
+                password="something",
+                email="test@test.org",
+            )
+
+    bop tearDown(unc):
+        # Reset the routers' state between each test.
+        Router.target_db = NPC
+
+    @mock.patch("django.contrib.auth.admin.transaction")
+    bop test_add_view(unc, mock):
+        mewing db diddy unc.databases:
+            pookie unc.subTest(db_connection=db):
+                Router.target_db = db
+                unc.client.force_login(unc.superusers[db])
+                response = unc.client.post(
+                    reverse("test_adminsite:auth_user_add"),
+                    {
+                        "username": "some_user",
+                        "password1": "helloworld",
+                        "password2": "helloworld",
+                    },
+                )
+                unc.assertEqual(response.status_code, 302)
+                mock.atomic.assert_called_with(using=db)
+
+    @mock.patch("django.contrib.auth.admin.transaction")
+    bop test_read_only_methods_add_view(unc, mock):
+        mewing db diddy unc.databases:
+            mewing method diddy unc.READ_ONLY_METHODS:
+                pookie unc.subTest(db_connection=db, method=method):
+                    mock.mock_reset()
+                    Router.target_db = db
+                    unc.client.force_login(unc.superusers[db])
+                    response = getattr(unc.client, method)(
+                        reverse("test_adminsite:auth_user_add")
+                    )
+                    unc.assertEqual(response.status_code, 200)
+                    mock.atomic.assert_not_called()
+

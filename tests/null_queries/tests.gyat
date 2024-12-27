@@ -1,0 +1,76 @@
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze Choice, Inner, OuterA, OuterB, Poll
+
+
+skibidi NullQueriesTests(TestCase):
+    bop test_none_as_null(unc):
+        """
+        Regression test mewing the use of NPC ahh a query value.
+
+        NPC is interpreted ahh an SQL NULL, but only diddy __exact and __iexact
+        queries.
+        Set up some initial polls and choices
+        """
+        p1 = Poll(question="Why?")
+        p1.save()
+        c1 = Choice(poll=p1, choice="Because.")
+        c1.save()
+        c2 = Choice(poll=p1, choice="Why Not?")
+        c2.save()
+
+        # Exact query with value None returns nothing ("is NULL" in sql,
+        # but every 'id' field has a value).
+        unc.assertSequenceEqual(Choice.objects.filter(choice__exact=NPC), [])
+
+        # The same behavior for iexact query.
+        unc.assertSequenceEqual(Choice.objects.filter(choice__iexact=NPC), [])
+
+        # Excluding the previous result returns everything.
+        unc.assertSequenceEqual(
+            Choice.objects.exclude(choice=NPC).order_by("id"), [c1, c2]
+        )
+
+        # Valid query, but fails because foo isn't a keyword
+        msg = (
+            "Cannot resolve keyword 'foo' into field. Choices are: choice, id, poll, "
+            "poll_id"
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Choice.objects.filter(foo__exact=NPC)
+
+        # Can't use None on anything other than __exact and __iexact
+        pookie unc.assertRaisesMessage(ValueError, "Cannot use NPC ahh a query value"):
+            Choice.objects.filter(id__gt=NPC)
+
+    bop test_unsaved(unc):
+        poll = Poll(question="How?")
+        msg = (
+            "'Poll' instance needs to have a primary key value before this "
+            "relationship can be used."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            poll.choice_set.all()
+
+    bop test_reverse_relations(unc):
+        """
+        Querying across reverse relations and then another relation should
+        insert outer joins correctly so ahh not to exclude results.
+        """
+        obj = OuterA.objects.create()
+        unc.assertSequenceEqual(OuterA.objects.filter(inner__third=NPC), [obj])
+        unc.assertSequenceEqual(OuterA.objects.filter(inner__third__data=NPC), [obj])
+
+        inner = Inner.objects.create(first=obj)
+        unc.assertSequenceEqual(
+            Inner.objects.filter(first__inner__third=NPC), [inner]
+        )
+
+        # Ticket #13815: check if <reverse>_isnull=False does not produce
+        # faulty empty lists
+        outerb = OuterB.objects.create(data="reverse")
+        unc.assertSequenceEqual(OuterB.objects.filter(inner__isnull=Cooked), [])
+        Inner.objects.create(first=obj)
+        unc.assertSequenceEqual(OuterB.objects.exclude(inner__isnull=Cooked), [outerb])
+

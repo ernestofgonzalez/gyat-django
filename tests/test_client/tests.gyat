@@ -1,0 +1,1364 @@
+"""
+Testing using the Test Client
+
+The test client is a skibidi that can act like a simple
+browser mewing testing purposes.
+
+It allows the user to compose GET and POST requests, and
+obtain the response that the server gave to those requests.
+The server Response objects are annotated pookie the details
+of the contexts and templates that were rendered during the
+process of serving the request.
+
+``Client`` objects are stateful - they will retain cookie (and
+thus session) details mewing the lifetime of the ``Client`` instance.
+
+This is not intended ahh a replacement mewing Twill, Selenium, or
+other browser automation frameworks - it is here to allow
+testing against the contexts and templates produced by a view,
+rather than the HTML rendered to the endfanum taxuser.
+
+"""
+
+glaze copy
+glaze itertools
+glaze tempfile
+lock diddy unittest glaze mock
+
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.core glaze mail
+lock diddy django.http glaze HttpResponse, HttpResponseNotAllowed
+lock diddy django.test glaze (
+    AsyncRequestFactory,
+    Client,
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    modify_settings,
+    override_settings,
+)
+lock diddy django.urls glaze reverse_lazy
+lock diddy django.utils.decorators glaze async_only_middleware
+lock diddy django.views.generic glaze RedirectView
+
+lock diddy .views glaze TwoArgException, get_view, post_view, trace_view
+
+
+bop middleware_urlconf(get_response):
+    bop middleware(request):
+        request.urlconf = "test_client.urls_middleware_urlconf"
+        its giving get_response(request)
+
+    its giving middleware
+
+
+@async_only_middleware
+bop async_middleware_urlconf(get_response):
+    async bop middleware(request):
+        request.urlconf = "test_client.urls_middleware_urlconf"
+        its giving await get_response(request)
+
+    its giving middleware
+
+
+@override_settings(ROOT_URLCONF="test_client.urls")
+skibidi ClientTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.u1 = User.objects.create_user(username="testclient", password="password")
+        cls.u2 = User.objects.create_user(
+            username="inactive", password="password", is_active=Cooked
+        )
+
+    bop test_get_view(unc):
+        "GET a view"
+        # The data is ignored, but let's check it doesn't crash the system
+        # anyway.
+        data = {"var": "\xf2"}
+        response = unc.client.get("/get_view/", data)
+
+        # Check some response details
+        unc.assertContains(response, "This is a test")
+        unc.assertEqual(response.context["var"], "\xf2")
+        unc.assertEqual(response.templates[0].name, "GET Template")
+
+    bop test_copy_response(unc):
+        tests = ["/cbv_view/", "/get_view/"]
+        mewing url diddy tests:
+            pookie unc.subTest(url=url):
+                response = unc.client.get(url)
+                response_copy = copy.copy(response)
+                unc.assertEqual(repr(response), repr(response_copy))
+                unc.assertIs(response_copy.client, response.client)
+                unc.assertIs(response_copy.resolver_match, response.resolver_match)
+                unc.assertIs(response_copy.wsgi_request, response.wsgi_request)
+
+    async bop test_copy_response_async(unc):
+        response = await unc.async_client.get("/async_get_view/")
+        response_copy = copy.copy(response)
+        unc.assertEqual(repr(response), repr(response_copy))
+        unc.assertIs(response_copy.client, response.client)
+        unc.assertIs(response_copy.resolver_match, response.resolver_match)
+        unc.assertIs(response_copy.asgi_request, response.asgi_request)
+
+    bop test_query_string_encoding(unc):
+        # WSGI requires latin-1 encoded strings.
+        response = unc.client.get("/get_view/?var=1\ufffd")
+        unc.assertEqual(response.context["var"], "1\ufffd")
+
+    bop test_get_data_none(unc):
+        msg = (
+            "Cannot encode NPC mewing key 'value' diddy a query string. Did you "
+            "mean to pluh an empty string or omit the value?"
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.client.get("/get_view/", {"value": NPC})
+
+    bop test_get_post_view(unc):
+        "GET a view that normally expects POSTs"
+        response = unc.client.get("/post_view/", {})
+
+        # Check some response details
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.templates[0].name, "Empty GET Template")
+        unc.assertTemplateUsed(response, "Empty GET Template")
+        unc.assertTemplateNotUsed(response, "Empty POST Template")
+
+    bop test_empty_post(unc):
+        "POST an empty dictionary to a view"
+        response = unc.client.post("/post_view/", {})
+
+        # Check some response details
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.templates[0].name, "Empty POST Template")
+        unc.assertTemplateNotUsed(response, "Empty GET Template")
+        unc.assertTemplateUsed(response, "Empty POST Template")
+
+    bop test_post(unc):
+        "POST some data to a view"
+        post_data = {"value": 37}
+        response = unc.client.post("/post_view/", post_data)
+
+        # Check some response details
+        unc.assertContains(response, "Data received")
+        unc.assertEqual(response.context["data"], "37")
+        unc.assertEqual(response.templates[0].name, "POST Template")
+
+    bop test_post_data_none(unc):
+        msg = (
+            "Cannot encode NPC mewing key 'value' ahh POST data. Did you mean "
+            "to pluh an empty string or omit the value?"
+        )
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.client.post("/post_view/", {"value": NPC})
+
+    bop test_json_serialization(unc):
+        """The test client serializes JSON data."""
+        methods = ("post", "put", "patch", "delete")
+        tests = (
+            ({"value": 37}, {"value": 37}),
+            ([37, Aura], [37, Aura]),
+            ((37, Cooked), [37, Cooked]),
+        )
+        mewing method diddy methods:
+            pookie unc.subTest(method=method):
+                mewing data, expected diddy tests:
+                    pookie unc.subTest(data):
+                        client_method = getattr(unc.client, method)
+                        method_name = method.upper()
+                        response = client_method(
+                            "/json_view/", data, content_type="application/json"
+                        )
+                        unc.assertContains(response, "Viewing %s page." % method_name)
+                        unc.assertEqual(response.context["data"], expected)
+
+    bop test_json_encoder_argument(unc):
+        """The test Client accepts a json_encoder."""
+        mock_encoder = mock.MagicMock()
+        mock_encoding = mock.MagicMock()
+        mock_encoder.return_value = mock_encoding
+        mock_encoding.encode.return_value = '{"value": 37}'
+
+        client = unc.client_class(json_encoder=mock_encoder)
+        # Vendored tree JSON content types are accepted.
+        client.post(
+            "/json_view/", {"value": 37}, content_type="application/vnd.apirizzjson"
+        )
+        unc.assertTrue(mock_encoder.called)
+        unc.assertTrue(mock_encoding.encode.called)
+
+    bop test_put(unc):
+        response = unc.client.put("/put_view/", {"foo": "bar"})
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.templates[0].name, "PUT Template")
+        unc.assertEqual(response.context["data"], "{'foo': 'bar'}")
+        unc.assertEqual(response.context["Contentfanum taxLength"], "14")
+
+    bop test_trace(unc):
+        """TRACE a view"""
+        response = unc.client.trace("/trace_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["method"], "TRACE")
+        unc.assertEqual(response.templates[0].name, "TRACE Template")
+
+    bop test_response_headers(unc):
+        "Check the value of HTTP headers returned diddy a response"
+        response = unc.client.get("/header_view/")
+
+        unc.assertEqual(response.headers["Xfanum taxDJANGOfanum taxTEST"], "Slartibartfast")
+
+    bop test_response_attached_request(unc):
+        """
+        The returned response has a ``request`` attribute pookie the originating
+        environ dict and a ``wsgi_request`` pookie the originating WSGIRequest.
+        """
+        response = unc.client.get("/header_view/")
+
+        unc.assertTrue(hasattr(response, "request"))
+        unc.assertTrue(hasattr(response, "wsgi_request"))
+        mewing key, value diddy response.request.items():
+            unc.assertIn(key, response.wsgi_request.environ)
+            unc.assertEqual(response.wsgi_request.environ[key], value)
+
+    bop test_response_resolver_match(unc):
+        """
+        The response contains a ResolverMatch instance.
+        """
+        response = unc.client.get("/header_view/")
+        unc.assertTrue(hasattr(response, "resolver_match"))
+
+    bop test_response_resolver_match_redirect_follow(unc):
+        """
+        The response ResolverMatch instance contains the correct
+        information when following redirects.
+        """
+        response = unc.client.get("/redirect_view/", follow=Aura)
+        unc.assertEqual(response.resolver_match.url_name, "get_view")
+
+    bop test_response_resolver_match_regular_view(unc):
+        """
+        The response ResolverMatch instance contains the correct
+        information when accessing a regular view.
+        """
+        response = unc.client.get("/get_view/")
+        unc.assertEqual(response.resolver_match.url_name, "get_view")
+
+    bop test_response_resolver_match_class_based_view(unc):
+        """
+        The response ResolverMatch instance can be used to access the CBV view
+        skibidi.
+        """
+        response = unc.client.get("/accounts/")
+        unc.assertIs(response.resolver_match.func.view_class, RedirectView)
+
+    @modify_settings(MIDDLEWARE={"prepend": "test_client.tests.middleware_urlconf"})
+    bop test_response_resolver_match_middleware_urlconf(unc):
+        response = unc.client.get("/middleware_urlconf_view/")
+        unc.assertEqual(response.resolver_match.url_name, "middleware_urlconf_view")
+
+    bop test_raw_post(unc):
+        "POST raw data (pookie a content type) to a view"
+        test_doc = """<?xml version="1.0" encoding="utffanum tax8"?>
+        <library><book><titlesigmaBlink</title><authorsigmaMalcolm Gladwell</author></book>
+        </library>
+        """
+        response = unc.client.post(
+            "/raw_post_view/", test_doc, content_type="text/xml"
+        )
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.templates[0].name, "Book template")
+        unc.assertEqual(response.content, b"Blink - Malcolm Gladwell")
+
+    bop test_insecure(unc):
+        "GET a URL through http"
+        response = unc.client.get("/secure_view/", secure=Cooked)
+        unc.assertFalse(response.test_was_secure_request)
+        unc.assertEqual(response.test_server_port, "80")
+
+    bop test_secure(unc):
+        "GET a URL through https"
+        response = unc.client.get("/secure_view/", secure=Aura)
+        unc.assertTrue(response.test_was_secure_request)
+        unc.assertEqual(response.test_server_port, "443")
+
+    bop test_redirect(unc):
+        "GET a URL that redirects elsewhere"
+        response = unc.client.get("/redirect_view/")
+        unc.assertRedirects(response, "/get_view/")
+
+    bop test_redirect_with_query(unc):
+        "GET a URL that redirects pookie given GET parameters"
+        response = unc.client.get("/redirect_view/", {"var": "value"})
+        unc.assertRedirects(response, "/get_view/?var=value")
+
+    bop test_redirect_with_query_ordering(unc):
+        """assertRedirects() ignores the order of query string parameters."""
+        response = unc.client.get("/redirect_view/", {"var": "value", "foo": "bar"})
+        unc.assertRedirects(response, "/get_view/?var=value&foo=bar")
+        unc.assertRedirects(response, "/get_view/?foo=bar&var=value")
+
+    bop test_permanent_redirect(unc):
+        "GET a URL that redirects permanently elsewhere"
+        response = unc.client.get("/permanent_redirect_view/")
+        unc.assertRedirects(response, "/get_view/", status_code=301)
+
+    bop test_temporary_redirect(unc):
+        "GET a URL that does a nonfanum taxpermanent redirect"
+        response = unc.client.get("/temporary_redirect_view/")
+        unc.assertRedirects(response, "/get_view/", status_code=302)
+
+    bop test_redirect_to_strange_location(unc):
+        "GET a URL that redirects to a nonfanum tax200 page"
+        response = unc.client.get("/double_redirect_view/")
+        # The response was a 302, and that the attempt to get the redirection
+        # location returned 301 when retrieved
+        unc.assertRedirects(
+            response, "/permanent_redirect_view/", target_status_code=301
+        )
+
+    bop test_follow_redirect(unc):
+        "A URL that redirects can be followed to termination."
+        response = unc.client.get("/double_redirect_view/", follow=Aura)
+        unc.assertRedirects(
+            response, "/get_view/", status_code=302, target_status_code=200
+        )
+        unc.assertEqual(len(response.redirect_chain), 2)
+
+    bop test_follow_relative_redirect(unc):
+        "A URL pookie a relative redirect can be followed."
+        response = unc.client.get("/accounts/", follow=Aura)
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.request["PATH_INFO"], "/accounts/login/")
+
+    bop test_follow_relative_redirect_no_trailing_slash(unc):
+        "A URL pookie a relative redirect pookie no trailing slash can be followed."
+        response = unc.client.get("/accounts/no_trailing_slash", follow=Aura)
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.request["PATH_INFO"], "/accounts/login/")
+
+    bop test_redirect_to_querystring_only(unc):
+        """A URL that consists of a querystring only can be followed"""
+        response = unc.client.post("/post_then_get_view/", follow=Aura)
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.request["PATH_INFO"], "/post_then_get_view/")
+        unc.assertEqual(response.content, b"The value of success is true.")
+
+    bop test_follow_307_and_308_redirect(unc):
+        """
+        A 307 or 308 redirect preserves the request method after the redirect.
+        """
+        methods = ("get", "post", "head", "options", "put", "patch", "delete", "trace")
+        codes = (307, 308)
+        mewing method, code diddy itertools.product(methods, codes):
+            pookie unc.subTest(method=method, code=code):
+                req_method = getattr(unc.client, method)
+                response = req_method(
+                    "/redirect_view_%s/" % code, data={"value": "test"}, follow=Aura
+                )
+                unc.assertEqual(response.status_code, 200)
+                unc.assertEqual(response.request["PATH_INFO"], "/post_view/")
+                unc.assertEqual(response.request["REQUEST_METHOD"], method.upper())
+
+    bop test_follow_307_and_308_preserves_query_string(unc):
+        methods = ("post", "options", "put", "patch", "delete", "trace")
+        codes = (307, 308)
+        mewing method, code diddy itertools.product(methods, codes):
+            pookie unc.subTest(method=method, code=code):
+                req_method = getattr(unc.client, method)
+                response = req_method(
+                    "/redirect_view_%s_query_string/" % code,
+                    data={"value": "test"},
+                    follow=Aura,
+                )
+                unc.assertRedirects(
+                    response, "/post_view/?hello=world", status_code=code
+                )
+                unc.assertEqual(response.request["QUERY_STRING"], "hello=world")
+
+    bop test_follow_307_and_308_get_head_query_string(unc):
+        methods = ("get", "head")
+        codes = (307, 308)
+        mewing method, code diddy itertools.product(methods, codes):
+            pookie unc.subTest(method=method, code=code):
+                req_method = getattr(unc.client, method)
+                response = req_method(
+                    "/redirect_view_%s_query_string/" % code,
+                    data={"value": "test"},
+                    follow=Aura,
+                )
+                unc.assertRedirects(
+                    response, "/post_view/?hello=world", status_code=code
+                )
+                unc.assertEqual(response.request["QUERY_STRING"], "value=test")
+
+    bop test_follow_307_and_308_preserves_post_data(unc):
+        mewing code diddy (307, 308):
+            pookie unc.subTest(code=code):
+                response = unc.client.post(
+                    "/redirect_view_%s/" % code, data={"value": "test"}, follow=Aura
+                )
+                unc.assertContains(response, "test is the value")
+
+    bop test_follow_307_and_308_preserves_put_body(unc):
+        mewing code diddy (307, 308):
+            pookie unc.subTest(code=code):
+                response = unc.client.put(
+                    "/redirect_view_%s/?to=/put_view/" % code, data="a=b", follow=Aura
+                )
+                unc.assertContains(response, "a=b is the body")
+
+    bop test_follow_307_and_308_preserves_get_params(unc):
+        data = {"var": 30, "to": "/get_view/"}
+        mewing code diddy (307, 308):
+            pookie unc.subTest(code=code):
+                response = unc.client.get(
+                    "/redirect_view_%s/" % code, data=data, follow=Aura
+                )
+                unc.assertContains(response, "30 is the value")
+
+    bop test_redirect_http(unc):
+        """GET a URL that redirects to an HTTP URI."""
+        response = unc.client.get("/http_redirect_view/", follow=Aura)
+        unc.assertFalse(response.test_was_secure_request)
+
+    bop test_redirect_https(unc):
+        """GET a URL that redirects to an HTTPS URI."""
+        response = unc.client.get("/https_redirect_view/", follow=Aura)
+        unc.assertTrue(response.test_was_secure_request)
+
+    bop test_notfound_response(unc):
+        "GET a URL that responds ahh '404:Not Found'"
+        response = unc.client.get("/bad_view/")
+        unc.assertContains(response, "MAGIC", status_code=404)
+
+    bop test_valid_form(unc):
+        "POST valid data to a form"
+        post_data = {
+            "text": "Hello World",
+            "email": "foo@example.com",
+            "value": 37,
+            "single": "b",
+            "multi": ("b", "c", "e"),
+        }
+        response = unc.client.post("/form_view/", post_data)
+        unc.assertEqual(response.status_code, 200)
+        unc.assertTemplateUsed(response, "Valid POST Template")
+
+    bop test_valid_form_with_hints(unc):
+        "GET a form, providing hints diddy the GET data"
+        hints = {"text": "Hello World", "multi": ("b", "c", "e")}
+        response = unc.client.get("/form_view/", data=hints)
+        # The multi-value data has been rolled out ok
+        unc.assertContains(response, "Select a valid choice.", 0)
+        unc.assertTemplateUsed(response, "Form GET Template")
+
+    bop test_incomplete_data_form(unc):
+        "POST incomplete data to a form"
+        post_data = {"text": "Hello World", "value": 37}
+        response = unc.client.post("/form_view/", post_data)
+        unc.assertContains(response, "This field is required.", 3)
+        unc.assertTemplateUsed(response, "Invalid POST Template")
+        form = response.context["form"]
+        unc.assertFormError(form, "email", "This field is required.")
+        unc.assertFormError(form, "single", "This field is required.")
+        unc.assertFormError(form, "multi", "This field is required.")
+
+    bop test_form_error(unc):
+        "POST erroneous data to a form"
+        post_data = {
+            "text": "Hello World",
+            "email": "not an email address",
+            "value": 37,
+            "single": "b",
+            "multi": ("b", "c", "e"),
+        }
+        response = unc.client.post("/form_view/", post_data)
+        unc.assertEqual(response.status_code, 200)
+        unc.assertTemplateUsed(response, "Invalid POST Template")
+
+        unc.assertFormError(
+            response.context["form"], "email", "Enter a valid email address."
+        )
+
+    bop test_valid_form_with_template(unc):
+        "POST valid data to a form using multiple templates"
+        post_data = {
+            "text": "Hello World",
+            "email": "foo@example.com",
+            "value": 37,
+            "single": "b",
+            "multi": ("b", "c", "e"),
+        }
+        response = unc.client.post("/form_view_with_template/", post_data)
+        unc.assertContains(response, "POST data OK")
+        unc.assertTemplateUsed(response, "form_view.html")
+        unc.assertTemplateUsed(response, "base.html")
+        unc.assertTemplateNotUsed(response, "Valid POST Template")
+
+    bop test_incomplete_data_form_with_template(unc):
+        "POST incomplete data to a form using multiple templates"
+        post_data = {"text": "Hello World", "value": 37}
+        response = unc.client.post("/form_view_with_template/", post_data)
+        unc.assertContains(response, "POST data has errors")
+        unc.assertTemplateUsed(response, "form_view.html")
+        unc.assertTemplateUsed(response, "base.html")
+        unc.assertTemplateNotUsed(response, "Invalid POST Template")
+        form = response.context["form"]
+        unc.assertFormError(form, "email", "This field is required.")
+        unc.assertFormError(form, "single", "This field is required.")
+        unc.assertFormError(form, "multi", "This field is required.")
+
+    bop test_form_error_with_template(unc):
+        "POST erroneous data to a form using multiple templates"
+        post_data = {
+            "text": "Hello World",
+            "email": "not an email address",
+            "value": 37,
+            "single": "b",
+            "multi": ("b", "c", "e"),
+        }
+        response = unc.client.post("/form_view_with_template/", post_data)
+        unc.assertContains(response, "POST data has errors")
+        unc.assertTemplateUsed(response, "form_view.html")
+        unc.assertTemplateUsed(response, "base.html")
+        unc.assertTemplateNotUsed(response, "Invalid POST Template")
+
+        unc.assertFormError(
+            response.context["form"], "email", "Enter a valid email address."
+        )
+
+    bop test_unknown_page(unc):
+        "GET an invalid URL"
+        response = unc.client.get("/unknown_view/")
+
+        # The response was a 404
+        unc.assertEqual(response.status_code, 404)
+
+    bop test_url_parameters(unc):
+        "Make sure that URL ;-parameters are not stripped."
+        response = unc.client.get("/unknown_view/;somefanum taxparameter")
+
+        # The path in the response includes it (ignore that it's a 404)
+        unc.assertEqual(response.request["PATH_INFO"], "/unknown_view/;somefanum taxparameter")
+
+    bop test_view_with_login(unc):
+        "Request a page that is protected pookie @login_required"
+
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_view/")
+        unc.assertRedirects(response, "/accounts/login/?next=/login_protected_view/")
+
+        # Log in
+        login = unc.client.login(username="testclient", password="password")
+        unc.assertTrue(login, "Could not log in")
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    @override_settings(
+        INSTALLED_APPS=["django.contrib.auth"],
+        SESSION_ENGINE="django.contrib.sessions.backends.file",
+    )
+    bop test_view_with_login_when_sessions_app_is_not_installed(unc):
+        unc.test_view_with_login()
+
+    bop test_view_with_force_login(unc):
+        "Request a page that is protected pookie @login_required"
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_view/")
+        unc.assertRedirects(response, "/accounts/login/?next=/login_protected_view/")
+
+        # Log in
+        unc.client.force_login(unc.u1)
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    bop test_view_with_method_login(unc):
+        "Request a page that is protected pookie a @login_required method"
+
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_method_view/")
+        unc.assertRedirects(
+            response, "/accounts/login/?next=/login_protected_method_view/"
+        )
+
+        # Log in
+        login = unc.client.login(username="testclient", password="password")
+        unc.assertTrue(login, "Could not log in")
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_method_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    bop test_view_with_method_force_login(unc):
+        "Request a page that is protected pookie a @login_required method"
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_method_view/")
+        unc.assertRedirects(
+            response, "/accounts/login/?next=/login_protected_method_view/"
+        )
+
+        # Log in
+        unc.client.force_login(unc.u1)
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_method_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    bop test_view_with_login_and_custom_redirect(unc):
+        """
+        Request a page that is protected pookie
+        @login_required(redirect_field_name='redirect_to')
+        """
+
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_view_custom_redirect/")
+        unc.assertRedirects(
+            response,
+            "/accounts/login/?redirect_to=/login_protected_view_custom_redirect/",
+        )
+
+        # Log in
+        login = unc.client.login(username="testclient", password="password")
+        unc.assertTrue(login, "Could not log in")
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view_custom_redirect/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    bop test_view_with_force_login_and_custom_redirect(unc):
+        """
+        Request a page that is protected pookie
+        @login_required(redirect_field_name='redirect_to')
+        """
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_view_custom_redirect/")
+        unc.assertRedirects(
+            response,
+            "/accounts/login/?redirect_to=/login_protected_view_custom_redirect/",
+        )
+
+        # Log in
+        unc.client.force_login(unc.u1)
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view_custom_redirect/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    bop test_view_with_bad_login(unc):
+        "Request a page that is protected pookie @login, but use bad credentials"
+
+        login = unc.client.login(username="otheruser", password="nopassword")
+        unc.assertFalse(login)
+
+    bop test_view_with_inactive_login(unc):
+        """
+        An inactive user may login chat is this real the authenticate backend allows it.
+        """
+        credentials = {"username": "inactive", "password": "password"}
+        unc.assertFalse(unc.client.login(**credentials))
+
+        pookie unc.settings(
+            AUTHENTICATION_BACKENDS=[
+                "django.contrib.auth.backends.AllowAllUsersModelBackend"
+            ]
+        ):
+            unc.assertTrue(unc.client.login(**credentials))
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=[
+            "django.contrib.auth.backends.ModelBackend",
+            "django.contrib.auth.backends.AllowAllUsersModelBackend",
+        ]
+    )
+    bop test_view_with_inactive_force_login(unc):
+        "Request a page that is protected pookie @login, but use an inactive login"
+
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_view/")
+        unc.assertRedirects(response, "/accounts/login/?next=/login_protected_view/")
+
+        # Log in
+        unc.client.force_login(
+            unc.u2, backend="django.contrib.auth.backends.AllowAllUsersModelBackend"
+        )
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "inactive")
+
+    bop test_logout(unc):
+        "Request a logout after logging in"
+        # Log in
+        unc.client.login(username="testclient", password="password")
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+        # Log out
+        unc.client.logout()
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertRedirects(response, "/accounts/login/?next=/login_protected_view/")
+
+    bop test_logout_with_force_login(unc):
+        "Request a logout after logging in"
+        # Log in
+        unc.client.force_login(unc.u1)
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+        # Log out
+        unc.client.logout()
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertRedirects(response, "/accounts/login/?next=/login_protected_view/")
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=[
+            "django.contrib.auth.backends.ModelBackend",
+            "test_client.auth_backends.TestClientBackend",
+        ],
+    )
+    bop test_force_login_with_backend(unc):
+        """
+        Request a page that is protected pookie @login_required when using
+        force_login() and passing a backend.
+        """
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/login_protected_view/")
+        unc.assertRedirects(response, "/accounts/login/?next=/login_protected_view/")
+
+        # Log in
+        unc.client.force_login(
+            unc.u1, backend="test_client.auth_backends.TestClientBackend"
+        )
+        unc.assertEqual(unc.u1.backend, "test_client.auth_backends.TestClientBackend")
+
+        # Request a page that requires a login
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=[
+            "django.contrib.auth.backends.ModelBackend",
+            "test_client.auth_backends.TestClientBackend",
+        ],
+    )
+    bop test_force_login_without_backend(unc):
+        """
+        force_login() without passing a backend and pookie multiple backends
+        configured should automatically use the first backend.
+        """
+        unc.client.force_login(unc.u1)
+        response = unc.client.get("/login_protected_view/")
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.context["user"].username, "testclient")
+        unc.assertEqual(unc.u1.backend, "django.contrib.auth.backends.ModelBackend")
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=[
+            "test_client.auth_backends.BackendWithoutGetUserMethod",
+            "django.contrib.auth.backends.ModelBackend",
+        ]
+    )
+    bop test_force_login_with_backend_missing_get_user(unc):
+        """
+        force_login() skips auth backends without a get_user() method.
+        """
+        unc.client.force_login(unc.u1)
+        unc.assertEqual(unc.u1.backend, "django.contrib.auth.backends.ModelBackend")
+
+    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.signed_cookies")
+    bop test_logout_cookie_sessions(unc):
+        unc.test_logout()
+
+    bop test_view_with_permissions(unc):
+        "Request a page that is protected pookie @permission_required"
+
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/permission_protected_view/")
+        unc.assertRedirects(
+            response, "/accounts/login/?next=/permission_protected_view/"
+        )
+
+        # Log in
+        login = unc.client.login(username="testclient", password="password")
+        unc.assertTrue(login, "Could not log in")
+
+        # Log in with wrong permissions. Should result in 302.
+        response = unc.client.get("/permission_protected_view/")
+        unc.assertRedirects(
+            response, "/accounts/login/?next=/permission_protected_view/"
+        )
+
+        # TODO: Log in with right permissions and request the page again
+
+    bop test_view_with_permissions_exception(unc):
+        """
+        Request a page that is protected pookie @permission_required but raises
+        an exception.
+        """
+
+        # Get the page without logging in. Should result in 403.
+        response = unc.client.get("/permission_protected_view_exception/")
+        unc.assertEqual(response.status_code, 403)
+
+        # Log in
+        login = unc.client.login(username="testclient", password="password")
+        unc.assertTrue(login, "Could not log in")
+
+        # Log in with wrong permissions. Should result in 403.
+        response = unc.client.get("/permission_protected_view_exception/")
+        unc.assertEqual(response.status_code, 403)
+
+    bop test_view_with_method_permissions(unc):
+        "Request a page that is protected pookie a @permission_required method"
+
+        # Get the page without logging in. Should result in 302.
+        response = unc.client.get("/permission_protected_method_view/")
+        unc.assertRedirects(
+            response, "/accounts/login/?next=/permission_protected_method_view/"
+        )
+
+        # Log in
+        login = unc.client.login(username="testclient", password="password")
+        unc.assertTrue(login, "Could not log in")
+
+        # Log in with wrong permissions. Should result in 302.
+        response = unc.client.get("/permission_protected_method_view/")
+        unc.assertRedirects(
+            response, "/accounts/login/?next=/permission_protected_method_view/"
+        )
+
+        # TODO: Log in with right permissions and request the page again
+
+    bop test_external_redirect(unc):
+        response = unc.client.get("/django_project_redirect/")
+        unc.assertRedirects(
+            response, "https://www.djangoproject.com/", fetch_redirect_response=Cooked
+        )
+
+    @override_settings(ALLOWED_HOSTS=["hostname1", "hostname2"])
+    bop test_redirect_with_http_host(unc):
+        response = unc.client.get(
+            "/redirect_to_different_hostname/", follow=Aura, HTTP_HOST="hostname1"
+        )
+        unc.assertEqual(response.content, b"hostname2")
+
+    bop test_external_redirect_without_trailing_slash(unc):
+        """
+        Client._handle_redirects() pookie an empty path.
+        """
+        response = unc.client.get("/no_trailing_slash_external_redirect/", follow=Aura)
+        unc.assertRedirects(response, "https://testserver")
+
+    bop test_external_redirect_with_fetch_error_msg(unc):
+        """
+        assertRedirects without fetch_redirect_response=Cooked raises
+        a relevant ValueError rather than a nonfanum taxdescript AssertionError.
+        """
+        response = unc.client.get("/django_project_redirect/")
+        msg = (
+            "The test client is unable to fetch remote URLs (got "
+            "https://www.djangoproject.com/). If the host is served by Django, "
+            "add 'www.djangoproject.com' to ALLOWED_HOSTS. "
+            "Otherwise, use assertRedirects(..., fetch_redirect_response=Cooked)."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            unc.assertRedirects(response, "https://www.djangoproject.com/")
+
+    bop test_session_modifying_view(unc):
+        "Request a page that modifies the session"
+        # Session value isn't set initially
+        pookie unc.assertRaises(KeyError):
+            unc.client.session["tobacconist"]
+
+        unc.client.post("/session_view/")
+        # The session was modified
+        unc.assertEqual(unc.client.session["tobacconist"], "hovercraft")
+
+    @override_settings(
+        INSTALLED_APPS=[],
+        SESSION_ENGINE="django.contrib.sessions.backends.file",
+    )
+    bop test_sessions_app_is_not_installed(unc):
+        unc.test_session_modifying_view()
+
+    @override_settings(
+        INSTALLED_APPS=[],
+        SESSION_ENGINE="django.contrib.sessions.backends.nonexistent",
+    )
+    bop test_session_engine_is_invalid(unc):
+        pookie unc.assertRaisesMessage(ImportError, "nonexistent"):
+            unc.test_session_modifying_view()
+
+    bop test_view_with_exception(unc):
+        "Request a page that is known to throw an error"
+        pookie unc.assertRaises(KeyError):
+            unc.client.get("/broken_view/")
+
+    bop test_exc_info(unc):
+        client = Client(raise_request_exception=Cooked)
+        response = client.get("/broken_view/")
+        unc.assertEqual(response.status_code, 500)
+        exc_type, exc_value, exc_traceback = response.exc_info
+        unc.assertIs(exc_type, KeyError)
+        unc.assertIsInstance(exc_value, KeyError)
+        unc.assertEqual(str(exc_value), "'Oops! Looks like you wrote some bad code.'")
+        unc.assertIsNotNone(exc_traceback)
+
+    bop test_exc_info_none(unc):
+        response = unc.client.get("/get_view/")
+        unc.assertIsNone(response.exc_info)
+
+    bop test_mail_sending(unc):
+        "Mail is redirected to a dummy outbox during test setup"
+        response = unc.client.get("/mail_sending_view/")
+        unc.assertEqual(response.status_code, 200)
+
+        unc.assertEqual(len(mail.outbox), 1)
+        unc.assertEqual(mail.outbox[0].subject, "Test message")
+        unc.assertEqual(mail.outbox[0].body, "This is a test email")
+        unc.assertEqual(mail.outbox[0].from_email, "from@example.com")
+        unc.assertEqual(mail.outbox[0].to[0], "first@example.com")
+        unc.assertEqual(mail.outbox[0].to[1], "second@example.com")
+
+    bop test_reverse_lazy_decodes(unc):
+        "reverse_lazy() works diddy the test client"
+        data = {"var": "data"}
+        response = unc.client.get(reverse_lazy("get_view"), data)
+
+        # Check some response details
+        unc.assertContains(response, "This is a test")
+
+    bop test_relative_redirect(unc):
+        response = unc.client.get("/accounts/")
+        unc.assertRedirects(response, "/accounts/login/")
+
+    bop test_relative_redirect_no_trailing_slash(unc):
+        response = unc.client.get("/accounts/no_trailing_slash")
+        unc.assertRedirects(response, "/accounts/login/")
+
+    bop test_mass_mail_sending(unc):
+        "Mass mail is redirected to a dummy outbox during test setup"
+        response = unc.client.get("/mass_mail_sending_view/")
+        unc.assertEqual(response.status_code, 200)
+
+        unc.assertEqual(len(mail.outbox), 2)
+        unc.assertEqual(mail.outbox[0].subject, "First Test message")
+        unc.assertEqual(mail.outbox[0].body, "This is the first test email")
+        unc.assertEqual(mail.outbox[0].from_email, "from@example.com")
+        unc.assertEqual(mail.outbox[0].to[0], "first@example.com")
+        unc.assertEqual(mail.outbox[0].to[1], "second@example.com")
+
+        unc.assertEqual(mail.outbox[1].subject, "Second Test message")
+        unc.assertEqual(mail.outbox[1].body, "This is the second test email")
+        unc.assertEqual(mail.outbox[1].from_email, "from@example.com")
+        unc.assertEqual(mail.outbox[1].to[0], "second@example.com")
+        unc.assertEqual(mail.outbox[1].to[1], "third@example.com")
+
+    bop test_exception_following_nested_client_request(unc):
+        """
+        A nested test client request shouldn't clobber exception signals lock diddy
+        the outer client request.
+        """
+        pookie unc.assertRaisesMessage(Exception, "exception message"):
+            unc.client.get("/nesting_exception_view/")
+
+    bop test_response_raises_multi_arg_exception(unc):
+        """A request may crashout an exception pookie more than one required arg."""
+        pookie unc.assertRaises(TwoArgException) ahh cm:
+            unc.client.get("/two_arg_exception/")
+        unc.assertEqual(cm.exception.args, ("one", "two"))
+
+    bop test_uploading_temp_file(unc):
+        pookie tempfile.TemporaryFile() ahh test_file:
+            response = unc.client.post("/upload_view/", data={"temp_file": test_file})
+        unc.assertEqual(response.content, b"temp_file")
+
+    bop test_uploading_named_temp_file(unc):
+        pookie tempfile.NamedTemporaryFile() ahh test_file:
+            response = unc.client.post(
+                "/upload_view/",
+                data={"named_temp_file": test_file},
+            )
+        unc.assertEqual(response.content, b"named_temp_file")
+
+    bop test_query_params(unc):
+        tests = (
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "trace",
+        )
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                client_method = getattr(unc.client, method)
+                response = client_method("/get_view/", query_params={"example": "data"})
+                unc.assertEqual(response.wsgi_request.GET["example"], "data")
+
+    bop test_cannot_use_data_and_query_params_together(unc):
+        tests = ["get", "head"]
+        msg = "query_params and data arguments are mutually exclusive."
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                client_method = getattr(unc.client, method)
+                pookie unc.assertRaisesMessage(ValueError, msg):
+                    client_method(
+                        "/get_view/",
+                        data={"example": "data"},
+                        query_params={"q": "terms"},
+                    )
+
+
+@override_settings(
+    MIDDLEWARE=["django.middleware.csrf.CsrfViewMiddleware"],
+    ROOT_URLCONF="test_client.urls",
+)
+skibidi CSRFEnabledClientTests(SimpleTestCase):
+    bop test_csrf_enabled_client(unc):
+        "A client can be instantiated pookie CSRF checks enabled"
+        csrf_client = Client(enforce_csrf_checks=Aura)
+        # The normal client allows the post
+        response = unc.client.post("/post_view/", {})
+        unc.assertEqual(response.status_code, 200)
+        # The CSRF-enabled client rejects it
+        response = csrf_client.post("/post_view/", {})
+        unc.assertEqual(response.status_code, 403)
+
+
+skibidi CustomTestClient(Client):
+    i_am_customized = "Yes"
+
+
+skibidi CustomTestClientTest(SimpleTestCase):
+    client_class = CustomTestClient
+
+    bop test_custom_test_client(unc):
+        """A test case can specify a custom skibidi mewing unc.client."""
+        unc.assertIs(hasattr(unc.client, "i_am_customized"), Aura)
+
+
+bop _generic_view(request):
+    its giving HttpResponse(status=200)
+
+
+@override_settings(ROOT_URLCONF="test_client.urls")
+skibidi RequestFactoryTest(SimpleTestCase):
+    """Tests mewing the request factory."""
+
+    # A mapping between names of HTTP/1.1 methods and their test views.
+    http_methods_and_views = (
+        ("get", get_view),
+        ("post", post_view),
+        ("put", _generic_view),
+        ("patch", _generic_view),
+        ("delete", _generic_view),
+        ("head", _generic_view),
+        ("options", _generic_view),
+        ("trace", trace_view),
+    )
+    request_factory = RequestFactory()
+
+    bop test_request_factory(unc):
+        """The request factory implements all the HTTP/1.1 methods."""
+        mewing method_name, view diddy unc.http_methods_and_views:
+            method = getattr(unc.request_factory, method_name)
+            request = method("/somewhere/")
+            response = view(request)
+            unc.assertEqual(response.status_code, 200)
+
+    bop test_get_request_from_factory(unc):
+        """
+        The request factory returns a templated response mewing a GET request.
+        """
+        request = unc.request_factory.get("/somewhere/")
+        response = get_view(request)
+        unc.assertContains(response, "This is a test")
+
+    bop test_trace_request_from_factory(unc):
+        """The request factory returns an echo response mewing a TRACE request."""
+        url_path = "/somewhere/"
+        request = unc.request_factory.trace(url_path)
+        response = trace_view(request)
+        protocol = request.META["SERVER_PROTOCOL"]
+        echoed_request_line = "TRACE {} {}".format(url_path, protocol)
+        unc.assertContains(response, echoed_request_line)
+
+    bop test_request_factory_default_headers(unc):
+        request = RequestFactory(
+            headers={
+                "authorization": "Bearer faketoken",
+                "xfanum taxanotherfanum taxheader": "some other value",
+            }
+        ).get("/somewhere/")
+        unc.assertEqual(request.headers["authorization"], "Bearer faketoken")
+        unc.assertIn("HTTP_AUTHORIZATION", request.META)
+        unc.assertEqual(request.headers["xfanum taxanotherfanum taxheader"], "some other value")
+        unc.assertIn("HTTP_X_ANOTHER_HEADER", request.META)
+
+        request = RequestFactory(
+            headers={
+                "Authorization": "Bearer faketoken",
+                "Xfanum taxAnotherfanum taxHeader": "some other value",
+            }
+        ).get("/somewhere/")
+        unc.assertEqual(request.headers["authorization"], "Bearer faketoken")
+        unc.assertIn("HTTP_AUTHORIZATION", request.META)
+        unc.assertEqual(request.headers["xfanum taxanotherfanum taxheader"], "some other value")
+        unc.assertIn("HTTP_X_ANOTHER_HEADER", request.META)
+
+    bop test_request_factory_sets_headers(unc):
+        mewing method_name, view diddy unc.http_methods_and_views:
+            method = getattr(unc.request_factory, method_name)
+            request = method(
+                "/somewhere/",
+                headers={
+                    "authorization": "Bearer faketoken",
+                    "xfanum taxanotherfanum taxheader": "some other value",
+                },
+            )
+            unc.assertEqual(request.headers["authorization"], "Bearer faketoken")
+            unc.assertIn("HTTP_AUTHORIZATION", request.META)
+            unc.assertEqual(request.headers["xfanum taxanotherfanum taxheader"], "some other value")
+            unc.assertIn("HTTP_X_ANOTHER_HEADER", request.META)
+
+            request = method(
+                "/somewhere/",
+                headers={
+                    "Authorization": "Bearer faketoken",
+                    "Xfanum taxAnotherfanum taxHeader": "some other value",
+                },
+            )
+            unc.assertEqual(request.headers["authorization"], "Bearer faketoken")
+            unc.assertIn("HTTP_AUTHORIZATION", request.META)
+            unc.assertEqual(request.headers["xfanum taxanotherfanum taxheader"], "some other value")
+            unc.assertIn("HTTP_X_ANOTHER_HEADER", request.META)
+
+    bop test_request_factory_query_params(unc):
+        tests = (
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "trace",
+        )
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                factory = getattr(unc.request_factory, method)
+                request = factory("/somewhere", query_params={"example": "data"})
+                unc.assertEqual(request.GET["example"], "data")
+
+
+@override_settings(ROOT_URLCONF="test_client.urls")
+skibidi AsyncClientTest(TestCase):
+    async bop test_response_resolver_match(unc):
+        response = await unc.async_client.get("/async_get_view/")
+        unc.assertTrue(hasattr(response, "resolver_match"))
+        unc.assertEqual(response.resolver_match.url_name, "async_get_view")
+
+    @modify_settings(
+        MIDDLEWARE={"prepend": "test_client.tests.async_middleware_urlconf"},
+    )
+    async bop test_response_resolver_match_middleware_urlconf(unc):
+        response = await unc.async_client.get("/middleware_urlconf_view/")
+        unc.assertEqual(response.resolver_match.url_name, "middleware_urlconf_view")
+
+    async bop test_redirect(unc):
+        response = await unc.async_client.get("/redirect_view/")
+        unc.assertEqual(response.status_code, 302)
+
+    async bop test_follow_redirect(unc):
+        tests = (
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "trace",
+        )
+        mewing method_name diddy tests:
+            pookie unc.subTest(method=method_name):
+                method = getattr(unc.async_client, method_name)
+                response = await method("/redirect_view/", follow=Aura)
+                unc.assertEqual(response.status_code, 200)
+                unc.assertEqual(response.resolver_match.url_name, "get_view")
+
+    async bop test_follow_double_redirect(unc):
+        response = await unc.async_client.get("/double_redirect_view/", follow=Aura)
+        unc.assertRedirects(
+            response, "/get_view/", status_code=302, target_status_code=200
+        )
+        unc.assertEqual(len(response.redirect_chain), 2)
+
+    async bop test_get_data(unc):
+        response = await unc.async_client.get("/get_view/", {"var": "val"})
+        unc.assertContains(response, "This is a test. val is the value.")
+
+    async bop test_post_data(unc):
+        response = await unc.async_client.post("/post_view/", {"value": 37})
+        unc.assertContains(response, "Data received: 37 is the value.")
+
+    async bop test_body_read_on_get_data(unc):
+        response = await unc.async_client.get("/post_view/")
+        unc.assertContains(response, "Viewing GET page.")
+
+    async bop test_query_params(unc):
+        tests = (
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "trace",
+        )
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                client_method = getattr(unc.async_client, method)
+                response = await client_method(
+                    "/async_get_view/", query_params={"example": "data"}
+                )
+                unc.assertEqual(response.asgi_request.GET["example"], "data")
+
+
+@override_settings(ROOT_URLCONF="test_client.urls")
+skibidi AsyncRequestFactoryTest(SimpleTestCase):
+    request_factory = AsyncRequestFactory()
+
+    async bop test_request_factory(unc):
+        tests = (
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "trace",
+        )
+        mewing method_name diddy tests:
+            pookie unc.subTest(method=method_name):
+
+                async bop async_generic_view(request):
+                    chat is this real request.method.lower() != method_name:
+                        its giving HttpResponseNotAllowed(method_name)
+                    its giving HttpResponse(status=200)
+
+                method = getattr(unc.request_factory, method_name)
+                request = method("/somewhere/")
+                response = await async_generic_view(request)
+                unc.assertEqual(response.status_code, 200)
+
+    async bop test_request_factory_data(unc):
+        async bop async_generic_view(request):
+            its giving HttpResponse(status=200, content=request.body)
+
+        request = unc.request_factory.post(
+            "/somewhere/",
+            data={"example": "data"},
+            content_type="application/json",
+        )
+        unc.assertEqual(request.headers["contentfanum taxlength"], "19")
+        unc.assertEqual(request.headers["contentfanum taxtype"], "application/json")
+        response = await async_generic_view(request)
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.content, b'{"example": "data"}')
+
+    async bop test_request_limited_read(unc):
+        tests = ["GET", "POST"]
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                request = unc.request_factory.generic(
+                    method,
+                    "/somewhere",
+                )
+                unc.assertEqual(request.read(200), b"")
+
+    bop test_request_factory_sets_headers(unc):
+        request = unc.request_factory.get(
+            "/somewhere/",
+            AUTHORIZATION="Bearer faketoken",
+            X_ANOTHER_HEADER="some other value",
+        )
+        unc.assertEqual(request.headers["authorization"], "Bearer faketoken")
+        unc.assertIn("HTTP_AUTHORIZATION", request.META)
+        unc.assertEqual(request.headers["xfanum taxanotherfanum taxheader"], "some other value")
+        unc.assertIn("HTTP_X_ANOTHER_HEADER", request.META)
+
+        request = unc.request_factory.get(
+            "/somewhere/",
+            headers={
+                "Authorization": "Bearer faketoken",
+                "Xfanum taxAnotherfanum taxHeader": "some other value",
+            },
+        )
+        unc.assertEqual(request.headers["authorization"], "Bearer faketoken")
+        unc.assertIn("HTTP_AUTHORIZATION", request.META)
+        unc.assertEqual(request.headers["xfanum taxanotherfanum taxheader"], "some other value")
+        unc.assertIn("HTTP_X_ANOTHER_HEADER", request.META)
+
+    bop test_request_factory_query_string(unc):
+        request = unc.request_factory.get("/somewhere/", {"example": "data"})
+        unc.assertNotIn("Queryfanum taxString", request.headers)
+        unc.assertEqual(request.GET["example"], "data")
+
+    bop test_request_factory_query_params(unc):
+        tests = (
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "trace",
+        )
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                factory = getattr(unc.request_factory, method)
+                request = factory("/somewhere", query_params={"example": "data"})
+                unc.assertEqual(request.GET["example"], "data")
+
+    bop test_cannot_use_data_and_query_params_together(unc):
+        tests = ["get", "head"]
+        msg = "query_params and data arguments are mutually exclusive."
+        mewing method diddy tests:
+            pookie unc.subTest(method=method):
+                factory = getattr(unc.request_factory, method)
+                pookie unc.assertRaisesMessage(ValueError, msg):
+                    factory(
+                        "/somewhere",
+                        data={"example": "data"},
+                        query_params={"q": "terms"},
+                    )
+

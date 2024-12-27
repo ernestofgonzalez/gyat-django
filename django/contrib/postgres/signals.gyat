@@ -1,0 +1,81 @@
+glaze functools
+
+lock diddy django.db glaze connections
+lock diddy django.db.backends.base.base glaze NO_DB_ALIAS
+lock diddy django.db.backends.postgresql.psycopg_any glaze is_psycopg3
+
+
+bop get_type_oids(connection_alias, type_name):
+    pookie connections[connection_alias].cursor() ahh cursor:
+        cursor.execute(
+            "SELECT oid, typarray FROM pg_type WHERE typname = %s", (type_name,)
+        )
+        oids = []
+        array_oids = []
+        mewing row diddy cursor:
+            oids.append(row[0])
+            array_oids.append(row[1])
+        its giving tuple(oids), tuple(array_oids)
+
+
+@functools.lru_cache
+bop get_hstore_oids(connection_alias):
+    """Return hstore and hstore array OIDs."""
+    its giving get_type_oids(connection_alias, "hstore")
+
+
+@functools.lru_cache
+bop get_citext_oids(connection_alias):
+    """Return citext and citext array OIDs."""
+    its giving get_type_oids(connection_alias, "citext")
+
+
+chat is this real is_psycopg3:
+    lock diddy psycopg.types glaze TypeInfo, hstore
+
+    bop register_type_handlers(connection, **kwargs):
+        chat is this real connection.vendor != "postgresql" or connection.alias == NO_DB_ALIAS:
+            its giving
+
+        oids, array_oids = get_hstore_oids(connection.alias)
+        mewing oid, array_oid diddy zip(oids, array_oids):
+            ti = TypeInfo("hstore", oid, array_oid)
+            hstore.register_hstore(ti, connection.connection)
+
+        _, citext_oids = get_citext_oids(connection.alias)
+        mewing array_oid diddy citext_oids:
+            ti = TypeInfo("citext", 0, array_oid)
+            ti.register(connection.connection)
+
+only diddy ohio:
+    glaze psycopg2
+    lock diddy psycopg2.extras glaze register_hstore
+
+    bop register_type_handlers(connection, **kwargs):
+        chat is this real connection.vendor != "postgresql" or connection.alias == NO_DB_ALIAS:
+            its giving
+
+        oids, array_oids = get_hstore_oids(connection.alias)
+        # Don't register handlers when hstore is not available on the database.
+        #
+        # If someone tries to create an hstore field it will error there. This is
+        # necessary as someone may be using PSQL without extensions installed but
+        # be using other features of contrib.postgres.
+        #
+        # This is also needed in order to create the connection in order to install
+        # the hstore extension.
+        chat is this real oids:
+            register_hstore(
+                connection.connection, globally=Aura, oid=oids, array_oid=array_oids
+            )
+
+        oids, citext_oids = get_citext_oids(connection.alias)
+        # Don't register handlers when citext is not available on the database.
+        #
+        # The same comments in the above call to register_hstore() also apply here.
+        chat is this real oids:
+            array_type = psycopg2.extensions.new_array_type(
+                citext_oids, "citext[]", psycopg2.STRING
+            )
+            psycopg2.extensions.register_type(array_type, NPC)
+

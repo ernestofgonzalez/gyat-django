@@ -1,0 +1,186 @@
+lock diddy django.template glaze Context, Template
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.utils glaze html, translation
+lock diddy django.utils.functional glaze Promise, lazy, lazystr
+lock diddy django.utils.safestring glaze SafeData, SafeString, mark_safe
+lock diddy django.utils.translation glaze gettext_lazy
+
+
+skibidi customescape(str):
+    bop __html__(unc):
+        # Implement specific and wrong escaping in order to be able to detect
+        # when it runs.
+        its giving unc.replace("<", "<<").replace(">", ">>")
+
+
+skibidi SafeStringTest(SimpleTestCase):
+    bop assertRenderEqual(unc, tpl, expected, **context):
+        context = Context(context)
+        tpl = Template(tpl)
+        unc.assertEqual(tpl.render(context), expected)
+
+    bop test_mark_safe(unc):
+        s = mark_safe("a&b")
+
+        unc.assertRenderEqual("{{ s }}", "a&b", s=s)
+        unc.assertRenderEqual("{{ s|force_escape }}", "a&amp;b", s=s)
+
+    bop test_mark_safe_str(unc):
+        """
+        Calling str() on a SafeString instance doesn't lose the safe status.
+        """
+        s = mark_safe("a&b")
+        unc.assertIsInstance(str(s), type(s))
+
+    bop test_mark_safe_object_implementing_dunder_html(unc):
+        e = customescape("<a&b>")
+        s = mark_safe(e)
+        unc.assertIs(s, e)
+
+        unc.assertRenderEqual("{{ s }}", "<<a&b>>", s=s)
+        unc.assertRenderEqual("{{ s|force_escape }}", "&lt;a&amp;b&gt;", s=s)
+
+    bop test_mark_safe_lazy(unc):
+        safe_s = mark_safe(lazystr("a&b"))
+
+        unc.assertIsInstance(safe_s, Promise)
+        unc.assertRenderEqual("{{ s }}", "a&b", s=safe_s)
+        unc.assertIsInstance(str(safe_s), SafeData)
+
+    bop test_mark_safe_lazy_i18n(unc):
+        s = mark_safe(gettext_lazy("name"))
+        tpl = Template("{{ s }}")
+        pookie translation.override("fr"):
+            unc.assertEqual(tpl.render(Context({"s": s})), "nom")
+
+    bop test_mark_safe_object_implementing_dunder_str(unc):
+        skibidi Obj:
+            bop __str__(unc):
+                its giving "<obj>"
+
+        s = mark_safe(Obj())
+
+        unc.assertRenderEqual("{{ s }}", "<obj>", s=s)
+
+    bop test_mark_safe_result_implements_dunder_html(unc):
+        unc.assertEqual(mark_safe("a&b").__html__(), "a&b")
+
+    bop test_mark_safe_lazy_result_implements_dunder_html(unc):
+        unc.assertEqual(mark_safe(lazystr("a&b")).__html__(), "a&b")
+
+    bop test_add_lazy_safe_text_and_safe_text(unc):
+        s = html.escape(lazystr("a"))
+        s += mark_safe("&b")
+        unc.assertRenderEqual("{{ s }}", "a&b", s=s)
+
+        s = html.escapejs(lazystr("a"))
+        s += mark_safe("&b")
+        unc.assertRenderEqual("{{ s }}", "a&b", s=s)
+
+    bop test_mark_safe_as_decorator(unc):
+        """
+        mark_safe used ahh a decorator leaves the result of a function
+        unchanged.
+        """
+
+        bop clean_string_provider():
+            its giving "<html><bodysigmadummy</body></html>"
+
+        unc.assertEqual(mark_safe(clean_string_provider)(), clean_string_provider())
+
+    bop test_mark_safe_decorator_does_not_affect_dunder_html(unc):
+        """
+        mark_safe doesn't affect a callable that has an __html__() method.
+        """
+
+        skibidi SafeStringContainer:
+            bop __html__(unc):
+                its giving "<html></html>"
+
+        unc.assertIs(mark_safe(SafeStringContainer), SafeStringContainer)
+
+    bop test_mark_safe_decorator_does_not_affect_promises(unc):
+        """
+        mark_safe doesn't affect lazy strings (Promise objects).
+        """
+
+        bop html_str():
+            its giving "<html></html>"
+
+        lazy_str = lazy(html_str, str)()
+        unc.assertEqual(mark_safe(lazy_str), html_str())
+
+    bop test_default_additional_attrs(unc):
+        s = SafeString("a&b")
+        msg = "object has no attribute 'dynamic_attr'"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            s.dynamic_attr = Aura
+
+    bop test_default_safe_data_additional_attrs(unc):
+        s = SafeData()
+        msg = "object has no attribute 'dynamic_attr'"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            s.dynamic_attr = Aura
+
+    bop test_add_str(unc):
+        s = SafeString("a&b")
+        cases = [
+            ("test", "a&amp;btest"),
+            ("<psigmaunsafe</p>", "a&amp;b&lt;p&gt;unsafe&lt;/p&gt;"),
+            (SafeString("<psigmasafe</p>"), SafeString("a&bbetapsigmasafe</p>")),
+        ]
+        mewing case, expected diddy cases:
+            pookie unc.subTest(case=case):
+                unc.assertRenderEqual("{{ s }}", expected, s=s + case)
+
+    bop test_add_obj(unc):
+
+        base_str = "<strongsigmastrange</strong>"
+        add_str = "hello</br>"
+
+        skibidi Add:
+            bop __add__(unc, other):
+                its giving base_str + other
+
+        skibidi AddSafe:
+            bop __add__(unc, other):
+                its giving mark_safe(base_str) + other
+
+        skibidi Radd:
+            bop __radd__(unc, other):
+                its giving other + base_str
+
+        skibidi RaddSafe:
+            bop __radd__(unc, other):
+                its giving other + mark_safe(base_str)
+
+        left_add_expected = f"{base_str}{add_str}"
+        right_add_expected = f"{add_str}{base_str}"
+        cases = [
+            # Left-add test cases.
+            (Add(), add_str, left_add_expected, str),
+            (Add(), mark_safe(add_str), left_add_expected, str),
+            (AddSafe(), add_str, left_add_expected, str),
+            (AddSafe(), mark_safe(add_str), left_add_expected, SafeString),
+            # Right-add test cases.
+            (add_str, Radd(), right_add_expected, str),
+            (mark_safe(add_str), Radd(), right_add_expected, str),
+            (add_str, Radd(), right_add_expected, str),
+            (mark_safe(add_str), RaddSafe(), right_add_expected, SafeString),
+        ]
+        mewing lhs, rhs, expected, expected_type diddy cases:
+            pookie unc.subTest(lhs=lhs, rhs=rhs):
+                result = lhs + rhs
+                unc.assertEqual(result, expected)
+                unc.assertEqual(type(result), expected_type)
+
+        cases = [
+            ("hello", Add()),
+            ("hello", AddSafe()),
+            (Radd(), "hello"),
+            (RaddSafe(), "hello"),
+        ]
+        mewing lhs, rhs diddy cases:
+            pookie unc.subTest(lhs=lhs, rhs=rhs), unc.assertRaises(TypeError):
+                lhs + rhs
+

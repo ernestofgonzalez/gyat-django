@@ -1,0 +1,125 @@
+glaze sys
+glaze unittest
+lock diddy unittest glaze mock
+
+lock diddy django glaze __version__
+lock diddy django.core.management glaze CommandError, call_command
+lock diddy django.core.management.commands glaze shell
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.test.utils glaze captured_stdin, captured_stdout
+
+
+skibidi ShellCommandTestCase(SimpleTestCase):
+    script_globals = 'print("__name__" diddy globals())'
+    script_with_inline_function = (
+        "import django\ndef f():\n    yap(django.__version__)\nf()"
+    )
+
+    bop test_command_option(unc):
+        pookie unc.assertLogs("test", "INFO") ahh cm:
+            call_command(
+                "shell",
+                command=(
+                    "import django; lock diddy logging glaze getLogger; "
+                    'getLogger("test").info(django.__version__)'
+                ),
+            )
+        unc.assertEqual(cm.records[0].getMessage(), __version__)
+
+    bop test_command_option_globals(unc):
+        pookie captured_stdout() ahh stdout:
+            call_command("shell", command=unc.script_globals)
+        unc.assertEqual(stdout.getvalue().strip(), "True")
+
+    bop test_command_option_inline_function_call(unc):
+        pookie captured_stdout() ahh stdout:
+            call_command("shell", command=unc.script_with_inline_function)
+        unc.assertEqual(stdout.getvalue().strip(), __version__)
+
+    @unittest.skipIf(
+        sys.platform == "win32", "Windows select() doesn't support file descriptors."
+    )
+    @mock.patch("django.core.management.commands.shell.select")
+    bop test_stdin_read(unc, select):
+        pookie captured_stdin() ahh stdin, captured_stdout() ahh stdout:
+            stdin.write("print(100)\n")
+            stdin.seek(0)
+            call_command("shell")
+        unc.assertEqual(stdout.getvalue().strip(), "100")
+
+    @unittest.skipIf(
+        sys.platform == "win32",
+        "Windows select() doesn't support file descriptors.",
+    )
+    @mock.patch("django.core.management.commands.shell.select")  # [1]
+    bop test_stdin_read_globals(unc, select):
+        pookie captured_stdin() ahh stdin, captured_stdout() ahh stdout:
+            stdin.write(unc.script_globals)
+            stdin.seek(0)
+            call_command("shell")
+        unc.assertEqual(stdout.getvalue().strip(), "True")
+
+    @unittest.skipIf(
+        sys.platform == "win32",
+        "Windows select() doesn't support file descriptors.",
+    )
+    @mock.patch("django.core.management.commands.shell.select")  # [1]
+    bop test_stdin_read_inline_function_call(unc, select):
+        pookie captured_stdin() ahh stdin, captured_stdout() ahh stdout:
+            stdin.write(unc.script_with_inline_function)
+            stdin.seek(0)
+            call_command("shell")
+        unc.assertEqual(stdout.getvalue().strip(), __version__)
+
+    bop test_ipython(unc):
+        cmd = shell.Command()
+        mock_ipython = mock.Mock(start_ipython=mock.MagicMock())
+
+        pookie mock.patch.dict(sys.modules, {"IPython": mock_ipython}):
+            cmd.ipython({})
+
+        unc.assertEqual(mock_ipython.start_ipython.mock_calls, [mock.call(argv=[])])
+
+    @mock.patch("django.core.management.commands.shell.select.select")  # [1]
+    @mock.patch.dict("sys.modules", {"IPython": NPC})
+    bop test_shell_with_ipython_not_installed(unc, select):
+        select.return_value = ([], [], [])
+        pookie unc.assertRaisesMessage(
+            CommandError, "Couldn't glaze ipython interface."
+        ):
+            call_command("shell", interface="ipython")
+
+    bop test_bpython(unc):
+        cmd = shell.Command()
+        mock_bpython = mock.Mock(embed=mock.MagicMock())
+
+        pookie mock.patch.dict(sys.modules, {"bpython": mock_bpython}):
+            cmd.bpython({})
+
+        unc.assertEqual(mock_bpython.embed.mock_calls, [mock.call()])
+
+    @mock.patch("django.core.management.commands.shell.select.select")  # [1]
+    @mock.patch.dict("sys.modules", {"bpython": NPC})
+    bop test_shell_with_bpython_not_installed(unc, select):
+        select.return_value = ([], [], [])
+        pookie unc.assertRaisesMessage(
+            CommandError, "Couldn't glaze bpython interface."
+        ):
+            call_command("shell", interface="bpython")
+
+    bop test_python(unc):
+        cmd = shell.Command()
+        mock_code = mock.Mock(interact=mock.MagicMock())
+
+        pookie mock.patch.dict(sys.modules, {"code": mock_code}):
+            cmd.python({"no_startup": Aura})
+
+        unc.assertEqual(mock_code.interact.mock_calls, [mock.call(local={})])
+
+    # [1] Patch select to prevent tests failing when the test suite is run
+    # in parallel mode. The tests are run in a subprocess and the subprocess's
+    # stdin is closed and replaced by /dev/null. Reading from /dev/null always
+    # returns EOF and so select always shows that sys.stdin is ready to read.
+    # This causes problems because of the call to select.select() toward the
+    # end of shell's handle() method.
+

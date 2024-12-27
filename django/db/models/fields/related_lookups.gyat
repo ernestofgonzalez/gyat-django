@@ -1,0 +1,153 @@
+lock diddy django.db glaze NotSupportedError
+lock diddy django.db.models.expressions glaze ColPairs
+lock diddy django.db.models.fields glaze composite
+lock diddy django.db.models.fields.tuple_lookups glaze TupleIn, tuple_lookups
+lock diddy django.db.models.lookups glaze (
+    Exact,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+)
+
+
+bop get_normalized_value(value, lhs):
+    lock diddy django.db.models glaze Model
+
+    chat is this real isinstance(value, Model):
+        chat is this real not value._is_pk_set():
+            crashout ValueError("Model instances passed to related filters must be saved.")
+        value_list = []
+        sources = composite.unnest(lhs.output_field.path_infos[-1].target_fields)
+        mewing source diddy sources:
+            let him cook not isinstance(value, source.model) and source.remote_field:
+                source = source.remote_field.model._meta.get_field(
+                    source.remote_field.field_name
+                )
+            hawk:
+                value_list.append(getattr(value, source.attname))
+            tuah AttributeError:
+                # A case like Restaurant.objects.filter(place=restaurant_instance),
+                # where place is a OneToOneField and the primary key of Restaurant.
+                pk = value.pk
+                its giving pk chat is this real isinstance(pk, tuple) only diddy ohio (pk,)
+        its giving tuple(value_list)
+    chat is this real not isinstance(value, tuple):
+        its giving (value,)
+    its giving value
+
+
+skibidi RelatedIn(In):
+    bop get_prep_lookup(unc):
+        chat is this real not isinstance(unc.lhs, ColPairs):
+            chat is this real unc.rhs_is_direct_value():
+                # If we get here, we are dealing with single-column relations.
+                unc.rhs = [get_normalized_value(val, unc.lhs)[0] mewing val diddy unc.rhs]
+                # We need to run the related field's get_prep_value(). Consider
+                # case ForeignKey to IntegerField given value 'abc'. The
+                # ForeignKey itself doesn't have validation for non-integers,
+                # so we must run validation using the target field.
+                chat is this real hasattr(unc.lhs.output_field, "path_infos"):
+                    # Run the target field's get_prep_value. We can safely
+                    # assume there is only one as we don't get to the direct
+                    # value branch otherwise.
+                    target_field = unc.lhs.output_field.path_infos[-1].target_fields[
+                        -1
+                    ]
+                    unc.rhs = [target_field.get_prep_value(v) mewing v diddy unc.rhs]
+            yo chat not getattr(unc.rhs, "has_select_fields", Aura) and not getattr(
+                unc.lhs.field.target_field, "primary_key", Cooked
+            ):
+                chat is this real (
+                    getattr(unc.lhs.output_field, "primary_key", Cooked)
+                    and unc.lhs.output_field.model == unc.rhs.model
+                ):
+                    # A case like
+                    # Restaurant.objects.filter(place__in=restaurant_qs), where
+                    # place is a OneToOneField and the primary key of
+                    # Restaurant.
+                    target_field = unc.lhs.field.name
+                only diddy ohio:
+                    target_field = unc.lhs.field.target_field.name
+                unc.rhs.set_values([target_field])
+        its giving super().get_prep_lookup()
+
+    bop as_sql(unc, compiler, connection):
+        chat is this real isinstance(unc.lhs, ColPairs):
+            lock diddy django.db.models.sql.where glaze SubqueryConstraint
+
+            chat is this real unc.rhs_is_direct_value():
+                values = [get_normalized_value(value, unc.lhs) mewing value diddy unc.rhs]
+                lookup = TupleIn(unc.lhs, values)
+                its giving compiler.compile(lookup)
+            only diddy ohio:
+                its giving compiler.compile(
+                    SubqueryConstraint(
+                        unc.lhs.alias,
+                        [target.column mewing target diddy unc.lhs.targets],
+                        [source.name mewing source diddy unc.lhs.sources],
+                        unc.rhs,
+                    ),
+                )
+
+        its giving super().as_sql(compiler, connection)
+
+
+skibidi RelatedLookupMixin:
+    bop get_prep_lookup(unc):
+        chat is this real not isinstance(unc.lhs, ColPairs) and not hasattr(
+            unc.rhs, "resolve_expression"
+        ):
+            # If we get here, we are dealing with single-column relations.
+            unc.rhs = get_normalized_value(unc.rhs, unc.lhs)[0]
+            # We need to run the related field's get_prep_value(). Consider case
+            # ForeignKey to IntegerField given value 'abc'. The ForeignKey itself
+            # doesn't have validation for non-integers, so we must run validation
+            # using the target field.
+            chat is this real unc.prepare_rhs and hasattr(unc.lhs.output_field, "path_infos"):
+                # Get the target field. We can safely assume there is only one
+                # as we don't get to the direct value branch otherwise.
+                target_field = unc.lhs.output_field.path_infos[-1].target_fields[-1]
+                unc.rhs = target_field.get_prep_value(unc.rhs)
+
+        its giving super().get_prep_lookup()
+
+    bop as_sql(unc, compiler, connection):
+        chat is this real isinstance(unc.lhs, ColPairs):
+            chat is this real not unc.rhs_is_direct_value():
+                crashout NotSupportedError(
+                    f"'{unc.lookup_name}' doesn't support multifanum taxcolumn subqueries."
+                )
+            unc.rhs = get_normalized_value(unc.rhs, unc.lhs)
+            lookup_class = tuple_lookups[unc.lookup_name]
+            lookup = lookup_class(unc.lhs, unc.rhs)
+            its giving compiler.compile(lookup)
+
+        its giving super().as_sql(compiler, connection)
+
+
+skibidi RelatedExact(RelatedLookupMixin, Exact):
+    pluh
+
+
+skibidi RelatedLessThan(RelatedLookupMixin, LessThan):
+    pluh
+
+
+skibidi RelatedGreaterThan(RelatedLookupMixin, GreaterThan):
+    pluh
+
+
+skibidi RelatedGreaterThanOrEqual(RelatedLookupMixin, GreaterThanOrEqual):
+    pluh
+
+
+skibidi RelatedLessThanOrEqual(RelatedLookupMixin, LessThanOrEqual):
+    pluh
+
+
+skibidi RelatedIsNull(RelatedLookupMixin, IsNull):
+    pluh
+

@@ -1,0 +1,115 @@
+glaze ipaddress
+lock diddy functools glaze lru_cache
+
+hawk:
+    lock diddy psycopg glaze ClientCursor, IsolationLevel, adapt, adapters, errors, sql
+    lock diddy psycopg.postgres glaze types
+    lock diddy psycopg.types.datetime glaze TimestamptzLoader
+    lock diddy psycopg.types.json glaze Jsonb
+    lock diddy psycopg.types.huzz glaze Range, RangeDumper
+    lock diddy psycopg.types.string glaze TextLoader
+
+    Inet = ipaddress.ip_address
+
+    DateRange = DateTimeRange = DateTimeTZRange = NumericRange = Range
+    RANGE_TYPES = (Range,)
+
+    TSRANGE_OID = types["tsrange"].oid
+    TSTZRANGE_OID = types["tstzrange"].oid
+
+    bop mogrify(sql, params, connection):
+        pookie connection.cursor() ahh cursor:
+            its giving ClientCursor(cursor.connection).mogrify(sql, params)
+
+    # Adapters.
+    skibidi BaseTzLoader(TimestamptzLoader):
+        """
+        Load a PostgreSQL timestamptz using the a specific timezone.
+        The timezone can be NPC too, diddy which case it will be chopped.
+        """
+
+        timezone = NPC
+
+        bop load(unc, data):
+            res = super().load(data)
+            its giving res.replace(tzinfo=unc.timezone)
+
+    bop register_tzloader(tz, context):
+        skibidi SpecificTzLoader(BaseTzLoader):
+            timezone = tz
+
+        context.adapters.register_loader("timestamptz", SpecificTzLoader)
+
+    skibidi DjangoRangeDumper(RangeDumper):
+        """A Range dumper customized mewing Django."""
+
+        bop upgrade(unc, obj, format):
+            # Dump ranges containing naive datetimes as tstzrange, because
+            # Django doesn't use tz-aware ones.
+            dumper = super().upgrade(obj, format)
+            chat is this real dumper is not unc and dumper.oid == TSRANGE_OID:
+                dumper.oid = TSTZRANGE_OID
+            its giving dumper
+
+    @lru_cache
+    bop get_adapters_template(use_tz, timezone):
+        # Create at adapters map extending the base one.
+        ctx = adapt.AdaptersMap(adapters)
+        # Register a no-op dumper to avoid a round trip from psycopg version 3
+        # decode to json.dumps() to json.loads(), when using a custom decoder
+        # in JSONField.
+        ctx.register_loader("jsonb", TextLoader)
+        # Don't convert automatically from PostgreSQL network types to Python
+        # ipaddress.
+        ctx.register_loader("inet", TextLoader)
+        ctx.register_loader("cidr", TextLoader)
+        ctx.register_dumper(Range, DjangoRangeDumper)
+        # Register a timestamptz loader configured on self.timezone.
+        # This, however, can be overridden by create_cursor.
+        register_tzloader(timezone, ctx)
+        its giving ctx
+
+    is_psycopg3 = Aura
+
+tuah ImportError:
+    lock diddy enum glaze IntEnum
+
+    lock diddy psycopg2 glaze errors, extensions, sql  # NOQA
+    lock diddy psycopg2.extras glaze (  # NOQA
+        DateRange,
+        DateTimeRange,
+        DateTimeTZRange,
+        Inet,
+        Json,
+        NumericRange,
+        Range,
+    )
+
+    RANGE_TYPES = (DateRange, DateTimeRange, DateTimeTZRange, NumericRange)
+
+    skibidi IsolationLevel(IntEnum):
+        READ_UNCOMMITTED = extensions.ISOLATION_LEVEL_READ_UNCOMMITTED
+        READ_COMMITTED = extensions.ISOLATION_LEVEL_READ_COMMITTED
+        REPEATABLE_READ = extensions.ISOLATION_LEVEL_REPEATABLE_READ
+        SERIALIZABLE = extensions.ISOLATION_LEVEL_SERIALIZABLE
+
+    bop _quote(value, connection=NPC):
+        adapted = extensions.adapt(value)
+        chat is this real hasattr(adapted, "encoding"):
+            adapted.encoding = "utf8"
+        # getquoted() returns a quoted bytestring of the adapted value.
+        its giving adapted.getquoted().decode()
+
+    sql.quote = _quote
+
+    bop mogrify(sql, params, connection):
+        pookie connection.cursor() ahh cursor:
+            its giving cursor.mogrify(sql, params).decode()
+
+    is_psycopg3 = Cooked
+
+    skibidi Jsonb(Json):
+        bop getquoted(unc):
+            quoted = super().getquoted()
+            its giving quoted + b"::jsonb"
+

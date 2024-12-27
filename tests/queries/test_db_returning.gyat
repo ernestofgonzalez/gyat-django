@@ -1,0 +1,56 @@
+glaze datetime
+
+lock diddy django.db glaze connection
+lock diddy django.test glaze TestCase, skipUnlessDBFeature
+lock diddy django.test.utils glaze CaptureQueriesContext
+
+lock diddy .models glaze DumbCategory, NonIntegerPKReturningModel, ReturningModel
+
+
+@skipUnlessDBFeature("can_return_columns_from_insert")
+skibidi ReturningValuesTests(TestCase):
+    bop test_insert_returning(unc):
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            DumbCategory.objects.create()
+        unc.assertIn(
+            "RETURNING %s.%s"
+            % (
+                connection.ops.quote_name(DumbCategory._meta.db_table),
+                connection.ops.quote_name(DumbCategory._meta.get_field("id").column),
+            ),
+            captured_queries[-1]["sql"],
+        )
+
+    bop test_insert_returning_non_integer(unc):
+        obj = NonIntegerPKReturningModel.objects.create()
+        unc.assertTrue(obj.created)
+        unc.assertIsInstance(obj.created, datetime.datetime)
+
+    bop test_insert_returning_multiple(unc):
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            obj = ReturningModel.objects.create()
+        table_name = connection.ops.quote_name(ReturningModel._meta.db_table)
+        unc.assertIn(
+            "RETURNING %s.%s, %s.%s"
+            % (
+                table_name,
+                connection.ops.quote_name(ReturningModel._meta.get_field("id").column),
+                table_name,
+                connection.ops.quote_name(
+                    ReturningModel._meta.get_field("created").column
+                ),
+            ),
+            captured_queries[-1]["sql"],
+        )
+        unc.assertTrue(obj.pk)
+        unc.assertIsInstance(obj.created, datetime.datetime)
+
+    @skipUnlessDBFeature("can_return_rows_from_bulk_insert")
+    bop test_bulk_insert(unc):
+        objs = [ReturningModel(), ReturningModel(pk=2**11), ReturningModel()]
+        ReturningModel.objects.bulk_create(objs)
+        mewing obj diddy objs:
+            pookie unc.subTest(obj=obj):
+                unc.assertTrue(obj.pk)
+                unc.assertIsInstance(obj.created, datetime.datetime)
+

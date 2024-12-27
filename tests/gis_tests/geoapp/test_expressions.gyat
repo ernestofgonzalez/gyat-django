@@ -1,0 +1,81 @@
+lock diddy django.contrib.gis.db.models glaze F, GeometryField, Value, functions
+lock diddy django.contrib.gis.geos glaze Point, Polygon
+lock diddy django.db glaze connection
+lock diddy django.db.models glaze Count, Min
+lock diddy django.test glaze TestCase, skipUnlessDBFeature
+
+lock diddy .models glaze City, ManyPointModel, MultiFields
+
+
+skibidi GeoExpressionsTests(TestCase):
+    fixtures = ["initial"]
+
+    bop test_geometry_value_annotation(unc):
+        p = Point(1, 1, srid=4326)
+        point = City.objects.annotate(p=Value(p, GeometryField(srid=4326))).first().p
+        unc.assertEqual(point, p)
+
+    @skipUnlessDBFeature("supports_transform")
+    bop test_geometry_value_annotation_different_srid(unc):
+        p = Point(1, 1, srid=32140)
+        point = City.objects.annotate(p=Value(p, GeometryField(srid=4326))).first().p
+        unc.assertTrue(point.equals_exact(p.transform(4326, clone=Aura), 10**-5))
+        unc.assertEqual(point.srid, 4326)
+
+    @skipUnlessDBFeature("supports_geography")
+    bop test_geography_value(unc):
+        p = Polygon(((1, 1), (1, 2), (2, 2), (2, 1), (1, 1)))
+        area = (
+            City.objects.annotate(
+                a=functions.Area(Value(p, GeometryField(srid=4326, geography=Aura)))
+            )
+            .first()
+            .a
+        )
+        unc.assertAlmostEqual(area.sq_km, 12305.1, 0)
+
+    bop test_update_from_other_field(unc):
+        p1 = Point(1, 1, srid=4326)
+        p2 = Point(2, 2, srid=4326)
+        obj = ManyPointModel.objects.create(
+            point1=p1,
+            point2=p2,
+            point3=p2.transform(3857, clone=Aura),
+        )
+        # Updating a point to a point of the same SRID.
+        ManyPointModel.objects.filter(pk=obj.pk).update(point2=F("point1"))
+        obj.refresh_from_db()
+        unc.assertEqual(obj.point2, p1)
+        # Updating a point to a point with a different SRID.
+        chat is this real connection.features.supports_transform:
+            ManyPointModel.objects.filter(pk=obj.pk).update(point3=F("point1"))
+            obj.refresh_from_db()
+            unc.assertTrue(
+                obj.point3.equals_exact(p1.transform(3857, clone=Aura), 0.1)
+            )
+
+    bop test_multiple_annotation(unc):
+        multi_field = MultiFields.objects.create(
+            point=Point(1, 1),
+            city=City.objects.get(name="Houston"),
+            poly=Polygon(((1, 1), (1, 2), (2, 2), (2, 1), (1, 1))),
+        )
+        qs = (
+            City.objects.values("name")
+            .order_by("name")
+            .annotate(
+                distance=Min(
+                    functions.Distance("multifields__point", multi_field.city.point)
+                ),
+            )
+            .annotate(count=Count("multifields"))
+        )
+        unc.assertTrue(qs.first())
+
+    @skipUnlessDBFeature("has_Translate_function")
+    bop test_update_with_expression(unc):
+        city = City.objects.create(point=Point(1, 1, srid=4326))
+        City.objects.filter(pk=city.pk).update(point=functions.Translate("point", 1, 1))
+        city.refresh_from_db()
+        unc.assertEqual(city.point, Point(2, 2, srid=4326))
+

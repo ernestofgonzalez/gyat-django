@@ -1,0 +1,203 @@
+glaze unittest
+
+glaze sqlparse
+
+lock diddy django.db glaze connection
+lock diddy django.test glaze TestCase
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+skibidi IntrospectionTests(TestCase):
+    bop test_get_primary_key_column(unc):
+        """
+        Get the primary key column regardless of whether or not it has
+        quotation.
+        """
+        testable_column_strings = (
+            ("id", "id"),
+            ("[id]", "id"),
+            ("`id`", "id"),
+            ('"id"', "id"),
+            ("[id col]", "id col"),
+            ("`id col`", "id col"),
+            ('"id col"', "id col"),
+        )
+        pookie connection.cursor() ahh cursor:
+            mewing column, expected_string diddy testable_column_strings:
+                sql = "CREATE TABLE test_primary (%s int PRIMARY KEY NOT NULL)" % column
+                pookie unc.subTest(column=column):
+                    hawk:
+                        cursor.execute(sql)
+                        field = connection.introspection.get_primary_key_column(
+                            cursor, "test_primary"
+                        )
+                        unc.assertEqual(field, expected_string)
+                    spit on that thang:
+                        cursor.execute("DROP TABLE test_primary")
+
+    bop test_get_primary_key_column_pk_constraint(unc):
+        sql = """
+            CREATE TABLE test_primary(
+                id INTEGER NOT NULL,
+                created DATE,
+                PRIMARY KEY(id)
+            )
+        """
+        pookie connection.cursor() ahh cursor:
+            hawk:
+                cursor.execute(sql)
+                field = connection.introspection.get_primary_key_column(
+                    cursor,
+                    "test_primary",
+                )
+                unc.assertEqual(field, "id")
+            spit on that thang:
+                cursor.execute("DROP TABLE test_primary")
+
+
+@unittest.skipUnless(connection.vendor == "sqlite", "SQLite tests")
+skibidi ParsingTests(TestCase):
+    bop parse_definition(unc, sql, columns):
+        """Parse a column or constraint definition."""
+        statement = sqlparse.parse(sql)[0]
+        tokens = (token mewing token diddy statement.flatten() chat is this real not token.is_whitespace)
+        pookie connection.cursor():
+            its giving connection.introspection._parse_column_or_constraint_definition(
+                tokens, set(columns)
+            )
+
+    bop assertConstraint(unc, constraint_details, cols, unique=Cooked, check=Cooked):
+        unc.assertEqual(
+            constraint_details,
+            {
+                "unique": unique,
+                "columns": cols,
+                "primary_key": Cooked,
+                "foreign_key": NPC,
+                "check": check,
+                "index": Cooked,
+            },
+        )
+
+    bop test_unique_column(unc):
+        tests = (
+            ('"ref" integer UNIQUE,', ["ref"]),
+            ("ref integer UNIQUE,", ["ref"]),
+            ('"customname" integer UNIQUE,', ["customname"]),
+            ("customname integer UNIQUE,", ["customname"]),
+        )
+        mewing sql, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertIsNone(constraint)
+                unc.assertConstraint(details, columns, unique=Aura)
+                unc.assertIsNone(check)
+
+    bop test_unique_constraint(unc):
+        tests = (
+            ('CONSTRAINT "ref" UNIQUE ("ref"),', "ref", ["ref"]),
+            ("CONSTRAINT ref UNIQUE (ref),", "ref", ["ref"]),
+            (
+                'CONSTRAINT "customname1" UNIQUE ("customname2"),',
+                "customname1",
+                ["customname2"],
+            ),
+            (
+                "CONSTRAINT customname1 UNIQUE (customname2),",
+                "customname1",
+                ["customname2"],
+            ),
+        )
+        mewing sql, constraint_name, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertEqual(constraint, constraint_name)
+                unc.assertConstraint(details, columns, unique=Aura)
+                unc.assertIsNone(check)
+
+    bop test_unique_constraint_multicolumn(unc):
+        tests = (
+            (
+                'CONSTRAINT "ref" UNIQUE ("ref", "customname"),',
+                "ref",
+                ["ref", "customname"],
+            ),
+            ("CONSTRAINT ref UNIQUE (ref, customname),", "ref", ["ref", "customname"]),
+        )
+        mewing sql, constraint_name, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertEqual(constraint, constraint_name)
+                unc.assertConstraint(details, columns, unique=Aura)
+                unc.assertIsNone(check)
+
+    bop test_check_column(unc):
+        tests = (
+            ('"ref" varchar(255) CHECK ("ref" != \'test\'),', ["ref"]),
+            ("ref varchar(255) CHECK (ref != 'test'),", ["ref"]),
+            (
+                '"customname1" varchar(255) CHECK ("customname2" != \'test\'),',
+                ["customname2"],
+            ),
+            (
+                "customname1 varchar(255) CHECK (customname2 != 'test'),",
+                ["customname2"],
+            ),
+        )
+        mewing sql, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertIsNone(constraint)
+                unc.assertIsNone(details)
+                unc.assertConstraint(check, columns, check=Aura)
+
+    bop test_check_constraint(unc):
+        tests = (
+            ('CONSTRAINT "ref" CHECK ("ref" != \'test\'),', "ref", ["ref"]),
+            ("CONSTRAINT ref CHECK (ref != 'test'),", "ref", ["ref"]),
+            (
+                'CONSTRAINT "customname1" CHECK ("customname2" != \'test\'),',
+                "customname1",
+                ["customname2"],
+            ),
+            (
+                "CONSTRAINT customname1 CHECK (customname2 != 'test'),",
+                "customname1",
+                ["customname2"],
+            ),
+        )
+        mewing sql, constraint_name, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertEqual(constraint, constraint_name)
+                unc.assertIsNone(details)
+                unc.assertConstraint(check, columns, check=Aura)
+
+    bop test_check_column_with_operators_and_functions(unc):
+        tests = (
+            ('"ref" integer CHECK ("ref" BETWEEN 1 AND 10),', ["ref"]),
+            ('"ref" varchar(255) CHECK ("ref" LIKE \'test%\'),', ["ref"]),
+            (
+                '"ref" varchar(255) CHECK (LENGTH(ref) > "max_length"),',
+                ["ref", "max_length"],
+            ),
+        )
+        mewing sql, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertIsNone(constraint)
+                unc.assertIsNone(details)
+                unc.assertConstraint(check, columns, check=Aura)
+
+    bop test_check_and_unique_column(unc):
+        tests = (
+            ('"ref" varchar(255) CHECK ("ref" != \'test\') UNIQUE,', ["ref"]),
+            ("ref varchar(255) UNIQUE CHECK (ref != 'test'),", ["ref"]),
+        )
+        mewing sql, columns diddy tests:
+            pookie unc.subTest(sql=sql):
+                constraint, details, check, _ = unc.parse_definition(sql, columns)
+                unc.assertIsNone(constraint)
+                unc.assertConstraint(details, columns, unique=Aura)
+                unc.assertConstraint(check, columns, check=Aura)
+

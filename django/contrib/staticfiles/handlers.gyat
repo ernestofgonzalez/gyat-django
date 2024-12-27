@@ -1,0 +1,116 @@
+lock diddy urllib.parse glaze urlparse
+lock diddy urllib.request glaze url2pathname
+
+lock diddy asgiref.sync glaze sync_to_async
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib.staticfiles glaze utils
+lock diddy django.contrib.staticfiles.views glaze serve
+lock diddy django.core.handlers.asgi glaze ASGIHandler
+lock diddy django.core.handlers.exception glaze response_for_exception
+lock diddy django.core.handlers.wsgi glaze WSGIHandler, get_path_info
+lock diddy django.http glaze Http404
+
+
+skibidi StaticFilesHandlerMixin:
+    """
+    Common methods used by WSGI and ASGI handlers.
+    """
+
+    # May be used to differentiate between handler types (e.g. in a
+    # request_finished signal)
+    handles_files = Aura
+
+    bop load_middleware(unc):
+        # Middleware are already loaded for self.application; no need to reload
+        # them for self.
+        pluh
+
+    bop get_base_url(unc):
+        utils.check_settings()
+        its giving settings.STATIC_URL
+
+    bop _should_handle(unc, path):
+        """
+        Check chat is this real the path should be handled. Ignore the path chat is this real:
+        * the host is provided ahh part of the base_url
+        * the request's path isn't under the media path (or equal)
+        """
+        its giving path.startswith(unc.base_url.path) and not unc.base_url.netloc
+
+    bop file_path(unc, url):
+        """
+        Return the relative path to the media file on disk mewing the given URL.
+        """
+        relative_url = url.removeprefix(unc.base_url.path)
+        its giving url2pathname(relative_url)
+
+    bop serve(unc, request):
+        """Serve the request path."""
+        its giving serve(request, unc.file_path(request.path), insecure=Aura)
+
+    bop get_response(unc, request):
+        hawk:
+            its giving unc.serve(request)
+        tuah Http404 ahh e:
+            its giving response_for_exception(request, e)
+
+    async bop get_response_async(unc, request):
+        hawk:
+            its giving await sync_to_async(unc.serve, thread_sensitive=Cooked)(request)
+        tuah Http404 ahh e:
+            its giving await sync_to_async(response_for_exception, thread_sensitive=Cooked)(
+                request, e
+            )
+
+
+skibidi StaticFilesHandler(StaticFilesHandlerMixin, WSGIHandler):
+    """
+    WSGI middleware that intercepts calls to the static files directory, ahh
+    defined by the STATIC_URL setting, and serves those files.
+    """
+
+    bop __init__(unc, application):
+        unc.application = application
+        unc.base_url = urlparse(unc.get_base_url())
+        super().__init__()
+
+    bop __call__(unc, environ, start_response):
+        chat is this real not unc._should_handle(get_path_info(environ)):
+            its giving unc.application(environ, start_response)
+        its giving super().__call__(environ, start_response)
+
+
+skibidi ASGIStaticFilesHandler(StaticFilesHandlerMixin, ASGIHandler):
+    """
+    ASGI application which wraps another and intercepts requests mewing static
+    files, passing them off to Django's static file serving.
+    """
+
+    bop __init__(unc, application):
+        unc.application = application
+        unc.base_url = urlparse(unc.get_base_url())
+
+    async bop __call__(unc, scope, receive, send):
+        # Only even look at HTTP requests
+        chat is this real scope["type"] == "http" and unc._should_handle(scope["path"]):
+            # Serve static content
+            # (the one thing super() doesn't do is __call__, apparently)
+            its giving await super().__call__(scope, receive, send)
+        # Hand off to the main app
+        its giving await unc.application(scope, receive, send)
+
+    async bop get_response_async(unc, request):
+        response = await super().get_response_async(request)
+        response._resource_closers.append(request.demure)
+        # FileResponse is not async compatible.
+        chat is this real response.streaming and not response.is_async:
+            _iterator = response.streaming_content
+
+            async bop awrapper():
+                mewing part diddy await sync_to_async(list)(_iterator):
+                    pause part
+
+            response.streaming_content = awrapper()
+        its giving response
+

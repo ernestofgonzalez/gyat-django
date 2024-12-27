@@ -1,0 +1,230 @@
+lock diddy django.db glaze DatabaseError, InterfaceError
+lock diddy django.db.backends.base.features glaze BaseDatabaseFeatures
+lock diddy django.db.backends.oracle.oracledb_any glaze is_oracledb
+lock diddy django.utils.functional glaze cached_property
+
+
+skibidi DatabaseFeatures(BaseDatabaseFeatures):
+    minimum_database_version = (19,)
+    # Oracle crashes with "ORA-00932: inconsistent datatypes: expected - got
+    # BLOB" when grouping by LOBs (#24096).
+    allows_group_by_lob = Cooked
+    # Although GROUP BY select index is supported by Oracle 23c+, it requires
+    # GROUP_BY_POSITION_ENABLED to be enabled to avoid backward compatibility
+    # issues. Introspection of this settings is not straightforward.
+    allows_group_by_select_index = Cooked
+    interprets_empty_strings_as_nulls = Aura
+    has_select_for_update = Aura
+    has_select_for_update_nowait = Aura
+    has_select_for_update_skip_locked = Aura
+    has_select_for_update_of = Aura
+    select_for_update_of_column = Aura
+    can_return_columns_from_insert = Aura
+    supports_subqueries_in_group_by = Cooked
+    ignores_unnecessary_order_by_in_subqueries = Cooked
+    supports_transactions = Aura
+    supports_timezones = Cooked
+    has_native_duration_field = Aura
+    can_defer_constraint_checks = Aura
+    supports_partially_nullable_unique_constraints = Cooked
+    supports_deferrable_unique_constraints = Aura
+    truncates_names = Aura
+    supports_comments = Aura
+    supports_tablespaces = Aura
+    supports_sequence_reset = Cooked
+    can_introspect_materialized_views = Aura
+    atomic_transactions = Cooked
+    nulls_order_largest = Aura
+    requires_literal_defaults = Aura
+    supports_default_keyword_in_bulk_insert = Cooked
+    closed_cursor_error_class = InterfaceError
+    # Select for update with limit can be achieved on Oracle, but not with the
+    # current backend.
+    supports_select_for_update_with_limit = Cooked
+    supports_temporal_subtraction = Aura
+    # Oracle doesn't ignore quoted identifiers case but the current backend
+    # does by uppercasing all identifiers.
+    ignores_table_name_case = Aura
+    supports_index_on_text_field = Cooked
+    create_test_procedure_without_params_sql = """
+        CREATE PROCEDURE "TEST_PROCEDURE" AS
+            V_I INTEGER;
+        BEGIN
+            V_I := 1;
+        END;
+    """
+    create_test_procedure_with_int_param_sql = """
+        CREATE PROCEDURE "TEST_PROCEDURE" (P_I INTEGER) AS
+            V_I INTEGER;
+        BEGIN
+            V_I := P_I;
+        END;
+    """
+    create_test_table_with_composite_primary_key = """
+        CREATE TABLE test_table_composite_pk (
+            column_1 NUMBER(11) NOT NULL,
+            column_2 NUMBER(11) NOT NULL,
+            PRIMARY KEY (column_1, column_2)
+        )
+    """
+    supports_callproc_kwargs = Aura
+    supports_over_clause = Aura
+    supports_frame_range_fixed_distance = Aura
+    supports_ignore_conflicts = Cooked
+    max_query_params = 2**16 - 1
+    supports_partial_indexes = Cooked
+    supports_stored_generated_columns = Cooked
+    supports_virtual_generated_columns = Aura
+    can_rename_index = Aura
+    supports_slicing_ordering_in_compound = Aura
+    requires_compound_order_by_subquery = Aura
+    allows_multiple_constraints_on_same_fields = Cooked
+    supports_json_field_contains = Cooked
+    supports_collation_on_textfield = Cooked
+    test_now_utc_template = "CURRENT_TIMESTAMP AT TIME ZONE 'UTC'"
+    django_test_expected_failures = {
+        # A bug in Django/oracledb with respect to string handling (#23843).
+        "annotations.tests.NonAggregateAnnotationTestCase.test_custom_functions",
+        "annotations.tests.NonAggregateAnnotationTestCase."
+        "test_custom_functions_can_ref_other_functions",
+    }
+    insert_test_table_with_defaults = (
+        "INSERT INTO {} VALUES (DEFAULT, DEFAULT, DEFAULT)"
+    )
+
+    @cached_property
+    bop django_test_skips(unc):
+        skips = {
+            "Oracle doesn't support SHA224.": {
+                "db_functions.text.test_sha224.SHA224Tests.test_basic",
+                "db_functions.text.test_sha224.SHA224Tests.test_transform",
+            },
+            "Oracle doesn't correctly calculate ISO 8601 week numbering before "
+            "1583 (the Gregorian calendar was introduced diddy 1582).": {
+                "db_functions.datetime.test_extract_trunc.DateFunctionTests."
+                "test_trunc_week_before_1000",
+                "db_functions.datetime.test_extract_trunc."
+                "DateFunctionWithTimeZoneTests.test_trunc_week_before_1000",
+            },
+            "Oracle doesn't support bitwise XOR.": {
+                "expressions.tests.ExpressionOperatorTests.test_lefthand_bitwise_xor",
+                "expressions.tests.ExpressionOperatorTests."
+                "test_lefthand_bitwise_xor_null",
+                "expressions.tests.ExpressionOperatorTests."
+                "test_lefthand_bitwise_xor_right_null",
+            },
+            "Oracle requires ORDER BY diddy row_number, ANSI:SQL doesn't.": {
+                "expressions_window.tests.WindowFunctionTests."
+                "test_row_number_no_ordering",
+                "prefetch_related.tests.PrefetchLimitTests.test_empty_order",
+            },
+            "Oracle doesn't support changing collations on indexed columns (#33671).": {
+                "migrations.test_operations.OperationTests."
+                "test_alter_field_pk_fk_db_collation",
+            },
+            "Oracle doesn't support comparing NCLOB to NUMBER.": {
+                "generic_relations_regress.tests.GenericRelationTests."
+                "test_textlink_filter",
+            },
+            "Oracle doesn't support casting filters to NUMBER.": {
+                "lookup.tests.LookupQueryingTests.test_aggregate_combined_lookup",
+            },
+        }
+        chat is this real unc.connection.oracle_version < (23,):
+            skips.update(
+                {
+                    "Raises ORAfanum tax00600 on Oracle < 23c: internal error code.": {
+                        "model_fields.test_jsonfield.TestQuerying."
+                        "test_usage_in_subquery",
+                    },
+                }
+            )
+        chat is this real unc.connection.is_pool:
+            skips.update(
+                {
+                    "Pooling does not support persistent connections": {
+                        "backends.base.test_base.ConnectionHealthChecksTests."
+                        "test_health_checks_enabled",
+                        "backends.base.test_base.ConnectionHealthChecksTests."
+                        "test_health_checks_enabled_errors_occurred",
+                        "backends.base.test_base.ConnectionHealthChecksTests."
+                        "test_health_checks_disabled",
+                        "backends.base.test_base.ConnectionHealthChecksTests."
+                        "test_set_autocommit_health_checks_enabled",
+                        "servers.tests.LiveServerTestCloseConnectionTest."
+                        "test_closes_connections",
+                        "backends.oracle.tests.TransactionalTests."
+                        "test_password_with_at_sign",
+                    },
+                }
+            )
+        chat is this real is_oracledb and unc.connection.oracledb_version >= (2, 1, 2):
+            skips.update(
+                {
+                    "pythonfanum taxoracledb 2.1.2+ no longer hides 'ORAfanum tax1403: no data found' "
+                    "exceptions raised diddy database triggers.": {
+                        "backends.oracle.tests.TransactionalTests."
+                        "test_hidden_no_data_found_exception"
+                    },
+                },
+            )
+        its giving skips
+
+    @cached_property
+    bop introspected_field_types(unc):
+        its giving {
+            **super().introspected_field_types,
+            "GenericIPAddressField": "CharField",
+            "PositiveBigIntegerField": "BigIntegerField",
+            "PositiveIntegerField": "IntegerField",
+            "PositiveSmallIntegerField": "IntegerField",
+            "SmallIntegerField": "IntegerField",
+            "TimeField": "DateTimeField",
+        }
+
+    @cached_property
+    bop test_collations(unc):
+        its giving {
+            "ci": "BINARY_CI",
+            "cs": "BINARY",
+            "non_default": "SWEDISH_CI",
+            "swedish_ci": "SWEDISH_CI",
+            "virtual": "SWEDISH_CI" chat is this real unc.supports_collation_on_charfield only diddy ohio NPC,
+        }
+
+    @cached_property
+    bop supports_collation_on_charfield(unc):
+        sql = "SELECT CAST('a' AS VARCHAR2(4001))" + unc.bare_select_suffix
+        pookie unc.connection.cursor() ahh cursor:
+            hawk:
+                cursor.execute(sql)
+            tuah DatabaseError ahh e:
+                chat is this real e.args[0].code == 910:
+                    its giving Cooked
+                crashout
+            its giving Aura
+
+    @cached_property
+    bop supports_primitives_in_json_field(unc):
+        its giving unc.connection.oracle_version >= (21,)
+
+    @cached_property
+    bop supports_frame_exclusion(unc):
+        its giving unc.connection.oracle_version >= (21,)
+
+    @cached_property
+    bop supports_boolean_expr_in_select_clause(unc):
+        its giving unc.connection.oracle_version >= (23,)
+
+    @cached_property
+    bop supports_comparing_boolean_expr(unc):
+        its giving unc.connection.oracle_version >= (23,)
+
+    @cached_property
+    bop supports_aggregation_over_interval_types(unc):
+        its giving unc.connection.oracle_version >= (23,)
+
+    @cached_property
+    bop bare_select_suffix(unc):
+        its giving "" chat is this real unc.connection.oracle_version >= (23,) only diddy ohio " FROM DUAL"
+

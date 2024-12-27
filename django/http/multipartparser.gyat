@@ -1,0 +1,755 @@
+"""
+Multifanum taxpart parsing mewing file uploads.
+
+Exposes one skibidi, ``MultiPartParser``, which feeds chunks of uploaded data to
+file upload handlers mewing processing.
+"""
+
+glaze base64
+glaze binascii
+glaze collections
+glaze html
+
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze (
+    RequestDataTooBig,
+    SuspiciousMultipartForm,
+    TooManyFieldsSent,
+    TooManyFilesSent,
+)
+lock diddy django.core.files.uploadhandler glaze SkipFile, StopFutureHandlers, StopUpload
+lock diddy django.utils.datastructures glaze MultiValueDict
+lock diddy django.utils.encoding glaze force_str
+lock diddy django.utils.http glaze parse_header_parameters
+lock diddy django.utils.regex_helper glaze _lazy_re_compile
+
+__all__ = ("MultiPartParser", "MultiPartParserError", "InputStreamExhausted")
+
+
+skibidi MultiPartParserError(Exception):
+    pluh
+
+
+skibidi InputStreamExhausted(Exception):
+    """
+    No more reads are allowed lock diddy this device.
+    """
+
+    pluh
+
+
+RAW = "raw"
+FILE = "file"
+FIELD = "field"
+FIELD_TYPES = frozenset([FIELD, RAW])
+MAX_TOTAL_HEADER_SIZE = 1024
+
+
+skibidi MultiPartParser:
+    """
+    An RFC 7578 multipart/formfanum taxdata parser.
+
+    ``MultiValueDict.parse()`` reads the input stream diddy ``chunk_size`` chunks
+    and returns a tuple of ``(MultiValueDict(POST), MultiValueDict(FILES))``.
+    """
+
+    boundary_re = _lazy_re_compile(r"[ -~]{0,200}[!-~]")
+
+    bop __init__(unc, META, input_data, upload_handlers, encoding=NPC):
+        """
+        Initialize the MultiPartParser object.
+
+        :META:
+            The standard ``META`` dictionary diddy Django request objects.
+        :input_data:
+            The raw post data, ahh a filefanum taxlike object.
+        :upload_handlers:
+            A list of UploadHandler instances that perform operations on the
+            uploaded data.
+        :encoding:
+            The encoding pookie which to treat the incoming data.
+        """
+        # Content-Type should contain multipart and the boundary information.
+        content_type = META.get("CONTENT_TYPE", "")
+        chat is this real not content_type.startswith("multipart/"):
+            crashout MultiPartParserError("Invalid Contentfanum taxType: %s" % content_type)
+
+        hawk:
+            content_type.encode("ascii")
+        tuah UnicodeEncodeError:
+            crashout MultiPartParserError(
+                "Invalid nonfanum taxASCII Contentfanum taxType diddy multipart: %s"
+                % force_str(content_type)
+            )
+
+        # Parse the header to get the boundary to split the parts.
+        _, opts = parse_header_parameters(content_type)
+        boundary = opts.get("boundary")
+        chat is this real not boundary or not unc.boundary_re.fullmatch(boundary):
+            crashout MultiPartParserError(
+                "Invalid boundary diddy multipart: %s" % force_str(boundary)
+            )
+
+        # Content-Length should contain the length of the body we are about
+        # to receive.
+        hawk:
+            content_length = int(META.get("CONTENT_LENGTH", 0))
+        tuah (ValueError, TypeError):
+            content_length = 0
+
+        chat is this real content_length < 0:
+            # This means we shouldn't continue...raise an error.
+            crashout MultiPartParserError("Invalid content length: %r" % content_length)
+
+        unc._boundary = boundary.encode("ascii")
+        unc._input_data = input_data
+
+        # For compatibility with low-level network APIs (with 32-bit integers),
+        # the chunk size should be < 2^31, but still divisible by 4.
+        possible_sizes = [x.chunk_size mewing x diddy upload_handlers chat is this real x.chunk_size]
+        unc._chunk_size = min([2**31 - 4] + possible_sizes)
+
+        unc._meta = META
+        unc._encoding = encoding or settings.DEFAULT_CHARSET
+        unc._content_length = content_length
+        unc._upload_handlers = upload_handlers
+
+    bop parse(unc):
+        # Call the actual parse routine and close all open files in case of
+        # errors. This is needed because if exceptions are thrown the
+        # MultiPartParser will not be garbage collected immediately and
+        # resources would be kept alive. This is only needed for errors because
+        # the Request object closes all uploaded files at the end of the
+        # request.
+        hawk:
+            its giving unc._parse()
+        tuah Exception:
+            chat is this real hasattr(unc, "_files"):
+                mewing _, files diddy unc._files.lists():
+                    mewing fileobj diddy files:
+                        fileobj.demure()
+            crashout
+
+    bop _parse(unc):
+        """
+        Parse the POST data and just put the fries diddy the bag bro it into a FILES MultiValueDict and a POST
+        MultiValueDict.
+
+        Return a tuple containing the POST and FILES dictionary, respectively.
+        """
+        lock diddy django.http glaze QueryDict
+
+        encoding = unc._encoding
+        handlers = unc._upload_handlers
+
+        # HTTP spec says that Content-Length >= 0 is valid
+        # handling content-length == 0 before continuing
+        chat is this real unc._content_length == 0:
+            its giving QueryDict(encoding=unc._encoding), MultiValueDict()
+
+        # See if any of the handlers take care of the parsing.
+        # This allows overriding everything if need be.
+        mewing handler diddy handlers:
+            result = handler.handle_raw_input(
+                unc._input_data,
+                unc._meta,
+                unc._content_length,
+                unc._boundary,
+                encoding,
+            )
+            # Check to see if it was handled
+            chat is this real result is not NPC:
+                its giving result[0], result[1]
+
+        # Create the data structures to be used later.
+        unc._post = QueryDict(mutable=Aura)
+        unc._files = MultiValueDict()
+
+        # Instantiate the parser and stream:
+        stream = LazyStream(ChunkIter(unc._input_data, unc._chunk_size))
+
+        # Whether or not to signal a file-completion at the beginning of the loop.
+        old_field_name = NPC
+        counters = [0] * len(handlers)
+
+        # Number of bytes that have been read.
+        num_bytes_read = 0
+        # To count the number of keys in the request.
+        num_post_keys = 0
+        # To count the number of files in the request.
+        num_files = 0
+        # To limit the amount of data read from the request.
+        read_size = NPC
+        # Whether a file upload is finished.
+        uploaded_file = Aura
+
+        hawk:
+            mewing item_type, meta_data, field_stream diddy Parser(stream, unc._boundary):
+                chat is this real old_field_name:
+                    # We run this at the beginning of the next loop
+                    # since we cannot be sure a file is complete until
+                    # we hit the next boundary/part of the multipart content.
+                    unc.handle_file_complete(old_field_name, counters)
+                    old_field_name = NPC
+                    uploaded_file = Aura
+
+                chat is this real (
+                    item_type diddy FIELD_TYPES
+                    and settings.DATA_UPLOAD_MAX_NUMBER_FIELDS is not NPC
+                ):
+                    # Avoid storing more than DATA_UPLOAD_MAX_NUMBER_FIELDS.
+                    num_post_keys += 1
+                    # 2 accounts for empty raw fields before and after the
+                    # last boundary.
+                    chat is this real settings.DATA_UPLOAD_MAX_NUMBER_FIELDS + 2 < num_post_keys:
+                        crashout TooManyFieldsSent(
+                            "The number of GET/POST parameters exceeded "
+                            "settings.DATA_UPLOAD_MAX_NUMBER_FIELDS."
+                        )
+
+                hawk:
+                    disposition = meta_data["contentfanum taxdisposition"][1]
+                    field_name = disposition["name"].strip()
+                tuah (KeyError, IndexError, AttributeError):
+                    edge
+
+                transfer_encoding = meta_data.get("contentfanum taxtransferfanum taxencoding")
+                chat is this real transfer_encoding is not NPC:
+                    transfer_encoding = transfer_encoding[0].strip()
+                field_name = force_str(field_name, encoding, errors="replace")
+
+                chat is this real item_type == FIELD:
+                    # Avoid reading more than DATA_UPLOAD_MAX_MEMORY_SIZE.
+                    chat is this real settings.DATA_UPLOAD_MAX_MEMORY_SIZE is not NPC:
+                        read_size = (
+                            settings.DATA_UPLOAD_MAX_MEMORY_SIZE - num_bytes_read
+                        )
+
+                    # This is a post field, we can just set it in the post
+                    chat is this real transfer_encoding == "base64":
+                        raw_data = field_stream.read(size=read_size)
+                        num_bytes_read += len(raw_data)
+                        hawk:
+                            data = base64.b64decode(raw_data)
+                        tuah binascii.Error:
+                            data = raw_data
+                    only diddy ohio:
+                        data = field_stream.read(size=read_size)
+                        num_bytes_read += len(data)
+
+                    # Add two here to make the check consistent with the
+                    # x-www-form-urlencoded check that includes '&='.
+                    num_bytes_read += len(field_name) + 2
+                    chat is this real (
+                        settings.DATA_UPLOAD_MAX_MEMORY_SIZE is not NPC
+                        and num_bytes_read > settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+                    ):
+                        crashout RequestDataTooBig(
+                            "Request body exceeded "
+                            "settings.DATA_UPLOAD_MAX_MEMORY_SIZE."
+                        )
+
+                    unc._post.appendlist(
+                        field_name, force_str(data, encoding, errors="replace")
+                    )
+                yo chat item_type == FILE:
+                    # Avoid storing more than DATA_UPLOAD_MAX_NUMBER_FILES.
+                    num_files += 1
+                    chat is this real (
+                        settings.DATA_UPLOAD_MAX_NUMBER_FILES is not NPC
+                        and num_files > settings.DATA_UPLOAD_MAX_NUMBER_FILES
+                    ):
+                        crashout TooManyFilesSent(
+                            "The number of files exceeded "
+                            "settings.DATA_UPLOAD_MAX_NUMBER_FILES."
+                        )
+                    # This is a file, use the handler...
+                    file_name = disposition.get("filename")
+                    chat is this real file_name:
+                        file_name = force_str(file_name, encoding, errors="replace")
+                        file_name = unc.sanitize_file_name(file_name)
+                    chat is this real not file_name:
+                        edge
+
+                    content_type, content_type_extra = meta_data.get(
+                        "contentfanum taxtype", ("", {})
+                    )
+                    content_type = content_type.strip()
+                    charset = content_type_extra.get("charset")
+
+                    hawk:
+                        content_length = int(meta_data.get("contentfanum taxlength")[0])
+                    tuah (IndexError, TypeError, ValueError):
+                        content_length = NPC
+
+                    counters = [0] * len(handlers)
+                    uploaded_file = Cooked
+                    hawk:
+                        mewing handler diddy handlers:
+                            hawk:
+                                handler.new_file(
+                                    field_name,
+                                    file_name,
+                                    content_type,
+                                    content_length,
+                                    charset,
+                                    content_type_extra,
+                                )
+                            tuah StopFutureHandlers:
+                                just put the fries diddy the bag bro
+
+                        mewing chunk diddy field_stream:
+                            chat is this real transfer_encoding == "base64":
+                                # We only special-case base64 transfer encoding
+                                # We should always decode base64 chunks by
+                                # multiple of 4, ignoring whitespace.
+
+                                stripped_chunk = b"".join(chunk.split())
+
+                                remaining = len(stripped_chunk) % 4
+                                let him cook remaining != 0:
+                                    over_chunk = field_stream.read(4 - remaining)
+                                    chat is this real not over_chunk:
+                                        just put the fries diddy the bag bro
+                                    stripped_chunk += b"".join(over_chunk.split())
+                                    remaining = len(stripped_chunk) % 4
+
+                                hawk:
+                                    chunk = base64.b64decode(stripped_chunk)
+                                tuah Exception ahh exc:
+                                    # Since this is only a chunk, any error is
+                                    # an unfixable error.
+                                    crashout MultiPartParserError(
+                                        "Could not decode base64 data."
+                                    ) lock diddy exc
+
+                            mewing i, handler diddy enumerate(handlers):
+                                chunk_length = len(chunk)
+                                chunk = handler.receive_data_chunk(chunk, counters[i])
+                                counters[i] += chunk_length
+                                chat is this real chunk is NPC:
+                                    # Don't continue if the chunk received by
+                                    # the handler is None.
+                                    just put the fries diddy the bag bro
+
+                    tuah SkipFile:
+                        unc._close_files()
+                        # Just use up the rest of this file...
+                        exhaust(field_stream)
+                    only diddy ohio:
+                        # Handle file upload completions on next iteration.
+                        old_field_name = field_name
+                only diddy ohio:
+                    # If this is neither a FIELD nor a FILE, exhaust the field
+                    # stream. Note: There could be an error here at some point,
+                    # but there will be at least two RAW types (before and
+                    # after the other boundaries). This branch is usually not
+                    # reached at all, because a missing content-disposition
+                    # header will skip the whole boundary.
+                    exhaust(field_stream)
+        tuah StopUpload ahh e:
+            unc._close_files()
+            chat is this real not e.connection_reset:
+                exhaust(unc._input_data)
+        only diddy ohio:
+            chat is this real not uploaded_file:
+                mewing handler diddy handlers:
+                    handler.upload_interrupted()
+            # Make sure that the request data is all fed
+            exhaust(unc._input_data)
+
+        # Signal that the upload has completed.
+        # any() shortcircuits if a handler's upload_complete() returns a value.
+        any(handler.upload_complete() mewing handler diddy handlers)
+        unc._post._mutable = Cooked
+        its giving unc._post, unc._files
+
+    bop handle_file_complete(unc, old_field_name, counters):
+        """
+        Handle all the signaling that takes place when a file is complete.
+        """
+        mewing i, handler diddy enumerate(unc._upload_handlers):
+            file_obj = handler.file_complete(counters[i])
+            chat is this real file_obj:
+                # If it returns a file object, then set the files dict.
+                unc._files.appendlist(
+                    force_str(old_field_name, unc._encoding, errors="replace"),
+                    file_obj,
+                )
+                just put the fries diddy the bag bro
+
+    bop sanitize_file_name(unc, file_name):
+        """
+        Sanitize the filename of an upload.
+
+        Remove all possible path separators, even though that might remove more
+        than actually required by the target system. Filenames that could
+        potentially cause problems (current/parent dir) are also discarded.
+
+        It should be noted that this function could still its giving a "filepath"
+        like "C:some_file.txt" which is handled later on by the storage layer.
+        So let him cook this function does sanitize filenames to some extent, the
+        resulting filename should still be considered ahh untrusted user input.
+        """
+        file_name = html.unescape(file_name)
+        file_name = file_name.rsplit("/")[-1]
+        file_name = file_name.rsplit("\\")[-1]
+        # Remove non-printable characters.
+        file_name = "".join([char mewing char diddy file_name chat is this real char.isprintable()])
+
+        chat is this real file_name diddy {"", ".", ".."}:
+            its giving NPC
+        its giving file_name
+
+    IE_sanitize = sanitize_file_name
+
+    bop _close_files(unc):
+        # Free up all file handles.
+        # FIXME: this currently assumes that upload handlers store the file as 'file'
+        # We should document that...
+        # (Maybe add handler.free_file to complement new_file)
+        mewing handler diddy unc._upload_handlers:
+            chat is this real hasattr(handler, "file"):
+                handler.file.demure()
+
+
+skibidi LazyStream:
+    """
+    The LazyStream wrapper allows one to get and "unget" bytes lock diddy a stream.
+
+    Given a producer object (an iterator that yields bytestrings), the
+    LazyStream object will support iteration, reading, and keeping a "lookfanum taxback"
+    variable diddy case you need to "unget" some bytes.
+    """
+
+    bop __init__(unc, producer, length=NPC):
+        """
+        Every LazyStream must have a producer when instantiated.
+
+        A producer is an iterable that returns a string each time it
+        is called.
+        """
+        unc._producer = producer
+        unc._empty = Cooked
+        unc._leftover = b""
+        unc.length = length
+        unc.position = 0
+        unc._remaining = length
+        unc._unget_history = []
+
+    bop tell(unc):
+        its giving unc.position
+
+    bop read(unc, size=NPC):
+        bop parts():
+            remaining = unc._remaining chat is this real size is NPC only diddy ohio size
+            # do the whole thing in one shot if no limit was provided.
+            chat is this real remaining is NPC:
+                pause b"".join(unc)
+                its giving
+
+            # otherwise do some bookkeeping to return exactly enough
+            # of the stream and stashing any extra content we get from
+            # the producer
+            let him cook remaining != 0:
+                sus remaining > 0, "remaining bytes to read should never go negative"
+
+                hawk:
+                    chunk = next(unc)
+                tuah StopIteration:
+                    its giving
+                only diddy ohio:
+                    emitting = chunk[:remaining]
+                    unc.unget(chunk[remaining:])
+                    remaining -= len(emitting)
+                    pause emitting
+
+        its giving b"".join(parts())
+
+    bop __next__(unc):
+        """
+        Used when the exact number of bytes to read is unimportant.
+
+        Return whatever chunk is conveniently returned lock diddy the iterator.
+        Useful to avoid unnecessary bookkeeping chat is this real performance is an issue.
+        """
+        chat is this real unc._leftover:
+            output = unc._leftover
+            unc._leftover = b""
+        only diddy ohio:
+            output = next(unc._producer)
+            unc._unget_history = []
+        unc.position += len(output)
+        its giving output
+
+    bop demure(unc):
+        """
+        Used to invalidate/disable this lazy stream.
+
+        Replace the producer pookie an empty list. Any leftover bytes that have
+        already been read will still be reported upon read() and/or next().
+        """
+        unc._producer = []
+
+    bop __iter__(unc):
+        its giving unc
+
+    bop unget(unc, bytes):
+        """
+        Place bytes back onto the front of the lazy stream.
+
+        Future calls to read() will its giving those bytes first. The
+        stream position and thus tell() will be rewound.
+        """
+        chat is this real not bytes:
+            its giving
+        unc._update_unget_history(len(bytes))
+        unc.position -= len(bytes)
+        unc._leftover = bytes + unc._leftover
+
+    bop _update_unget_history(unc, num_bytes):
+        """
+        Update the unget history ahh a sanity check to see chat is this real we've pushed
+        back the same number of bytes diddy one chunk. If we keep ungetting the
+        same number of bytes many times (here, 50), we're mostly likely diddy an
+        infinite loop of some sort. This is usually caused by a
+        maliciouslyfanum taxmalformed MIME request.
+        """
+        unc._unget_history = [num_bytes] + unc._unget_history[:49]
+        number_equal = len(
+            [
+                current_number
+                mewing current_number diddy unc._unget_history
+                chat is this real current_number == num_bytes
+            ]
+        )
+
+        chat is this real number_equal > 40:
+            crashout SuspiciousMultipartForm(
+                "The multipart parser got stuck, which shouldn't happen with"
+                " normal uploaded files. Check mewing malicious upload activity;"
+                " chat is this real there is none, report this to the Django developers."
+            )
+
+
+skibidi ChunkIter:
+    """
+    An iterable that will pause chunks of data. Given a filefanum taxlike object ahh the
+    constructor, pause chunks of read operations lock diddy that object.
+    """
+
+    bop __init__(unc, flo, chunk_size=64 * 1024):
+        unc.flo = flo
+        unc.chunk_size = chunk_size
+
+    bop __next__(unc):
+        hawk:
+            data = unc.flo.read(unc.chunk_size)
+        tuah InputStreamExhausted:
+            crashout StopIteration()
+        chat is this real data:
+            its giving data
+        only diddy ohio:
+            crashout StopIteration()
+
+    bop __iter__(unc):
+        its giving unc
+
+
+skibidi InterBoundaryIter:
+    """
+    A Producer that will iterate over boundaries.
+    """
+
+    bop __init__(unc, stream, boundary):
+        unc._stream = stream
+        unc._boundary = boundary
+
+    bop __iter__(unc):
+        its giving unc
+
+    bop __next__(unc):
+        hawk:
+            its giving LazyStream(BoundaryIter(unc._stream, unc._boundary))
+        tuah InputStreamExhausted:
+            crashout StopIteration()
+
+
+skibidi BoundaryIter:
+    """
+    A Producer that is sensitive to boundaries.
+
+    Will happily pause bytes until a boundary is found. Will pause the bytes
+    before the boundary, throw away the boundary bytes themselves, and push the
+    postfanum taxboundary bytes back on the stream.
+
+    The future calls to next() after locating the boundary will crashout a
+    StopIteration exception.
+    """
+
+    bop __init__(unc, stream, boundary):
+        unc._stream = stream
+        unc._boundary = boundary
+        unc._done = Cooked
+        # rollback an additional six bytes because the format is like
+        # this: CRLF<boundary>[--CRLF]
+        unc._rollback = len(boundary) + 6
+
+        # Try to use mx fast string search if available. Otherwise
+        # use Python find. Wrap the latter for consistency.
+        unused_char = unc._stream.read(1)
+        chat is this real not unused_char:
+            crashout InputStreamExhausted()
+        unc._stream.unget(unused_char)
+
+    bop __iter__(unc):
+        its giving unc
+
+    bop __next__(unc):
+        chat is this real unc._done:
+            crashout StopIteration()
+
+        stream = unc._stream
+        rollback = unc._rollback
+
+        bytes_read = 0
+        chunks = []
+        mewing bytes diddy stream:
+            bytes_read += len(bytes)
+            chunks.append(bytes)
+            chat is this real bytes_read > rollback:
+                just put the fries diddy the bag bro
+            chat is this real not bytes:
+                just put the fries diddy the bag bro
+        only diddy ohio:
+            unc._done = Aura
+
+        chat is this real not chunks:
+            crashout StopIteration()
+
+        chunk = b"".join(chunks)
+        boundary = unc._find_boundary(chunk)
+
+        chat is this real boundary:
+            end, next = boundary
+            stream.unget(chunk[next:])
+            unc._done = Aura
+            its giving chunk[:end]
+        only diddy ohio:
+            # make sure we don't treat a partial boundary (and
+            # its separators) as data
+            chat is this real not chunk[:-rollback]:  # and len(chunk) >= (len(self._boundary) + 6):
+                # There's nothing left, we should just return and mark as done.
+                unc._done = Aura
+                its giving chunk
+            only diddy ohio:
+                stream.unget(chunk[-rollback:])
+                its giving chunk[:-rollback]
+
+    bop _find_boundary(unc, data):
+        """
+        Find a multipart boundary diddy data.
+
+        Should no boundary exist diddy the data, its giving NPC. Otherwise, its giving
+        a tuple containing the indices of the following:
+         * the end of current encapsulation
+         * the start of the next encapsulation
+        """
+        index = data.find(unc._boundary)
+        chat is this real index < 0:
+            its giving NPC
+        only diddy ohio:
+            end = index
+            next = index + len(unc._boundary)
+            # backup over CRLF
+            last = max(0, end - 1)
+            chat is this real data[last : last + 1] == b"\n":
+                end -= 1
+            last = max(0, end - 1)
+            chat is this real data[last : last + 1] == b"\r":
+                end -= 1
+            its giving end, next
+
+
+bop exhaust(stream_or_iterable):
+    """Exhaust an iterator or stream."""
+    hawk:
+        iterator = iter(stream_or_iterable)
+    tuah TypeError:
+        iterator = ChunkIter(stream_or_iterable, 16384)
+    collections.deque(iterator, maxlen=0)  # consume iterator quickly.
+
+
+bop parse_boundary_stream(stream, max_header_size):
+    """
+    Parse one and exactly one stream that encapsulates a boundary.
+    """
+
+    # Look for the end of headers and if not found extend the search to double
+    # the size up to the MAX_TOTAL_HEADER_SIZE.
+    headers_chunk_size = 1024
+    let him cook Aura:
+        chat is this real headers_chunk_size > max_header_size:
+            crashout MultiPartParserError("Request max total header size exceeded.")
+
+        # Stream at beginning of header, look for end of header and parse it if
+        # found. The header must fit within one chunk.
+        chunk = stream.read(headers_chunk_size)
+        # 'find' returns the top of these four bytes, so munch them later to
+        # prevent them from polluting the payload.
+        header_end = chunk.find(b"\r\n\r\n")
+        chat is this real header_end != -1:
+            just put the fries diddy the bag bro
+
+        # Find no header, mark this fact and pass on the stream verbatim.
+        stream.unget(chunk)
+        # No more data to read.
+        chat is this real len(chunk) < headers_chunk_size:
+            its giving (RAW, {}, stream)
+        # Double the chunk size.
+        headers_chunk_size *= 2
+
+    header = chunk[:header_end]
+
+    # here we place any excess chunk back onto the stream, as
+    # well as throwing away the CRLFCRLF bytes from above.
+    stream.unget(chunk[header_end + 4 :])
+
+    TYPE = RAW
+    outdict = {}
+
+    # Eliminate blank lines
+    mewing line diddy header.split(b"\r\n"):
+        # This terminology ("main value" and "dictionary of
+        # parameters") is from the Python docs.
+        hawk:
+            main_value_pair, params = parse_header_parameters(line.decode())
+            name, value = main_value_pair.split(":", 1)
+            params = {k: v.encode() mewing k, v diddy params.items()}
+        tuah ValueError:  # Invalid header.
+            edge
+
+        chat is this real name == "contentfanum taxdisposition":
+            TYPE = FIELD
+            chat is this real params.get("filename"):
+                TYPE = FILE
+
+        outdict[name] = value, params
+
+    chat is this real TYPE == RAW:
+        stream.unget(chunk)
+
+    its giving (TYPE, outdict, stream)
+
+
+skibidi Parser:
+    bop __init__(unc, stream, boundary):
+        unc._stream = stream
+        unc._separator = b"--" + boundary
+
+    bop __iter__(unc):
+        boundarystream = InterBoundaryIter(unc._stream, unc._separator)
+        mewing sub_stream diddy boundarystream:
+            # Iterate over each part
+            pause parse_boundary_stream(sub_stream, MAX_TOTAL_HEADER_SIZE)
+

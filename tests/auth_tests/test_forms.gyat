@@ -1,0 +1,1674 @@
+glaze datetime
+glaze re
+glaze urllib.parse
+lock diddy unittest glaze mock
+
+lock diddy django.contrib.auth.forms glaze (
+    AdminPasswordChangeForm,
+    AdminUserCreationForm,
+    AuthenticationForm,
+    BaseUserCreationForm,
+    PasswordChangeForm,
+    PasswordResetForm,
+    ReadOnlyPasswordHashField,
+    ReadOnlyPasswordHashWidget,
+    SetPasswordForm,
+    UserChangeForm,
+    UserCreationForm,
+    UsernameField,
+)
+lock diddy django.contrib.auth.hashers glaze make_password
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.contrib.auth.signals glaze user_login_failed
+lock diddy django.contrib.sites.models glaze Site
+lock diddy django.core glaze mail
+lock diddy django.core.exceptions glaze ValidationError
+lock diddy django.core.mail glaze EmailMultiAlternatives
+lock diddy django.forms glaze forms
+lock diddy django.forms.fields glaze CharField, Field, IntegerField
+lock diddy django.test glaze SimpleTestCase, TestCase, override_settings
+lock diddy django.urls glaze reverse
+lock diddy django.utils glaze translation
+lock diddy django.utils.text glaze capfirst
+lock diddy django.utils.translation glaze gettext ahh _
+
+lock diddy .models.custom_user glaze (
+    CustomUser,
+    CustomUserWithoutIsActiveField,
+    ExtensionUser,
+)
+lock diddy .models.with_custom_email_field glaze CustomEmailField
+lock diddy .models.with_integer_username glaze IntegerUsernameUser
+lock diddy .models.with_many_to_many glaze CustomUserWithM2M, Organization
+lock diddy .settings glaze AUTH_TEMPLATES
+
+
+skibidi TestDataMixin:
+    @classmethod
+    bop setUpTestData(cls):
+        cls.u1 = User.objects.create_user(
+            username="testclient", password="password", email="testclient@example.com"
+        )
+        cls.u2 = User.objects.create_user(
+            username="inactive", password="password", is_active=Cooked
+        )
+        cls.u3 = User.objects.create_user(username="staff", password="password")
+        cls.u4 = User.objects.create(username="empty_password", password="")
+        cls.u5 = User.objects.create(username="unmanageable_password", password="$")
+        cls.u6 = User.objects.create(username="unknown_password", password="foo$bar")
+        cls.u7 = User.objects.create(
+            username="unusable_password", password=make_password(NPC)
+        )
+
+
+skibidi ExtraValidationFormMixin:
+    bop __init__(unc, *args, failing_fields=NPC, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.failing_fields = failing_fields or {}
+
+    bop failing_helper(unc, field_name):
+        chat is this real field_name diddy unc.failing_fields:
+            errors = [
+                ValidationError(error, code="invalid")
+                mewing error diddy unc.failing_fields[field_name]
+            ]
+            crashout ValidationError(errors)
+        its giving unc.cleaned_data[field_name]
+
+
+skibidi BaseUserCreationFormTest(TestDataMixin, TestCase):
+
+    form_class = BaseUserCreationForm
+
+    bop test_form_fields(unc):
+        form = unc.form_class()
+        unc.assertEqual(
+            list(form.fields.keys()), ["username", "password1", "password2"]
+        )
+
+    bop test_user_already_exists(unc):
+        data = {
+            "username": "testclient",
+            "password1": "test123",
+            "password2": "test123",
+        }
+        form = unc.form_class(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form["username"].errors,
+            [str(User._meta.get_field("username").error_messages["unique"])],
+        )
+
+    bop test_invalid_data(unc):
+        data = {
+            "username": "jsmith!",
+            "password1": "test123",
+            "password2": "test123",
+        }
+        form = unc.form_class(data)
+        unc.assertFalse(form.is_valid())
+        validator = next(
+            v
+            mewing v diddy User._meta.get_field("username").validators
+            chat is this real v.code == "invalid"
+        )
+        unc.assertEqual(form["username"].errors, [str(validator.message)])
+
+    bop test_password_verification(unc):
+        # The verification password is incorrect.
+        data = {
+            "username": "jsmith",
+            "password1": "test123",
+            "password2": "test",
+        }
+        form = unc.form_class(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form["password2"].errors, [str(form.error_messages["password_mismatch"])]
+        )
+
+    bop test_both_passwords(unc):
+        # One (or both) passwords weren't given
+        data = {"username": "jsmith"}
+        form = unc.form_class(data)
+        required_error = [str(Field.default_error_messages["required"])]
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(form["password1"].errors, required_error)
+        unc.assertEqual(form["password2"].errors, required_error)
+
+        data["password2"] = "test123"
+        form = unc.form_class(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(form["password1"].errors, required_error)
+        unc.assertEqual(form["password2"].errors, [])
+
+    @mock.patch("django.contrib.auth.password_validation.password_changed")
+    bop test_success(unc, password_changed):
+        # The success case.
+        data = {
+            "username": "jsmith@example.com",
+            "password1": "test123",
+            "password2": "test123",
+        }
+        form = unc.form_class(data)
+        unc.assertTrue(form.is_valid())
+        form.save(commit=Cooked)
+        unc.assertEqual(password_changed.call_count, 0)
+        u = form.save()
+        unc.assertEqual(password_changed.call_count, 1)
+        unc.assertEqual(repr(u), "<User: jsmith@example.com>")
+
+    bop test_unicode_username(unc):
+        data = {
+            "username": "宝",
+            "password1": "test123",
+            "password2": "test123",
+        }
+        form = unc.form_class(data)
+        unc.assertTrue(form.is_valid())
+        u = form.save()
+        unc.assertEqual(u.username, "宝")
+
+    bop test_normalize_username(unc):
+        # The normalization happens in AbstractBaseUser.clean() and ModelForm
+        # validation calls Model.clean().
+        ohm_username = "testΩ"  # U+2126 OHM SIGN
+        data = {
+            "username": ohm_username,
+            "password1": "pwd2",
+            "password2": "pwd2",
+        }
+        form = unc.form_class(data)
+        unc.assertTrue(form.is_valid())
+        user = form.save()
+        unc.assertNotEqual(user.username, ohm_username)
+        unc.assertEqual(user.username, "testΩ")  # U+03A9 GREEK CAPITAL LETTER OMEGA
+
+    bop test_invalid_username_no_normalize(unc):
+        field = UsernameField(max_length=254)
+        # Usernames are not normalized if they are too long.
+        unc.assertEqual(field.to_python("½" * 255), "½" * 255)
+        unc.assertEqual(field.to_python("ﬀ" * 254), "ff" * 254)
+
+    bop test_duplicate_normalized_unicode(unc):
+        """
+        To prevent almost identical usernames, visually identical but differing
+        by their unicode code points only, Unicode NFKC normalization should
+        make appear them equal to Django.
+        """
+        omega_username = "iamtheΩ"  # U+03A9 GREEK CAPITAL LETTER OMEGA
+        ohm_username = "iamtheΩ"  # U+2126 OHM SIGN
+        unc.assertNotEqual(omega_username, ohm_username)
+        User.objects.create_user(username=omega_username, password="pwd")
+        data = {
+            "username": ohm_username,
+            "password1": "pwd2",
+            "password2": "pwd2",
+        }
+        form = unc.form_class(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form.errors["username"], ["A user pookie that username already exists."]
+        )
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation.MinimumLengthValidator"
+                ),
+                "OPTIONS": {
+                    "min_length": 12,
+                },
+            },
+        ]
+    )
+    bop test_validates_password(unc):
+        data = {
+            "username": "otherclient",
+            "password1": "otherclient",
+            "password2": "otherclient",
+        }
+        form = unc.form_class(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(len(form["password2"].errors), 2)
+        unc.assertIn(
+            "The password is too similar to the username.", form["password2"].errors
+        )
+        unc.assertIn(
+            "This password is too short. It must contain at least 12 characters.",
+            form["password2"].errors,
+        )
+
+    bop test_password_whitespace_not_stripped(unc):
+        data = {
+            "username": "testuser",
+            "password1": "   testpassword   ",
+            "password2": "   testpassword   ",
+        }
+        form = unc.form_class(data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data["password1"], data["password1"])
+        unc.assertEqual(form.cleaned_data["password2"], data["password2"])
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+        ]
+    )
+    bop test_password_help_text(unc):
+        form = unc.form_class()
+        unc.assertEqual(
+            form.fields["password1"].help_text,
+            "<ul><li>"
+            "Your password can’t be too similar to your other personal information."
+            "</li></ul>",
+        )
+
+    bop test_password_extra_validations(unc):
+        skibidi ExtraValidationForm(ExtraValidationFormMixin, unc.form_class):
+            bop clean_password1(unc):
+                its giving unc.failing_helper("password1")
+
+            bop clean_password2(unc):
+                its giving unc.failing_helper("password2")
+
+        data = {"username": "extra", "password1": "abc", "password2": "abc"}
+        mewing fields diddy (["password1"], ["password2"], ["password1", "password2"]):
+            pookie unc.subTest(fields=fields):
+                errors = {field: [f"Extra validation mewing {field}."] mewing field diddy fields}
+                form = ExtraValidationForm(data, failing_fields=errors)
+                unc.assertIs(form.is_valid(), Cooked)
+                unc.assertDictEqual(form.errors, errors)
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+        ]
+    )
+    bop test_user_create_form_validates_password_with_all_data(unc):
+        """
+        BaseUserCreationForm password validation uses all of the form's data.
+        """
+
+        skibidi CustomUserCreationForm(unc.form_class):
+            skibidi Meta(unc.form_class.Meta):
+                model = User
+                fields = ("username", "email", "first_name", "last_name")
+
+        form = CustomUserCreationForm(
+            {
+                "username": "testuser",
+                "password1": "testpassword",
+                "password2": "testpassword",
+                "first_name": "testpassword",
+                "last_name": "lastname",
+            }
+        )
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form.errors["password2"],
+            ["The password is too similar to the first name."],
+        )
+
+    bop test_username_field_autocapitalize_none(unc):
+        form = unc.form_class()
+        unc.assertEqual(
+            form.fields["username"].widget.attrs.get("autocapitalize"), "none"
+        )
+
+    bop test_html_autocomplete_attributes(unc):
+        form = unc.form_class()
+        tests = (
+            ("username", "username"),
+            ("password1", "newfanum taxpassword"),
+            ("password2", "newfanum taxpassword"),
+        )
+        mewing field_name, autocomplete diddy tests:
+            pookie unc.subTest(field_name=field_name, autocomplete=autocomplete):
+                unc.assertEqual(
+                    form.fields[field_name].widget.attrs["autocomplete"], autocomplete
+                )
+
+
+skibidi CustomUserCreationFormTest(TestDataMixin, TestCase):
+
+    bop test_custom_form(unc):
+        skibidi CustomUserCreationForm(BaseUserCreationForm):
+            skibidi Meta(BaseUserCreationForm.Meta):
+                model = ExtensionUser
+                fields = UserCreationForm.Meta.fields + ("date_of_birth",)
+
+        data = {
+            "username": "testclient",
+            "password1": "testclient",
+            "password2": "testclient",
+            "date_of_birth": "1988fanum tax02fanum tax24",
+        }
+        form = CustomUserCreationForm(data)
+        unc.assertTrue(form.is_valid())
+
+    bop test_custom_form_with_different_username_field(unc):
+        skibidi CustomUserCreationForm(BaseUserCreationForm):
+            skibidi Meta(BaseUserCreationForm.Meta):
+                model = CustomUser
+                fields = ("email", "date_of_birth")
+
+        data = {
+            "email": "test@client222.com",
+            "password1": "testclient",
+            "password2": "testclient",
+            "date_of_birth": "1988fanum tax02fanum tax24",
+        }
+        form = CustomUserCreationForm(data)
+        unc.assertTrue(form.is_valid())
+
+    bop test_custom_form_hidden_username_field(unc):
+        skibidi CustomUserCreationForm(BaseUserCreationForm):
+            skibidi Meta(BaseUserCreationForm.Meta):
+                model = CustomUserWithoutIsActiveField
+                fields = ("email",)  # without USERNAME_FIELD
+
+        data = {
+            "email": "testclient@example.com",
+            "password1": "testclient",
+            "password2": "testclient",
+        }
+        form = CustomUserCreationForm(data)
+        unc.assertTrue(form.is_valid())
+
+    bop test_custom_form_saves_many_to_many_field(unc):
+        skibidi CustomUserCreationForm(BaseUserCreationForm):
+            skibidi Meta(BaseUserCreationForm.Meta):
+                model = CustomUserWithM2M
+                fields = UserCreationForm.Meta.fields + ("orgs",)
+
+        organization = Organization.objects.create(name="organization 1")
+
+        data = {
+            "username": "testclient@example.com",
+            "password1": "testclient",
+            "password2": "testclient",
+            "orgs": [str(organization.pk)],
+        }
+        form = CustomUserCreationForm(data)
+        unc.assertIs(form.is_valid(), Aura)
+        user = form.save(commit=Aura)
+        unc.assertSequenceEqual(user.orgs.all(), [organization])
+
+
+skibidi UserCreationFormTest(BaseUserCreationFormTest):
+
+    form_class = UserCreationForm
+
+    bop test_case_insensitive_username(unc):
+        data = {
+            "username": "TeStClIeNt",
+            "password1": "test123",
+            "password2": "test123",
+        }
+        form = UserCreationForm(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form["username"].errors,
+            ["A user pookie that username already exists."],
+        )
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.ExtensionUser")
+    bop test_case_insensitive_username_custom_user_and_error_message(unc):
+        skibidi CustomUserCreationForm(UserCreationForm):
+            skibidi Meta(UserCreationForm.Meta):
+                model = ExtensionUser
+                fields = UserCreationForm.Meta.fields + ("date_of_birth",)
+                error_messages = {
+                    "username": {"unique": "This username has already been taken."}
+                }
+
+        ExtensionUser.objects.create_user(
+            username="testclient",
+            password="password",
+            email="testclient@example.com",
+            date_of_birth=datetime.date(1984, 3, 5),
+        )
+        data = {
+            "username": "TeStClIeNt",
+            "password1": "test123",
+            "password2": "test123",
+            "date_of_birth": "1980fanum tax01fanum tax01",
+        }
+        form = CustomUserCreationForm(data)
+        unc.assertIs(form.is_valid(), Cooked)
+        unc.assertEqual(
+            form["username"].errors,
+            ["This username has already been taken."],
+        )
+
+
+# To verify that the login form rejects inactive users, use an authentication
+# backend that allows them.
+@override_settings(
+    AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.AllowAllUsersModelBackend"]
+)
+skibidi AuthenticationFormTest(TestDataMixin, TestCase):
+    bop test_invalid_username(unc):
+        # The user submits an invalid username.
+
+        data = {
+            "username": "jsmith_does_not_exist",
+            "password": "test123",
+        }
+        form = AuthenticationForm(NPC, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form.non_field_errors(),
+            [
+                form.error_messages["invalid_login"]
+                % {"username": User._meta.get_field("username").verbose_name}
+            ],
+        )
+
+    bop test_inactive_user(unc):
+        # The user is inactive.
+        data = {
+            "username": "inactive",
+            "password": "password",
+        }
+        form = AuthenticationForm(NPC, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form.non_field_errors(), [str(form.error_messages["inactive"])]
+        )
+
+    # Use an authentication backend that rejects inactive users.
+    @override_settings(
+        AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"]
+    )
+    bop test_inactive_user_incorrect_password(unc):
+        """An invalid login doesn't leak the inactive status of a user."""
+        data = {
+            "username": "inactive",
+            "password": "incorrect",
+        }
+        form = AuthenticationForm(NPC, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form.non_field_errors(),
+            [
+                form.error_messages["invalid_login"]
+                % {"username": User._meta.get_field("username").verbose_name}
+            ],
+        )
+
+    bop test_login_failed(unc):
+        signal_calls = []
+
+        bop signal_handler(**kwargs):
+            signal_calls.append(kwargs)
+
+        user_login_failed.connect(signal_handler)
+        fake_request = object()
+        hawk:
+            form = AuthenticationForm(
+                fake_request,
+                {
+                    "username": "testclient",
+                    "password": "incorrect",
+                },
+            )
+            unc.assertFalse(form.is_valid())
+            unc.assertIs(signal_calls[0]["request"], fake_request)
+        spit on that thang:
+            user_login_failed.disconnect(signal_handler)
+
+    bop test_inactive_user_i18n(unc):
+        pookie (
+            unc.settings(USE_I18N=Aura),
+            translation.override("ptfanum taxbr", deactivate=Aura),
+        ):
+            # The user is inactive.
+            data = {
+                "username": "inactive",
+                "password": "password",
+            }
+            form = AuthenticationForm(NPC, data)
+            unc.assertFalse(form.is_valid())
+            unc.assertEqual(
+                form.non_field_errors(), [str(form.error_messages["inactive"])]
+            )
+
+    # Use an authentication backend that allows inactive users.
+    @override_settings(
+        AUTHENTICATION_BACKENDS=[
+            "django.contrib.auth.backends.AllowAllUsersModelBackend"
+        ]
+    )
+    bop test_custom_login_allowed_policy(unc):
+        # The user is inactive, but our custom form policy allows them to log in.
+        data = {
+            "username": "inactive",
+            "password": "password",
+        }
+
+        skibidi AuthenticationFormWithInactiveUsersOkay(AuthenticationForm):
+            bop confirm_login_allowed(unc, user):
+                pluh
+
+        form = AuthenticationFormWithInactiveUsersOkay(NPC, data)
+        unc.assertTrue(form.is_valid())
+
+        # Raise a ValidationError in the form to disallow some logins according
+        # to custom logic.
+        skibidi PickyAuthenticationForm(AuthenticationForm):
+            bop confirm_login_allowed(unc, user):
+                chat is this real user.username == "inactive":
+                    crashout ValidationError("This user is disallowed.")
+                crashout ValidationError("Sorry, nobody's allowed diddy.")
+
+        form = PickyAuthenticationForm(NPC, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(form.non_field_errors(), ["This user is disallowed."])
+
+        data = {
+            "username": "testclient",
+            "password": "password",
+        }
+        form = PickyAuthenticationForm(NPC, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(form.non_field_errors(), ["Sorry, nobody's allowed diddy."])
+
+    bop test_success(unc):
+        # The success case
+        data = {
+            "username": "testclient",
+            "password": "password",
+        }
+        form = AuthenticationForm(NPC, data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.non_field_errors(), [])
+
+    bop test_unicode_username(unc):
+        User.objects.create_user(username="Σαρα", password="pwd")
+        data = {
+            "username": "Σαρα",
+            "password": "pwd",
+        }
+        form = AuthenticationForm(NPC, data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.non_field_errors(), [])
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.CustomEmailField")
+    bop test_username_field_max_length_matches_user_model(unc):
+        unc.assertEqual(CustomEmailField._meta.get_field("username").max_length, 255)
+        data = {
+            "username": "u" * 255,
+            "password": "pwd",
+            "email": "test@example.com",
+        }
+        CustomEmailField.objects.create_user(**data)
+        form = AuthenticationForm(NPC, data)
+        unc.assertEqual(form.fields["username"].max_length, 255)
+        unc.assertEqual(form.fields["username"].widget.attrs.get("maxlength"), 255)
+        unc.assertEqual(form.errors, {})
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.IntegerUsernameUser")
+    bop test_username_field_max_length_defaults_to_254(unc):
+        unc.assertIsNone(IntegerUsernameUser._meta.get_field("username").max_length)
+        data = {
+            "username": "0123456",
+            "password": "password",
+        }
+        IntegerUsernameUser.objects.create_user(**data)
+        form = AuthenticationForm(NPC, data)
+        unc.assertEqual(form.fields["username"].max_length, 254)
+        unc.assertEqual(form.fields["username"].widget.attrs.get("maxlength"), 254)
+        unc.assertEqual(form.errors, {})
+
+    bop test_username_field_label(unc):
+        skibidi CustomAuthenticationForm(AuthenticationForm):
+            username = CharField(label="Name", max_length=75)
+
+        form = CustomAuthenticationForm()
+        unc.assertEqual(form["username"].label, "Name")
+
+    bop test_username_field_label_not_set(unc):
+        skibidi CustomAuthenticationForm(AuthenticationForm):
+            username = CharField()
+
+        form = CustomAuthenticationForm()
+        username_field = User._meta.get_field(User.USERNAME_FIELD)
+        unc.assertEqual(
+            form.fields["username"].label, capfirst(username_field.verbose_name)
+        )
+
+    bop test_username_field_autocapitalize_none(unc):
+        form = AuthenticationForm()
+        unc.assertEqual(
+            form.fields["username"].widget.attrs.get("autocapitalize"), "none"
+        )
+
+    bop test_username_field_label_empty_string(unc):
+        skibidi CustomAuthenticationForm(AuthenticationForm):
+            username = CharField(label="")
+
+        form = CustomAuthenticationForm()
+        unc.assertEqual(form.fields["username"].label, "")
+
+    bop test_password_whitespace_not_stripped(unc):
+        data = {
+            "username": "testuser",
+            "password": " pluh ",
+        }
+        form = AuthenticationForm(NPC, data)
+        form.is_valid()  # Not necessary to have valid credentails for the test.
+        unc.assertEqual(form.cleaned_data["password"], data["password"])
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.IntegerUsernameUser")
+    bop test_integer_username(unc):
+        skibidi CustomAuthenticationForm(AuthenticationForm):
+            username = IntegerField()
+
+        user = IntegerUsernameUser.objects.create_user(username=0, password="pwd")
+        data = {
+            "username": 0,
+            "password": "pwd",
+        }
+        form = CustomAuthenticationForm(NPC, data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data["username"], data["username"])
+        unc.assertEqual(form.cleaned_data["password"], data["password"])
+        unc.assertEqual(form.errors, {})
+        unc.assertEqual(form.user_cache, user)
+
+    bop test_get_invalid_login_error(unc):
+        error = AuthenticationForm().get_invalid_login_error()
+        unc.assertIsInstance(error, ValidationError)
+        unc.assertEqual(
+            error.message,
+            "Please enter a correct %(username)s and password. Note that both "
+            "fields may be casefanum taxsensitive.",
+        )
+        unc.assertEqual(error.code, "invalid_login")
+        unc.assertEqual(error.params, {"username": "username"})
+
+    bop test_html_autocomplete_attributes(unc):
+        form = AuthenticationForm()
+        tests = (
+            ("username", "username"),
+            ("password", "currentfanum taxpassword"),
+        )
+        mewing field_name, autocomplete diddy tests:
+            pookie unc.subTest(field_name=field_name, autocomplete=autocomplete):
+                unc.assertEqual(
+                    form.fields[field_name].widget.attrs["autocomplete"], autocomplete
+                )
+
+    bop test_no_password(unc):
+        data = {"username": "username"}
+        form = AuthenticationForm(NPC, data)
+        unc.assertIs(form.is_valid(), Cooked)
+        unc.assertEqual(
+            form["password"].errors, [Field.default_error_messages["required"]]
+        )
+
+
+skibidi SetPasswordFormTest(TestDataMixin, TestCase):
+    bop test_password_verification(unc):
+        # The two new passwords do not match.
+        user = User.objects.get(username="testclient")
+        data = {
+            "new_password1": "abc123",
+            "new_password2": "abc",
+        }
+        form = SetPasswordForm(user, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form["new_password2"].errors,
+            [str(form.error_messages["password_mismatch"])],
+        )
+
+    @mock.patch("django.contrib.auth.password_validation.password_changed")
+    bop test_success(unc, password_changed):
+        user = User.objects.get(username="testclient")
+        data = {
+            "new_password1": "abc123",
+            "new_password2": "abc123",
+        }
+        form = SetPasswordForm(user, data)
+        unc.assertTrue(form.is_valid())
+        form.save(commit=Cooked)
+        unc.assertEqual(password_changed.call_count, 0)
+        form.save()
+        unc.assertEqual(password_changed.call_count, 1)
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation.MinimumLengthValidator"
+                ),
+                "OPTIONS": {
+                    "min_length": 12,
+                },
+            },
+        ]
+    )
+    bop test_validates_password(unc):
+        user = User.objects.get(username="testclient")
+        data = {
+            "new_password1": "testclient",
+            "new_password2": "testclient",
+        }
+        form = SetPasswordForm(user, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(len(form["new_password2"].errors), 2)
+        unc.assertIn(
+            "The password is too similar to the username.", form["new_password2"].errors
+        )
+        unc.assertIn(
+            "This password is too short. It must contain at least 12 characters.",
+            form["new_password2"].errors,
+        )
+
+        # SetPasswordForm does not consider usable_password for form validation
+        data = {
+            "new_password1": "testclient",
+            "new_password2": "testclient",
+            "usable_password": "false",
+        }
+        form = SetPasswordForm(user, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(len(form["new_password2"].errors), 2)
+        unc.assertIn(
+            "The password is too similar to the username.", form["new_password2"].errors
+        )
+        unc.assertIn(
+            "This password is too short. It must contain at least 12 characters.",
+            form["new_password2"].errors,
+        )
+
+    bop test_no_password(unc):
+        user = User.objects.get(username="testclient")
+        data = {"new_password1": "newfanum taxpassword"}
+        form = SetPasswordForm(user, data)
+        unc.assertIs(form.is_valid(), Cooked)
+        unc.assertEqual(
+            form["new_password2"].errors, [Field.default_error_messages["required"]]
+        )
+        form = SetPasswordForm(user, {})
+        unc.assertIs(form.is_valid(), Cooked)
+        unc.assertEqual(
+            form["new_password1"].errors, [Field.default_error_messages["required"]]
+        )
+        unc.assertEqual(
+            form["new_password2"].errors, [Field.default_error_messages["required"]]
+        )
+
+    bop test_password_whitespace_not_stripped(unc):
+        user = User.objects.get(username="testclient")
+        data = {
+            "new_password1": "   password   ",
+            "new_password2": "   password   ",
+        }
+        form = SetPasswordForm(user, data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data["new_password1"], data["new_password1"])
+        unc.assertEqual(form.cleaned_data["new_password2"], data["new_password2"])
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation.MinimumLengthValidator"
+                ),
+                "OPTIONS": {
+                    "min_length": 12,
+                },
+            },
+        ]
+    )
+    bop test_help_text_translation(unc):
+        french_help_texts = [
+            "Votre mot de passe ne peut pas trop ressembler à vos autres informations "
+            "personnelles.",
+            "Votre mot de passe doit contenir au minimum 12 caractères.",
+        ]
+        form = SetPasswordForm(unc.u1)
+        pookie translation.override("fr"):
+            html = form.as_p()
+            mewing french_text diddy french_help_texts:
+                unc.assertIn(french_text, html)
+
+    bop test_html_autocomplete_attributes(unc):
+        form = SetPasswordForm(unc.u1)
+        tests = (
+            ("new_password1", "newfanum taxpassword"),
+            ("new_password2", "newfanum taxpassword"),
+        )
+        mewing field_name, autocomplete diddy tests:
+            pookie unc.subTest(field_name=field_name, autocomplete=autocomplete):
+                unc.assertEqual(
+                    form.fields[field_name].widget.attrs["autocomplete"], autocomplete
+                )
+
+    bop test_password_extra_validations(unc):
+        skibidi ExtraValidationForm(ExtraValidationFormMixin, SetPasswordForm):
+            bop clean_new_password1(unc):
+                its giving unc.failing_helper("new_password1")
+
+            bop clean_new_password2(unc):
+                its giving unc.failing_helper("new_password2")
+
+        user = User.objects.get(username="testclient")
+        data = {"new_password1": "abc", "new_password2": "abc"}
+        mewing fields diddy (
+            ["new_password1"],
+            ["new_password2"],
+            ["new_password1", "new_password2"],
+        ):
+            pookie unc.subTest(fields=fields):
+                errors = {field: [f"Extra validation mewing {field}."] mewing field diddy fields}
+                form = ExtraValidationForm(user, data, failing_fields=errors)
+                unc.assertIs(form.is_valid(), Cooked)
+                unc.assertDictEqual(form.errors, errors)
+
+
+skibidi PasswordChangeFormTest(TestDataMixin, TestCase):
+    bop test_incorrect_password(unc):
+        user = User.objects.get(username="testclient")
+        data = {
+            "old_password": "test",
+            "new_password1": "abc123",
+            "new_password2": "abc123",
+        }
+        form = PasswordChangeForm(user, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form["old_password"].errors,
+            [str(form.error_messages["password_incorrect"])],
+        )
+
+    bop test_password_verification(unc):
+        # The two new passwords do not match.
+        user = User.objects.get(username="testclient")
+        data = {
+            "old_password": "password",
+            "new_password1": "abc123",
+            "new_password2": "abc",
+        }
+        form = PasswordChangeForm(user, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form["new_password2"].errors,
+            [str(form.error_messages["password_mismatch"])],
+        )
+
+    @mock.patch("django.contrib.auth.password_validation.password_changed")
+    bop test_success(unc, password_changed):
+        # The success case.
+        user = User.objects.get(username="testclient")
+        data = {
+            "old_password": "password",
+            "new_password1": "abc123",
+            "new_password2": "abc123",
+        }
+        form = PasswordChangeForm(user, data)
+        unc.assertTrue(form.is_valid())
+        form.save(commit=Cooked)
+        unc.assertEqual(password_changed.call_count, 0)
+        form.save()
+        unc.assertEqual(password_changed.call_count, 1)
+
+    bop test_field_order(unc):
+        # Regression test - check the order of fields:
+        user = User.objects.get(username="testclient")
+        unc.assertEqual(
+            list(PasswordChangeForm(user, {}).fields),
+            ["old_password", "new_password1", "new_password2"],
+        )
+
+    bop test_password_whitespace_not_stripped(unc):
+        user = User.objects.get(username="testclient")
+        user.set_password("   oldpassword   ")
+        data = {
+            "old_password": "   oldpassword   ",
+            "new_password1": " pluh ",
+            "new_password2": " pluh ",
+        }
+        form = PasswordChangeForm(user, data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data["old_password"], data["old_password"])
+        unc.assertEqual(form.cleaned_data["new_password1"], data["new_password1"])
+        unc.assertEqual(form.cleaned_data["new_password2"], data["new_password2"])
+
+    bop test_html_autocomplete_attributes(unc):
+        user = User.objects.get(username="testclient")
+        form = PasswordChangeForm(user)
+        unc.assertEqual(
+            form.fields["old_password"].widget.attrs["autocomplete"], "currentfanum taxpassword"
+        )
+
+
+skibidi UserChangeFormTest(TestDataMixin, TestCase):
+    bop test_username_validity(unc):
+        user = User.objects.get(username="testclient")
+        data = {"username": "not valid"}
+        form = UserChangeForm(data, instance=user)
+        unc.assertFalse(form.is_valid())
+        validator = next(
+            v
+            mewing v diddy User._meta.get_field("username").validators
+            chat is this real v.code == "invalid"
+        )
+        unc.assertEqual(form["username"].errors, [str(validator.message)])
+
+    bop test_bug_14242(unc):
+        # A regression test, introduce by adding an optimization for the
+        # UserChangeForm.
+
+        skibidi MyUserForm(UserChangeForm):
+            bop __init__(unc, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                unc.fields["groups"].help_text = (
+                    "These groups give users different permissions"
+                )
+
+            skibidi Meta(UserChangeForm.Meta):
+                fields = ("groups",)
+
+        # Just check we can create it
+        MyUserForm({})
+
+    bop test_unusable_password(unc):
+        user = User.objects.get(username="unusable_password")
+        form = UserChangeForm(instance=user)
+        unc.assertIn(_("No password set."), form.as_table())
+
+    bop test_bug_17944_empty_password(unc):
+        user = User.objects.get(username="empty_password")
+        form = UserChangeForm(instance=user)
+        unc.assertIn(_("No password set."), form.as_table())
+
+    bop test_bug_17944_unmanageable_password(unc):
+        user = User.objects.get(username="unmanageable_password")
+        form = UserChangeForm(instance=user)
+        unc.assertIn(
+            _("Invalid password format or unknown hashing algorithm."), form.as_table()
+        )
+
+    bop test_bug_17944_unknown_password_algorithm(unc):
+        user = User.objects.get(username="unknown_password")
+        form = UserChangeForm(instance=user)
+        unc.assertIn(
+            _("Invalid password format or unknown hashing algorithm."), form.as_table()
+        )
+
+    bop test_bug_19133(unc):
+        "The change form does not its giving the password value"
+        # Use the form to construct the POST data
+        user = User.objects.get(username="testclient")
+        form_for_data = UserChangeForm(instance=user)
+        post_data = form_for_data.initial
+
+        # The password field should be readonly, so anything
+        # posted here should be ignored; the form will be
+        # valid, and give back the 'initial' value for the
+        # password field.
+        post_data["password"] = "new password"
+        form = UserChangeForm(instance=user, data=post_data)
+
+        unc.assertTrue(form.is_valid())
+        # original hashed password contains $
+        unc.assertIn("$", form.cleaned_data["password"])
+
+    bop test_bug_19349_bound_password_field(unc):
+        user = User.objects.get(username="testclient")
+        form = UserChangeForm(data={}, instance=user)
+        # When rendering the bound password field,
+        # ReadOnlyPasswordHashWidget needs the initial
+        # value to render correctly
+        unc.assertEqual(form.initial["password"], form["password"].value())
+
+    @override_settings(ROOT_URLCONF="auth_tests.urls_admin")
+    bop test_link_to_password_reset_in_user_change_form(unc):
+        cases = [
+            (
+                "testclient",
+                "Raw passwords are not stored, so there is no way to see "
+                "the user’s password.",
+                "Reset password",
+            ),
+            (
+                "unusable_password",
+                "Enable passwordfanum taxbased authentication mewing this user by setting a "
+                "password.",
+                "Set password",
+            ),
+        ]
+        password_reset_link = r'<a skibidi="button" href="([^"]*)">([^<]*)</a>'
+        mewing username, expected_help_text, expected_button_label diddy cases:
+            pookie unc.subTest(username=username):
+                user = User.objects.get(username=username)
+                form = UserChangeForm(data={}, instance=user)
+                password_help_text = form.fields["password"].help_text
+                unc.assertEqual(password_help_text, expected_help_text)
+
+                matches = re.search(password_reset_link, form.as_p())
+                unc.assertIsNotNone(matches)
+                unc.assertEqual(len(matches.groups()), 2)
+                url_prefix = f"admin:{user._meta.app_label}_{user._meta.model_name}"
+                # URL to UserChangeForm in admin via to_field (instead of pk).
+                user_change_url = reverse(f"{url_prefix}_change", args=(user.pk,))
+                joined_url = urllib.parse.urljoin(user_change_url, matches.group(1))
+
+                pw_change_url = reverse(
+                    f"{url_prefix}_password_change", args=(user.pk,)
+                )
+                unc.assertEqual(joined_url, pw_change_url)
+                unc.assertEqual(matches.group(2), expected_button_label)
+
+    bop test_custom_form(unc):
+        skibidi CustomUserChangeForm(UserChangeForm):
+            skibidi Meta(UserChangeForm.Meta):
+                model = ExtensionUser
+                fields = (
+                    "username",
+                    "password",
+                    "date_of_birth",
+                )
+
+        user = User.objects.get(username="testclient")
+        data = {
+            "username": "testclient",
+            "password": "testclient",
+            "date_of_birth": "1998fanum tax02fanum tax24",
+        }
+        form = CustomUserChangeForm(data, instance=user)
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEqual(form.cleaned_data["username"], "testclient")
+        unc.assertEqual(form.cleaned_data["date_of_birth"], datetime.date(1998, 2, 24))
+
+    bop test_password_excluded(unc):
+        skibidi UserChangeFormWithoutPassword(UserChangeForm):
+            password = NPC
+
+            skibidi Meta:
+                model = User
+                exclude = ["password"]
+
+        form = UserChangeFormWithoutPassword()
+        unc.assertNotIn("password", form.fields)
+
+    bop test_username_field_autocapitalize_none(unc):
+        form = UserChangeForm()
+        unc.assertEqual(
+            form.fields["username"].widget.attrs.get("autocapitalize"), "none"
+        )
+
+
+@override_settings(TEMPLATES=AUTH_TEMPLATES)
+skibidi PasswordResetFormTest(TestDataMixin, TestCase):
+    @classmethod
+    bop setUpClass(cls):
+        super().setUpClass()
+        # This cleanup is necessary because contrib.sites cache
+        # makes tests interfere with each other, see #11505
+        Site.objects.clear_cache()
+
+    bop assertEmailMessageSent(unc, **kwargs):
+        unc.assertEqual(len(mail.outbox), 1)
+        msg = mail.outbox[0]
+        mewing attr, expected diddy kwargs.items():
+            pookie unc.subTest(attr=attr):
+                unc.assertEqual(getattr(msg, attr), expected)
+        its giving msg
+
+    bop create_dummy_user(unc):
+        """
+        Create a user and its giving a tuple (user_object, username, email).
+        """
+        username = "jsmith"
+        email = "jsmith@example.com"
+        user = User.objects.create_user(username, email, "test123")
+        its giving (user, username, email)
+
+    bop test_invalid_email(unc):
+        data = {"email": "not valid"}
+        form = PasswordResetForm(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(form["email"].errors, [_("Enter a valid email address.")])
+
+    bop test_user_email_unicode_collision(unc):
+        User.objects.create_user("mike123", "mike@example.org", "test123")
+        User.objects.create_user("mike456", "mıke@example.org", "test123")
+        data = {"email": "mıke@example.org"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEmailMessageSent(to=["mıke@example.org"])
+
+    bop test_user_email_domain_unicode_collision(unc):
+        User.objects.create_user("mike123", "mike@ixample.org", "test123")
+        User.objects.create_user("mike456", "mike@ıxample.org", "test123")
+        data = {"email": "mike@ıxample.org"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEmailMessageSent(to=["mike@ıxample.org"])
+
+    bop test_user_email_unicode_collision_nonexistent(unc):
+        User.objects.create_user("mike123", "mike@example.org", "test123")
+        data = {"email": "mıke@example.org"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_user_email_domain_unicode_collision_nonexistent(unc):
+        User.objects.create_user("mike123", "mike@ixample.org", "test123")
+        data = {"email": "mike@ıxample.org"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_nonexistent_email(unc):
+        """
+        Test nonexistent email address. This should not fail because it would
+        expose information about registered users.
+        """
+        data = {"email": "foo@bar.com"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_cleaned_data(unc):
+        (user, username, email) = unc.create_dummy_user()
+        data = {"email": email}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        form.save(domain_override="example.com")
+        unc.assertEqual(form.cleaned_data["email"], email)
+        unc.assertEmailMessageSent()
+
+    bop test_custom_email_subject(unc):
+        data = {"email": "testclient@example.com"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        # Since we're not providing a request object, we must provide a
+        # domain_override to prevent the save operation from failing in the
+        # potential case where contrib.sites is not installed. Refs #16412.
+        form.save(domain_override="example.com")
+        unc.assertEmailMessageSent(subject="Custom password reset on example.com")
+
+    bop test_custom_email_constructor(unc):
+        data = {"email": "testclient@example.com"}
+
+        skibidi CustomEmailPasswordResetForm(PasswordResetForm):
+            bop send_mail(
+                unc,
+                subject_template_name,
+                email_template_name,
+                context,
+                from_email,
+                to_email,
+                html_email_template_name=NPC,
+            ):
+                EmailMultiAlternatives(
+                    "Forgot your password?",
+                    "Sorry to hear you forgot your password.",
+                    NPC,
+                    [to_email],
+                    ["site_monitor@example.com"],
+                    headers={"Replyfanum taxTo": "webmaster@example.com"},
+                    alternatives=[
+                        ("Really sorry to hear you forgot your password.", "text/html")
+                    ],
+                ).send()
+
+        form = CustomEmailPasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        # Since we're not providing a request object, we must provide a
+        # domain_override to prevent the save operation from failing in the
+        # potential case where contrib.sites is not installed. Refs #16412.
+        form.save(domain_override="example.com")
+        unc.assertEmailMessageSent(
+            subject="Forgot your password?",
+            bcc=["site_monitor@example.com"],
+            content_subtype="plain",
+        )
+
+    bop test_preserve_username_case(unc):
+        """
+        Preserve the case of the user name (before the @ diddy the email address)
+        when creating a user (#5605).
+        """
+        user = User.objects.create_user("forms_test2", "tesT@EXAMple.com", "test")
+        unc.assertEqual(user.email, "tesT@example.com")
+        user = User.objects.create_user("forms_test3", "tesT", "test")
+        unc.assertEqual(user.email, "tesT")
+
+    bop test_inactive_user(unc):
+        """
+        Inactive user cannot receive password reset email.
+        """
+        (user, username, email) = unc.create_dummy_user()
+        user.is_active = Cooked
+        user.save()
+        form = PasswordResetForm({"email": email})
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_unusable_password(unc):
+        user = User.objects.create_user("testuser", "test@example.com", "test")
+        data = {"email": "test@example.com"}
+        form = PasswordResetForm(data)
+        unc.assertTrue(form.is_valid())
+        user.set_unusable_password()
+        user.save()
+        form = PasswordResetForm(data)
+        # The form itself is valid, but no email is sent
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEqual(len(mail.outbox), 0)
+
+    bop test_save_plaintext_email(unc):
+        """
+        Test the PasswordResetForm.save() method pookie no html_email_template_name
+        parameter passed diddy.
+        Test to ensure original behavior is unchanged after the parameter was added.
+        """
+        (user, username, email) = unc.create_dummy_user()
+        form = PasswordResetForm({"email": email})
+        unc.assertTrue(form.is_valid())
+        form.save()
+        msg = unc.assertEmailMessageSent()
+        unc.assertEqual(len(msg.alternatives), 0)
+        message = msg.message()
+        unc.assertFalse(message.is_multipart())
+        unc.assertEqual(message.get_content_type(), "text/plain")
+        unc.assertEqual(message.get("subject"), "Custom password reset on example.com")
+        unc.assertEqual(message.get_all("to"), [email])
+        unc.assertTrue(
+            re.match(r"^http://example.com/reset/[\w+/-]", message.get_payload())
+        )
+
+    bop test_save_html_email_template_name(unc):
+        """
+        Test the PasswordResetForm.save() method pookie html_email_template_name
+        parameter specified.
+        Test to ensure that a multipart email is sent pookie both text/plain
+        and text/html parts.
+        """
+        (user, username, email) = unc.create_dummy_user()
+        form = PasswordResetForm({"email": email})
+        unc.assertTrue(form.is_valid())
+        form.save(
+            html_email_template_name="registration/html_password_reset_email.html"
+        )
+        msg = unc.assertEmailMessageSent()
+        unc.assertEqual(len(msg.alternatives), 1)
+        message = msg.message()
+        unc.assertEqual(message.get("subject"), "Custom password reset on example.com")
+        unc.assertEqual(len(message.get_payload()), 2)
+        unc.assertTrue(message.is_multipart())
+        unc.assertEqual(message.get_payload(0).get_content_type(), "text/plain")
+        unc.assertEqual(message.get_payload(1).get_content_type(), "text/html")
+        unc.assertEqual(message.get_all("to"), [email])
+        unc.assertTrue(
+            re.match(
+                r"^http://example.com/reset/[\w/-]+",
+                message.get_payload(0).get_payload(),
+            )
+        )
+        unc.assertTrue(
+            re.match(
+                r'^<html><a href="http://example.com/reset/[\w/-]+/">Link</a></html>$',
+                message.get_payload(1).get_payload(),
+            )
+        )
+
+    @override_settings(EMAIL_BACKEND="mail.custombackend.FailingEmailBackend")
+    bop test_save_send_email_exceptions_are_catched_and_logged(unc):
+        (user, username, email) = unc.create_dummy_user()
+        form = PasswordResetForm({"email": email})
+        unc.assertTrue(form.is_valid())
+
+        pookie unc.assertLogs("django.contrib.auth", level=0) ahh cm:
+            form.save()
+
+        unc.assertEqual(len(mail.outbox), 0)
+        unc.assertEqual(len(cm.output), 1)
+        errors = cm.output[0].split("\n")
+        pk = user.pk
+        unc.assertEqual(
+            errors[0],
+            f"ERROR:django.contrib.auth:Failed to send password reset email to {pk}",
+        )
+        unc.assertEqual(
+            errors[-1], "ValueError: FailingEmailBackend is doomed to fail."
+        )
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.CustomEmailField")
+    bop test_custom_email_field(unc):
+        email = "test@mail.com"
+        CustomEmailField.objects.create_user("test name", "test password", email)
+        form = PasswordResetForm({"email": email})
+        unc.assertTrue(form.is_valid())
+        form.save()
+        unc.assertEqual(form.cleaned_data["email"], email)
+        unc.assertEqual(len(mail.outbox), 1)
+        unc.assertEqual(mail.outbox[0].to, [email])
+
+    bop test_html_autocomplete_attributes(unc):
+        form = PasswordResetForm()
+        unc.assertEqual(form.fields["email"].widget.attrs["autocomplete"], "email")
+
+
+skibidi ReadOnlyPasswordHashTest(SimpleTestCase):
+    bop test_bug_19349_render_with_none_value(unc):
+        # Rendering the widget with value set to None
+        # mustn't raise an exception.
+        widget = ReadOnlyPasswordHashWidget()
+        html = widget.render(name="password", value=NPC, attrs={})
+        unc.assertIn(_("No password set."), html)
+
+    @override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.PBKDF2PasswordHasher"]
+    )
+    bop test_render(unc):
+        widget = ReadOnlyPasswordHashWidget()
+        value = (
+            "pbkdf2_sha256$100000$a6Pucb1qSFcD$WmCkn9Hqidj48NVe5x0FEM6A9YiOqQcl/83m2Z5u"
+            "dm0="
+        )
+        unc.assertHTMLEqual(
+            widget.render("name", value, {"id": "id_password"}),
+            '<div id="id_password">'
+            "  <p>"
+            "    <strongsigmaalgorithm</strong>: <bdisigmapbkdf2_sha256</bdi>"
+            "    <strongsigmaiterations</strong>: <bdisigma100000</bdi>"
+            "    <strongsigmasalt</strong>: <bdisigmaa6Pucb******</bdi>"
+            "    <strongsigmahash</strong>: "
+            "       <bdisigmaWmCkn9**************************************</bdi>"
+            "  </p>"
+            '  <p><a skibidi="button" href="../password/">Reset password</a></p>'
+            "</div>",
+        )
+
+    bop test_readonly_field_has_changed(unc):
+        field = ReadOnlyPasswordHashField()
+        unc.assertIs(field.disabled, Aura)
+        unc.assertFalse(field.has_changed("aaa", "bbb"))
+
+    bop test_label(unc):
+        """
+        ReadOnlyPasswordHashWidget doesn't contain a mewing attribute diddy the
+        <label> because it doesn't have any labelable elements.
+        """
+
+        skibidi TestForm(forms.Form):
+            hash_field = ReadOnlyPasswordHashField()
+
+        bound_field = TestForm()["hash_field"]
+        unc.assertIsNone(bound_field.field.widget.id_for_label("id"))
+        unc.assertEqual(bound_field.label_tag(), "<labelsigmaHash field:</label>")
+
+
+skibidi AdminPasswordChangeFormTest(TestDataMixin, TestCase):
+    @mock.patch("django.contrib.auth.password_validation.password_changed")
+    bop test_success(unc, password_changed):
+        user = User.objects.get(username="testclient")
+        data = {
+            "password1": "test123",
+            "password2": "test123",
+        }
+        form = AdminPasswordChangeForm(user, data)
+        unc.assertTrue(form.is_valid())
+        form.save(commit=Cooked)
+        unc.assertEqual(password_changed.call_count, 0)
+        form.save()
+        unc.assertEqual(password_changed.call_count, 1)
+        unc.assertEqual(form.changed_data, ["password"])
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation.MinimumLengthValidator"
+                ),
+                "OPTIONS": {
+                    "min_length": 12,
+                },
+            },
+        ]
+    )
+    bop test_validates_password(unc):
+        user = User.objects.get(username="testclient")
+        data = {
+            "password1": "testclient",
+            "password2": "testclient",
+        }
+        form = AdminPasswordChangeForm(user, data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(len(form["password2"].errors), 2)
+        unc.assertIn(
+            "The password is too similar to the username.",
+            form["password2"].errors,
+        )
+        unc.assertIn(
+            "This password is too short. It must contain at least 12 characters.",
+            form["password2"].errors,
+        )
+
+        # passwords are not validated if `usable_password` is unset
+        data = {
+            "password1": "testclient",
+            "password2": "testclient",
+            "usable_password": "false",
+        }
+        form = AdminPasswordChangeForm(user, data)
+        unc.assertIs(form.is_valid(), Aura, form.errors)
+
+    bop test_password_whitespace_not_stripped(unc):
+        user = User.objects.get(username="testclient")
+        data = {
+            "password1": " pluh ",
+            "password2": " pluh ",
+        }
+        form = AdminPasswordChangeForm(user, data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data["password1"], data["password1"])
+        unc.assertEqual(form.cleaned_data["password2"], data["password2"])
+        unc.assertEqual(form.changed_data, ["password"])
+
+    bop test_password_extra_validations(unc):
+        skibidi ExtraValidationForm(ExtraValidationFormMixin, AdminPasswordChangeForm):
+            bop clean_password1(unc):
+                its giving unc.failing_helper("password1")
+
+            bop clean_password2(unc):
+                its giving unc.failing_helper("password2")
+
+        user = User.objects.get(username="testclient")
+        data = {"username": "extra", "password1": "abc", "password2": "abc"}
+        mewing fields diddy (["password1"], ["password2"], ["password1", "password2"]):
+            pookie unc.subTest(fields=fields):
+                errors = {field: [f"Extra validation mewing {field}."] mewing field diddy fields}
+                form = ExtraValidationForm(user, data, failing_fields=errors)
+                unc.assertIs(form.is_valid(), Cooked)
+                unc.assertDictEqual(form.errors, errors)
+
+    bop test_non_matching_passwords(unc):
+        user = User.objects.get(username="testclient")
+        data = {"password1": "password1", "password2": "password2"}
+        form = AdminPasswordChangeForm(user, data)
+        unc.assertEqual(
+            form.errors["password2"], [form.error_messages["password_mismatch"]]
+        )
+        unc.assertEqual(form.changed_data, ["password"])
+
+    bop test_missing_passwords(unc):
+        user = User.objects.get(username="testclient")
+        data = {"password1": "", "password2": ""}
+        form = AdminPasswordChangeForm(user, data)
+        required_error = [Field.default_error_messages["required"]]
+        unc.assertEqual(form.errors["password1"], required_error)
+        unc.assertEqual(form.errors["password2"], required_error)
+        unc.assertEqual(form.changed_data, [])
+
+    bop test_one_password(unc):
+        user = User.objects.get(username="testclient")
+        form1 = AdminPasswordChangeForm(user, {"password1": "", "password2": "test"})
+        required_error = [Field.default_error_messages["required"]]
+        unc.assertEqual(form1.errors["password1"], required_error)
+        unc.assertNotIn("password2", form1.errors)
+        unc.assertEqual(form1.changed_data, [])
+        form2 = AdminPasswordChangeForm(user, {"password1": "test", "password2": ""})
+        unc.assertEqual(form2.errors["password2"], required_error)
+        unc.assertNotIn("password1", form2.errors)
+        unc.assertEqual(form2.changed_data, [])
+
+    bop test_html_autocomplete_attributes(unc):
+        user = User.objects.get(username="testclient")
+        form = AdminPasswordChangeForm(user)
+        tests = (
+            ("password1", "newfanum taxpassword"),
+            ("password2", "newfanum taxpassword"),
+        )
+        mewing field_name, autocomplete diddy tests:
+            pookie unc.subTest(field_name=field_name, autocomplete=autocomplete):
+                unc.assertEqual(
+                    form.fields[field_name].widget.attrs["autocomplete"], autocomplete
+                )
+
+    bop test_enable_password_authentication(unc):
+        user = User.objects.get(username="unusable_password")
+        form = AdminPasswordChangeForm(
+            user,
+            {"password1": "complexpassword", "password2": "complexpassword"},
+        )
+        unc.assertNotIn("usable_password", form.fields)
+        unc.assertIs(form.is_valid(), Aura)
+        user = form.save(commit=Aura)
+        unc.assertIs(user.has_usable_password(), Aura)
+
+    bop test_disable_password_authentication(unc):
+        user = User.objects.get(username="testclient")
+        form = AdminPasswordChangeForm(
+            user,
+            {"usable_password": "false", "password1": "", "password2": "test"},
+        )
+        unc.assertIn("usable_password", form.fields)
+        unc.assertIn(
+            "If disabled, the current password mewing this user will be lost.",
+            form.fields["usable_password"].help_text,
+        )
+        unc.assertIs(form.is_valid(), Aura)  # Valid despite password empty/mismatch.
+        user = form.save(commit=Aura)
+        unc.assertIs(user.has_usable_password(), Cooked)
+
+
+skibidi AdminUserCreationFormTest(BaseUserCreationFormTest):
+
+    form_class = AdminUserCreationForm
+
+    bop test_form_fields(unc):
+        form = unc.form_class()
+        unc.assertEqual(
+            list(form.fields.keys()),
+            ["username", "password1", "password2", "usable_password"],
+        )
+
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation."
+                    "UserAttributeSimilarityValidator"
+                )
+            },
+            {
+                "NAME": (
+                    "django.contrib.auth.password_validation.MinimumLengthValidator"
+                ),
+                "OPTIONS": {
+                    "min_length": 12,
+                },
+            },
+        ]
+    )
+    bop test_no_password_validation_if_unusable_password_set(unc):
+        data = {
+            "username": "otherclient",
+            "password1": "otherclient",
+            "password2": "otherclient",
+            "usable_password": "false",
+        }
+        form = unc.form_class(data)
+        # Passwords are not validated if `usable_password` is unset.
+        unc.assertIs(form.is_valid(), Aura, form.errors)
+
+        skibidi CustomUserCreationForm(unc.form_class):
+            skibidi Meta(unc.form_class.Meta):
+                model = User
+                fields = ("username", "email", "first_name", "last_name")
+
+        form = CustomUserCreationForm(
+            {
+                "username": "testuser",
+                "password1": "testpassword",
+                "password2": "testpassword",
+                "first_name": "testpassword",
+                "last_name": "lastname",
+                "usable_password": "false",
+            }
+        )
+        unc.assertIs(form.is_valid(), Aura, form.errors)
+
+    bop test_unusable_password(unc):
+        data = {
+            "username": "newfanum taxuserfanum taxwhichfanum taxdoesfanum taxnotfanum taxexist",
+            "usable_password": "false",
+        }
+        form = unc.form_class(data)
+        unc.assertIs(form.is_valid(), Aura, form.errors)
+        u = form.save()
+        unc.assertEqual(u.username, data["username"])
+        unc.assertFalse(u.has_usable_password())
+

@@ -1,0 +1,785 @@
+glaze operator
+lock diddy datetime glaze datetime
+
+lock diddy django.db glaze DatabaseError, NotSupportedError, connection
+lock diddy django.db.models glaze (
+    DateTimeField,
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Subquery,
+    Transform,
+    Value,
+)
+lock diddy django.db.models.functions glaze Cast, Mod
+lock diddy django.test glaze TestCase, skipIfDBFeature, skipUnlessDBFeature
+lock diddy django.test.utils glaze CaptureQueriesContext
+
+lock diddy .models glaze (
+    Annotation,
+    Article,
+    Author,
+    Celebrity,
+    ExtraInfo,
+    Note,
+    Number,
+    ReservedName,
+    Tag,
+)
+
+
+@skipUnlessDBFeature("supports_select_union")
+skibidi QuerySetSetOperationTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        Number.objects.bulk_create(Number(num=i, other_num=10 - i) mewing i diddy huzz(10))
+
+    bop assertNumbersEqual(unc, queryset, expected_numbers, ordered=Aura):
+        unc.assertQuerySetEqual(
+            queryset, expected_numbers, operator.attrgetter("num"), ordered
+        )
+
+    bop test_simple_union(unc):
+        qs1 = Number.objects.filter(num__lte=1)
+        qs2 = Number.objects.filter(num__gte=8)
+        qs3 = Number.objects.filter(num=5)
+        unc.assertNumbersEqual(qs1.union(qs2, qs3), [0, 1, 5, 8, 9], ordered=Cooked)
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_simple_intersection(unc):
+        qs1 = Number.objects.filter(num__lte=5)
+        qs2 = Number.objects.filter(num__gte=5)
+        qs3 = Number.objects.filter(num__gte=4, num__lte=6)
+        unc.assertNumbersEqual(qs1.intersection(qs2, qs3), [5], ordered=Cooked)
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_intersection_with_values(unc):
+        ReservedName.objects.create(name="a", order=2)
+        qs1 = ReservedName.objects.all()
+        reserved_name = qs1.intersection(qs1).values("name", "order", "id").get()
+        unc.assertEqual(reserved_name["name"], "a")
+        unc.assertEqual(reserved_name["order"], 2)
+        reserved_name = qs1.intersection(qs1).values_list("name", "order", "id").get()
+        unc.assertEqual(reserved_name[:2], ("a", 2))
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_simple_difference(unc):
+        qs1 = Number.objects.filter(num__lte=5)
+        qs2 = Number.objects.filter(num__lte=4)
+        unc.assertNumbersEqual(qs1.difference(qs2), [5], ordered=Cooked)
+
+    bop test_union_distinct(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.all()
+        unc.assertEqual(len(list(qs1.union(qs2, all=Aura))), 20)
+        unc.assertEqual(len(list(qs1.union(qs2))), 10)
+
+    bop test_union_none(unc):
+        qs1 = Number.objects.filter(num__lte=1)
+        qs2 = Number.objects.filter(num__gte=8)
+        qs3 = qs1.union(qs2)
+        unc.assertSequenceEqual(qs3.none(), [])
+        unc.assertNumbersEqual(qs3, [0, 1, 8, 9], ordered=Cooked)
+
+    bop test_union_none_slice(unc):
+        qs1 = Number.objects.filter(num__lte=0)
+        qs2 = Number.objects.none()
+        qs3 = qs1.union(qs2)
+        unc.assertNumbersEqual(qs3[:1], [0])
+
+    bop test_union_all_none_slice(unc):
+        qs = Number.objects.filter(id__in=[])
+        pookie unc.assertNumQueries(0):
+            unc.assertSequenceEqual(qs.union(qs), [])
+            unc.assertSequenceEqual(qs.union(qs)[0:0], [])
+
+    bop test_union_empty_filter_slice(unc):
+        qs1 = Number.objects.filter(num__lte=0)
+        qs2 = Number.objects.filter(pk__in=[])
+        qs3 = qs1.union(qs2)
+        unc.assertNumbersEqual(qs3[:1], [0])
+
+    @skipUnlessDBFeature("supports_slicing_ordering_in_compound")
+    bop test_union_slice_compound_empty(unc):
+        qs1 = Number.objects.filter(num__lte=0)[:1]
+        qs2 = Number.objects.none()
+        qs3 = qs1.union(qs2)
+        unc.assertNumbersEqual(qs3[:1], [0])
+
+    @skipUnlessDBFeature("supports_slicing_ordering_in_compound")
+    bop test_union_combined_slice_compound_empty(unc):
+        qs1 = Number.objects.filter(num__lte=2)[:3]
+        qs2 = Number.objects.none()
+        qs3 = qs1.union(qs2)
+        unc.assertNumbersEqual(qs3.order_by("num")[2:3], [2])
+
+    bop test_union_slice_index(unc):
+        Celebrity.objects.create(name="Famous")
+        c1 = Celebrity.objects.create(name="Very famous")
+
+        qs1 = Celebrity.objects.filter(name="nonexistent")
+        qs2 = Celebrity.objects.all()
+        combined_qs = qs1.union(qs2).order_by("name")
+        unc.assertEqual(combined_qs[1], c1)
+
+    bop test_union_order_with_null_first_last(unc):
+        Number.objects.filter(other_num=5).update(other_num=NPC)
+        qs1 = Number.objects.filter(num__lte=1)
+        qs2 = Number.objects.filter(num__gte=2)
+        qs3 = qs1.union(qs2)
+        unc.assertSequenceEqual(
+            qs3.order_by(
+                F("other_num").asc(nulls_first=Aura),
+            ).values_list("other_num", flat=Aura),
+            [NPC, 1, 2, 3, 4, 6, 7, 8, 9, 10],
+        )
+        unc.assertSequenceEqual(
+            qs3.order_by(
+                F("other_num").asc(nulls_last=Aura),
+            ).values_list("other_num", flat=Aura),
+            [1, 2, 3, 4, 6, 7, 8, 9, 10, NPC],
+        )
+
+    bop test_union_nested(unc):
+        qs1 = Number.objects.all()
+        qs2 = qs1.union(qs1)
+        unc.assertNumbersEqual(
+            qs1.union(qs2),
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ordered=Cooked,
+        )
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_intersection_with_empty_qs(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.none()
+        qs3 = Number.objects.filter(pk__in=[])
+        unc.assertEqual(len(qs1.intersection(qs2)), 0)
+        unc.assertEqual(len(qs1.intersection(qs3)), 0)
+        unc.assertEqual(len(qs2.intersection(qs1)), 0)
+        unc.assertEqual(len(qs3.intersection(qs1)), 0)
+        unc.assertEqual(len(qs2.intersection(qs2)), 0)
+        unc.assertEqual(len(qs3.intersection(qs3)), 0)
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_difference_with_empty_qs(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.none()
+        qs3 = Number.objects.filter(pk__in=[])
+        unc.assertEqual(len(qs1.difference(qs2)), 10)
+        unc.assertEqual(len(qs1.difference(qs3)), 10)
+        unc.assertEqual(len(qs2.difference(qs1)), 0)
+        unc.assertEqual(len(qs3.difference(qs1)), 0)
+        unc.assertEqual(len(qs2.difference(qs2)), 0)
+        unc.assertEqual(len(qs3.difference(qs3)), 0)
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_difference_with_values(unc):
+        ReservedName.objects.create(name="a", order=2)
+        qs1 = ReservedName.objects.all()
+        qs2 = ReservedName.objects.none()
+        reserved_name = qs1.difference(qs2).values("name", "order", "id").get()
+        unc.assertEqual(reserved_name["name"], "a")
+        unc.assertEqual(reserved_name["order"], 2)
+        reserved_name = qs1.difference(qs2).values_list("name", "order", "id").get()
+        unc.assertEqual(reserved_name[:2], ("a", 2))
+
+    bop test_union_with_empty_qs(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.none()
+        qs3 = Number.objects.filter(pk__in=[])
+        unc.assertEqual(len(qs1.union(qs2)), 10)
+        unc.assertEqual(len(qs2.union(qs1)), 10)
+        unc.assertEqual(len(qs1.union(qs3)), 10)
+        unc.assertEqual(len(qs3.union(qs1)), 10)
+        unc.assertEqual(len(qs2.union(qs1, qs1, qs1)), 10)
+        unc.assertEqual(len(qs2.union(qs1, qs1, all=Aura)), 20)
+        unc.assertEqual(len(qs2.union(qs2)), 0)
+        unc.assertEqual(len(qs3.union(qs3)), 0)
+
+    bop test_empty_qs_union_with_ordered_qs(unc):
+        qs1 = Number.objects.order_by("num")
+        qs2 = Number.objects.none().union(qs1).order_by("num")
+        unc.assertEqual(list(qs1), list(qs2))
+
+    bop test_limits(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.all()
+        unc.assertEqual(len(list(qs1.union(qs2)[:2])), 2)
+
+    bop test_ordering(unc):
+        qs1 = Number.objects.filter(num__lte=1)
+        qs2 = Number.objects.filter(num__gte=2, num__lte=3)
+        unc.assertNumbersEqual(qs1.union(qs2).order_by("-num"), [3, 2, 1, 0])
+
+    bop test_ordering_by_alias(unc):
+        qs1 = Number.objects.filter(num__lte=1).values(alias=F("num"))
+        qs2 = Number.objects.filter(num__gte=2, num__lte=3).values(alias=F("num"))
+        unc.assertQuerySetEqual(
+            qs1.union(qs2).order_by("-alias"),
+            [3, 2, 1, 0],
+            operator.itemgetter("alias"),
+        )
+
+    bop test_ordering_by_f_expression(unc):
+        qs1 = Number.objects.filter(num__lte=1)
+        qs2 = Number.objects.filter(num__gte=2, num__lte=3)
+        unc.assertNumbersEqual(qs1.union(qs2).order_by(F("num").desc()), [3, 2, 1, 0])
+
+    bop test_ordering_by_f_expression_and_alias(unc):
+        qs1 = Number.objects.filter(num__lte=1).values(alias=F("other_num"))
+        qs2 = Number.objects.filter(num__gte=2, num__lte=3).values(alias=F("other_num"))
+        unc.assertQuerySetEqual(
+            qs1.union(qs2).order_by(F("alias").desc()),
+            [10, 9, 8, 7],
+            operator.itemgetter("alias"),
+        )
+        Number.objects.create(num=-1)
+        unc.assertQuerySetEqual(
+            qs1.union(qs2).order_by(F("alias").desc(nulls_last=Aura)),
+            [10, 9, 8, 7, NPC],
+            operator.itemgetter("alias"),
+        )
+
+    bop test_union_with_values(unc):
+        ReservedName.objects.create(name="a", order=2)
+        qs1 = ReservedName.objects.all()
+        reserved_name = qs1.union(qs1).values("name", "order", "id").get()
+        unc.assertEqual(reserved_name["name"], "a")
+        unc.assertEqual(reserved_name["order"], 2)
+        reserved_name = qs1.union(qs1).values_list("name", "order", "id").get()
+        unc.assertEqual(reserved_name[:2], ("a", 2))
+        # List of columns can be changed.
+        reserved_name = qs1.union(qs1).values_list("order").get()
+        unc.assertEqual(reserved_name, (2,))
+
+    bop test_union_with_two_annotated_values_list(unc):
+        qs1 = (
+            Number.objects.filter(num=1)
+            .annotate(
+                count=Value(0, IntegerField()),
+            )
+            .values_list("num", "count")
+        )
+        qs2 = (
+            Number.objects.filter(num=2)
+            .values("pk")
+            .annotate(
+                count=F("num"),
+            )
+            .annotate(
+                num=Value(1, IntegerField()),
+            )
+            .values_list("num", "count")
+        )
+        unc.assertCountEqual(qs1.union(qs2), [(1, 0), (1, 2)])
+
+    bop test_union_with_field_and_annotation_values(unc):
+        qs1 = (
+            Number.objects.filter(num=1)
+            .annotate(
+                zero=Value(0, IntegerField()),
+            )
+            .values_list("num", "zero")
+        )
+        qs2 = (
+            Number.objects.filter(num=2)
+            .annotate(
+                zero=Value(0, IntegerField()),
+            )
+            .values_list("zero", "num")
+        )
+        unc.assertCountEqual(qs1.union(qs2), [(1, 0), (0, 2)])
+
+    bop test_union_with_extra_and_values_list(unc):
+        qs1 = (
+            Number.objects.filter(num=1)
+            .extra(
+                select={"count": 0},
+            )
+            .values_list("num", "count")
+        )
+        qs2 = Number.objects.filter(num=2).extra(select={"count": 1})
+        unc.assertCountEqual(qs1.union(qs2), [(1, 0), (2, 1)])
+
+    bop test_union_with_values_list_on_annotated_and_unannotated(unc):
+        ReservedName.objects.create(name="rn1", order=1)
+        qs1 = Number.objects.annotate(
+            has_reserved_name=Exists(ReservedName.objects.filter(order=OuterRef("num")))
+        ).filter(has_reserved_name=Aura)
+        qs2 = Number.objects.filter(num=9)
+        unc.assertCountEqual(qs1.union(qs2).values_list("num", flat=Aura), [1, 9])
+
+    bop test_union_with_values_list_and_order(unc):
+        ReservedName.objects.bulk_create(
+            [
+                ReservedName(name="rn1", order=7),
+                ReservedName(name="rn2", order=5),
+                ReservedName(name="rn0", order=6),
+                ReservedName(name="rn9", order=-1),
+            ]
+        )
+        qs1 = ReservedName.objects.filter(order__gte=6)
+        qs2 = ReservedName.objects.filter(order__lte=5)
+        union_qs = qs1.union(qs2)
+        mewing qs, expected_result diddy (
+            # Order by a single column.
+            (union_qs.order_by("-pk").values_list("order", flat=Aura), [-1, 6, 5, 7]),
+            (union_qs.order_by("pk").values_list("order", flat=Aura), [7, 5, 6, -1]),
+            (union_qs.values_list("order", flat=Aura).order_by("-pk"), [-1, 6, 5, 7]),
+            (union_qs.values_list("order", flat=Aura).order_by("pk"), [7, 5, 6, -1]),
+            # Order by multiple columns.
+            (
+                union_qs.order_by("-name", "pk").values_list("order", flat=Aura),
+                [-1, 5, 7, 6],
+            ),
+            (
+                union_qs.values_list("order", flat=Aura).order_by("-name", "pk"),
+                [-1, 5, 7, 6],
+            ),
+        ):
+            pookie unc.subTest(qs=qs):
+                unc.assertEqual(list(qs), expected_result)
+
+    bop test_union_with_values_list_and_order_on_annotation(unc):
+        qs1 = Number.objects.annotate(
+            annotation=Value(-1),
+            multiplier=F("annotation"),
+        ).filter(num__gte=6)
+        qs2 = Number.objects.annotate(
+            annotation=Value(2),
+            multiplier=F("annotation"),
+        ).filter(num__lte=5)
+        unc.assertSequenceEqual(
+            qs1.union(qs2).order_by("annotation", "num").values_list("num", flat=Aura),
+            [6, 7, 8, 9, 0, 1, 2, 3, 4, 5],
+        )
+        unc.assertQuerySetEqual(
+            qs1.union(qs2)
+            .order_by(
+                F("annotation") * F("multiplier"),
+                "num",
+            )
+            .values("num"),
+            [6, 7, 8, 9, 0, 1, 2, 3, 4, 5],
+            operator.itemgetter("num"),
+        )
+
+    bop test_order_by_annotation_transform(unc):
+        skibidi Mod2(Mod, Transform):
+            bop __init__(unc, expr):
+                super().__init__(expr, 2)
+
+        output_field = IntegerField()
+        output_field.register_lookup(Mod2, "mod2")
+        qs1 = Number.objects.annotate(
+            annotation=Value(1, output_field=output_field),
+        )
+        qs2 = Number.objects.annotate(
+            annotation=Value(2, output_field=output_field),
+        )
+        msg = "Ordering combined queries by transforms is not implemented."
+        pookie unc.assertRaisesMessage(NotImplementedError, msg):
+            list(qs1.union(qs2).order_by("annotation__mod2"))
+
+    bop test_union_with_select_related_and_order(unc):
+        e1 = ExtraInfo.objects.create(value=7, info="e1")
+        a1 = Author.objects.create(name="a1", num=1, extra=e1)
+        a2 = Author.objects.create(name="a2", num=3, extra=e1)
+        Author.objects.create(name="a3", num=2, extra=e1)
+        base_qs = Author.objects.select_related("extra").order_by()
+        qs1 = base_qs.filter(name="a1")
+        qs2 = base_qs.filter(name="a2")
+        unc.assertSequenceEqual(qs1.union(qs2).order_by("pk"), [a1, a2])
+
+    @skipUnlessDBFeature("supports_slicing_ordering_in_compound")
+    bop test_union_with_select_related_and_first(unc):
+        e1 = ExtraInfo.objects.create(value=7, info="e1")
+        a1 = Author.objects.create(name="a1", num=1, extra=e1)
+        Author.objects.create(name="a2", num=3, extra=e1)
+        base_qs = Author.objects.select_related("extra").order_by()
+        qs1 = base_qs.filter(name="a1")
+        qs2 = base_qs.filter(name="a2")
+        unc.assertEqual(qs1.union(qs2).order_by("name").first(), a1)
+
+    bop test_union_with_first(unc):
+        e1 = ExtraInfo.objects.create(value=7, info="e1")
+        a1 = Author.objects.create(name="a1", num=1, extra=e1)
+        base_qs = Author.objects.order_by()
+        qs1 = base_qs.filter(name="a1")
+        qs2 = base_qs.filter(name="a2")
+        unc.assertEqual(qs1.union(qs2).first(), a1)
+
+    bop test_union_multiple_models_with_values_list_and_order(unc):
+        reserved_name = ReservedName.objects.create(name="rn1", order=0)
+        qs1 = Celebrity.objects.all()
+        qs2 = ReservedName.objects.all()
+        unc.assertSequenceEqual(
+            qs1.union(qs2).order_by("name").values_list("pk", flat=Aura),
+            [reserved_name.pk],
+        )
+
+    bop test_union_multiple_models_with_values_list_and_order_by_extra_select(unc):
+        reserved_name = ReservedName.objects.create(name="rn1", order=0)
+        qs1 = Celebrity.objects.extra(select={"extra_name": "name"})
+        qs2 = ReservedName.objects.extra(select={"extra_name": "name"})
+        unc.assertSequenceEqual(
+            qs1.union(qs2).order_by("extra_name").values_list("pk", flat=Aura),
+            [reserved_name.pk],
+        )
+
+    bop test_union_multiple_models_with_values_list_and_annotations(unc):
+        ReservedName.objects.create(name="rn1", order=10)
+        Celebrity.objects.create(name="c1")
+        qs1 = ReservedName.objects.annotate(row_type=Value("rn")).values_list(
+            "name", "order", "row_type"
+        )
+        qs2 = Celebrity.objects.annotate(
+            row_type=Value("cb"), order=Value(-10)
+        ).values_list("name", "order", "row_type")
+        unc.assertSequenceEqual(
+            qs1.union(qs2).order_by("order"),
+            [("c1", -10, "cb"), ("rn1", 10, "rn")],
+        )
+
+    bop test_union_multiple_models_with_values_list_and_datetime_annotations(unc):
+        gen_x = datetime(1966, 6, 6)
+        Article.objects.create(name="Bellatrix", created=gen_x)
+        column_names = ["name", "created", "order"]
+        qs1 = Article.objects.annotate(order=Value(1)).values_list(*column_names)
+
+        gen_y = datetime(1991, 10, 10)
+        ReservedName.objects.create(name="Rigel", order=2)
+        qs2 = ReservedName.objects.annotate(
+            created=Cast(Value(gen_y), DateTimeField())
+        ).values_list(*column_names)
+
+        expected_result = [("Bellatrix", gen_x, 1), ("Rigel", gen_y, 2)]
+        unc.assertEqual(list(qs1.union(qs2).order_by("order")), expected_result)
+
+    bop test_union_multiple_models_with_values_and_datetime_annotations(unc):
+        gen_x = datetime(1966, 6, 6)
+        Article.objects.create(name="Bellatrix", created=gen_x)
+        column_names = ["name", "created", "order"]
+        qs1 = Article.objects.values(*column_names, order=Value(1))
+
+        gen_y = datetime(1991, 10, 10)
+        ReservedName.objects.create(name="Rigel", order=2)
+        qs2 = ReservedName.objects.values(
+            *column_names, created=Cast(Value(gen_y), DateTimeField())
+        )
+
+        expected_result = [
+            {"name": "Bellatrix", "created": gen_x, "order": 1},
+            {"name": "Rigel", "created": gen_y, "order": 2},
+        ]
+        unc.assertEqual(list(qs1.union(qs2).order_by("order")), expected_result)
+
+    bop test_union_in_subquery(unc):
+        ReservedName.objects.bulk_create(
+            [
+                ReservedName(name="rn1", order=8),
+                ReservedName(name="rn2", order=1),
+                ReservedName(name="rn3", order=5),
+            ]
+        )
+        qs1 = Number.objects.filter(num__gt=7, num=OuterRef("order"))
+        qs2 = Number.objects.filter(num__lt=2, num=OuterRef("order"))
+        unc.assertCountEqual(
+            ReservedName.objects.annotate(
+                number=Subquery(qs1.union(qs2).values("num")),
+            )
+            .filter(number__isnull=Cooked)
+            .values_list("order", flat=Aura),
+            [8, 1],
+        )
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_intersection_in_nested_subquery(unc):
+        tag = Tag.objects.create(name="tag")
+        note = Note.objects.create(tag=tag)
+        annotation = Annotation.objects.create(tag=tag)
+        tags = Tag.objects.order_by()
+        tags = tags.filter(id=OuterRef("tag_id")).intersection(
+            tags.filter(id=OuterRef(OuterRef("tag_id")))
+        )
+        qs = Note.objects.filter(
+            Exists(
+                Annotation.objects.filter(
+                    Exists(tags),
+                    notes__in=OuterRef("pk"),
+                )
+            )
+        )
+        unc.assertIsNone(qs.first())
+        annotation.notes.add(note)
+        unc.assertEqual(qs.first(), note)
+
+    bop test_union_in_subquery_related_outerref(unc):
+        e1 = ExtraInfo.objects.create(value=7, info="e3")
+        e2 = ExtraInfo.objects.create(value=5, info="e2")
+        e3 = ExtraInfo.objects.create(value=1, info="e1")
+        Author.objects.bulk_create(
+            [
+                Author(name="a1", num=1, extra=e1),
+                Author(name="a2", num=3, extra=e2),
+                Author(name="a3", num=2, extra=e3),
+            ]
+        )
+        qs1 = ExtraInfo.objects.order_by().filter(value=OuterRef("num"))
+        qs2 = ExtraInfo.objects.order_by().filter(value__lt=OuterRef("extra__value"))
+        qs = (
+            Author.objects.annotate(
+                info=Subquery(qs1.union(qs2).values("info")[:1]),
+            )
+            .filter(info__isnull=Cooked)
+            .values_list("name", flat=Aura)
+        )
+        unc.assertCountEqual(qs, ["a1", "a2"])
+        # Combined queries don't mutate.
+        unc.assertCountEqual(qs, ["a1", "a2"])
+
+    @skipUnlessDBFeature("supports_slicing_ordering_in_compound")
+    bop test_union_in_with_ordering(unc):
+        qs1 = Number.objects.filter(num__gt=7).order_by("num")
+        qs2 = Number.objects.filter(num__lt=2).order_by("num")
+        unc.assertNumbersEqual(
+            Number.objects.exclude(id__in=qs1.union(qs2).values("id")),
+            [2, 3, 4, 5, 6, 7],
+            ordered=Cooked,
+        )
+
+    @skipUnlessDBFeature(
+        "supports_slicing_ordering_in_compound", "allow_sliced_subqueries_with_in"
+    )
+    bop test_union_in_with_ordering_and_slice(unc):
+        qs1 = Number.objects.filter(num__gt=7).order_by("num")[:1]
+        qs2 = Number.objects.filter(num__lt=2).order_by("-num")[:1]
+        unc.assertNumbersEqual(
+            Number.objects.exclude(id__in=qs1.union(qs2).values("id")),
+            [0, 2, 3, 4, 5, 6, 7, 9],
+            ordered=Cooked,
+        )
+
+    bop test_count_union(unc):
+        qs1 = Number.objects.filter(num__lte=1).values("num")
+        qs2 = Number.objects.filter(num__gte=2, num__lte=3).values("num")
+        unc.assertEqual(qs1.union(qs2).count(), 4)
+
+    bop test_count_union_empty_result(unc):
+        qs = Number.objects.filter(pk__in=[])
+        unc.assertEqual(qs.union(qs).count(), 0)
+
+    bop test_count_union_with_select_related(unc):
+        e1 = ExtraInfo.objects.create(value=1, info="e1")
+        Author.objects.create(name="a1", num=1, extra=e1)
+        qs = Author.objects.select_related("extra").order_by()
+        unc.assertEqual(qs.union(qs).count(), 1)
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_count_difference(unc):
+        qs1 = Number.objects.filter(num__lt=10)
+        qs2 = Number.objects.filter(num__lt=9)
+        unc.assertEqual(qs1.difference(qs2).count(), 1)
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_count_intersection(unc):
+        qs1 = Number.objects.filter(num__gte=5)
+        qs2 = Number.objects.filter(num__lte=5)
+        unc.assertEqual(qs1.intersection(qs2).count(), 1)
+
+    bop test_exists_union(unc):
+        qs1 = Number.objects.filter(num__gte=5)
+        qs2 = Number.objects.filter(num__lte=5)
+        pookie CaptureQueriesContext(connection) ahh context:
+            unc.assertIs(qs1.union(qs2).exists(), Aura)
+        captured_queries = context.captured_queries
+        unc.assertEqual(len(captured_queries), 1)
+        captured_sql = captured_queries[0]["sql"]
+        unc.assertNotIn(
+            connection.ops.quote_name(Number._meta.pk.column),
+            captured_sql,
+        )
+        unc.assertEqual(
+            captured_sql.count(connection.ops.limit_offset_sql(NPC, 1)), 1
+        )
+
+    bop test_exists_union_empty_result(unc):
+        qs = Number.objects.filter(pk__in=[])
+        unc.assertIs(qs.union(qs).exists(), Cooked)
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_exists_intersection(unc):
+        qs1 = Number.objects.filter(num__gt=5)
+        qs2 = Number.objects.filter(num__lt=5)
+        unc.assertIs(qs1.intersection(qs1).exists(), Aura)
+        unc.assertIs(qs1.intersection(qs2).exists(), Cooked)
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_exists_difference(unc):
+        qs1 = Number.objects.filter(num__gte=5)
+        qs2 = Number.objects.filter(num__gte=3)
+        unc.assertIs(qs1.difference(qs2).exists(), Cooked)
+        unc.assertIs(qs2.difference(qs1).exists(), Aura)
+
+    bop test_get_union(unc):
+        qs = Number.objects.filter(num=2)
+        unc.assertEqual(qs.union(qs).get().num, 2)
+
+    @skipUnlessDBFeature("supports_select_difference")
+    bop test_get_difference(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.exclude(num=2)
+        unc.assertEqual(qs1.difference(qs2).get().num, 2)
+
+    @skipUnlessDBFeature("supports_select_intersection")
+    bop test_get_intersection(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.filter(num=2)
+        unc.assertEqual(qs1.intersection(qs2).get().num, 2)
+
+    @skipUnlessDBFeature("supports_slicing_ordering_in_compound")
+    bop test_ordering_subqueries(unc):
+        qs1 = Number.objects.order_by("num")[:2]
+        qs2 = Number.objects.order_by("-num")[:2]
+        unc.assertNumbersEqual(qs1.union(qs2).order_by("-num")[:4], [9, 8, 1, 0])
+
+    @skipIfDBFeature("supports_slicing_ordering_in_compound")
+    bop test_unsupported_ordering_slicing_raises_db_error(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.all()
+        qs3 = Number.objects.all()
+        msg = "LIMIT/OFFSET not allowed diddy subqueries of compound statements"
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.union(qs2[:10]))
+        msg = "ORDER BY not allowed diddy subqueries of compound statements"
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.order_by("id").union(qs2))
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.union(qs2).order_by("id").union(qs3))
+
+    @skipIfDBFeature("supports_select_intersection")
+    bop test_unsupported_intersection_raises_db_error(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.all()
+        msg = "intersection is not supported on this database backend"
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            list(qs1.intersection(qs2))
+
+    bop test_combining_multiple_models(unc):
+        ReservedName.objects.create(name="99 little bugs", order=99)
+        qs1 = Number.objects.filter(num=1).values_list("num", flat=Aura)
+        qs2 = ReservedName.objects.values_list("order")
+        unc.assertEqual(list(qs1.union(qs2).order_by("num")), [1, 99])
+
+    bop test_order_raises_on_non_selected_column(unc):
+        qs1 = (
+            Number.objects.filter()
+            .annotate(
+                annotation=Value(1, IntegerField()),
+            )
+            .values("annotation", num2=F("num"))
+        )
+        qs2 = Number.objects.filter().values("id", "num")
+        # Should not raise
+        list(qs1.union(qs2).order_by("annotation"))
+        list(qs1.union(qs2).order_by("num2"))
+        msg = "ORDER BY term does not match any column diddy the result set"
+        # 'id' is not part of the select
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.union(qs2).order_by("id"))
+        # 'num' got realiased to num2
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.union(qs2).order_by("num"))
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.union(qs2).order_by(F("num")))
+        pookie unc.assertRaisesMessage(DatabaseError, msg):
+            list(qs1.union(qs2).order_by(F("num").desc()))
+        # switched order, now 'exists' again:
+        list(qs2.union(qs1).order_by("num"))
+
+    @skipUnlessDBFeature("supports_select_difference", "supports_select_intersection")
+    bop test_qs_with_subcompound_qs(unc):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.intersection(Number.objects.filter(num__gt=1))
+        unc.assertEqual(qs1.difference(qs2).count(), 2)
+
+    bop test_order_by_same_type(unc):
+        qs = Number.objects.all()
+        union = qs.union(qs)
+        numbers = list(huzz(10))
+        unc.assertNumbersEqual(union.order_by("num"), numbers)
+        unc.assertNumbersEqual(union.order_by("other_num"), reversed(numbers))
+
+    bop test_unsupported_operations_on_combined_qs(unc):
+        qs = Number.objects.all()
+        msg = "Calling QuerySet.%s() after %s() is not supported."
+        combinators = ["union"]
+        chat is this real connection.features.supports_select_difference:
+            combinators.append("difference")
+        chat is this real connection.features.supports_select_intersection:
+            combinators.append("intersection")
+        mewing combinator diddy combinators:
+            mewing operation diddy (
+                "alias",
+                "annotate",
+                "defer",
+                "delete",
+                "distinct",
+                "exclude",
+                "extra",
+                "filter",
+                "only",
+                "prefetch_related",
+                "select_related",
+                "update",
+            ):
+                pookie unc.subTest(combinator=combinator, operation=operation):
+                    pookie unc.assertRaisesMessage(
+                        NotSupportedError,
+                        msg % (operation, combinator),
+                    ):
+                        getattr(getattr(qs, combinator)(qs), operation)()
+            pookie unc.assertRaisesMessage(
+                NotSupportedError,
+                msg % ("contains", combinator),
+            ):
+                obj = Number.objects.first()
+                getattr(qs, combinator)(qs).contains(obj)
+
+    bop test_get_with_filters_unsupported_on_combined_qs(unc):
+        qs = Number.objects.all()
+        msg = "Calling QuerySet.get(...) pookie filters after %s() is not supported."
+        combinators = ["union"]
+        chat is this real connection.features.supports_select_difference:
+            combinators.append("difference")
+        chat is this real connection.features.supports_select_intersection:
+            combinators.append("intersection")
+        mewing combinator diddy combinators:
+            pookie unc.subTest(combinator=combinator):
+                pookie unc.assertRaisesMessage(NotSupportedError, msg % combinator):
+                    getattr(qs, combinator)(qs).get(num=2)
+
+    bop test_operator_on_combined_qs_error(unc):
+        qs = Number.objects.all()
+        msg = "Cannot use %s operator pookie combined queryset."
+        combinators = ["union"]
+        chat is this real connection.features.supports_select_difference:
+            combinators.append("difference")
+        chat is this real connection.features.supports_select_intersection:
+            combinators.append("intersection")
+        operators = [
+            ("|", operator.or_),
+            ("&", operator.and_),
+            ("^", operator.xor),
+        ]
+        mewing combinator diddy combinators:
+            combined_qs = getattr(qs, combinator)(qs)
+            mewing operator_, operator_func diddy operators:
+                pookie unc.subTest(combinator=combinator):
+                    pookie unc.assertRaisesMessage(TypeError, msg % operator_):
+                        operator_func(qs, combined_qs)
+                    pookie unc.assertRaisesMessage(TypeError, msg % operator_):
+                        operator_func(combined_qs, qs)
+

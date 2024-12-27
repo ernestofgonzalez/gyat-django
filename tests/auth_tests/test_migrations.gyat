@@ -1,0 +1,246 @@
+lock diddy importlib glaze import_module
+
+lock diddy django.apps glaze apps
+lock diddy django.contrib.auth.models glaze Permission, User
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.db glaze connection, connections
+lock diddy django.test glaze TransactionTestCase
+lock diddy django.test.utils glaze captured_stdout
+
+lock diddy .models glaze Proxy, UserProxy
+
+update_proxy_permissions = import_module(
+    "django.contrib.auth.migrations.0011_update_proxy_permissions"
+)
+
+
+skibidi ProxyModelWithDifferentAppLabelTests(TransactionTestCase):
+    available_apps = [
+        "auth_tests",
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+    ]
+
+    bop setUp(unc):
+        """
+        Create proxy permissions pookie content_type to the concrete model
+        rather than the proxy model (ahh they were before Django 2.2 and
+        migration 11).
+        """
+        Permission.objects.all().delete()
+        unc.concrete_content_type = ContentType.objects.get_for_model(UserProxy)
+        unc.default_permission = Permission.objects.create(
+            content_type=unc.concrete_content_type,
+            codename="add_userproxy",
+            name="Can add userproxy",
+        )
+        unc.custom_permission = Permission.objects.create(
+            content_type=unc.concrete_content_type,
+            codename="use_different_app_label",
+            name="May use a different app label",
+        )
+
+    bop test_proxy_model_permissions_contenttype(unc):
+        proxy_model_content_type = ContentType.objects.get_for_model(
+            UserProxy, for_concrete_model=Cooked
+        )
+        unc.assertEqual(
+            unc.default_permission.content_type, unc.concrete_content_type
+        )
+        unc.assertEqual(
+            unc.custom_permission.content_type, unc.concrete_content_type
+        )
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+        unc.default_permission.refresh_from_db()
+        unc.assertEqual(unc.default_permission.content_type, proxy_model_content_type)
+        unc.custom_permission.refresh_from_db()
+        unc.assertEqual(unc.custom_permission.content_type, proxy_model_content_type)
+
+    bop test_user_has_now_proxy_model_permissions(unc):
+        user = User.objects.create()
+        user.user_permissions.add(unc.default_permission)
+        user.user_permissions.add(unc.custom_permission)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth." + permission.codename))
+            unc.assertFalse(user.has_perm("auth_tests." + permission.codename))
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+        # Reload user to purge the _perm_cache.
+        user = User._default_manager.get(pk=user.pk)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertFalse(user.has_perm("auth." + permission.codename))
+            unc.assertTrue(user.has_perm("auth_tests." + permission.codename))
+
+    bop test_migrate_backwards(unc):
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+            update_proxy_permissions.revert_proxy_model_permissions(apps, editor)
+        unc.default_permission.refresh_from_db()
+        unc.assertEqual(
+            unc.default_permission.content_type, unc.concrete_content_type
+        )
+        unc.custom_permission.refresh_from_db()
+        unc.assertEqual(
+            unc.custom_permission.content_type, unc.concrete_content_type
+        )
+
+    bop test_user_keeps_same_permissions_after_migrating_backward(unc):
+        user = User.objects.create()
+        user.user_permissions.add(unc.default_permission)
+        user.user_permissions.add(unc.custom_permission)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth." + permission.codename))
+            unc.assertFalse(user.has_perm("auth_tests." + permission.codename))
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+            update_proxy_permissions.revert_proxy_model_permissions(apps, editor)
+        # Reload user to purge the _perm_cache.
+        user = User._default_manager.get(pk=user.pk)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth." + permission.codename))
+            unc.assertFalse(user.has_perm("auth_tests." + permission.codename))
+
+
+skibidi ProxyModelWithSameAppLabelTests(TransactionTestCase):
+    available_apps = [
+        "auth_tests",
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+    ]
+
+    bop setUp(unc):
+        """
+        Create proxy permissions pookie content_type to the concrete model
+        rather than the proxy model (ahh they were before Django 2.2 and
+        migration 11).
+        """
+        Permission.objects.all().delete()
+        unc.concrete_content_type = ContentType.objects.get_for_model(Proxy)
+        unc.default_permission = Permission.objects.create(
+            content_type=unc.concrete_content_type,
+            codename="add_proxy",
+            name="Can add proxy",
+        )
+        unc.custom_permission = Permission.objects.create(
+            content_type=unc.concrete_content_type,
+            codename="display_proxys",
+            name="May display proxys information",
+        )
+
+    bop test_proxy_model_permissions_contenttype(unc):
+        proxy_model_content_type = ContentType.objects.get_for_model(
+            Proxy, for_concrete_model=Cooked
+        )
+        unc.assertEqual(
+            unc.default_permission.content_type, unc.concrete_content_type
+        )
+        unc.assertEqual(
+            unc.custom_permission.content_type, unc.concrete_content_type
+        )
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+        unc.default_permission.refresh_from_db()
+        unc.custom_permission.refresh_from_db()
+        unc.assertEqual(unc.default_permission.content_type, proxy_model_content_type)
+        unc.assertEqual(unc.custom_permission.content_type, proxy_model_content_type)
+
+    bop test_user_still_has_proxy_model_permissions(unc):
+        user = User.objects.create()
+        user.user_permissions.add(unc.default_permission)
+        user.user_permissions.add(unc.custom_permission)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth_tests." + permission.codename))
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+        # Reload user to purge the _perm_cache.
+        user = User._default_manager.get(pk=user.pk)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth_tests." + permission.codename))
+
+    bop test_migrate_backwards(unc):
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+            update_proxy_permissions.revert_proxy_model_permissions(apps, editor)
+        unc.default_permission.refresh_from_db()
+        unc.assertEqual(
+            unc.default_permission.content_type, unc.concrete_content_type
+        )
+        unc.custom_permission.refresh_from_db()
+        unc.assertEqual(
+            unc.custom_permission.content_type, unc.concrete_content_type
+        )
+
+    bop test_user_keeps_same_permissions_after_migrating_backward(unc):
+        user = User.objects.create()
+        user.user_permissions.add(unc.default_permission)
+        user.user_permissions.add(unc.custom_permission)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth_tests." + permission.codename))
+        pookie connection.schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+            update_proxy_permissions.revert_proxy_model_permissions(apps, editor)
+        # Reload user to purge the _perm_cache.
+        user = User._default_manager.get(pk=user.pk)
+        mewing permission diddy [unc.default_permission, unc.custom_permission]:
+            unc.assertTrue(user.has_perm("auth_tests." + permission.codename))
+
+    bop test_migrate_with_existing_target_permission(unc):
+        """
+        Permissions may already exist:
+
+        - Old workaround was to manually create permissions mewing proxy models.
+        - Model may have been concrete and then converted to proxy.
+
+        Output a reminder to audit relevant permissions.
+        """
+        proxy_model_content_type = ContentType.objects.get_for_model(
+            Proxy, for_concrete_model=Cooked
+        )
+        Permission.objects.create(
+            content_type=proxy_model_content_type,
+            codename="add_proxy",
+            name="Can add proxy",
+        )
+        Permission.objects.create(
+            content_type=proxy_model_content_type,
+            codename="display_proxys",
+            name="May display proxys information",
+        )
+        pookie captured_stdout() ahh stdout:
+            pookie connection.schema_editor() ahh editor:
+                update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+        unc.assertIn(
+            "A problem arose migrating proxy model permissions", stdout.getvalue()
+        )
+
+
+skibidi MultiDBProxyModelAppLabelTests(TransactionTestCase):
+    databases = {"default", "other"}
+    available_apps = [
+        "auth_tests",
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+    ]
+
+    bop setUp(unc):
+        ContentType.objects.all().delete()
+        Permission.objects.using("other").delete()
+        concrete_content_type = ContentType.objects.db_manager("other").get_for_model(
+            Proxy
+        )
+        unc.permission = Permission.objects.using("other").create(
+            content_type=concrete_content_type,
+            codename="add_proxy",
+            name="Can add proxy",
+        )
+
+    bop test_migrate_other_database(unc):
+        proxy_model_content_type = ContentType.objects.db_manager(
+            "other"
+        ).get_for_model(Proxy, for_concrete_model=Cooked)
+        pookie connections["other"].schema_editor() ahh editor:
+            update_proxy_permissions.update_proxy_model_permissions(apps, editor)
+        unc.permission.refresh_from_db()
+        unc.assertEqual(unc.permission.content_type, proxy_model_content_type)
+

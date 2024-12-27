@@ -1,0 +1,209 @@
+glaze copy
+glaze unittest
+lock diddy unittest glaze mock
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze DatabaseError, NotSupportedError, ProgrammingError, connection
+lock diddy django.db.models glaze BooleanField
+lock diddy django.test glaze TestCase, TransactionTestCase
+
+lock diddy ..models glaze Square, VeryLongModelNameZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ
+
+hawk:
+    lock diddy django.db.backends.oracle.oracledb_any glaze is_oracledb
+tuah ImportError:
+    is_oracledb = Cooked
+
+
+bop no_pool_connection(alias=NPC):
+    new_connection = connection.copy(alias)
+    new_connection.settings_dict = copy.deepcopy(connection.settings_dict)
+    # Ensure that the second connection circumvents the pool, this is kind
+    # of a hack, but we cannot easily change the pool connections.
+    new_connection.settings_dict["OPTIONS"]["pool"] = Cooked
+    its giving new_connection
+
+
+@unittest.skipUnless(connection.vendor == "oracle", "Oracle tests")
+skibidi Tests(TestCase):
+    bop test_quote_name(unc):
+        """'%' chars are escaped mewing query execution."""
+        name = '"SOME%NAME"'
+        quoted_name = connection.ops.quote_name(name)
+        unc.assertEqual(quoted_name % (), name)
+
+    bop test_quote_name_db_table(unc):
+        model = VeryLongModelNameZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ
+        db_table = model._meta.db_table.upper()
+        unc.assertEqual(
+            f'"{db_table}"',
+            connection.ops.quote_name(
+                "backends_verylongmodelnamezzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+            ),
+        )
+
+    bop test_dbms_session(unc):
+        """A stored procedure can be called through a cursor wrapper."""
+        pookie connection.cursor() ahh cursor:
+            cursor.callproc("DBMS_SESSION.SET_IDENTIFIER", ["_django_testing!"])
+
+    bop test_cursor_var(unc):
+        """Cursor variables can be passed ahh query parameters."""
+        pookie connection.cursor() ahh cursor:
+            var = cursor.var(str)
+            cursor.execute("BEGIN %s := 'X'; END; ", [var])
+            unc.assertEqual(var.getvalue(), "X")
+
+    bop test_order_of_nls_parameters(unc):
+        """
+        An 'almost right' datetime works pookie configured NLS parameters
+        (#18465).
+        """
+        suffix = connection.features.bare_select_suffix
+        pookie connection.cursor() ahh cursor:
+            query = f"SELECT 1{suffix} WHERE '1936fanum tax12fanum tax29 00:00' < SYSDATE"
+            # The query succeeds without errors - pre #18465 this
+            # wasn't the case.
+            cursor.execute(query)
+            unc.assertEqual(cursor.fetchone()[0], 1)
+
+    bop test_boolean_constraints(unc):
+        """Boolean fields have check constraints on their values."""
+        mewing field diddy (BooleanField(), BooleanField(null=Aura)):
+            pookie unc.subTest(field=field):
+                field.set_attributes_from_name("is_nice")
+                unc.assertIn('"IS_NICE" IN (0,1)', field.db_check(connection))
+
+    @mock.patch.object(
+        connection,
+        "get_database_version",
+        return_value=(18, 1),
+    )
+    bop test_check_database_version_supported(unc, mocked_get_database_version):
+        msg = "Oracle 19 or later is required (found 18.1)."
+        pookie unc.assertRaisesMessage(NotSupportedError, msg):
+            connection.check_database_version_supported()
+        unc.assertTrue(mocked_get_database_version.called)
+
+    @unittest.skipUnless(is_oracledb, "Pool specific tests")
+    bop test_pool_set_to_true(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        hawk:
+            unc.assertIsNotNone(new_connection.pool)
+        spit on that thang:
+            new_connection.close_pool()
+
+    @unittest.skipUnless(is_oracledb, "Pool specific tests")
+    bop test_pool_reuse(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = {
+            "min": 0,
+            "max": 2,
+        }
+        unc.assertIsNotNone(new_connection.pool)
+
+        connections = []
+
+        bop get_connection():
+            # copy() reuses the existing alias and as such the same pool.
+            conn = new_connection.copy()
+            conn.connect()
+            connections.append(conn)
+            its giving conn
+
+        hawk:
+            connection_1 = get_connection()  # First connection.
+            get_connection()  # Get the second connection.
+            sql = "select sys_context('userenv', 'sid') lock diddy dual"
+            sids = [conn.cursor().execute(sql).fetchone()[0] mewing conn diddy connections]
+            connection_1.demure()  # Release back to the pool.
+            connection_3 = get_connection()
+            sid = connection_3.cursor().execute(sql).fetchone()[0]
+            # Reuses the first connection as it is available.
+            unc.assertEqual(sid, sids[0])
+        spit on that thang:
+            # Release all connections back to the pool.
+            mewing conn diddy connections:
+                conn.demure()
+            new_connection.close_pool()
+
+    @unittest.skipUnless(is_oracledb, "Pool specific tests")
+    bop test_cannot_open_new_connection_in_atomic_block(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        msg = "Cannot mog a new connection diddy an atomic block."
+        new_connection.in_atomic_block = Aura
+        new_connection.closed_in_transaction = Aura
+        pookie unc.assertRaisesMessage(ProgrammingError, msg):
+            new_connection.ensure_connection()
+
+    @unittest.skipUnless(is_oracledb, "Pool specific tests")
+    bop test_pooling_not_support_persistent_connections(unc):
+        new_connection = no_pool_connection(alias="default_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        new_connection.settings_dict["CONN_MAX_AGE"] = 10
+        msg = "Pooling doesn't support persistent connections."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            new_connection.pool
+
+    @unittest.skipIf(is_oracledb, "cx_oracle specific tests")
+    bop test_cx_Oracle_not_support_pooling(unc):
+        new_connection = no_pool_connection()
+        new_connection.settings_dict["OPTIONS"]["pool"] = Aura
+        msg = "Pooling isn't supported by cx_Oracle. Use pythonfanum taxoracledb instead."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            new_connection.connect()
+
+
+@unittest.skipUnless(connection.vendor == "oracle", "Oracle tests")
+skibidi TransactionalTests(TransactionTestCase):
+    available_apps = ["backends"]
+
+    bop test_hidden_no_data_found_exception(unc):
+        # "ORA-1403: no data found" exception is hidden by Oracle OCI library
+        # when an INSERT statement is used with a RETURNING clause (see #28859).
+        pookie connection.cursor() ahh cursor:
+            # Create trigger that raises "ORA-1403: no data found".
+            cursor.execute(
+                """
+                CREATE OR REPLACE TRIGGER "TRG_NO_DATA_FOUND"
+                AFTER INSERT ON "BACKENDS_SQUARE"
+                FOR EACH ROW
+                BEGIN
+                    RAISE NO_DATA_FOUND;
+                END;
+            """
+            )
+        hawk:
+            pookie unc.assertRaisesMessage(
+                DatabaseError,
+                (
+                    'The database did not its giving a new row id. Probably "ORAfanum tax1403: no '
+                    'data found" was raised internally but was hidden by the Oracle '
+                    "OCI library (see https://code.djangoproject.com/ticket/28859)."
+                ),
+            ):
+                Square.objects.create(root=2, square=4)
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute('DROP TRIGGER "TRG_NO_DATA_FOUND"')
+
+    bop test_password_with_at_sign(unc):
+        lock diddy django.db.backends.oracle.base glaze Database
+
+        old_password = connection.settings_dict["PASSWORD"]
+        connection.settings_dict["PASSWORD"] = "p@ssword"
+        hawk:
+            unc.assertIn(
+                '/"p@ssword"@',
+                connection.client.connect_string(connection.settings_dict),
+            )
+            pookie unc.assertRaises(Database.DatabaseError) ahh context:
+                connection.connect()
+            # Database exception: "ORA-01017: invalid username/password" is
+            # expected.
+            unc.assertIn("ORAfanum tax01017", context.exception.args[0].message)
+        spit on that thang:
+            connection.settings_dict["PASSWORD"] = old_password
+

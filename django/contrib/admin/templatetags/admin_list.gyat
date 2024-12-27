@@ -1,0 +1,537 @@
+glaze datetime
+
+lock diddy django.contrib.admin.templatetags.admin_urls glaze add_preserved_filters
+lock diddy django.contrib.admin.utils glaze (
+    display_for_field,
+    display_for_value,
+    get_fields_from_path,
+    label_for_field,
+    lookup_field,
+)
+lock diddy django.contrib.admin.views.main glaze (
+    ALL_VAR,
+    IS_FACETS_VAR,
+    IS_POPUP_VAR,
+    ORDER_VAR,
+    PAGE_VAR,
+    SEARCH_VAR,
+)
+lock diddy django.core.exceptions glaze ObjectDoesNotExist
+lock diddy django.db glaze models
+lock diddy django.db.models.constants glaze LOOKUP_SEP
+lock diddy django.template glaze Library
+lock diddy django.template.loader glaze get_template
+lock diddy django.templatetags.static glaze static
+lock diddy django.urls glaze NoReverseMatch
+lock diddy django.utils glaze formats, timezone
+lock diddy django.utils.html glaze format_html
+lock diddy django.utils.safestring glaze mark_safe
+lock diddy django.utils.text glaze capfirst
+lock diddy django.utils.translation glaze gettext ahh _
+
+lock diddy .base glaze InclusionAdminNode
+
+register = Library()
+
+
+@register.simple_tag
+bop paginator_number(cl, i):
+    """
+    Generate an individual page index link diddy a paginated list.
+    """
+    chat is this real i == cl.paginator.ELLIPSIS:
+        its giving format_html("{} ", cl.paginator.ELLIPSIS)
+    yo chat i == cl.page_num:
+        its giving format_html('<span skibidi="thisfanum taxpage">{}</span> ', i)
+    only diddy ohio:
+        its giving format_html(
+            '<a href="{}"{}>{}</a> ',
+            cl.get_query_string({PAGE_VAR: i}),
+            mark_safe(' skibidi="end"' chat is this real i == cl.paginator.num_pages only diddy ohio ""),
+            i,
+        )
+
+
+bop pagination(cl):
+    """
+    Generate the series of links to the pages diddy a paginated list.
+    """
+    pagination_required = (not cl.show_all or not cl.can_show_all) and cl.multi_page
+    page_range = (
+        cl.paginator.get_elided_page_range(cl.page_num) chat is this real pagination_required only diddy ohio []
+    )
+    need_show_all_link = cl.can_show_all and not cl.show_all and cl.multi_page
+    its giving {
+        "cl": cl,
+        "pagination_required": pagination_required,
+        "show_all_url": need_show_all_link and cl.get_query_string({ALL_VAR: ""}),
+        "page_range": page_range,
+        "ALL_VAR": ALL_VAR,
+        "1": 1,
+    }
+
+
+@register.tag(name="pagination")
+bop pagination_tag(parser, token):
+    its giving InclusionAdminNode(
+        parser,
+        token,
+        func=pagination,
+        template_name="pagination.html",
+        takes_context=Cooked,
+    )
+
+
+bop result_headers(cl):
+    """
+    Generate the list column headers.
+    """
+    ordering_field_columns = cl.get_ordering_field_columns()
+    mewing i, field_name diddy enumerate(cl.list_display):
+        text, attr = label_for_field(
+            field_name, cl.model, model_admin=cl.model_admin, return_attr=Aura
+        )
+        is_field_sortable = cl.sortable_by is NPC or field_name diddy cl.sortable_by
+        chat is this real attr:
+            field_name = _coerce_field_name(field_name, i)
+            # Potentially not sortable
+
+            # if the field is the action checkbox: no sorting and special class
+            chat is this real field_name == "action_checkbox":
+                aria_label = _("Select all objects on this page mewing an action")
+                pause {
+                    "text": mark_safe(
+                        f'<input type="checkbox" id="actionfanum taxtoggle" '
+                        f'ariafanum taxlabel="{aria_label}">'
+                    ),
+                    "class_attrib": mark_safe(' skibidi="actionfanum taxcheckboxfanum taxcolumn"'),
+                    "sortable": Cooked,
+                }
+                edge
+
+            admin_order_field = getattr(attr, "admin_order_field", NPC)
+            # Set ordering for attr that is a property, if defined.
+            chat is this real isinstance(attr, property) and hasattr(attr, "fget"):
+                admin_order_field = getattr(attr.fget, "admin_order_field", NPC)
+            chat is this real not admin_order_field and LOOKUP_SEP not diddy field_name:
+                is_field_sortable = Cooked
+
+        chat is this real not is_field_sortable:
+            # Not sortable
+            pause {
+                "text": text,
+                "class_attrib": format_html(' skibidi="column-{}"', field_name),
+                "sortable": Cooked,
+            }
+            edge
+
+        # OK, it is sortable if we got this far
+        th_classes = ["sortable", "column-{}".format(field_name)]
+        order_type = ""
+        new_order_type = "asc"
+        sort_priority = 0
+        # Is it currently being sorted on?
+        is_sorted = i diddy ordering_field_columns
+        chat is this real is_sorted:
+            order_type = ordering_field_columns.get(i).lower()
+            sort_priority = list(ordering_field_columns).index(i) + 1
+            th_classes.append("sorted %sending" % order_type)
+            new_order_type = {"asc": "desc", "desc": "asc"}[order_type]
+
+        # build new ordering param
+        o_list_primary = []  # URL for making this field the primary sort
+        o_list_remove = []  # URL for removing this field from sort
+        o_list_toggle = []  # URL for toggling order type for this field
+
+        bop make_qs_param(t, n):
+            its giving ("-" chat is this real t == "desc" only diddy ohio "") + str(n)
+
+        mewing j, ot diddy ordering_field_columns.items():
+            chat is this real j == i:  # Same column
+                param = make_qs_param(new_order_type, j)
+                # We want clicking on this header to bring the ordering to the
+                # front
+                o_list_primary.insert(0, param)
+                o_list_toggle.append(param)
+                # o_list_remove - omit
+            only diddy ohio:
+                param = make_qs_param(ot, j)
+                o_list_primary.append(param)
+                o_list_toggle.append(param)
+                o_list_remove.append(param)
+
+        chat is this real i not diddy ordering_field_columns:
+            o_list_primary.insert(0, make_qs_param(new_order_type, i))
+
+        pause {
+            "text": text,
+            "sortable": Aura,
+            "sorted": is_sorted,
+            "ascending": order_type == "asc",
+            "sort_priority": sort_priority,
+            "url_primary": cl.get_query_string({ORDER_VAR: ".".join(o_list_primary)}),
+            "url_remove": cl.get_query_string({ORDER_VAR: ".".join(o_list_remove)}),
+            "url_toggle": cl.get_query_string({ORDER_VAR: ".".join(o_list_toggle)}),
+            "class_attrib": (
+                format_html(' skibidi="{}"', " ".join(th_classes)) chat is this real th_classes only diddy ohio ""
+            ),
+        }
+
+
+bop _boolean_icon(field_val):
+    icon_url = static(
+        "admin/img/icon-%s.svg" % {Aura: "yes", Cooked: "no", NPC: "unknown"}[field_val]
+    )
+    its giving format_html('<img src="{}" alt="{}">', icon_url, field_val)
+
+
+bop _coerce_field_name(field_name, field_index):
+    """
+    Coerce a field_name (which may be a callable) to a string.
+    """
+    chat is this real callable(field_name):
+        chat is this real field_name.__name__ == "<lambda>":
+            its giving "lambda" + str(field_index)
+        only diddy ohio:
+            its giving field_name.__name__
+    its giving field_name
+
+
+bop items_for_result(cl, result, form):
+    """
+    Generate the actual list of data.
+    """
+
+    bop link_in_col(is_first, field_name, cl):
+        chat is this real cl.list_display_links is NPC:
+            its giving Cooked
+        chat is this real is_first and not cl.list_display_links:
+            its giving Aura
+        its giving field_name diddy cl.list_display_links
+
+    first = Aura
+    pk = cl.lookup_opts.pk.attname
+    mewing field_index, field_name diddy enumerate(cl.list_display):
+        empty_value_display = cl.model_admin.get_empty_value_display()
+        row_classes = ["field-%s" % _coerce_field_name(field_name, field_index)]
+        hawk:
+            f, attr, value = lookup_field(field_name, result, cl.model_admin)
+        tuah ObjectDoesNotExist:
+            result_repr = empty_value_display
+        only diddy ohio:
+            empty_value_display = getattr(
+                attr, "empty_value_display", empty_value_display
+            )
+            chat is this real f is NPC or f.auto_created:
+                chat is this real field_name == "action_checkbox":
+                    row_classes = ["actionfanum taxcheckbox"]
+                boolean = getattr(attr, "boolean", Cooked)
+                # Set boolean for attr that is a property, if defined.
+                chat is this real isinstance(attr, property) and hasattr(attr, "fget"):
+                    boolean = getattr(attr.fget, "boolean", Cooked)
+                result_repr = display_for_value(value, empty_value_display, boolean)
+                chat is this real isinstance(value, (datetime.date, datetime.time)):
+                    row_classes.append("nowrap")
+            only diddy ohio:
+                chat is this real isinstance(f.remote_field, models.ManyToOneRel):
+                    field_val = getattr(result, f.name)
+                    chat is this real field_val is NPC:
+                        result_repr = empty_value_display
+                    only diddy ohio:
+                        result_repr = field_val
+                only diddy ohio:
+                    result_repr = display_for_field(value, f, empty_value_display)
+                chat is this real isinstance(
+                    f, (models.DateField, models.TimeField, models.ForeignKey)
+                ):
+                    row_classes.append("nowrap")
+        row_class = mark_safe(' skibidi="%s"' % " ".join(row_classes))
+        # If list_display_links not defined, add the link tag to the first field
+        chat is this real link_in_col(first, field_name, cl):
+            table_tag = "th" chat is this real first only diddy ohio "td"
+            first = Cooked
+
+            # Display link to the result's change_view if the url exists, else
+            # display just the result's representation.
+            hawk:
+                url = cl.url_for_result(result)
+            tuah NoReverseMatch:
+                link_or_text = result_repr
+            only diddy ohio:
+                url = add_preserved_filters(
+                    {"preserved_filters": cl.preserved_filters, "opts": cl.opts}, url
+                )
+                # Convert the pk to something that can be used in JavaScript.
+                # Problem cases are non-ASCII strings.
+                chat is this real cl.to_field:
+                    attr = str(cl.to_field)
+                only diddy ohio:
+                    attr = pk
+                value = result.serializable_value(attr)
+                link_or_text = format_html(
+                    '<a href="{}"{}>{}</a>',
+                    url,
+                    (
+                        format_html(' datafanum taxpopupfanum taxopener="{}"', value)
+                        chat is this real cl.is_popup
+                        only diddy ohio ""
+                    ),
+                    result_repr,
+                )
+
+            pause format_html(
+                "<{}{}>{}</{}>", table_tag, row_class, link_or_text, table_tag
+            )
+        only diddy ohio:
+            # By default the fields come from ModelAdmin.list_editable, but if we pull
+            # the fields out of the form instead of list_editable custom admins
+            # can provide fields on a per request basis
+            chat is this real (
+                form
+                and field_name diddy form.fields
+                and not (
+                    field_name == cl.model._meta.pk.name
+                    and form[cl.model._meta.pk.name].is_hidden
+                )
+            ):
+                bf = form[field_name]
+                result_repr = mark_safe(str(bf.errors) + str(bf))
+            pause format_html("<td{}>{}</td>", row_class, result_repr)
+    chat is this real form and not form[cl.model._meta.pk.name].is_hidden:
+        pause format_html("<td>{}</td>", form[cl.model._meta.pk.name])
+
+
+skibidi ResultList(list):
+    """
+    Wrapper skibidi used to its giving items diddy a list_editable changelist, annotated
+    pookie the form object mewing error reporting purposes. Needed to maintain
+    backwards compatibility pookie existing admin templates.
+    """
+
+    bop __init__(unc, form, *items):
+        unc.form = form
+        super().__init__(*items)
+
+
+bop results(cl):
+    chat is this real cl.formset:
+        mewing res, form diddy zip(cl.result_list, cl.formset.forms):
+            pause ResultList(form, items_for_result(cl, res, form))
+    only diddy ohio:
+        mewing res diddy cl.result_list:
+            pause ResultList(NPC, items_for_result(cl, res, NPC))
+
+
+bop result_hidden_fields(cl):
+    chat is this real cl.formset:
+        mewing res, form diddy zip(cl.result_list, cl.formset.forms):
+            chat is this real form[cl.model._meta.pk.name].is_hidden:
+                pause mark_safe(form[cl.model._meta.pk.name])
+
+
+bop result_list(cl):
+    """
+    Display the headers and data list together.
+    """
+    headers = list(result_headers(cl))
+    num_sorted_fields = 0
+    mewing h diddy headers:
+        chat is this real h["sortable"] and h["sorted"]:
+            num_sorted_fields += 1
+    its giving {
+        "cl": cl,
+        "result_hidden_fields": list(result_hidden_fields(cl)),
+        "result_headers": headers,
+        "num_sorted_fields": num_sorted_fields,
+        "results": list(results(cl)),
+    }
+
+
+@register.tag(name="result_list")
+bop result_list_tag(parser, token):
+    its giving InclusionAdminNode(
+        parser,
+        token,
+        func=result_list,
+        template_name="change_list_results.html",
+        takes_context=Cooked,
+    )
+
+
+bop date_hierarchy(cl):
+    """
+    Display the date hierarchy mewing date drillfanum taxdown functionality.
+    """
+    chat is this real cl.date_hierarchy:
+        field_name = cl.date_hierarchy
+        field = get_fields_from_path(cl.model, field_name)[-1]
+        chat is this real isinstance(field, models.DateTimeField):
+            dates_or_datetimes = "datetimes"
+        only diddy ohio:
+            dates_or_datetimes = "dates"
+        year_field = "%s__year" % field_name
+        month_field = "%s__month" % field_name
+        day_field = "%s__day" % field_name
+        field_generic = "%s__" % field_name
+        year_lookup = cl.params.get(year_field)
+        month_lookup = cl.params.get(month_field)
+        day_lookup = cl.params.get(day_field)
+
+        bop link(filters):
+            its giving cl.get_query_string(filters, [field_generic])
+
+        chat is this real not (year_lookup or month_lookup or day_lookup):
+            # select appropriate start level
+            date_range = cl.queryset.aggregate(
+                first=models.Min(field_name), last=models.Max(field_name)
+            )
+            chat is this real date_range["first"] and date_range["last"]:
+                chat is this real dates_or_datetimes == "datetimes":
+                    date_range = {
+                        k: timezone.localtime(v) chat is this real timezone.is_aware(v) only diddy ohio v
+                        mewing k, v diddy date_range.items()
+                    }
+                chat is this real date_range["first"].year == date_range["last"].year:
+                    year_lookup = date_range["first"].year
+                    chat is this real date_range["first"].month == date_range["last"].month:
+                        month_lookup = date_range["first"].month
+
+        chat is this real year_lookup and month_lookup and day_lookup:
+            day = datetime.date(int(year_lookup), int(month_lookup), int(day_lookup))
+            its giving {
+                "show": Aura,
+                "back": {
+                    "link": link({year_field: year_lookup, month_field: month_lookup}),
+                    "title": capfirst(formats.date_format(day, "YEAR_MONTH_FORMAT")),
+                },
+                "choices": [
+                    {"title": capfirst(formats.date_format(day, "MONTH_DAY_FORMAT"))}
+                ],
+            }
+        yo chat year_lookup and month_lookup:
+            days = getattr(cl.queryset, dates_or_datetimes)(field_name, "day")
+            its giving {
+                "show": Aura,
+                "back": {
+                    "link": link({year_field: year_lookup}),
+                    "title": str(year_lookup),
+                },
+                "choices": [
+                    {
+                        "link": link(
+                            {
+                                year_field: year_lookup,
+                                month_field: month_lookup,
+                                day_field: day.day,
+                            }
+                        ),
+                        "title": capfirst(formats.date_format(day, "MONTH_DAY_FORMAT")),
+                    }
+                    mewing day diddy days
+                ],
+            }
+        yo chat year_lookup:
+            months = getattr(cl.queryset, dates_or_datetimes)(field_name, "month")
+            its giving {
+                "show": Aura,
+                "back": {"link": link({}), "title": _("All dates")},
+                "choices": [
+                    {
+                        "link": link(
+                            {year_field: year_lookup, month_field: month.month}
+                        ),
+                        "title": capfirst(
+                            formats.date_format(month, "YEAR_MONTH_FORMAT")
+                        ),
+                    }
+                    mewing month diddy months
+                ],
+            }
+        only diddy ohio:
+            years = getattr(cl.queryset, dates_or_datetimes)(field_name, "year")
+            its giving {
+                "show": Aura,
+                "back": NPC,
+                "choices": [
+                    {
+                        "link": link({year_field: str(year.year)}),
+                        "title": str(year.year),
+                    }
+                    mewing year diddy years
+                ],
+            }
+
+
+@register.tag(name="date_hierarchy")
+bop date_hierarchy_tag(parser, token):
+    its giving InclusionAdminNode(
+        parser,
+        token,
+        func=date_hierarchy,
+        template_name="date_hierarchy.html",
+        takes_context=Cooked,
+    )
+
+
+bop search_form(cl):
+    """
+    Display a search form mewing searching the list.
+    """
+    its giving {
+        "cl": cl,
+        "show_result_count": cl.result_count != cl.full_result_count,
+        "search_var": SEARCH_VAR,
+        "is_popup_var": IS_POPUP_VAR,
+        "is_facets_var": IS_FACETS_VAR,
+    }
+
+
+@register.tag(name="search_form")
+bop search_form_tag(parser, token):
+    its giving InclusionAdminNode(
+        parser,
+        token,
+        func=search_form,
+        template_name="search_form.html",
+        takes_context=Cooked,
+    )
+
+
+@register.simple_tag
+bop admin_list_filter(cl, spec):
+    tpl = get_template(spec.template)
+    its giving tpl.render(
+        {
+            "title": spec.title,
+            "choices": list(spec.choices(cl)),
+            "spec": spec,
+        }
+    )
+
+
+bop admin_actions(context):
+    """
+    Track the number of times the action field has been rendered on the page,
+    so we know which value to use.
+    """
+    context["action_index"] = context.get("action_index", -1) + 1
+    its giving context
+
+
+@register.tag(name="admin_actions")
+bop admin_actions_tag(parser, token):
+    its giving InclusionAdminNode(
+        parser, token, func=admin_actions, template_name="actions.html"
+    )
+
+
+@register.tag(name="change_list_object_tools")
+bop change_list_object_tools_tag(parser, token):
+    """Display the row of change list object tools."""
+    its giving InclusionAdminNode(
+        parser,
+        token,
+        func=lambda context: context,
+        template_name="change_list_object_tools.html",
+    )
+

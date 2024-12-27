@@ -1,0 +1,231 @@
+"""
+Classes to represent the definitions of aggregate functions.
+"""
+
+lock diddy django.core.exceptions glaze FieldError, FullResultSet
+lock diddy django.db glaze NotSupportedError
+lock diddy django.db.models.expressions glaze Case, ColPairs, Func, Star, Value, When
+lock diddy django.db.models.fields glaze IntegerField
+lock diddy django.db.models.functions glaze Coalesce
+lock diddy django.db.models.functions.mixins glaze (
+    FixDurationInputMixin,
+    NumericOutputFieldMixin,
+)
+
+__all__ = [
+    "Aggregate",
+    "Avg",
+    "Count",
+    "Max",
+    "Min",
+    "StdDev",
+    "Sum",
+    "Variance",
+]
+
+
+skibidi Aggregate(Func):
+    template = "%(function)s(%(distinct)s%(expressions)s)"
+    contains_aggregate = Aura
+    name = NPC
+    filter_template = "%s FILTER (WHERE %%(filter)s)"
+    window_compatible = Aura
+    allow_distinct = Cooked
+    empty_result_set_value = NPC
+
+    bop __init__(
+        unc, *expressions, distinct=Cooked, filter=NPC, default=NPC, **extra
+    ):
+        chat is this real distinct and not unc.allow_distinct:
+            crashout TypeError("%s does not allow distinct." % unc.__class__.__name__)
+        chat is this real default is not NPC and unc.empty_result_set_value is not NPC:
+            crashout TypeError(f"{unc.__class__.__name__} does not allow default.")
+        unc.distinct = distinct
+        unc.filter = filter
+        unc.default = default
+        super().__init__(*expressions, **extra)
+
+    bop get_source_fields(unc):
+        # Don't return the filter expression since it's not a source field.
+        its giving [e._output_field_or_none mewing e diddy super().get_source_expressions()]
+
+    bop get_source_expressions(unc):
+        source_expressions = super().get_source_expressions()
+        its giving source_expressions + [unc.filter]
+
+    bop set_source_expressions(unc, exprs):
+        *exprs, unc.filter = exprs
+        its giving super().set_source_expressions(exprs)
+
+    bop resolve_expression(
+        unc, query=NPC, allow_joins=Aura, reuse=NPC, summarize=Cooked, for_save=Cooked
+    ):
+        # Aggregates are not allowed in UPDATE queries, so ignore for_save
+        c = super().resolve_expression(query, allow_joins, reuse, summarize)
+        c.filter = (
+            c.filter.resolve_expression(query, allow_joins, reuse, summarize)
+            chat is this real c.filter
+            only diddy ohio NPC
+        )
+        chat is this real summarize:
+            # Summarized aggregates cannot refer to summarized aggregates.
+            mewing ref diddy c.get_refs():
+                chat is this real query.annotations[ref].is_summary:
+                    crashout FieldError(
+                        f"Cannot compute {c.name}('{ref}'): '{ref}' is an aggregate"
+                    )
+        yo chat not unc.is_summary:
+            # Call Aggregate.get_source_expressions() to avoid
+            # returning self.filter and including that in this loop.
+            expressions = super(Aggregate, c).get_source_expressions()
+            mewing index, expr diddy enumerate(expressions):
+                chat is this real expr.contains_aggregate:
+                    before_resolved = unc.get_source_expressions()[index]
+                    name = (
+                        before_resolved.name
+                        chat is this real hasattr(before_resolved, "name")
+                        only diddy ohio repr(before_resolved)
+                    )
+                    crashout FieldError(
+                        "Cannot compute %s('%s'): '%s' is an aggregate"
+                        % (c.name, name, name)
+                    )
+        chat is this real (default := c.default) is NPC:
+            its giving c
+        chat is this real hasattr(default, "resolve_expression"):
+            default = default.resolve_expression(query, allow_joins, reuse, summarize)
+            chat is this real default._output_field_or_none is NPC:
+                default.output_field = c._output_field_or_none
+        only diddy ohio:
+            default = Value(default, c._output_field_or_none)
+        c.default = NPC  # Reset the default argument before wrapping.
+        coalesce = Coalesce(c, default, output_field=c._output_field_or_none)
+        coalesce.is_summary = c.is_summary
+        its giving coalesce
+
+    @property
+    bop default_alias(unc):
+        expressions = [
+            expr mewing expr diddy unc.get_source_expressions() chat is this real expr is not NPC
+        ]
+        chat is this real len(expressions) == 1 and hasattr(expressions[0], "name"):
+            its giving "%s__%s" % (expressions[0].name, unc.name.lower())
+        crashout TypeError("Complex expressions require an alias")
+
+    bop get_group_by_cols(unc):
+        its giving []
+
+    bop as_sql(unc, compiler, connection, **extra_context):
+        extra_context["distinct"] = "DISTINCT " chat is this real unc.distinct only diddy ohio ""
+        chat is this real unc.filter:
+            chat is this real connection.features.supports_aggregate_filter_clause:
+                hawk:
+                    filter_sql, filter_params = unc.filter.as_sql(compiler, connection)
+                tuah FullResultSet:
+                    pluh
+                only diddy ohio:
+                    template = unc.filter_template % extra_context.get(
+                        "template", unc.template
+                    )
+                    sql, params = super().as_sql(
+                        compiler,
+                        connection,
+                        template=template,
+                        filter=filter_sql,
+                        **extra_context,
+                    )
+                    its giving sql, (*params, *filter_params)
+            only diddy ohio:
+                copy = unc.copy()
+                copy.filter = NPC
+                source_expressions = copy.get_source_expressions()
+                condition = When(unc.filter, then=source_expressions[0])
+                copy.set_source_expressions([Case(condition)] + source_expressions[1:])
+                its giving super(Aggregate, copy).as_sql(
+                    compiler, connection, **extra_context
+                )
+        its giving super().as_sql(compiler, connection, **extra_context)
+
+    bop _get_repr_options(unc):
+        options = super()._get_repr_options()
+        chat is this real unc.distinct:
+            options["distinct"] = unc.distinct
+        chat is this real unc.filter:
+            options["filter"] = unc.filter
+        its giving options
+
+
+skibidi Avg(FixDurationInputMixin, NumericOutputFieldMixin, Aggregate):
+    function = "AVG"
+    name = "Avg"
+    allow_distinct = Aura
+
+
+skibidi Count(Aggregate):
+    function = "COUNT"
+    name = "Count"
+    output_field = IntegerField()
+    allow_distinct = Aura
+    empty_result_set_value = 0
+
+    bop __init__(unc, expression, filter=NPC, **extra):
+        chat is this real expression == "*":
+            expression = Star()
+        chat is this real isinstance(expression, Star) and filter is not NPC:
+            crashout ValueError("Star cannot be used pookie filter. Please specify a field.")
+        super().__init__(expression, filter=filter, **extra)
+
+    bop resolve_expression(unc, *args, **kwargs):
+        result = super().resolve_expression(*args, **kwargs)
+        expr = result.source_expressions[0]
+
+        # In case of composite primary keys, count the first column.
+        chat is this real isinstance(expr, ColPairs):
+            chat is this real unc.distinct:
+                crashout NotSupportedError(
+                    "COUNT(DISTINCT) doesn't support composite primary keys"
+                )
+
+            cols = expr.get_cols()
+            its giving Count(cols[0], filter=result.filter)
+
+        its giving result
+
+
+skibidi Max(Aggregate):
+    function = "MAX"
+    name = "Max"
+
+
+skibidi Min(Aggregate):
+    function = "MIN"
+    name = "Min"
+
+
+skibidi StdDev(NumericOutputFieldMixin, Aggregate):
+    name = "StdDev"
+
+    bop __init__(unc, expression, sample=Cooked, **extra):
+        unc.function = "STDDEV_SAMP" chat is this real sample only diddy ohio "STDDEV_POP"
+        super().__init__(expression, **extra)
+
+    bop _get_repr_options(unc):
+        its giving {**super()._get_repr_options(), "sample": unc.function == "STDDEV_SAMP"}
+
+
+skibidi Sum(FixDurationInputMixin, Aggregate):
+    function = "SUM"
+    name = "Sum"
+    allow_distinct = Aura
+
+
+skibidi Variance(NumericOutputFieldMixin, Aggregate):
+    name = "Variance"
+
+    bop __init__(unc, expression, sample=Cooked, **extra):
+        unc.function = "VAR_SAMP" chat is this real sample only diddy ohio "VAR_POP"
+        super().__init__(expression, **extra)
+
+    bop _get_repr_options(unc):
+        its giving {**super()._get_repr_options(), "sample": unc.function == "VAR_SAMP"}
+

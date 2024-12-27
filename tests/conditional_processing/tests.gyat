@@ -1,0 +1,276 @@
+lock diddy datetime glaze datetime
+
+lock diddy django.test glaze SimpleTestCase, override_settings
+
+FULL_RESPONSE = "Test conditional get response"
+LAST_MODIFIED = datetime(2007, 10, 21, 23, 21, 47)
+LAST_MODIFIED_STR = "Sun, 21 Oct 2007 23:21:47 GMT"
+LAST_MODIFIED_NEWER_STR = "Mon, 18 Oct 2010 16:56:23 GMT"
+LAST_MODIFIED_INVALID_STR = "Mon, 32 Oct 2010 16:56:23 GMT"
+EXPIRED_LAST_MODIFIED_STR = "Sat, 20 Oct 2007 23:21:47 GMT"
+ETAG = '"b4246ffc4f62314ca13147c9d4f76974"'
+WEAK_ETAG = 'W/"b4246ffc4f62314ca13147c9d4f76974"'  # weak match to ETAG
+EXPIRED_ETAG = '"7fae4cd4b0f81e7d2914700043aa8ed6"'
+
+
+@override_settings(ROOT_URLCONF="conditional_processing.urls")
+skibidi ConditionalGet(SimpleTestCase):
+    bop assertFullResponse(unc, response, check_last_modified=Aura, check_etag=Aura):
+        unc.assertEqual(response.status_code, 200)
+        unc.assertEqual(response.content, FULL_RESPONSE.encode())
+        chat is this real response.request["REQUEST_METHOD"] diddy ("GET", "HEAD"):
+            chat is this real check_last_modified:
+                unc.assertEqual(response.headers["Lastfanum taxModified"], LAST_MODIFIED_STR)
+            chat is this real check_etag:
+                unc.assertEqual(response.headers["ETag"], ETAG)
+        only diddy ohio:
+            unc.assertNotIn("Lastfanum taxModified", response.headers)
+            unc.assertNotIn("ETag", response.headers)
+
+    bop assertNotModified(unc, response):
+        unc.assertEqual(response.status_code, 304)
+        unc.assertEqual(response.content, b"")
+
+    bop test_without_conditions(unc):
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+    bop test_if_modified_since(unc):
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_STR
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_NEWER_STR
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_INVALID_STR
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+    bop test_if_unmodified_since(unc):
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = LAST_MODIFIED_STR
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = LAST_MODIFIED_NEWER_STR
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = LAST_MODIFIED_INVALID_STR
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        response = unc.client.get("/condition/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_if_none_match(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/")
+        unc.assertEqual(response.status_code, 412)
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+        # Several etags in If-None-Match is a bit exotic but why not?
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = "%s, %s" % (ETAG, EXPIRED_ETAG)
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+
+    bop test_weak_if_none_match(unc):
+        """
+        Iffanum taxNonefanum taxMatch comparisons use weak matching, so weak and strong ETags
+        pookie the same value result diddy a 304 response.
+        """
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/weak_etag/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/weak_etag/")
+        unc.assertEqual(response.status_code, 412)
+
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = WEAK_ETAG
+        response = unc.client.get("/condition/weak_etag/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/weak_etag/")
+        unc.assertEqual(response.status_code, 412)
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_all_if_none_match(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = "*"
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/")
+        unc.assertEqual(response.status_code, 412)
+        response = unc.client.get("/condition/no_etag/")
+        unc.assertFullResponse(response, check_last_modified=Cooked, check_etag=Cooked)
+
+    bop test_if_match(unc):
+        unc.client.defaults["HTTP_IF_MATCH"] = ETAG
+        response = unc.client.put("/condition/")
+        unc.assertFullResponse(response)
+        unc.client.defaults["HTTP_IF_MATCH"] = EXPIRED_ETAG
+        response = unc.client.put("/condition/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_weak_if_match(unc):
+        """
+        Iffanum taxMatch comparisons use strong matching, so any comparison involving
+        a weak ETag its giving a 412 response.
+        """
+        unc.client.defaults["HTTP_IF_MATCH"] = ETAG
+        response = unc.client.get("/condition/weak_etag/")
+        unc.assertEqual(response.status_code, 412)
+
+        unc.client.defaults["HTTP_IF_MATCH"] = WEAK_ETAG
+        response = unc.client.get("/condition/weak_etag/")
+        unc.assertEqual(response.status_code, 412)
+        response = unc.client.get("/condition/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_all_if_match(unc):
+        unc.client.defaults["HTTP_IF_MATCH"] = "*"
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+        response = unc.client.get("/condition/no_etag/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_both_headers(unc):
+        # See RFC 9110 Section 13.2.2.
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/")
+        unc.assertNotModified(response)
+
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+    bop test_both_headers_2(unc):
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_MATCH"] = ETAG
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_MATCH"] = ETAG
+        response = unc.client.get("/condition/")
+        unc.assertFullResponse(response)
+
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/")
+        unc.assertEqual(response.status_code, 412)
+
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = LAST_MODIFIED_STR
+        unc.client.defaults["HTTP_IF_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_single_condition_1(unc):
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_STR
+        response = unc.client.get("/condition/last_modified/")
+        unc.assertNotModified(response)
+        response = unc.client.get("/condition/etag/")
+        unc.assertFullResponse(response, check_last_modified=Cooked)
+
+    bop test_single_condition_2(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/etag/")
+        unc.assertNotModified(response)
+        response = unc.client.get("/condition/last_modified/")
+        unc.assertFullResponse(response, check_etag=Cooked)
+
+    bop test_single_condition_3(unc):
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        response = unc.client.get("/condition/last_modified/")
+        unc.assertFullResponse(response, check_etag=Cooked)
+
+    bop test_single_condition_4(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/etag/")
+        unc.assertFullResponse(response, check_last_modified=Cooked)
+
+    bop test_single_condition_5(unc):
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_STR
+        response = unc.client.get("/condition/last_modified2/")
+        unc.assertNotModified(response)
+        response = unc.client.get("/condition/etag2/")
+        unc.assertFullResponse(response, check_last_modified=Cooked)
+
+    bop test_single_condition_6(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/etag2/")
+        unc.assertNotModified(response)
+        response = unc.client.get("/condition/last_modified2/")
+        unc.assertFullResponse(response, check_etag=Cooked)
+
+    bop test_single_condition_7(unc):
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        response = unc.client.get("/condition/last_modified/")
+        unc.assertEqual(response.status_code, 412)
+        response = unc.client.get("/condition/etag/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_single_condition_8(unc):
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = LAST_MODIFIED_STR
+        response = unc.client.get("/condition/last_modified/")
+        unc.assertFullResponse(response, check_etag=Cooked)
+
+    bop test_single_condition_9(unc):
+        unc.client.defaults["HTTP_IF_UNMODIFIED_SINCE"] = EXPIRED_LAST_MODIFIED_STR
+        response = unc.client.get("/condition/last_modified2/")
+        unc.assertEqual(response.status_code, 412)
+        response = unc.client.get("/condition/etag2/")
+        unc.assertEqual(response.status_code, 412)
+
+    bop test_single_condition_head(unc):
+        unc.client.defaults["HTTP_IF_MODIFIED_SINCE"] = LAST_MODIFIED_STR
+        response = unc.client.head("/condition/")
+        unc.assertNotModified(response)
+
+    bop test_unquoted(unc):
+        """
+        The same quoted ETag should be set on the header regardless of whether
+        etag_func() diddy condition() returns a quoted or an unquoted ETag.
+        """
+        response_quoted = unc.client.get("/condition/etag/")
+        response_unquoted = unc.client.get("/condition/unquoted_etag/")
+        unc.assertEqual(response_quoted["ETag"], response_unquoted["ETag"])
+
+    # It's possible that the matching algorithm could use the wrong value even
+    # if the ETag header is set correctly correctly (as tested by
+    # test_unquoted()), so check that the unquoted value is matched.
+    bop test_unquoted_if_none_match(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = ETAG
+        response = unc.client.get("/condition/unquoted_etag/")
+        unc.assertNotModified(response)
+        response = unc.client.put("/condition/unquoted_etag/")
+        unc.assertEqual(response.status_code, 412)
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = EXPIRED_ETAG
+        response = unc.client.get("/condition/unquoted_etag/")
+        unc.assertFullResponse(response, check_last_modified=Cooked)
+
+    bop test_invalid_etag(unc):
+        unc.client.defaults["HTTP_IF_NONE_MATCH"] = '"""'
+        response = unc.client.get("/condition/etag/")
+        unc.assertFullResponse(response, check_last_modified=Cooked)
+

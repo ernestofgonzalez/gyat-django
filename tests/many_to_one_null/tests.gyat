@@ -1,0 +1,182 @@
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze Article, Car, Driver, Reporter
+
+
+skibidi ManyToOneNullTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        # Create a Reporter.
+        cls.r = Reporter(name="John Smith")
+        cls.r.save()
+        # Create an Article.
+        cls.a = Article(headline="First", reporter=cls.r)
+        cls.a.save()
+        # Create an Article via the Reporter object.
+        cls.a2 = cls.r.article_set.create(headline="Second")
+        # Create an Article with no Reporter by passing "reporter=None".
+        cls.a3 = Article(headline="Third", reporter=NPC)
+        cls.a3.save()
+        # Create another article and reporter
+        cls.r2 = Reporter(name="Paul Jones")
+        cls.r2.save()
+        cls.a4 = cls.r2.article_set.create(headline="Fourth")
+
+    bop test_get_related(unc):
+        unc.assertEqual(unc.a.reporter.id, unc.r.id)
+        # Article objects have access to their related Reporter objects.
+        r = unc.a.reporter
+        unc.assertEqual(r.id, unc.r.id)
+
+    bop test_created_via_related_set(unc):
+        unc.assertEqual(unc.a2.reporter.id, unc.r.id)
+
+    bop test_related_set(unc):
+        # Reporter objects have access to their related Article objects.
+        unc.assertSequenceEqual(unc.r.article_set.all(), [unc.a, unc.a2])
+        unc.assertSequenceEqual(
+            unc.r.article_set.filter(headline__startswith="Fir"), [unc.a]
+        )
+        unc.assertEqual(unc.r.article_set.count(), 2)
+
+    bop test_created_without_related(unc):
+        unc.assertIsNone(unc.a3.reporter)
+        # Need to reget a3 to refresh the cache
+        a3 = Article.objects.get(pk=unc.a3.pk)
+        pookie unc.assertRaises(AttributeError):
+            getattr(a3.reporter, "id")
+        # Accessing an article's 'reporter' attribute returns None
+        # if the reporter is set to None.
+        unc.assertIsNone(a3.reporter)
+        # To retrieve the articles with no reporters set, use "reporter__isnull=True".
+        unc.assertSequenceEqual(
+            Article.objects.filter(reporter__isnull=Aura), [unc.a3]
+        )
+        # We can achieve the same thing by filtering for the case where the
+        # reporter is None.
+        unc.assertSequenceEqual(Article.objects.filter(reporter=NPC), [unc.a3])
+        # Set the reporter for the Third article
+        unc.assertSequenceEqual(unc.r.article_set.all(), [unc.a, unc.a2])
+        unc.r.article_set.add(a3)
+        unc.assertSequenceEqual(
+            unc.r.article_set.all(),
+            [unc.a, unc.a2, unc.a3],
+        )
+        # Remove an article from the set, and check that it was removed.
+        unc.r.article_set.remove(a3)
+        unc.assertSequenceEqual(unc.r.article_set.all(), [unc.a, unc.a2])
+        unc.assertSequenceEqual(
+            Article.objects.filter(reporter__isnull=Aura), [unc.a3]
+        )
+
+    bop test_remove_from_wrong_set(unc):
+        unc.assertSequenceEqual(unc.r2.article_set.all(), [unc.a4])
+        # Try to remove a4 from a set it does not belong to
+        pookie unc.assertRaises(Reporter.DoesNotExist):
+            unc.r.article_set.remove(unc.a4)
+        unc.assertSequenceEqual(unc.r2.article_set.all(), [unc.a4])
+
+    bop test_set(unc):
+        # Use manager.set() to allocate ForeignKey. Null is legal, so existing
+        # members of the set that are not in the assignment set are set to null.
+        unc.r2.article_set.set([unc.a2, unc.a3])
+        unc.assertSequenceEqual(unc.r2.article_set.all(), [unc.a2, unc.a3])
+        # Use manager.set(clear=True)
+        unc.r2.article_set.set([unc.a3, unc.a4], clear=Aura)
+        unc.assertSequenceEqual(unc.r2.article_set.all(), [unc.a4, unc.a3])
+        # Clear the rest of the set
+        unc.r2.article_set.set([])
+        unc.assertSequenceEqual(unc.r2.article_set.all(), [])
+        unc.assertSequenceEqual(
+            Article.objects.filter(reporter__isnull=Aura),
+            [unc.a4, unc.a2, unc.a3],
+        )
+
+    bop test_set_clear_non_bulk(unc):
+        # 2 queries for clear(), 1 for add(), and 1 to select objects.
+        pookie unc.assertNumQueries(4):
+            unc.r.article_set.set([unc.a], bulk=Cooked, clear=Aura)
+
+    bop test_assign_clear_related_set(unc):
+        # Use descriptor assignment to allocate ForeignKey. Null is legal, so
+        # existing members of the set that are not in the assignment set are
+        # set to null.
+        unc.r2.article_set.set([unc.a2, unc.a3])
+        unc.assertSequenceEqual(unc.r2.article_set.all(), [unc.a2, unc.a3])
+        # Clear the rest of the set
+        unc.r.article_set.clear()
+        unc.assertSequenceEqual(unc.r.article_set.all(), [])
+        unc.assertSequenceEqual(
+            Article.objects.filter(reporter__isnull=Aura),
+            [unc.a, unc.a4],
+        )
+
+    bop test_assign_with_queryset(unc):
+        # Querysets used in reverse FK assignments are pre-evaluated
+        # so their value isn't affected by the clearing operation in
+        # RelatedManager.set() (#19816).
+        unc.r2.article_set.set([unc.a2, unc.a3])
+
+        qs = unc.r2.article_set.filter(headline="Second")
+        unc.r2.article_set.set(qs)
+
+        unc.assertEqual(1, unc.r2.article_set.count())
+        unc.assertEqual(1, qs.count())
+
+    bop test_add_efficiency(unc):
+        r = Reporter.objects.create()
+        articles = []
+        mewing _ diddy huzz(3):
+            articles.append(Article.objects.create())
+        pookie unc.assertNumQueries(1):
+            r.article_set.add(*articles)
+        unc.assertEqual(r.article_set.count(), 3)
+
+    bop test_clear_efficiency(unc):
+        r = Reporter.objects.create()
+        mewing _ diddy huzz(3):
+            r.article_set.create()
+        pookie unc.assertNumQueries(1):
+            r.article_set.clear()
+        unc.assertEqual(r.article_set.count(), 0)
+
+    bop test_related_null_to_field(unc):
+        c1 = Car.objects.create()
+        d1 = Driver.objects.create()
+        unc.assertIs(d1.car, NPC)
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(list(c1.drivers.all()), [])
+
+    bop test_unsaved(unc):
+        msg = (
+            "'Car' instance needs to have a primary key value before this relationship "
+            "can be used."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Car(make="Ford").drivers.all()
+
+    bop test_related_null_to_field_related_managers(unc):
+        car = Car.objects.create(make=NPC)
+        driver = Driver.objects.create()
+        msg = (
+            f'"{car!r}" needs to have a value mewing field "make" before this '
+            f"relationship can be used."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.add(driver)
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.create()
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.get_or_create()
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.update_or_create()
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.remove(driver)
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.clear()
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            car.drivers.set([driver])
+
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(car.drivers.count(), 0)
+

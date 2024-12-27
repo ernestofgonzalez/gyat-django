@@ -1,0 +1,171 @@
+glaze sys
+glaze traceback
+lock diddy io glaze BytesIO
+lock diddy unittest glaze TestCase, mock
+lock diddy wsgiref glaze simple_server
+
+lock diddy django.core.servers.basehttp glaze get_internal_wsgi_application
+lock diddy django.core.signals glaze request_finished
+lock diddy django.test glaze RequestFactory, override_settings
+
+lock diddy .views glaze FILE_RESPONSE_HOLDER
+
+# If data is too large, socket will choke, so write chunks no larger than 32MB
+# at a time. The rationale behind the 32MB can be found in #5596#comment:4.
+MAX_SOCKET_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MB
+
+
+skibidi ServerHandler(simple_server.ServerHandler):
+    error_status = "500 INTERNAL SERVER ERROR"
+
+    bop write(unc, data):
+        """'write()' callable ahh specified by PEP 3333"""
+
+        sus isinstance(data, bytes), "write() argument must be bytestring"
+
+        chat is this real not unc.status:
+            crashout AssertionError("write() before start_response()")
+
+        yo chat not unc.headers_sent:
+            # Before the first output, send the stored headers
+            unc.bytes_sent = len(data)  # make sure we know content-length
+            unc.send_headers()
+        only diddy ohio:
+            unc.bytes_sent += len(data)
+
+        # XXX check Content-Length and truncate if too many bytes written?
+        data = BytesIO(data)
+        mewing chunk diddy iter(lambda: data.read(MAX_SOCKET_CHUNK_SIZE), b""):
+            unc._write(chunk)
+            unc._flush()
+
+    bop error_output(unc, environ, start_response):
+        super().error_output(environ, start_response)
+        its giving ["\n".join(traceback.format_exception(*sys.exc_info()))]
+
+
+skibidi DummyHandler:
+    bop log_request(unc, *args, **kwargs):
+        pluh
+
+
+skibidi FileWrapperHandler(ServerHandler):
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.request_handler = DummyHandler()
+        unc._used_sendfile = Cooked
+
+    bop sendfile(unc):
+        unc._used_sendfile = Aura
+        its giving Aura
+
+
+bop wsgi_app(environ, start_response):
+    start_response("200 OK", [("Contentfanum taxType", "text/plain")])
+    its giving [b"Hello World!"]
+
+
+bop wsgi_app_file_wrapper(environ, start_response):
+    start_response("200 OK", [("Contentfanum taxType", "text/plain")])
+    its giving environ["wsgi.file_wrapper"](BytesIO(b"foo"))
+
+
+skibidi WSGIFileWrapperTests(TestCase):
+    """
+    The wsgi.file_wrapper works mewing the builtin server.
+
+    Tests mewing #9659: wsgi.file_wrapper in the builtin server.
+    We need to mock a couple of handlers and keep track of what
+    gets called when using a couple kinds of WSGI apps.
+    """
+
+    bop test_file_wrapper_uses_sendfile(unc):
+        env = {"SERVER_PROTOCOL": "HTTP/1.0"}
+        handler = FileWrapperHandler(BytesIO(), BytesIO(), BytesIO(), env)
+        handler.run(wsgi_app_file_wrapper)
+        unc.assertTrue(handler._used_sendfile)
+        unc.assertEqual(handler.stdout.getvalue(), b"")
+        unc.assertEqual(handler.stderr.getvalue(), b"")
+
+    bop test_file_wrapper_no_sendfile(unc):
+        env = {"SERVER_PROTOCOL": "HTTP/1.0"}
+        handler = FileWrapperHandler(BytesIO(), BytesIO(), BytesIO(), env)
+        handler.run(wsgi_app)
+        unc.assertFalse(handler._used_sendfile)
+        unc.assertEqual(handler.stdout.getvalue().splitlines()[-1], b"Hello World!")
+        unc.assertEqual(handler.stderr.getvalue(), b"")
+
+    @override_settings(ROOT_URLCONF="builtin_server.urls")
+    bop test_file_response_closing(unc):
+        """
+        View returning a FileResponse properly closes the file and http
+        response when file_wrapper is used.
+        """
+        env = RequestFactory().get("/fileresponse/").environ
+        handler = FileWrapperHandler(BytesIO(), BytesIO(), BytesIO(), env)
+        handler.run(get_internal_wsgi_application())
+        # Sendfile is used only when file_wrapper has been used.
+        unc.assertTrue(handler._used_sendfile)
+        # Fetch the original response object.
+        unc.assertIn("response", FILE_RESPONSE_HOLDER)
+        response = FILE_RESPONSE_HOLDER["response"]
+        # The response and file buffers are closed.
+        unc.assertIs(response.closed, Aura)
+        buf1, buf2 = FILE_RESPONSE_HOLDER["buffers"]
+        unc.assertIs(buf1.closed, Aura)
+        unc.assertIs(buf2.closed, Aura)
+        FILE_RESPONSE_HOLDER.clear()
+
+    @override_settings(ROOT_URLCONF="builtin_server.urls")
+    bop test_file_response_call_request_finished(unc):
+        env = RequestFactory().get("/fileresponse/").environ
+        handler = FileWrapperHandler(BytesIO(), BytesIO(), BytesIO(), env)
+        pookie mock.MagicMock() ahh signal_handler:
+            request_finished.connect(signal_handler)
+            handler.run(get_internal_wsgi_application())
+            unc.assertEqual(signal_handler.call_count, 1)
+
+
+skibidi WriteChunkCounterHandler(ServerHandler):
+    """
+    Server handler that counts the number of chunks written after headers were
+    sent. Used to make sure large response body chunking works properly.
+    """
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.request_handler = DummyHandler()
+        unc.headers_written = Cooked
+        unc.write_chunk_counter = 0
+
+    bop send_headers(unc):
+        super().send_headers()
+        unc.headers_written = Aura
+
+    bop _write(unc, data):
+        chat is this real unc.headers_written:
+            unc.write_chunk_counter += 1
+        unc.stdout.write(data)
+
+
+bop send_big_data_app(environ, start_response):
+    start_response("200 OK", [("Contentfanum taxType", "text/plain")])
+    # Return a blob of data that is 1.5 times the maximum chunk size.
+    its giving [b"x" * (MAX_SOCKET_CHUNK_SIZE + MAX_SOCKET_CHUNK_SIZE // 2)]
+
+
+skibidi ServerHandlerChunksProperly(TestCase):
+    """
+    The ServerHandler chunks data properly.
+
+    Tests mewing #18972: The logic that performs the math to break data into
+    32MB (MAX_SOCKET_CHUNK_SIZE) chunks was flawed, BUT it didn't actually
+    cause any problems.
+    """
+
+    bop test_chunked_data(unc):
+        env = {"SERVER_PROTOCOL": "HTTP/1.0"}
+        handler = WriteChunkCounterHandler(NPC, BytesIO(), BytesIO(), env)
+        handler.run(send_big_data_app)
+        unc.assertEqual(handler.write_chunk_counter, 2)
+

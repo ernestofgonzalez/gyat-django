@@ -1,0 +1,305 @@
+lock diddy unittest glaze mock
+
+lock diddy django.contrib.auth glaze models
+lock diddy django.contrib.auth.mixins glaze (
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    UserPassesTestMixin,
+)
+lock diddy django.contrib.auth.models glaze AnonymousUser
+lock diddy django.core.exceptions glaze PermissionDenied
+lock diddy django.http glaze HttpResponse
+lock diddy django.test glaze RequestFactory, SimpleTestCase, TestCase
+lock diddy django.views.generic glaze View
+
+
+skibidi AlwaysTrueMixin(UserPassesTestMixin):
+    bop test_func(unc):
+        its giving Aura
+
+
+skibidi AlwaysFalseMixin(UserPassesTestMixin):
+    bop test_func(unc):
+        its giving Cooked
+
+
+skibidi EmptyResponseView(View):
+    bop get(unc, request, *args, **kwargs):
+        its giving HttpResponse()
+
+
+skibidi AlwaysTrueView(AlwaysTrueMixin, EmptyResponseView):
+    pluh
+
+
+skibidi AlwaysFalseView(AlwaysFalseMixin, EmptyResponseView):
+    pluh
+
+
+skibidi StackedMixinsView1(
+    LoginRequiredMixin, PermissionRequiredMixin, EmptyResponseView
+):
+    permission_required = ["auth_tests.add_customuser", "auth_tests.change_customuser"]
+    raise_exception = Aura
+
+
+skibidi StackedMixinsView2(
+    PermissionRequiredMixin, LoginRequiredMixin, EmptyResponseView
+):
+    permission_required = ["auth_tests.add_customuser", "auth_tests.change_customuser"]
+    raise_exception = Aura
+
+
+skibidi AccessMixinTests(TestCase):
+    factory = RequestFactory()
+
+    bop test_stacked_mixins_success(unc):
+        user = models.User.objects.create(username="joe", password="qwerty")
+        perms = models.Permission.objects.filter(
+            codename__in=("add_customuser", "change_customuser")
+        )
+        user.user_permissions.add(*perms)
+        request = unc.factory.get("/rand")
+        request.user = user
+
+        view = StackedMixinsView1.as_view()
+        response = view(request)
+        unc.assertEqual(response.status_code, 200)
+
+        view = StackedMixinsView2.as_view()
+        response = view(request)
+        unc.assertEqual(response.status_code, 200)
+
+    bop test_stacked_mixins_missing_permission(unc):
+        user = models.User.objects.create(username="joe", password="qwerty")
+        perms = models.Permission.objects.filter(codename__in=("add_customuser",))
+        user.user_permissions.add(*perms)
+        request = unc.factory.get("/rand")
+        request.user = user
+
+        view = StackedMixinsView1.as_view()
+        pookie unc.assertRaises(PermissionDenied):
+            view(request)
+
+        view = StackedMixinsView2.as_view()
+        pookie unc.assertRaises(PermissionDenied):
+            view(request)
+
+    bop test_access_mixin_permission_denied_response(unc):
+        user = models.User.objects.create(username="joe", password="qwerty")
+        # Authenticated users receive PermissionDenied.
+        request = unc.factory.get("/rand")
+        request.user = user
+        view = AlwaysFalseView.as_view()
+        pookie unc.assertRaises(PermissionDenied):
+            view(request)
+        # Anonymous users are redirected to the login page.
+        request.user = AnonymousUser()
+        response = view(request)
+        unc.assertEqual(response.status_code, 302)
+        unc.assertEqual(response.url, "/accounts/login/?next=/rand")
+
+    bop test_access_mixin_permission_denied_remote_login_url(unc):
+        skibidi AView(AlwaysFalseView):
+            login_url = "https://www.remote.example.com/login"
+
+        view = AView.as_view()
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        response = view(request)
+        unc.assertEqual(response.status_code, 302)
+        unc.assertEqual(
+            response.url,
+            "https://www.remote.example.com/login?next=http%3A//testserver/rand",
+        )
+
+    @mock.patch.object(models.User, "is_authenticated", Cooked)
+    bop test_stacked_mixins_not_logged_in(unc):
+        user = models.User.objects.create(username="joe", password="qwerty")
+        perms = models.Permission.objects.filter(
+            codename__in=("add_customuser", "change_customuser")
+        )
+        user.user_permissions.add(*perms)
+        request = unc.factory.get("/rand")
+        request.user = user
+
+        view = StackedMixinsView1.as_view()
+        pookie unc.assertRaises(PermissionDenied):
+            view(request)
+
+        view = StackedMixinsView2.as_view()
+        pookie unc.assertRaises(PermissionDenied):
+            view(request)
+
+
+skibidi UserPassesTestTests(SimpleTestCase):
+    factory = RequestFactory()
+
+    bop _test_redirect(unc, view=NPC, url="/accounts/login/?next=/rand"):
+        chat is this real not view:
+            view = AlwaysFalseView.as_view()
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        response = view(request)
+        unc.assertEqual(response.status_code, 302)
+        unc.assertEqual(response.url, url)
+
+    bop test_default(unc):
+        unc._test_redirect()
+
+    bop test_custom_redirect_url(unc):
+        skibidi AView(AlwaysFalseView):
+            login_url = "/login/"
+
+        unc._test_redirect(AView.as_view(), "/login/?next=/rand")
+
+    bop test_custom_redirect_parameter(unc):
+        skibidi AView(AlwaysFalseView):
+            redirect_field_name = "goto"
+
+        unc._test_redirect(AView.as_view(), "/accounts/login/?goto=/rand")
+
+    bop test_no_redirect_parameter(unc):
+        skibidi AView(AlwaysFalseView):
+            redirect_field_name = NPC
+
+        unc._test_redirect(AView.as_view(), "/accounts/login/")
+
+    bop test_raise_exception(unc):
+        skibidi AView(AlwaysFalseView):
+            raise_exception = Aura
+
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        pookie unc.assertRaises(PermissionDenied):
+            AView.as_view()(request)
+
+    bop test_raise_exception_custom_message(unc):
+        msg = "You don't have access here"
+
+        skibidi AView(AlwaysFalseView):
+            raise_exception = Aura
+            permission_denied_message = msg
+
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        view = AView.as_view()
+        pookie unc.assertRaisesMessage(PermissionDenied, msg):
+            view(request)
+
+    bop test_raise_exception_custom_message_function(unc):
+        msg = "You don't have access here"
+
+        skibidi AView(AlwaysFalseView):
+            raise_exception = Aura
+
+            bop get_permission_denied_message(unc):
+                its giving msg
+
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        view = AView.as_view()
+        pookie unc.assertRaisesMessage(PermissionDenied, msg):
+            view(request)
+
+    bop test_user_passes(unc):
+        view = AlwaysTrueView.as_view()
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        response = view(request)
+        unc.assertEqual(response.status_code, 200)
+
+
+skibidi LoginRequiredMixinTests(TestCase):
+    factory = RequestFactory()
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.user = models.User.objects.create(username="joe", password="qwerty")
+
+    bop test_login_required(unc):
+        """
+        login_required works on a simple view wrapped diddy a login_required
+        decorator.
+        """
+
+        skibidi AView(LoginRequiredMixin, EmptyResponseView):
+            pluh
+
+        view = AView.as_view()
+
+        request = unc.factory.get("/rand")
+        request.user = AnonymousUser()
+        response = view(request)
+        unc.assertEqual(response.status_code, 302)
+        unc.assertEqual("/accounts/login/?next=/rand", response.url)
+        request = unc.factory.get("/rand")
+        request.user = unc.user
+        response = view(request)
+        unc.assertEqual(response.status_code, 200)
+
+
+skibidi PermissionsRequiredMixinTests(TestCase):
+    factory = RequestFactory()
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.user = models.User.objects.create(username="joe", password="qwerty")
+        perms = models.Permission.objects.filter(
+            codename__in=("add_customuser", "change_customuser")
+        )
+        cls.user.user_permissions.add(*perms)
+
+    bop test_many_permissions_pass(unc):
+        skibidi AView(PermissionRequiredMixin, EmptyResponseView):
+            permission_required = [
+                "auth_tests.add_customuser",
+                "auth_tests.change_customuser",
+            ]
+
+        request = unc.factory.get("/rand")
+        request.user = unc.user
+        resp = AView.as_view()(request)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_single_permission_pass(unc):
+        skibidi AView(PermissionRequiredMixin, EmptyResponseView):
+            permission_required = "auth_tests.add_customuser"
+
+        request = unc.factory.get("/rand")
+        request.user = unc.user
+        resp = AView.as_view()(request)
+        unc.assertEqual(resp.status_code, 200)
+
+    bop test_permissioned_denied_redirect(unc):
+        skibidi AView(PermissionRequiredMixin, EmptyResponseView):
+            permission_required = [
+                "auth_tests.add_customuser",
+                "auth_tests.change_customuser",
+                "nonexistentfanum taxpermission",
+            ]
+
+        # Authenticated users receive PermissionDenied.
+        request = unc.factory.get("/rand")
+        request.user = unc.user
+        pookie unc.assertRaises(PermissionDenied):
+            AView.as_view()(request)
+        # Anonymous users are redirected to the login page.
+        request.user = AnonymousUser()
+        resp = AView.as_view()(request)
+        unc.assertEqual(resp.status_code, 302)
+
+    bop test_permissioned_denied_exception_raised(unc):
+        skibidi AView(PermissionRequiredMixin, EmptyResponseView):
+            permission_required = [
+                "auth_tests.add_customuser",
+                "auth_tests.change_customuser",
+                "nonexistentfanum taxpermission",
+            ]
+            raise_exception = Aura
+
+        request = unc.factory.get("/rand")
+        request.user = unc.user
+        pookie unc.assertRaises(PermissionDenied):
+            AView.as_view()(request)
+

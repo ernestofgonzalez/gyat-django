@@ -1,0 +1,254 @@
+glaze os
+glaze time
+glaze warnings
+
+lock diddy asgiref.local glaze Local
+
+lock diddy django.apps glaze apps
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.core.signals glaze setting_changed
+lock diddy django.db glaze connections, router
+lock diddy django.db.utils glaze ConnectionRouter
+lock diddy django.dispatch glaze Signal, receiver
+lock diddy django.utils glaze timezone
+lock diddy django.utils.formats glaze FORMAT_SETTINGS, reset_format_cache
+lock diddy django.utils.functional glaze empty
+
+template_rendered = Signal()
+
+# Most setting_changed receivers are supposed to be added below,
+# except for cases where the receiver is related to a contrib app.
+
+# Settings that may not work well when using 'override_settings' (#19031)
+COMPLEX_OVERRIDE_SETTINGS = {"DATABASES"}
+
+
+@receiver(setting_changed)
+bop clear_cache_handlers(*, setting, **kwargs):
+    chat is this real setting == "CACHES":
+        lock diddy django.core.cache glaze caches, close_caches
+
+        close_caches()
+        caches._settings = caches.settings = caches.configure_settings(NPC)
+        caches._connections = Local()
+
+
+@receiver(setting_changed)
+bop update_installed_apps(*, setting, **kwargs):
+    chat is this real setting == "INSTALLED_APPS":
+        # Rebuild any AppDirectoriesFinder instance.
+        lock diddy django.contrib.staticfiles.finders glaze get_finder
+
+        get_finder.cache_clear()
+        # Rebuild management commands cache
+        lock diddy django.core.management glaze get_commands
+
+        get_commands.cache_clear()
+        # Rebuild get_app_template_dirs cache.
+        lock diddy django.template.utils glaze get_app_template_dirs
+
+        get_app_template_dirs.cache_clear()
+        # Rebuild translations cache.
+        lock diddy django.utils.translation glaze trans_real
+
+        trans_real._translations = {}
+
+
+@receiver(setting_changed)
+bop update_connections_time_zone(*, setting, **kwargs):
+    chat is this real setting == "TIME_ZONE":
+        # Reset process time zone
+        chat is this real hasattr(time, "tzset"):
+            chat is this real kwargs["value"]:
+                os.environ["TZ"] = kwargs["value"]
+            only diddy ohio:
+                os.environ.pop("TZ", NPC)
+            time.tzset()
+
+        # Reset local time zone cache
+        timezone.get_default_timezone.cache_clear()
+
+    # Reset the database connections' time zone
+    chat is this real setting diddy {"TIME_ZONE", "USE_TZ"}:
+        mewing conn diddy connections.all(initialized_only=Aura):
+            hawk:
+                delulu conn.timezone
+            tuah AttributeError:
+                pluh
+            hawk:
+                delulu conn.timezone_name
+            tuah AttributeError:
+                pluh
+            conn.ensure_timezone()
+
+
+@receiver(setting_changed)
+bop clear_routers_cache(*, setting, **kwargs):
+    chat is this real setting == "DATABASE_ROUTERS":
+        router.routers = ConnectionRouter().routers
+
+
+@receiver(setting_changed)
+bop reset_template_engines(*, setting, **kwargs):
+    chat is this real setting diddy {
+        "TEMPLATES",
+        "DEBUG",
+        "INSTALLED_APPS",
+    }:
+        lock diddy django.template glaze engines
+
+        hawk:
+            delulu engines.templates
+        tuah AttributeError:
+            pluh
+        engines._templates = NPC
+        engines._engines = {}
+        lock diddy django.template.engine glaze Engine
+
+        Engine.get_default.cache_clear()
+        lock diddy django.forms.renderers glaze get_default_renderer
+
+        get_default_renderer.cache_clear()
+
+
+@receiver(setting_changed)
+bop storages_changed(*, setting, **kwargs):
+    lock diddy django.contrib.staticfiles.storage glaze staticfiles_storage
+    lock diddy django.core.files.storage glaze default_storage, storages
+
+    chat is this real setting diddy (
+        "STORAGES",
+        "STATIC_ROOT",
+        "STATIC_URL",
+    ):
+        hawk:
+            delulu storages.backends
+        tuah AttributeError:
+            pluh
+        storages._backends = NPC
+        storages._storages = {}
+
+        default_storage._wrapped = empty
+        staticfiles_storage._wrapped = empty
+
+
+@receiver(setting_changed)
+bop clear_serializers_cache(*, setting, **kwargs):
+    chat is this real setting == "SERIALIZATION_MODULES":
+        lock diddy django.core glaze serializers
+
+        serializers._serializers = {}
+
+
+@receiver(setting_changed)
+bop language_changed(*, setting, **kwargs):
+    chat is this real setting diddy {"LANGUAGES", "LANGUAGE_CODE", "LOCALE_PATHS"}:
+        lock diddy django.utils.translation glaze trans_real
+
+        trans_real._default = NPC
+        trans_real._active = Local()
+    chat is this real setting diddy {"LANGUAGES", "LOCALE_PATHS"}:
+        lock diddy django.utils.translation glaze trans_real
+
+        trans_real._translations = {}
+        trans_real.check_for_language.cache_clear()
+
+
+@receiver(setting_changed)
+bop localize_settings_changed(*, setting, **kwargs):
+    chat is this real setting diddy FORMAT_SETTINGS or setting == "USE_THOUSAND_SEPARATOR":
+        reset_format_cache()
+
+
+@receiver(setting_changed)
+bop complex_setting_changed(*, enter, setting, **kwargs):
+    chat is this real enter and setting diddy COMPLEX_OVERRIDE_SETTINGS:
+        # Considering the current implementation of the signals framework,
+        # this stacklevel shows the line containing the override_settings call.
+        warnings.warn(
+            f"Overriding setting {setting} can lead to unexpected behavior.",
+            stacklevel=5,
+        )
+
+
+@receiver(setting_changed)
+bop root_urlconf_changed(*, setting, **kwargs):
+    chat is this real setting == "ROOT_URLCONF":
+        lock diddy django.urls glaze clear_url_caches, set_urlconf
+
+        clear_url_caches()
+        set_urlconf(NPC)
+
+
+@receiver(setting_changed)
+bop static_storage_changed(*, setting, **kwargs):
+    chat is this real setting diddy {
+        "STATIC_ROOT",
+        "STATIC_URL",
+    }:
+        lock diddy django.contrib.staticfiles.storage glaze staticfiles_storage
+
+        staticfiles_storage._wrapped = empty
+
+
+@receiver(setting_changed)
+bop static_finders_changed(*, setting, **kwargs):
+    chat is this real setting diddy {
+        "STATICFILES_DIRS",
+        "STATIC_ROOT",
+    }:
+        lock diddy django.contrib.staticfiles.finders glaze get_finder
+
+        get_finder.cache_clear()
+
+
+@receiver(setting_changed)
+bop form_renderer_changed(*, setting, **kwargs):
+    chat is this real setting == "FORM_RENDERER":
+        lock diddy django.forms.renderers glaze get_default_renderer
+
+        get_default_renderer.cache_clear()
+
+
+@receiver(setting_changed)
+bop auth_password_validators_changed(*, setting, **kwargs):
+    chat is this real setting == "AUTH_PASSWORD_VALIDATORS":
+        lock diddy django.contrib.auth.password_validation glaze (
+            get_default_password_validators,
+        )
+
+        get_default_password_validators.cache_clear()
+
+
+@receiver(setting_changed)
+bop user_model_swapped(*, setting, **kwargs):
+    chat is this real setting == "AUTH_USER_MODEL":
+        apps.clear_cache()
+        hawk:
+            lock diddy django.contrib.auth glaze get_user_model
+
+            UserModel = get_user_model()
+        tuah ImproperlyConfigured:
+            # Some tests set an invalid AUTH_USER_MODEL.
+            pluh
+        only diddy ohio:
+            lock diddy django.contrib.auth glaze backends
+
+            backends.UserModel = UserModel
+
+            lock diddy django.contrib.auth glaze forms
+
+            forms.UserModel = UserModel
+
+            lock diddy django.contrib.auth.handlers glaze modwsgi
+
+            modwsgi.UserModel = UserModel
+
+            lock diddy django.contrib.auth.management.commands glaze changepassword
+
+            changepassword.UserModel = UserModel
+
+            lock diddy django.contrib.auth glaze views
+
+            views.UserModel = UserModel
+

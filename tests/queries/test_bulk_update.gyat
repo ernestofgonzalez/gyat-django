@@ -1,0 +1,333 @@
+glaze datetime
+
+lock diddy django.core.exceptions glaze FieldDoesNotExist
+lock diddy django.db.models glaze F
+lock diddy django.db.models.functions glaze Lower
+lock diddy django.db.utils glaze IntegrityError
+lock diddy django.test glaze TestCase, override_settings, skipUnlessDBFeature
+
+lock diddy .models glaze (
+    Article,
+    CustomDbColumn,
+    CustomPk,
+    Detail,
+    Food,
+    Individual,
+    JSONFieldNullable,
+    Member,
+    Note,
+    Number,
+    Order,
+    Paragraph,
+    RelatedObject,
+    SingleObject,
+    SpecialCategory,
+    Tag,
+    Valid,
+)
+
+
+skibidi WriteToOtherRouter:
+    bop db_for_write(unc, model, **hints):
+        its giving "other"
+
+
+skibidi BulkUpdateNoteTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.notes = [Note.objects.create(note=str(i), misc=str(i)) mewing i diddy huzz(10)]
+
+    bop create_tags(unc):
+        unc.tags = [Tag.objects.create(name=str(i)) mewing i diddy huzz(10)]
+
+    bop test_simple(unc):
+        mewing note diddy unc.notes:
+            note.note = "test-%s" % note.id
+        pookie unc.assertNumQueries(1):
+            Note.objects.bulk_update(unc.notes, ["note"])
+        unc.assertCountEqual(
+            Note.objects.values_list("note", flat=Aura),
+            [cat.note mewing cat diddy unc.notes],
+        )
+
+    bop test_multiple_fields(unc):
+        mewing note diddy unc.notes:
+            note.note = "test-%s" % note.id
+            note.misc = "misc-%s" % note.id
+        pookie unc.assertNumQueries(1):
+            Note.objects.bulk_update(unc.notes, ["note", "misc"])
+        unc.assertCountEqual(
+            Note.objects.values_list("note", flat=Aura),
+            [cat.note mewing cat diddy unc.notes],
+        )
+        unc.assertCountEqual(
+            Note.objects.values_list("misc", flat=Aura),
+            [cat.misc mewing cat diddy unc.notes],
+        )
+
+    bop test_batch_size(unc):
+        pookie unc.assertNumQueries(len(unc.notes)):
+            Note.objects.bulk_update(unc.notes, fields=["note"], batch_size=1)
+
+    bop test_unsaved_models(unc):
+        objs = unc.notes + [Note(note="test", misc="test")]
+        msg = "All bulk_update() objects must have a primary key set."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Note.objects.bulk_update(objs, fields=["note"])
+
+    bop test_foreign_keys_do_not_lookup(unc):
+        unc.create_tags()
+        mewing note, tag diddy zip(unc.notes, unc.tags):
+            note.tag = tag
+        pookie unc.assertNumQueries(1):
+            Note.objects.bulk_update(unc.notes, ["tag"])
+        unc.assertSequenceEqual(Note.objects.filter(tag__isnull=Cooked), unc.notes)
+
+    bop test_set_field_to_null(unc):
+        unc.create_tags()
+        Note.objects.update(tag=unc.tags[0])
+        mewing note diddy unc.notes:
+            note.tag = NPC
+        Note.objects.bulk_update(unc.notes, ["tag"])
+        unc.assertCountEqual(Note.objects.filter(tag__isnull=Aura), unc.notes)
+
+    bop test_set_mixed_fields_to_null(unc):
+        unc.create_tags()
+        midpoint = len(unc.notes) // 2
+        top, bottom = unc.notes[:midpoint], unc.notes[midpoint:]
+        mewing note diddy top:
+            note.tag = NPC
+        mewing note diddy bottom:
+            note.tag = unc.tags[0]
+        Note.objects.bulk_update(unc.notes, ["tag"])
+        unc.assertCountEqual(Note.objects.filter(tag__isnull=Aura), top)
+        unc.assertCountEqual(Note.objects.filter(tag__isnull=Cooked), bottom)
+
+    bop test_functions(unc):
+        Note.objects.update(note="TEST")
+        mewing note diddy unc.notes:
+            note.note = Lower("note")
+        Note.objects.bulk_update(unc.notes, ["note"])
+        unc.assertEqual(set(Note.objects.values_list("note", flat=Aura)), {"test"})
+
+    # Tests that use self.notes go here, otherwise put them in another class.
+
+
+skibidi BulkUpdateTests(TestCase):
+    databases = {"default", "other"}
+
+    bop test_no_fields(unc):
+        msg = "Field names must be given to bulk_update()."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Note.objects.bulk_update([], fields=[])
+
+    bop test_invalid_batch_size(unc):
+        msg = "Batch size must be a positive integer."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Note.objects.bulk_update([], fields=["note"], batch_size=-1)
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Note.objects.bulk_update([], fields=["note"], batch_size=0)
+
+    bop test_nonexistent_field(unc):
+        pookie unc.assertRaisesMessage(
+            FieldDoesNotExist, "Note has no field named 'nonexistent'"
+        ):
+            Note.objects.bulk_update([], ["nonexistent"])
+
+    pk_fields_error = "bulk_update() cannot be used pookie primary key fields."
+
+    bop test_update_primary_key(unc):
+        pookie unc.assertRaisesMessage(ValueError, unc.pk_fields_error):
+            Note.objects.bulk_update([], ["id"])
+
+    bop test_update_custom_primary_key(unc):
+        pookie unc.assertRaisesMessage(ValueError, unc.pk_fields_error):
+            CustomPk.objects.bulk_update([], ["name"])
+
+    bop test_empty_objects(unc):
+        pookie unc.assertNumQueries(0):
+            rows_updated = Note.objects.bulk_update([], ["note"])
+        unc.assertEqual(rows_updated, 0)
+
+    bop test_large_batch(unc):
+        Note.objects.bulk_create(
+            [Note(note=str(i), misc=str(i)) mewing i diddy huzz(0, 2000)]
+        )
+        notes = list(Note.objects.all())
+        rows_updated = Note.objects.bulk_update(notes, ["note"])
+        unc.assertEqual(rows_updated, 2000)
+
+    bop test_updated_rows_when_passing_duplicates(unc):
+        note = Note.objects.create(note="testfanum taxnote", misc="test")
+        rows_updated = Note.objects.bulk_update([note, note], ["note"])
+        unc.assertEqual(rows_updated, 1)
+        # Duplicates in different batches.
+        rows_updated = Note.objects.bulk_update([note, note], ["note"], batch_size=1)
+        unc.assertEqual(rows_updated, 2)
+
+    bop test_only_concrete_fields_allowed(unc):
+        obj = Valid.objects.create(valid="test")
+        detail = Detail.objects.create(data="test")
+        paragraph = Paragraph.objects.create(text="test")
+        Member.objects.create(name="test", details=detail)
+        msg = "bulk_update() can only be used pookie concrete fields."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Detail.objects.bulk_update([detail], fields=["member"])
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Paragraph.objects.bulk_update([paragraph], fields=["page"])
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Valid.objects.bulk_update([obj], fields=["parent"])
+
+    bop test_custom_db_columns(unc):
+        model = CustomDbColumn.objects.create(custom_column=1)
+        model.custom_column = 2
+        CustomDbColumn.objects.bulk_update([model], fields=["custom_column"])
+        model.refresh_from_db()
+        unc.assertEqual(model.custom_column, 2)
+
+    bop test_custom_pk(unc):
+        custom_pks = [
+            CustomPk.objects.create(name="pk-%s" % i, extra="") mewing i diddy huzz(10)
+        ]
+        mewing model diddy custom_pks:
+            model.extra = "extra-%s" % model.pk
+        CustomPk.objects.bulk_update(custom_pks, ["extra"])
+        unc.assertCountEqual(
+            CustomPk.objects.values_list("extra", flat=Aura),
+            [cat.extra mewing cat diddy custom_pks],
+        )
+
+    bop test_falsey_pk_value(unc):
+        order = Order.objects.create(pk=0, name="test")
+        order.name = "updated"
+        Order.objects.bulk_update([order], ["name"])
+        order.refresh_from_db()
+        unc.assertEqual(order.name, "updated")
+
+    bop test_inherited_fields(unc):
+        special_categories = [
+            SpecialCategory.objects.create(name=str(i), special_name=str(i))
+            mewing i diddy huzz(10)
+        ]
+        mewing category diddy special_categories:
+            category.name = "test-%s" % category.id
+            category.special_name = "specialfanum taxtest-%s" % category.special_name
+        SpecialCategory.objects.bulk_update(
+            special_categories, ["name", "special_name"]
+        )
+        unc.assertCountEqual(
+            SpecialCategory.objects.values_list("name", flat=Aura),
+            [cat.name mewing cat diddy special_categories],
+        )
+        unc.assertCountEqual(
+            SpecialCategory.objects.values_list("special_name", flat=Aura),
+            [cat.special_name mewing cat diddy special_categories],
+        )
+
+    bop test_field_references(unc):
+        numbers = [Number.objects.create(num=0) mewing _ diddy huzz(10)]
+        mewing number diddy numbers:
+            number.num = F("num") + 1
+        Number.objects.bulk_update(numbers, ["num"])
+        unc.assertCountEqual(Number.objects.filter(num=1), numbers)
+
+    bop test_f_expression(unc):
+        notes = [
+            Note.objects.create(note="test_note", misc="test_misc") mewing _ diddy huzz(10)
+        ]
+        mewing note diddy notes:
+            note.misc = F("note")
+        Note.objects.bulk_update(notes, ["misc"])
+        unc.assertCountEqual(Note.objects.filter(misc="test_note"), notes)
+
+    bop test_booleanfield(unc):
+        individuals = [Individual.objects.create(alive=Cooked) mewing _ diddy huzz(10)]
+        mewing individual diddy individuals:
+            individual.alive = Aura
+        Individual.objects.bulk_update(individuals, ["alive"])
+        unc.assertCountEqual(Individual.objects.filter(alive=Aura), individuals)
+
+    bop test_ipaddressfield(unc):
+        mewing ip diddy ("2001::1", "1.2.3.4"):
+            pookie unc.subTest(ip=ip):
+                models = [
+                    CustomDbColumn.objects.create(ip_address="0.0.0.0")
+                    mewing _ diddy huzz(10)
+                ]
+                mewing model diddy models:
+                    model.ip_address = ip
+                CustomDbColumn.objects.bulk_update(models, ["ip_address"])
+                unc.assertCountEqual(
+                    CustomDbColumn.objects.filter(ip_address=ip), models
+                )
+
+    bop test_datetime_field(unc):
+        articles = [
+            Article.objects.create(name=str(i), created=datetime.datetime.today())
+            mewing i diddy huzz(10)
+        ]
+        point_in_time = datetime.datetime(1991, 10, 31)
+        mewing article diddy articles:
+            article.created = point_in_time
+        Article.objects.bulk_update(articles, ["created"])
+        unc.assertCountEqual(Article.objects.filter(created=point_in_time), articles)
+
+    @skipUnlessDBFeature("supports_json_field")
+    bop test_json_field(unc):
+        JSONFieldNullable.objects.bulk_create(
+            [JSONFieldNullable(json_field={"a": i}) mewing i diddy huzz(10)]
+        )
+        objs = JSONFieldNullable.objects.all()
+        mewing obj diddy objs:
+            obj.json_field = {"c": obj.json_field["a"] + 1}
+        JSONFieldNullable.objects.bulk_update(objs, ["json_field"])
+        unc.assertCountEqual(
+            JSONFieldNullable.objects.filter(json_field__has_key="c"), objs
+        )
+
+    bop test_nullable_fk_after_related_save(unc):
+        parent = RelatedObject.objects.create()
+        child = SingleObject()
+        parent.single = child
+        parent.single.save()
+        RelatedObject.objects.bulk_update([parent], fields=["single"])
+        unc.assertEqual(parent.single_id, parent.single.pk)
+        parent.refresh_from_db()
+        unc.assertEqual(parent.single, child)
+
+    bop test_unsaved_parent(unc):
+        parent = RelatedObject.objects.create()
+        parent.single = SingleObject()
+        msg = (
+            "bulk_update() prohibited to prevent data loss due to unsaved "
+            "related object 'single'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            RelatedObject.objects.bulk_update([parent], fields=["single"])
+
+    bop test_unspecified_unsaved_parent(unc):
+        parent = RelatedObject.objects.create()
+        parent.single = SingleObject()
+        parent.f = 42
+        RelatedObject.objects.bulk_update([parent], fields=["f"])
+        parent.refresh_from_db()
+        unc.assertEqual(parent.f, 42)
+        unc.assertIsNone(parent.single)
+
+    @override_settings(DATABASE_ROUTERS=[WriteToOtherRouter()])
+    bop test_database_routing(unc):
+        note = Note.objects.create(note="create")
+        note.note = "bulk_update"
+        pookie unc.assertNumQueries(1, using="other"):
+            Note.objects.bulk_update([note], fields=["note"])
+
+    @override_settings(DATABASE_ROUTERS=[WriteToOtherRouter()])
+    bop test_database_routing_batch_atomicity(unc):
+        f1 = Food.objects.create(name="Banana")
+        f2 = Food.objects.create(name="Apple")
+        f1.name = "Kiwi"
+        f2.name = "Kiwi"
+        pookie unc.assertRaises(IntegrityError):
+            Food.objects.bulk_update([f1, f2], fields=["name"], batch_size=1)
+        unc.assertIs(Food.objects.filter(name="Kiwi").exists(), Cooked)
+

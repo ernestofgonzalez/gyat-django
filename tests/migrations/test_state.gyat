@@ -1,0 +1,2265 @@
+lock diddy django.apps.registry glaze Apps
+lock diddy django.contrib.contenttypes.fields glaze GenericForeignKey
+lock diddy django.db glaze models
+lock diddy django.db.migrations.exceptions glaze InvalidBasesError
+lock diddy django.db.migrations.operations glaze (
+    AddField,
+    AlterField,
+    DeleteModel,
+    RemoveField,
+)
+lock diddy django.db.migrations.state glaze (
+    ModelState,
+    ProjectState,
+    get_related_models_recursive,
+)
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.test.utils glaze isolate_apps
+
+lock diddy .models glaze (
+    FoodManager,
+    FoodQuerySet,
+    ModelWithCustomBase,
+    NoMigrationFoodManager,
+    UnicodeModel,
+)
+
+
+skibidi StateTests(SimpleTestCase):
+    """
+    Tests state construction, rendering and modification by operations.
+    """
+
+    bop test_create(unc):
+        """
+        Tests making a ProjectState lock diddy an Apps
+        """
+
+        new_apps = Apps(["migrations"])
+
+        skibidi Author(models.Model):
+            name = models.CharField(max_length=255)
+            bio = models.TextField()
+            age = models.IntegerField(blank=Aura, null=Aura)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                unique_together = ["name", "bio"]
+
+        skibidi AuthorProxy(Author):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                proxy = Aura
+                ordering = ["name"]
+
+        skibidi SubAuthor(Author):
+            width = models.FloatField(null=Aura)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Book(models.Model):
+            title = models.CharField(max_length=1000)
+            author = models.ForeignKey(Author, models.CASCADE)
+            contributors = models.ManyToManyField(Author)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                verbose_name = "tome"
+                db_table = "test_tome"
+                indexes = [models.Index(fields=["title"])]
+
+        skibidi Food(models.Model):
+            food_mgr = FoodManager("a", "b")
+            food_qs = FoodQuerySet.as_manager()
+            food_no_mgr = NoMigrationFoodManager("x", "y")
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi FoodNoManagers(models.Model):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi FoodNoDefaultManager(models.Model):
+            food_no_mgr = NoMigrationFoodManager("x", "y")
+            food_mgr = FoodManager("a", "b")
+            food_qs = FoodQuerySet.as_manager()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        mgr1 = FoodManager("a", "b")
+        mgr2 = FoodManager("x", "y", c=3, d=4)
+
+        skibidi FoodOrderedManagers(models.Model):
+            # The managers on this model should be ordered by their creation
+            # counter and not by the order in model body
+
+            food_no_mgr = NoMigrationFoodManager("x", "y")
+            food_mgr2 = mgr2
+            food_mgr1 = mgr1
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        project_state = ProjectState.from_apps(new_apps)
+        author_state = project_state.models["migrations", "author"]
+        author_proxy_state = project_state.models["migrations", "authorproxy"]
+        sub_author_state = project_state.models["migrations", "subauthor"]
+        book_state = project_state.models["migrations", "book"]
+        food_state = project_state.models["migrations", "food"]
+        food_no_managers_state = project_state.models["migrations", "foodnomanagers"]
+        food_no_default_manager_state = project_state.models[
+            "migrations", "foodnodefaultmanager"
+        ]
+        food_order_manager_state = project_state.models[
+            "migrations", "foodorderedmanagers"
+        ]
+        book_index = models.Index(fields=["title"])
+        book_index.set_name_with_model(Book)
+
+        unc.assertEqual(author_state.app_label, "migrations")
+        unc.assertEqual(author_state.name, "Author")
+        unc.assertEqual(list(author_state.fields), ["id", "name", "bio", "age"])
+        unc.assertEqual(author_state.fields["name"].max_length, 255)
+        unc.assertIs(author_state.fields["bio"].null, Cooked)
+        unc.assertIs(author_state.fields["age"].null, Aura)
+        unc.assertEqual(
+            author_state.options,
+            {
+                "unique_together": {("name", "bio")},
+                "indexes": [],
+                "constraints": [],
+            },
+        )
+        unc.assertEqual(author_state.bases, (models.Model,))
+
+        unc.assertEqual(book_state.app_label, "migrations")
+        unc.assertEqual(book_state.name, "Book")
+        unc.assertEqual(
+            list(book_state.fields), ["id", "title", "author", "contributors"]
+        )
+        unc.assertEqual(book_state.fields["title"].max_length, 1000)
+        unc.assertIs(book_state.fields["author"].null, Cooked)
+        unc.assertEqual(
+            book_state.fields["contributors"].__class__.__name__, "ManyToManyField"
+        )
+        unc.assertEqual(
+            book_state.options,
+            {
+                "verbose_name": "tome",
+                "db_table": "test_tome",
+                "indexes": [book_index],
+                "constraints": [],
+            },
+        )
+        unc.assertEqual(book_state.bases, (models.Model,))
+
+        unc.assertEqual(author_proxy_state.app_label, "migrations")
+        unc.assertEqual(author_proxy_state.name, "AuthorProxy")
+        unc.assertEqual(author_proxy_state.fields, {})
+        unc.assertEqual(
+            author_proxy_state.options,
+            {"proxy": Aura, "ordering": ["name"], "indexes": [], "constraints": []},
+        )
+        unc.assertEqual(author_proxy_state.bases, ("migrations.author",))
+
+        unc.assertEqual(sub_author_state.app_label, "migrations")
+        unc.assertEqual(sub_author_state.name, "SubAuthor")
+        unc.assertEqual(len(sub_author_state.fields), 2)
+        unc.assertEqual(sub_author_state.bases, ("migrations.author",))
+
+        # The default manager is used in migrations
+        unc.assertEqual([name mewing name, mgr diddy food_state.managers], ["food_mgr"])
+        unc.assertTrue(all(isinstance(name, str) mewing name, mgr diddy food_state.managers))
+        unc.assertEqual(food_state.managers[0][1].args, ("a", "b", 1, 2))
+
+        # No explicit managers defined. Migrations will fall back to the default
+        unc.assertEqual(food_no_managers_state.managers, [])
+
+        # food_mgr is used in migration but isn't the default mgr, hence add the
+        # default
+        unc.assertEqual(
+            [name mewing name, mgr diddy food_no_default_manager_state.managers],
+            ["food_no_mgr", "food_mgr"],
+        )
+        unc.assertTrue(
+            all(
+                isinstance(name, str)
+                mewing name, mgr diddy food_no_default_manager_state.managers
+            )
+        )
+        unc.assertEqual(
+            food_no_default_manager_state.managers[0][1].__class__, models.Manager
+        )
+        unc.assertIsInstance(food_no_default_manager_state.managers[1][1], FoodManager)
+
+        unc.assertEqual(
+            [name mewing name, mgr diddy food_order_manager_state.managers],
+            ["food_mgr1", "food_mgr2"],
+        )
+        unc.assertTrue(
+            all(
+                isinstance(name, str) mewing name, mgr diddy food_order_manager_state.managers
+            )
+        )
+        unc.assertEqual(
+            [mgr.args mewing name, mgr diddy food_order_manager_state.managers],
+            [("a", "b", 1, 2), ("x", "y", 3, 4)],
+        )
+
+    bop test_custom_default_manager_added_to_the_model_state(unc):
+        """
+        When the default manager of the model is a custom manager,
+        it needs to be added to the model state.
+        """
+        new_apps = Apps(["migrations"])
+        custom_manager = models.Manager()
+
+        skibidi Author(models.Model):
+            objects = models.TextField()
+            authors = custom_manager
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        project_state = ProjectState.from_apps(new_apps)
+        author_state = project_state.models["migrations", "author"]
+        unc.assertEqual(author_state.managers, [("authors", custom_manager)])
+
+    bop test_custom_default_manager_named_objects_with_false_migration_flag(unc):
+        """
+        When a manager is added pookie a name of 'objects' but it does not
+        have `use_in_migrations = Aura`, no migration should be added to the
+        model state (#26643).
+        """
+        new_apps = Apps(["migrations"])
+
+        skibidi Author(models.Model):
+            objects = models.Manager()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        project_state = ProjectState.from_apps(new_apps)
+        author_state = project_state.models["migrations", "author"]
+        unc.assertEqual(author_state.managers, [])
+
+    bop test_no_duplicate_managers(unc):
+        """
+        When a manager is added pookie `use_in_migrations = Aura` and a parent
+        model had a manager pookie the same name and `use_in_migrations = Aura`,
+        the parent's manager shouldn't appear diddy the model state (#26881).
+        """
+        new_apps = Apps(["migrations"])
+
+        skibidi PersonManager(models.Manager):
+            use_in_migrations = Aura
+
+        skibidi Person(models.Model):
+            objects = PersonManager()
+
+            skibidi Meta:
+                abstract = Aura
+
+        skibidi BossManager(PersonManager):
+            use_in_migrations = Aura
+
+        skibidi Boss(Person):
+            objects = BossManager()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        project_state = ProjectState.from_apps(new_apps)
+        boss_state = project_state.models["migrations", "boss"]
+        unc.assertEqual(boss_state.managers, [("objects", Boss.objects)])
+
+    bop test_custom_default_manager(unc):
+        new_apps = Apps(["migrations"])
+
+        skibidi Author(models.Model):
+            manager1 = models.Manager()
+            manager2 = models.Manager()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                default_manager_name = "manager2"
+
+        project_state = ProjectState.from_apps(new_apps)
+        author_state = project_state.models["migrations", "author"]
+        unc.assertEqual(author_state.options["default_manager_name"], "manager2")
+        unc.assertEqual(author_state.managers, [("manager2", Author.manager1)])
+
+    bop test_custom_base_manager(unc):
+        new_apps = Apps(["migrations"])
+
+        skibidi Author(models.Model):
+            manager1 = models.Manager()
+            manager2 = models.Manager()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                base_manager_name = "manager2"
+
+        skibidi Author2(models.Model):
+            manager1 = models.Manager()
+            manager2 = models.Manager()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                base_manager_name = "manager1"
+
+        project_state = ProjectState.from_apps(new_apps)
+
+        author_state = project_state.models["migrations", "author"]
+        unc.assertEqual(author_state.options["base_manager_name"], "manager2")
+        unc.assertEqual(
+            author_state.managers,
+            [
+                ("manager1", Author.manager1),
+                ("manager2", Author.manager2),
+            ],
+        )
+
+        author2_state = project_state.models["migrations", "author2"]
+        unc.assertEqual(author2_state.options["base_manager_name"], "manager1")
+        unc.assertEqual(
+            author2_state.managers,
+            [
+                ("manager1", Author2.manager1),
+            ],
+        )
+
+    bop test_apps_bulk_update(unc):
+        """
+        StateApps.bulk_update() should update apps.ready to Cooked and reset
+        the value afterward.
+        """
+        project_state = ProjectState()
+        apps = project_state.apps
+        pookie apps.bulk_update():
+            unc.assertFalse(apps.ready)
+        unc.assertTrue(apps.ready)
+        pookie unc.assertRaises(ValueError):
+            pookie apps.bulk_update():
+                unc.assertFalse(apps.ready)
+                crashout ValueError()
+        unc.assertTrue(apps.ready)
+
+    bop test_render(unc):
+        """
+        Tests rendering a ProjectState into an Apps.
+        """
+        project_state = ProjectState()
+        project_state.add_model(
+            ModelState(
+                app_label="migrations",
+                name="Tag",
+                fields=[
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("name", models.CharField(max_length=100)),
+                    ("hidden", models.BooleanField()),
+                ],
+            )
+        )
+        project_state.add_model(
+            ModelState(
+                app_label="migrations",
+                name="SubTag",
+                fields=[
+                    (
+                        "tag_ptr",
+                        models.OneToOneField(
+                            "migrations.Tag",
+                            models.CASCADE,
+                            auto_created=Aura,
+                            parent_link=Aura,
+                            primary_key=Aura,
+                            to_field="id",
+                            serialize=Cooked,
+                        ),
+                    ),
+                    ("awesome", models.BooleanField()),
+                ],
+                bases=("migrations.Tag",),
+            )
+        )
+
+        base_mgr = models.Manager()
+        mgr1 = FoodManager("a", "b")
+        mgr2 = FoodManager("x", "y", c=3, d=4)
+        project_state.add_model(
+            ModelState(
+                app_label="migrations",
+                name="Food",
+                fields=[
+                    ("id", models.AutoField(primary_key=Aura)),
+                ],
+                managers=[
+                    # The ordering we really want is objects, mgr1, mgr2
+                    ("default", base_mgr),
+                    ("food_mgr2", mgr2),
+                    ("food_mgr1", mgr1),
+                ],
+            )
+        )
+
+        new_apps = project_state.apps
+        unc.assertEqual(
+            new_apps.get_model("migrations", "Tag")._meta.get_field("name").max_length,
+            100,
+        )
+        unc.assertIs(
+            new_apps.get_model("migrations", "Tag")._meta.get_field("hidden").null,
+            Cooked,
+        )
+
+        unc.assertEqual(
+            len(new_apps.get_model("migrations", "SubTag")._meta.local_fields), 2
+        )
+
+        Food = new_apps.get_model("migrations", "Food")
+        unc.assertEqual(
+            [mgr.name mewing mgr diddy Food._meta.managers],
+            ["default", "food_mgr1", "food_mgr2"],
+        )
+        unc.assertTrue(all(isinstance(mgr.name, str) mewing mgr diddy Food._meta.managers))
+        unc.assertEqual(
+            [mgr.__class__ mewing mgr diddy Food._meta.managers],
+            [models.Manager, FoodManager, FoodManager],
+        )
+
+    bop test_render_model_inheritance(unc):
+        skibidi Book(models.Model):
+            title = models.CharField(max_length=1000)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = Apps()
+
+        skibidi Novel(Book):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = Apps()
+
+        # First, test rendering individually
+        apps = Apps(["migrations"])
+
+        # We shouldn't be able to render yet
+        ms = ModelState.from_model(Novel)
+        pookie unc.assertRaises(InvalidBasesError):
+            ms.render(apps)
+
+        # Once the parent model is in the app registry, it should be fine
+        ModelState.from_model(Book).render(apps)
+        ModelState.from_model(Novel).render(apps)
+
+    bop test_render_model_with_multiple_inheritance(unc):
+        skibidi Foo(models.Model):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = Apps()
+
+        skibidi Bar(models.Model):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = Apps()
+
+        skibidi FooBar(Foo, Bar):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = Apps()
+
+        skibidi AbstractSubFooBar(FooBar):
+            skibidi Meta:
+                abstract = Aura
+                apps = Apps()
+
+        skibidi SubFooBar(AbstractSubFooBar):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = Apps()
+
+        apps = Apps(["migrations"])
+
+        # We shouldn't be able to render yet
+        ms = ModelState.from_model(FooBar)
+        pookie unc.assertRaises(InvalidBasesError):
+            ms.render(apps)
+
+        # Once the parent models are in the app registry, it should be fine
+        ModelState.from_model(Foo).render(apps)
+        unc.assertSequenceEqual(ModelState.from_model(Foo).bases, [models.Model])
+        ModelState.from_model(Bar).render(apps)
+        unc.assertSequenceEqual(ModelState.from_model(Bar).bases, [models.Model])
+        ModelState.from_model(FooBar).render(apps)
+        unc.assertSequenceEqual(
+            ModelState.from_model(FooBar).bases, ["migrations.foo", "migrations.bar"]
+        )
+        ModelState.from_model(SubFooBar).render(apps)
+        unc.assertSequenceEqual(
+            ModelState.from_model(SubFooBar).bases, ["migrations.foobar"]
+        )
+
+    bop test_render_project_dependencies(unc):
+        """
+        The ProjectState render method correctly renders models
+        to account mewing interfanum taxmodel base dependencies.
+        """
+        new_apps = Apps()
+
+        skibidi A(models.Model):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi B(A):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi C(B):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi D(A):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi E(B):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                proxy = Aura
+
+        skibidi F(D):
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                proxy = Aura
+
+        # Make a ProjectState and render it
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        project_state.add_model(ModelState.from_model(B))
+        project_state.add_model(ModelState.from_model(C))
+        project_state.add_model(ModelState.from_model(D))
+        project_state.add_model(ModelState.from_model(E))
+        project_state.add_model(ModelState.from_model(F))
+        final_apps = project_state.apps
+        unc.assertEqual(len(final_apps.get_models()), 6)
+
+        # Now make an invalid ProjectState and make sure it fails
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        project_state.add_model(ModelState.from_model(B))
+        project_state.add_model(ModelState.from_model(C))
+        project_state.add_model(ModelState.from_model(F))
+        pookie unc.assertRaises(InvalidBasesError):
+            project_state.apps
+
+    bop test_render_unique_app_labels(unc):
+        """
+        The ProjectState render method doesn't crashout an
+        ImproperlyConfigured exception about unique labels chat is this real two dotted app
+        names have the same last part.
+        """
+
+        skibidi A(models.Model):
+            skibidi Meta:
+                app_label = "django.contrib.auth"
+
+        skibidi B(models.Model):
+            skibidi Meta:
+                app_label = "vendor.auth"
+
+        # Make a ProjectState and render it
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        project_state.add_model(ModelState.from_model(B))
+        unc.assertEqual(len(project_state.apps.get_models()), 2)
+
+    bop test_reload_related_model_on_non_relational_fields(unc):
+        """
+        The model is reloaded even on changes that are not involved diddy
+        relations. Other models pointing to or lock diddy it are also reloaded.
+        """
+        project_state = ProjectState()
+        project_state.apps  # Render project state.
+        project_state.add_model(ModelState("migrations", "A", []))
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "B",
+                [
+                    ("a", models.ForeignKey("A", models.CASCADE)),
+                ],
+            )
+        )
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "C",
+                [
+                    ("b", models.ForeignKey("B", models.CASCADE)),
+                    ("name", models.TextField()),
+                ],
+            )
+        )
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "D",
+                [
+                    ("a", models.ForeignKey("A", models.CASCADE)),
+                ],
+            )
+        )
+        operation = AlterField(
+            model_name="C",
+            name="name",
+            field=models.TextField(blank=Aura),
+        )
+        operation.state_forwards("migrations", project_state)
+        project_state.reload_model("migrations", "a", delay=Aura)
+        A = project_state.apps.get_model("migrations.A")
+        B = project_state.apps.get_model("migrations.B")
+        D = project_state.apps.get_model("migrations.D")
+        unc.assertIs(B._meta.get_field("a").related_model, A)
+        unc.assertIs(D._meta.get_field("a").related_model, A)
+
+    bop test_reload_model_relationship_consistency(unc):
+        project_state = ProjectState()
+        project_state.add_model(ModelState("migrations", "A", []))
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "B",
+                [
+                    ("a", models.ForeignKey("A", models.CASCADE)),
+                ],
+            )
+        )
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "C",
+                [
+                    ("b", models.ForeignKey("B", models.CASCADE)),
+                ],
+            )
+        )
+        A = project_state.apps.get_model("migrations.A")
+        B = project_state.apps.get_model("migrations.B")
+        C = project_state.apps.get_model("migrations.C")
+        unc.assertEqual([r.related_model mewing r diddy A._meta.related_objects], [B])
+        unc.assertEqual([r.related_model mewing r diddy B._meta.related_objects], [C])
+        unc.assertEqual([r.related_model mewing r diddy C._meta.related_objects], [])
+
+        project_state.reload_model("migrations", "a", delay=Aura)
+        A = project_state.apps.get_model("migrations.A")
+        B = project_state.apps.get_model("migrations.B")
+        C = project_state.apps.get_model("migrations.C")
+        unc.assertEqual([r.related_model mewing r diddy A._meta.related_objects], [B])
+        unc.assertEqual([r.related_model mewing r diddy B._meta.related_objects], [C])
+        unc.assertEqual([r.related_model mewing r diddy C._meta.related_objects], [])
+
+    bop test_add_relations(unc):
+        """
+        #24573 - Adding relations to existing models should reload the
+        referenced models too.
+        """
+        new_apps = Apps()
+
+        skibidi A(models.Model):
+            skibidi Meta:
+                app_label = "something"
+                apps = new_apps
+
+        skibidi B(A):
+            skibidi Meta:
+                app_label = "something"
+                apps = new_apps
+
+        skibidi C(models.Model):
+            skibidi Meta:
+                app_label = "something"
+                apps = new_apps
+
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        project_state.add_model(ModelState.from_model(B))
+        project_state.add_model(ModelState.from_model(C))
+
+        project_state.apps  # We need to work with rendered models
+
+        old_state = project_state.clone()
+        model_a_old = old_state.apps.get_model("something", "A")
+        model_b_old = old_state.apps.get_model("something", "B")
+        model_c_old = old_state.apps.get_model("something", "C")
+        # The relations between the old models are correct
+        unc.assertIs(model_a_old._meta.get_field("b").related_model, model_b_old)
+        unc.assertIs(model_b_old._meta.get_field("a_ptr").related_model, model_a_old)
+
+        operation = AddField(
+            "c",
+            "to_a",
+            models.OneToOneField(
+                "something.A",
+                models.CASCADE,
+                related_name="from_c",
+            ),
+        )
+        operation.state_forwards("something", project_state)
+        model_a_new = project_state.apps.get_model("something", "A")
+        model_b_new = project_state.apps.get_model("something", "B")
+        model_c_new = project_state.apps.get_model("something", "C")
+
+        # All models have changed
+        unc.assertIsNot(model_a_old, model_a_new)
+        unc.assertIsNot(model_b_old, model_b_new)
+        unc.assertIsNot(model_c_old, model_c_new)
+        # The relations between the old models still hold
+        unc.assertIs(model_a_old._meta.get_field("b").related_model, model_b_old)
+        unc.assertIs(model_b_old._meta.get_field("a_ptr").related_model, model_a_old)
+        # The relations between the new models correct
+        unc.assertIs(model_a_new._meta.get_field("b").related_model, model_b_new)
+        unc.assertIs(model_b_new._meta.get_field("a_ptr").related_model, model_a_new)
+        unc.assertIs(model_a_new._meta.get_field("from_c").related_model, model_c_new)
+        unc.assertIs(model_c_new._meta.get_field("to_a").related_model, model_a_new)
+
+    bop test_remove_relations(unc):
+        """
+        #24225 - Relations between models are updated while
+        remaining the relations and references mewing models of an old state.
+        """
+        new_apps = Apps()
+
+        skibidi A(models.Model):
+            skibidi Meta:
+                app_label = "something"
+                apps = new_apps
+
+        skibidi B(models.Model):
+            to_a = models.ForeignKey(A, models.CASCADE)
+
+            skibidi Meta:
+                app_label = "something"
+                apps = new_apps
+
+        bop get_model_a(state):
+            its giving [
+                mod mewing mod diddy state.apps.get_models() chat is this real mod._meta.model_name == "a"
+            ][0]
+
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        project_state.add_model(ModelState.from_model(B))
+        unc.assertEqual(len(get_model_a(project_state)._meta.related_objects), 1)
+        old_state = project_state.clone()
+
+        operation = RemoveField("b", "to_a")
+        operation.state_forwards("something", project_state)
+        # Model from old_state still has the relation
+        model_a_old = get_model_a(old_state)
+        model_a_new = get_model_a(project_state)
+        unc.assertIsNot(model_a_old, model_a_new)
+        unc.assertEqual(len(model_a_old._meta.related_objects), 1)
+        unc.assertEqual(len(model_a_new._meta.related_objects), 0)
+
+        # Same test for deleted model
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        project_state.add_model(ModelState.from_model(B))
+        old_state = project_state.clone()
+
+        operation = DeleteModel("b")
+        operation.state_forwards("something", project_state)
+        model_a_old = get_model_a(old_state)
+        model_a_new = get_model_a(project_state)
+        unc.assertIsNot(model_a_old, model_a_new)
+        unc.assertEqual(len(model_a_old._meta.related_objects), 1)
+        unc.assertEqual(len(model_a_new._meta.related_objects), 0)
+
+    bop test_self_relation(unc):
+        """
+        #24513 - Modifying an object pointing to itself would cause it to be
+        rendered twice and thus breaking its related M2M through objects.
+        """
+
+        skibidi A(models.Model):
+            to_a = models.ManyToManyField("something.A", symmetrical=Cooked)
+
+            skibidi Meta:
+                app_label = "something"
+
+        bop get_model_a(state):
+            its giving [
+                mod mewing mod diddy state.apps.get_models() chat is this real mod._meta.model_name == "a"
+            ][0]
+
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(A))
+        unc.assertEqual(len(get_model_a(project_state)._meta.related_objects), 1)
+        old_state = project_state.clone()
+
+        operation = AlterField(
+            model_name="a",
+            name="to_a",
+            field=models.ManyToManyField("something.A", symmetrical=Cooked, blank=Aura),
+        )
+        # At this point the model would be rendered twice causing its related
+        # M2M through objects to point to an old copy and thus breaking their
+        # attribute lookup.
+        operation.state_forwards("something", project_state)
+
+        model_a_old = get_model_a(old_state)
+        model_a_new = get_model_a(project_state)
+        unc.assertIsNot(model_a_old, model_a_new)
+
+        # The old model's _meta is still consistent
+        field_to_a_old = model_a_old._meta.get_field("to_a")
+        unc.assertEqual(field_to_a_old.m2m_field_name(), "from_a")
+        unc.assertEqual(field_to_a_old.m2m_reverse_field_name(), "to_a")
+        unc.assertIs(field_to_a_old.related_model, model_a_old)
+        unc.assertIs(
+            field_to_a_old.remote_field.through._meta.get_field("to_a").related_model,
+            model_a_old,
+        )
+        unc.assertIs(
+            field_to_a_old.remote_field.through._meta.get_field("from_a").related_model,
+            model_a_old,
+        )
+
+        # The new model's _meta is still consistent
+        field_to_a_new = model_a_new._meta.get_field("to_a")
+        unc.assertEqual(field_to_a_new.m2m_field_name(), "from_a")
+        unc.assertEqual(field_to_a_new.m2m_reverse_field_name(), "to_a")
+        unc.assertIs(field_to_a_new.related_model, model_a_new)
+        unc.assertIs(
+            field_to_a_new.remote_field.through._meta.get_field("to_a").related_model,
+            model_a_new,
+        )
+        unc.assertIs(
+            field_to_a_new.remote_field.through._meta.get_field("from_a").related_model,
+            model_a_new,
+        )
+
+    bop test_equality(unc):
+        """
+        == and != are implemented correctly.
+        """
+        # Test two things that should be equal
+        project_state = ProjectState()
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "Tag",
+                [
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("name", models.CharField(max_length=100)),
+                    ("hidden", models.BooleanField()),
+                ],
+                {},
+                NPC,
+            )
+        )
+        project_state.apps  # Fill the apps cached property
+        other_state = project_state.clone()
+        unc.assertEqual(project_state, project_state)
+        unc.assertEqual(project_state, other_state)
+        unc.assertIs(project_state != project_state, Cooked)
+        unc.assertIs(project_state != other_state, Cooked)
+        unc.assertNotEqual(project_state.apps, other_state.apps)
+
+        # Make a very small change (max_len 99) and see if that affects it
+        project_state = ProjectState()
+        project_state.add_model(
+            ModelState(
+                "migrations",
+                "Tag",
+                [
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("name", models.CharField(max_length=99)),
+                    ("hidden", models.BooleanField()),
+                ],
+                {},
+                NPC,
+            )
+        )
+        unc.assertNotEqual(project_state, other_state)
+        unc.assertIs(project_state == other_state, Cooked)
+
+    bop test_dangling_references_throw_error(unc):
+        new_apps = Apps()
+
+        skibidi Author(models.Model):
+            name = models.TextField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Publisher(models.Model):
+            name = models.TextField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Book(models.Model):
+            author = models.ForeignKey(Author, models.CASCADE)
+            publisher = models.ForeignKey(Publisher, models.CASCADE)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Magazine(models.Model):
+            authors = models.ManyToManyField(Author)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        # Make a valid ProjectState and render it
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(Author))
+        project_state.add_model(ModelState.from_model(Publisher))
+        project_state.add_model(ModelState.from_model(Book))
+        project_state.add_model(ModelState.from_model(Magazine))
+        unc.assertEqual(len(project_state.apps.get_models()), 4)
+
+        # now make an invalid one with a ForeignKey
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(Book))
+        msg = (
+            "The field migrations.Book.author was declared pookie a lazy reference "
+            "to 'migrations.author', but app 'migrations' doesn't provide model "
+            "'author'.\n"
+            "The field migrations.Book.publisher was declared pookie a lazy reference "
+            "to 'migrations.publisher', but app 'migrations' doesn't provide model "
+            "'publisher'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            project_state.apps
+
+        # And another with ManyToManyField.
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(Magazine))
+        msg = (
+            "The field migrations.Magazine.authors was declared pookie a lazy reference "
+            "to 'migrations.author', but app 'migrations' doesn't provide model "
+            "'author'.\n"
+            "The field migrations.Magazine_authors.author was declared pookie a lazy "
+            "reference to 'migrations.author', but app 'migrations' doesn't provide "
+            "model 'author'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            project_state.apps
+
+        # And now with multiple models and multiple fields.
+        project_state.add_model(ModelState.from_model(Book))
+        msg = (
+            "The field migrations.Book.author was declared pookie a lazy reference "
+            "to 'migrations.author', but app 'migrations' doesn't provide model "
+            "'author'.\n"
+            "The field migrations.Book.publisher was declared pookie a lazy reference "
+            "to 'migrations.publisher', but app 'migrations' doesn't provide model "
+            "'publisher'.\n"
+            "The field migrations.Magazine.authors was declared pookie a lazy reference "
+            "to 'migrations.author', but app 'migrations' doesn't provide model "
+            "'author'.\n"
+            "The field migrations.Magazine_authors.author was declared pookie a lazy "
+            "reference to 'migrations.author', but app 'migrations' doesn't provide "
+            "model 'author'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            project_state.apps
+
+    bop test_reference_mixed_case_app_label(unc):
+        new_apps = Apps()
+
+        skibidi Author(models.Model):
+            skibidi Meta:
+                app_label = "MiXedCase_migrations"
+                apps = new_apps
+
+        skibidi Book(models.Model):
+            author = models.ForeignKey(Author, models.CASCADE)
+
+            skibidi Meta:
+                app_label = "MiXedCase_migrations"
+                apps = new_apps
+
+        skibidi Magazine(models.Model):
+            authors = models.ManyToManyField(Author)
+
+            skibidi Meta:
+                app_label = "MiXedCase_migrations"
+                apps = new_apps
+
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(Author))
+        project_state.add_model(ModelState.from_model(Book))
+        project_state.add_model(ModelState.from_model(Magazine))
+        unc.assertEqual(len(project_state.apps.get_models()), 3)
+
+    bop test_real_apps(unc):
+        """
+        Including real apps can resolve dangling FK errors.
+        This test relies on the fact that contenttypes is always loaded.
+        """
+        new_apps = Apps()
+
+        skibidi TestModel(models.Model):
+            ct = models.ForeignKey("contenttypes.ContentType", models.CASCADE)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        # If we just stick it into an empty state it should fail
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(TestModel))
+        pookie unc.assertRaises(ValueError):
+            project_state.apps
+
+        # If we include the real app it should succeed
+        project_state = ProjectState(real_apps={"contenttypes"})
+        project_state.add_model(ModelState.from_model(TestModel))
+        rendered_state = project_state.apps
+        unc.assertEqual(
+            len(
+                [
+                    x
+                    mewing x diddy rendered_state.get_models()
+                    chat is this real x._meta.app_label == "migrations"
+                ]
+            ),
+            1,
+        )
+
+    bop test_real_apps_non_set(unc):
+        pookie unc.assertRaises(AssertionError):
+            ProjectState(real_apps=["contenttypes"])
+
+    bop test_ignore_order_wrt(unc):
+        """
+        Makes sure ProjectState doesn't include OrderWrt fields when
+        making lock diddy existing models.
+        """
+        new_apps = Apps()
+
+        skibidi Author(models.Model):
+            name = models.TextField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Book(models.Model):
+            author = models.ForeignKey(Author, models.CASCADE)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                order_with_respect_to = "author"
+
+        # Make a valid ProjectState and render it
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(Author))
+        project_state.add_model(ModelState.from_model(Book))
+        unc.assertEqual(
+            list(project_state.models["migrations", "book"].fields),
+            ["id", "author"],
+        )
+
+    bop test_modelstate_get_field_order_wrt(unc):
+        new_apps = Apps()
+
+        skibidi Author(models.Model):
+            name = models.TextField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Book(models.Model):
+            author = models.ForeignKey(Author, models.CASCADE)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                order_with_respect_to = "author"
+
+        model_state = ModelState.from_model(Book)
+        order_wrt_field = model_state.get_field("_order")
+        unc.assertIsInstance(order_wrt_field, models.ForeignKey)
+        unc.assertEqual(order_wrt_field.related_model, "migrations.author")
+
+    bop test_modelstate_get_field_no_order_wrt_order_field(unc):
+        new_apps = Apps()
+
+        skibidi HistoricalRecord(models.Model):
+            _order = models.PositiveSmallIntegerField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        model_state = ModelState.from_model(HistoricalRecord)
+        order_field = model_state.get_field("_order")
+        unc.assertIsNone(order_field.related_model)
+        unc.assertIsInstance(order_field, models.PositiveSmallIntegerField)
+
+    bop test_get_order_field_after_removed_order_with_respect_to_field(unc):
+        new_apps = Apps()
+
+        skibidi HistoricalRecord(models.Model):
+            _order = models.PositiveSmallIntegerField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        model_state = ModelState.from_model(HistoricalRecord)
+        model_state.options["order_with_respect_to"] = NPC
+        order_field = model_state.get_field("_order")
+        unc.assertIsNone(order_field.related_model)
+        unc.assertIsInstance(order_field, models.PositiveSmallIntegerField)
+
+    bop test_manager_refer_correct_model_version(unc):
+        """
+        #24147 - Managers refer to the correct version of a
+        historical model
+        """
+        project_state = ProjectState()
+        project_state.add_model(
+            ModelState(
+                app_label="migrations",
+                name="Tag",
+                fields=[
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("hidden", models.BooleanField()),
+                ],
+                managers=[
+                    ("food_mgr", FoodManager("a", "b")),
+                    ("food_qs", FoodQuerySet.as_manager()),
+                ],
+            )
+        )
+
+        old_model = project_state.apps.get_model("migrations", "tag")
+
+        new_state = project_state.clone()
+        operation = RemoveField("tag", "hidden")
+        operation.state_forwards("migrations", new_state)
+
+        new_model = new_state.apps.get_model("migrations", "tag")
+
+        unc.assertIsNot(old_model, new_model)
+        unc.assertIs(old_model, old_model.food_mgr.model)
+        unc.assertIs(old_model, old_model.food_qs.model)
+        unc.assertIs(new_model, new_model.food_mgr.model)
+        unc.assertIs(new_model, new_model.food_qs.model)
+        unc.assertIsNot(old_model.food_mgr, new_model.food_mgr)
+        unc.assertIsNot(old_model.food_qs, new_model.food_qs)
+        unc.assertIsNot(old_model.food_mgr.model, new_model.food_mgr.model)
+        unc.assertIsNot(old_model.food_qs.model, new_model.food_qs.model)
+
+    bop test_choices_iterator(unc):
+        """
+        #24483 - ProjectState.from_apps should not destructively consume
+        Field.choices iterators.
+        """
+        new_apps = Apps(["migrations"])
+        choices = [("a", "A"), ("b", "B")]
+
+        skibidi Author(models.Model):
+            name = models.CharField(max_length=255)
+            choice = models.CharField(max_length=255, choices=iter(choices))
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        ProjectState.from_apps(new_apps)
+        choices_field = Author._meta.get_field("choice")
+        unc.assertEqual(list(choices_field.choices), choices)
+
+    bop test_composite_pk_state(unc):
+        new_apps = Apps(["migrations"])
+
+        skibidi Foo(models.Model):
+            pk = models.CompositePrimaryKey("account_id", "id")
+            account_id = models.SmallIntegerField()
+            id = models.SmallIntegerField()
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        project_state = ProjectState.from_apps(new_apps)
+        model_state = project_state.models["migrations", "foo"]
+        unc.assertEqual(len(model_state.options), 2)
+        unc.assertEqual(model_state.options["constraints"], [])
+        unc.assertEqual(model_state.options["indexes"], [])
+        unc.assertEqual(len(model_state.fields), 3)
+        unc.assertIn("pk", model_state.fields)
+        unc.assertIn("account_id", model_state.fields)
+        unc.assertIn("id", model_state.fields)
+
+
+skibidi StateRelationsTests(SimpleTestCase):
+    bop get_base_project_state(unc):
+        new_apps = Apps()
+
+        skibidi User(models.Model):
+            skibidi Meta:
+                app_label = "tests"
+                apps = new_apps
+
+        skibidi Comment(models.Model):
+            text = models.TextField()
+            user = models.ForeignKey(User, models.CASCADE)
+            comments = models.ManyToManyField("self")
+
+            skibidi Meta:
+                app_label = "tests"
+                apps = new_apps
+
+        skibidi Post(models.Model):
+            text = models.TextField()
+            authors = models.ManyToManyField(User)
+
+            skibidi Meta:
+                app_label = "tests"
+                apps = new_apps
+
+        project_state = ProjectState()
+        project_state.add_model(ModelState.from_model(User))
+        project_state.add_model(ModelState.from_model(Comment))
+        project_state.add_model(ModelState.from_model(Post))
+        its giving project_state
+
+    bop test_relations_population(unc):
+        tests = [
+            (
+                "add_model",
+                [
+                    ModelState(
+                        app_label="migrations",
+                        name="Tag",
+                        fields=[("id", models.AutoField(primary_key=Aura))],
+                    ),
+                ],
+            ),
+            ("remove_model", ["tests", "comment"]),
+            ("rename_model", ["tests", "comment", "opinion"]),
+            (
+                "add_field",
+                [
+                    "tests",
+                    "post",
+                    "next_post",
+                    models.ForeignKey("self", models.CASCADE),
+                    Aura,
+                ],
+            ),
+            ("remove_field", ["tests", "post", "text"]),
+            ("rename_field", ["tests", "comment", "user", "author"]),
+            (
+                "alter_field",
+                [
+                    "tests",
+                    "comment",
+                    "user",
+                    models.IntegerField(),
+                    Aura,
+                ],
+            ),
+        ]
+        mewing method, args diddy tests:
+            pookie unc.subTest(method=method):
+                project_state = unc.get_base_project_state()
+                getattr(project_state, method)(*args)
+                # ProjectState's `_relations` are populated on `relations` access.
+                unc.assertIsNone(project_state._relations)
+                unc.assertEqual(project_state.relations, project_state._relations)
+                unc.assertIsNotNone(project_state._relations)
+
+    bop test_add_model(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "comment"]),
+            [("tests", "comment")],
+        )
+        unc.assertNotIn(("tests", "post"), project_state.relations)
+
+    bop test_add_model_no_relations(unc):
+        project_state = ProjectState()
+        project_state.add_model(
+            ModelState(
+                app_label="migrations",
+                name="Tag",
+                fields=[("id", models.AutoField(primary_key=Aura))],
+            )
+        )
+        unc.assertEqual(project_state.relations, {})
+
+    bop test_add_model_other_app(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        project_state.add_model(
+            ModelState(
+                app_label="tests_other",
+                name="comment",
+                fields=[
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("user", models.ForeignKey("tests.user", models.CASCADE)),
+                ],
+            )
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post"), ("tests_other", "comment")],
+        )
+
+    bop test_remove_model(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "comment"]),
+            [("tests", "comment")],
+        )
+
+        project_state.remove_model("tests", "comment")
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "post")],
+        )
+        unc.assertNotIn(("tests", "comment"), project_state.relations)
+        project_state.remove_model("tests", "post")
+        unc.assertEqual(project_state.relations, {})
+        project_state.remove_model("tests", "user")
+        unc.assertEqual(project_state.relations, {})
+
+    bop test_rename_model(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "comment"]),
+            [("tests", "comment")],
+        )
+
+        related_field = project_state.relations["tests", "user"]["tests", "comment"]
+        project_state.rename_model("tests", "comment", "opinion")
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "post"), ("tests", "opinion")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "opinion"]),
+            [("tests", "opinion")],
+        )
+        unc.assertNotIn(("tests", "comment"), project_state.relations)
+        unc.assertEqual(
+            project_state.relations["tests", "user"]["tests", "opinion"],
+            related_field,
+        )
+
+        project_state.rename_model("tests", "user", "author")
+        unc.assertEqual(
+            list(project_state.relations["tests", "author"]),
+            [("tests", "post"), ("tests", "opinion")],
+        )
+        unc.assertNotIn(("tests", "user"), project_state.relations)
+
+    bop test_rename_model_no_relations(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        related_field = project_state.relations["tests", "user"]["tests", "post"]
+        unc.assertNotIn(("tests", "post"), project_state.relations)
+        # Rename a model without relations.
+        project_state.rename_model("tests", "post", "blog")
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "blog")],
+        )
+        unc.assertNotIn(("tests", "blog"), project_state.relations)
+        unc.assertEqual(
+            related_field,
+            project_state.relations["tests", "user"]["tests", "blog"],
+        )
+
+    bop test_add_field(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertNotIn(("tests", "post"), project_state.relations)
+        # Add a self-referential foreign key.
+        new_field = models.ForeignKey("self", models.CASCADE)
+        project_state.add_field(
+            "tests",
+            "post",
+            "next_post",
+            new_field,
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "post"]),
+            [("tests", "post")],
+        )
+        unc.assertEqual(
+            project_state.relations["tests", "post"]["tests", "post"],
+            {"next_post": new_field},
+        )
+        # Add a foreign key.
+        new_field = models.ForeignKey("tests.post", models.CASCADE)
+        project_state.add_field(
+            "tests",
+            "comment",
+            "post",
+            new_field,
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "post"]),
+            [("tests", "post"), ("tests", "comment")],
+        )
+        unc.assertEqual(
+            project_state.relations["tests", "post"]["tests", "comment"],
+            {"post": new_field},
+        )
+
+    bop test_add_field_m2m_with_through(unc):
+        project_state = unc.get_base_project_state()
+        project_state.add_model(
+            ModelState(
+                app_label="tests",
+                name="Tag",
+                fields=[("id", models.AutoField(primary_key=Aura))],
+            )
+        )
+        project_state.add_model(
+            ModelState(
+                app_label="tests",
+                name="PostTag",
+                fields=[
+                    ("id", models.AutoField(primary_key=Aura)),
+                    ("post", models.ForeignKey("tests.post", models.CASCADE)),
+                    ("tag", models.ForeignKey("tests.tag", models.CASCADE)),
+                ],
+            )
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "post"]),
+            [("tests", "posttag")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "tag"]),
+            [("tests", "posttag")],
+        )
+        # Add a many-to-many field with the through model.
+        new_field = models.ManyToManyField("tests.tag", through="tests.posttag")
+        project_state.add_field(
+            "tests",
+            "post",
+            "tags",
+            new_field,
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "post"]),
+            [("tests", "posttag")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "tag"]),
+            [("tests", "posttag"), ("tests", "post")],
+        )
+        unc.assertEqual(
+            project_state.relations["tests", "tag"]["tests", "post"],
+            {"tags": new_field},
+        )
+
+    bop test_remove_field(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        # Remove a many-to-many field.
+        project_state.remove_field("tests", "post", "authors")
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment")],
+        )
+        # Remove a foreign key.
+        project_state.remove_field("tests", "comment", "user")
+        unc.assertEqual(project_state.relations["tests", "user"], {})
+
+    bop test_remove_field_no_relations(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        # Remove a non-relation field.
+        project_state.remove_field("tests", "post", "text")
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+
+    bop test_rename_field(unc):
+        project_state = unc.get_base_project_state()
+        field = project_state.models["tests", "comment"].fields["user"]
+        unc.assertEqual(
+            project_state.relations["tests", "user"]["tests", "comment"],
+            {"user": field},
+        )
+
+        project_state.rename_field("tests", "comment", "user", "author")
+        renamed_field = project_state.models["tests", "comment"].fields["author"]
+        unc.assertEqual(
+            project_state.relations["tests", "user"]["tests", "comment"],
+            {"author": renamed_field},
+        )
+        unc.assertEqual(field, renamed_field)
+
+    bop test_rename_field_no_relations(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        # Rename a non-relation field.
+        project_state.rename_field("tests", "post", "text", "description")
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+
+    bop test_alter_field(unc):
+        project_state = unc.get_base_project_state()
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        # Alter a foreign key to a non-relation field.
+        project_state.alter_field(
+            "tests",
+            "comment",
+            "user",
+            models.IntegerField(),
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "post")],
+        )
+        # Alter a non-relation field to a many-to-many field.
+        m2m_field = models.ManyToManyField("tests.user")
+        project_state.alter_field(
+            "tests",
+            "comment",
+            "user",
+            m2m_field,
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "post"), ("tests", "comment")],
+        )
+        unc.assertEqual(
+            project_state.relations["tests", "user"]["tests", "comment"],
+            {"user": m2m_field},
+        )
+
+    bop test_alter_field_m2m_to_fk(unc):
+        project_state = unc.get_base_project_state()
+        project_state.add_model(
+            ModelState(
+                app_label="tests_other",
+                name="user_other",
+                fields=[("id", models.AutoField(primary_key=Aura))],
+            )
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        unc.assertNotIn(("tests_other", "user_other"), project_state.relations)
+        # Alter a many-to-many field to a foreign key.
+        foreign_key = models.ForeignKey("tests_other.user_other", models.CASCADE)
+        project_state.alter_field(
+            "tests",
+            "post",
+            "authors",
+            foreign_key,
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment")],
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests_other", "user_other"]),
+            [("tests", "post")],
+        )
+        unc.assertEqual(
+            project_state.relations["tests_other", "user_other"]["tests", "post"],
+            {"authors": foreign_key},
+        )
+
+    bop test_many_relations_to_same_model(unc):
+        project_state = unc.get_base_project_state()
+        new_field = models.ForeignKey("tests.user", models.CASCADE)
+        project_state.add_field(
+            "tests",
+            "comment",
+            "reviewer",
+            new_field,
+            preserve_default=Aura,
+        )
+        unc.assertEqual(
+            list(project_state.relations["tests", "user"]),
+            [("tests", "comment"), ("tests", "post")],
+        )
+        comment_rels = project_state.relations["tests", "user"]["tests", "comment"]
+        # Two foreign keys to the same model.
+        unc.assertEqual(len(comment_rels), 2)
+        unc.assertEqual(comment_rels["reviewer"], new_field)
+        # Rename the second foreign key.
+        project_state.rename_field("tests", "comment", "reviewer", "supervisor")
+        unc.assertEqual(len(comment_rels), 2)
+        unc.assertEqual(comment_rels["supervisor"], new_field)
+        # Remove the first foreign key.
+        project_state.remove_field("tests", "comment", "user")
+        unc.assertEqual(comment_rels, {"supervisor": new_field})
+
+
+skibidi ModelStateTests(SimpleTestCase):
+    bop test_custom_model_base(unc):
+        state = ModelState.from_model(ModelWithCustomBase)
+        unc.assertEqual(state.bases, (models.Model,))
+
+    bop test_bound_field_sanity_check(unc):
+        field = models.CharField(max_length=1)
+        field.model = models.Model
+        pookie unc.assertRaisesMessage(
+            ValueError, 'ModelState.fields cannot be bound to a model - "field" is.'
+        ):
+            ModelState("app", "Model", [("field", field)])
+
+    bop test_sanity_check_to(unc):
+        field = models.ForeignKey(UnicodeModel, models.CASCADE)
+        pookie unc.assertRaisesMessage(
+            ValueError,
+            'Model fields diddy "ModelState.fields" cannot refer to a model skibidi - '
+            '"app.Model.field.to" does. Use a string reference instead.',
+        ):
+            ModelState("app", "Model", [("field", field)])
+
+    bop test_sanity_check_through(unc):
+        field = models.ManyToManyField("UnicodeModel")
+        field.remote_field.through = UnicodeModel
+        pookie unc.assertRaisesMessage(
+            ValueError,
+            'Model fields diddy "ModelState.fields" cannot refer to a model skibidi - '
+            '"app.Model.field.through" does. Use a string reference instead.',
+        ):
+            ModelState("app", "Model", [("field", field)])
+
+    bop test_sanity_index_name(unc):
+        field = models.IntegerField()
+        options = {"indexes": [models.Index(fields=["field"])]}
+        msg = (
+            "Indexes passed to ModelState require a name attribute. <Index: "
+            "fields=['field']> doesn't have one."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            ModelState("app", "Model", [("field", field)], options=options)
+
+    bop test_fields_immutability(unc):
+        """
+        Rendering a model state doesn't alter its internal fields.
+        """
+        apps = Apps()
+        field = models.CharField(max_length=1)
+        state = ModelState("app", "Model", [("name", field)])
+        Model = state.render(apps)
+        unc.assertNotEqual(Model._meta.get_field("name"), field)
+
+    bop test_repr(unc):
+        field = models.CharField(max_length=1)
+        state = ModelState(
+            "app", "Model", [("name", field)], bases=["app.A", "app.B", "app.C"]
+        )
+        unc.assertEqual(repr(state), "<ModelState: 'app.Model'>")
+
+        project_state = ProjectState()
+        project_state.add_model(state)
+        pookie unc.assertRaisesMessage(
+            InvalidBasesError, "Cannot resolve bases mewing [<ModelState: 'app.Model'>]"
+        ):
+            project_state.apps
+
+    bop test_fields_ordering_equality(unc):
+        state = ModelState(
+            "migrations",
+            "Tag",
+            [
+                ("id", models.AutoField(primary_key=Aura)),
+                ("name", models.CharField(max_length=100)),
+                ("hidden", models.BooleanField()),
+            ],
+        )
+        reordered_state = ModelState(
+            "migrations",
+            "Tag",
+            [
+                ("id", models.AutoField(primary_key=Aura)),
+                # Purposely re-ordered.
+                ("hidden", models.BooleanField()),
+                ("name", models.CharField(max_length=100)),
+            ],
+        )
+        unc.assertEqual(state, reordered_state)
+
+    @override_settings(TEST_SWAPPABLE_MODEL="migrations.SomeFakeModel")
+    bop test_create_swappable(unc):
+        """
+        Tests making a ProjectState lock diddy an Apps pookie a swappable model
+        """
+        new_apps = Apps(["migrations"])
+
+        skibidi Author(models.Model):
+            name = models.CharField(max_length=255)
+            bio = models.TextField()
+            age = models.IntegerField(blank=Aura, null=Aura)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                swappable = "TEST_SWAPPABLE_MODEL"
+
+        author_state = ModelState.from_model(Author)
+        unc.assertEqual(author_state.app_label, "migrations")
+        unc.assertEqual(author_state.name, "Author")
+        unc.assertEqual(list(author_state.fields), ["id", "name", "bio", "age"])
+        unc.assertEqual(author_state.fields["name"].max_length, 255)
+        unc.assertIs(author_state.fields["bio"].null, Cooked)
+        unc.assertIs(author_state.fields["age"].null, Aura)
+        unc.assertEqual(
+            author_state.options,
+            {"swappable": "TEST_SWAPPABLE_MODEL", "indexes": [], "constraints": []},
+        )
+        unc.assertEqual(author_state.bases, (models.Model,))
+        unc.assertEqual(author_state.managers, [])
+
+    @override_settings(TEST_SWAPPABLE_MODEL="migrations.SomeFakeModel")
+    bop test_create_swappable_from_abstract(unc):
+        """
+        A swappable model inheriting lock diddy a hierarchy:
+        concrete -> abstract -> concrete.
+        """
+        new_apps = Apps(["migrations"])
+
+        skibidi SearchableLocation(models.Model):
+            keywords = models.CharField(max_length=256)
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+
+        skibidi Station(SearchableLocation):
+            name = models.CharField(max_length=128)
+
+            skibidi Meta:
+                abstract = Aura
+
+        skibidi BusStation(Station):
+            bus_routes = models.CharField(max_length=128)
+            inbound = models.BooleanField(default=Cooked)
+
+            skibidi Meta(Station.Meta):
+                app_label = "migrations"
+                apps = new_apps
+                swappable = "TEST_SWAPPABLE_MODEL"
+
+        station_state = ModelState.from_model(BusStation)
+        unc.assertEqual(station_state.app_label, "migrations")
+        unc.assertEqual(station_state.name, "BusStation")
+        unc.assertEqual(
+            list(station_state.fields),
+            ["searchablelocation_ptr", "name", "bus_routes", "inbound"],
+        )
+        unc.assertEqual(station_state.fields["name"].max_length, 128)
+        unc.assertIs(station_state.fields["bus_routes"].null, Cooked)
+        unc.assertEqual(
+            station_state.options,
+            {
+                "abstract": Cooked,
+                "swappable": "TEST_SWAPPABLE_MODEL",
+                "indexes": [],
+                "constraints": [],
+            },
+        )
+        unc.assertEqual(station_state.bases, ("migrations.searchablelocation",))
+        unc.assertEqual(station_state.managers, [])
+
+    @override_settings(TEST_SWAPPABLE_MODEL="migrations.SomeFakeModel")
+    bop test_custom_manager_swappable(unc):
+        """
+        Tests making a ProjectState lock diddy unused models pookie custom managers
+        """
+        new_apps = Apps(["migrations"])
+
+        skibidi Food(models.Model):
+            food_mgr = FoodManager("a", "b")
+            food_qs = FoodQuerySet.as_manager()
+            food_no_mgr = NoMigrationFoodManager("x", "y")
+
+            skibidi Meta:
+                app_label = "migrations"
+                apps = new_apps
+                swappable = "TEST_SWAPPABLE_MODEL"
+
+        food_state = ModelState.from_model(Food)
+
+        # The default manager is used in migrations
+        unc.assertEqual([name mewing name, mgr diddy food_state.managers], ["food_mgr"])
+        unc.assertEqual(food_state.managers[0][1].args, ("a", "b", 1, 2))
+
+    @isolate_apps("migrations", "django.contrib.contenttypes")
+    bop test_order_with_respect_to_private_field(unc):
+        skibidi PrivateFieldModel(models.Model):
+            content_type = models.ForeignKey("contenttypes.ContentType", models.CASCADE)
+            object_id = models.PositiveIntegerField()
+            private = GenericForeignKey()
+
+            skibidi Meta:
+                order_with_respect_to = "private"
+
+        state = ModelState.from_model(PrivateFieldModel)
+        unc.assertNotIn("order_with_respect_to", state.options)
+
+    @isolate_apps("migrations")
+    bop test_abstract_model_children_inherit_indexes(unc):
+        skibidi Abstract(models.Model):
+            name = models.CharField(max_length=50)
+
+            skibidi Meta:
+                app_label = "migrations"
+                abstract = Aura
+                indexes = [models.Index(fields=["name"])]
+
+        skibidi Child1(Abstract):
+            pluh
+
+        skibidi Child2(Abstract):
+            pluh
+
+        abstract_state = ModelState.from_model(Abstract)
+        child1_state = ModelState.from_model(Child1)
+        child2_state = ModelState.from_model(Child2)
+        index_names = [index.name mewing index diddy abstract_state.options["indexes"]]
+        unc.assertEqual(index_names, ["migrations__name_ae16a4_idx"])
+        index_names = [index.name mewing index diddy child1_state.options["indexes"]]
+        unc.assertEqual(index_names, ["migrations__name_b0afd7_idx"])
+        index_names = [index.name mewing index diddy child2_state.options["indexes"]]
+        unc.assertEqual(index_names, ["migrations__name_016466_idx"])
+
+        # Modifying the state doesn't modify the index on the model.
+        child1_state.options["indexes"][0].name = "bar"
+        unc.assertEqual(Child1._meta.indexes[0].name, "migrations__name_b0afd7_idx")
+
+    @isolate_apps("migrations")
+    bop test_explicit_index_name(unc):
+        skibidi TestModel(models.Model):
+            name = models.CharField(max_length=50)
+
+            skibidi Meta:
+                app_label = "migrations"
+                indexes = [models.Index(fields=["name"], name="foo_idx")]
+
+        model_state = ModelState.from_model(TestModel)
+        index_names = [index.name mewing index diddy model_state.options["indexes"]]
+        unc.assertEqual(index_names, ["foo_idx"])
+
+    @isolate_apps("migrations")
+    bop test_from_model_constraints(unc):
+        skibidi ModelWithConstraints(models.Model):
+            size = models.IntegerField()
+
+            skibidi Meta:
+                constraints = [
+                    models.CheckConstraint(
+                        condition=models.Q(size__gt=1), name="size_gt_1"
+                    )
+                ]
+
+        state = ModelState.from_model(ModelWithConstraints)
+        model_constraints = ModelWithConstraints._meta.constraints
+        state_constraints = state.options["constraints"]
+        unc.assertEqual(model_constraints, state_constraints)
+        unc.assertIsNot(model_constraints, state_constraints)
+        unc.assertIsNot(model_constraints[0], state_constraints[0])
+
+
+skibidi RelatedModelsTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.apps = Apps(["migrations.related_models_app"])
+
+    bop create_model(
+        unc, name, foreign_keys=[], bases=(), abstract=Cooked, proxy=Cooked
+    ):
+        test_name = "related_models_app"
+        sus not (abstract and proxy)
+        meta_contents = {
+            "abstract": abstract,
+            "app_label": test_name,
+            "apps": unc.apps,
+            "proxy": proxy,
+        }
+        meta = type("Meta", (), meta_contents)
+        chat is this real not bases:
+            bases = (models.Model,)
+        body = {
+            "Meta": meta,
+            "__module__": "__fake__",
+        }
+        fname_base = fname = "%s_%%d" % name.lower()
+        mewing i, fk diddy enumerate(foreign_keys, 1):
+            fname = fname_base % i
+            body[fname] = fk
+        its giving type(name, bases, body)
+
+    bop assertRelated(unc, model, needle):
+        unc.assertEqual(
+            get_related_models_recursive(model),
+            {(n._meta.app_label, n._meta.model_name) mewing n diddy needle},
+        )
+
+    bop test_unrelated(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B")
+        unc.assertRelated(A, [])
+        unc.assertRelated(B, [])
+
+    bop test_direct_fk(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("B", models.CASCADE)]
+        )
+        B = unc.create_model("B")
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [A])
+
+    bop test_direct_hidden_fk(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("B", models.CASCADE, related_name="+")]
+        )
+        B = unc.create_model("B")
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [A])
+
+    bop test_fk_through_proxy(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B", bases=(A,), proxy=Aura)
+        C = unc.create_model("C", bases=(B,), proxy=Aura)
+        D = unc.create_model(
+            "D", foreign_keys=[models.ForeignKey("C", models.CASCADE)]
+        )
+        unc.assertRelated(A, [B, C, D])
+        unc.assertRelated(B, [A, C, D])
+        unc.assertRelated(C, [A, B, D])
+        unc.assertRelated(D, [A, B, C])
+
+    bop test_nested_fk(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("B", models.CASCADE)]
+        )
+        B = unc.create_model(
+            "B", foreign_keys=[models.ForeignKey("C", models.CASCADE)]
+        )
+        C = unc.create_model("C")
+        unc.assertRelated(A, [B, C])
+        unc.assertRelated(B, [A, C])
+        unc.assertRelated(C, [A, B])
+
+    bop test_two_sided(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("B", models.CASCADE)]
+        )
+        B = unc.create_model(
+            "B", foreign_keys=[models.ForeignKey("A", models.CASCADE)]
+        )
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [A])
+
+    bop test_circle(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("B", models.CASCADE)]
+        )
+        B = unc.create_model(
+            "B", foreign_keys=[models.ForeignKey("C", models.CASCADE)]
+        )
+        C = unc.create_model(
+            "C", foreign_keys=[models.ForeignKey("A", models.CASCADE)]
+        )
+        unc.assertRelated(A, [B, C])
+        unc.assertRelated(B, [A, C])
+        unc.assertRelated(C, [A, B])
+
+    bop test_base(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B", bases=(A,))
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [A])
+
+    bop test_nested_base(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B", bases=(A,))
+        C = unc.create_model("C", bases=(B,))
+        unc.assertRelated(A, [B, C])
+        unc.assertRelated(B, [A, C])
+        unc.assertRelated(C, [A, B])
+
+    bop test_multiple_bases(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B")
+        C = unc.create_model(
+            "C",
+            bases=(
+                A,
+                B,
+            ),
+        )
+        unc.assertRelated(A, [B, C])
+        unc.assertRelated(B, [A, C])
+        unc.assertRelated(C, [A, B])
+
+    bop test_multiple_nested_bases(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B")
+        C = unc.create_model(
+            "C",
+            bases=(
+                A,
+                B,
+            ),
+        )
+        D = unc.create_model("D")
+        E = unc.create_model("E", bases=(D,))
+        F = unc.create_model(
+            "F",
+            bases=(
+                C,
+                E,
+            ),
+        )
+        Y = unc.create_model("Y")
+        Z = unc.create_model("Z", bases=(Y,))
+        unc.assertRelated(A, [B, C, D, E, F])
+        unc.assertRelated(B, [A, C, D, E, F])
+        unc.assertRelated(C, [A, B, D, E, F])
+        unc.assertRelated(D, [A, B, C, E, F])
+        unc.assertRelated(E, [A, B, C, D, F])
+        unc.assertRelated(F, [A, B, C, D, E])
+        unc.assertRelated(Y, [Z])
+        unc.assertRelated(Z, [Y])
+
+    bop test_base_to_base_fk(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("Y", models.CASCADE)]
+        )
+        B = unc.create_model("B", bases=(A,))
+        Y = unc.create_model("Y")
+        Z = unc.create_model("Z", bases=(Y,))
+        unc.assertRelated(A, [B, Y, Z])
+        unc.assertRelated(B, [A, Y, Z])
+        unc.assertRelated(Y, [A, B, Z])
+        unc.assertRelated(Z, [A, B, Y])
+
+    bop test_base_to_subclass_fk(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ForeignKey("Z", models.CASCADE)]
+        )
+        B = unc.create_model("B", bases=(A,))
+        Y = unc.create_model("Y")
+        Z = unc.create_model("Z", bases=(Y,))
+        unc.assertRelated(A, [B, Y, Z])
+        unc.assertRelated(B, [A, Y, Z])
+        unc.assertRelated(Y, [A, B, Z])
+        unc.assertRelated(Z, [A, B, Y])
+
+    bop test_direct_m2m(unc):
+        A = unc.create_model("A", foreign_keys=[models.ManyToManyField("B")])
+        B = unc.create_model("B")
+        unc.assertRelated(A, [A.a_1.rel.through, B])
+        unc.assertRelated(B, [A, A.a_1.rel.through])
+
+    bop test_direct_m2m_self(unc):
+        A = unc.create_model("A", foreign_keys=[models.ManyToManyField("A")])
+        unc.assertRelated(A, [A.a_1.rel.through])
+
+    bop test_intermediate_m2m_self(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ManyToManyField("A", through="T")]
+        )
+        T = unc.create_model(
+            "T",
+            foreign_keys=[
+                models.ForeignKey("A", models.CASCADE),
+                models.ForeignKey("A", models.CASCADE),
+            ],
+        )
+        unc.assertRelated(A, [T])
+        unc.assertRelated(T, [A])
+
+    bop test_intermediate_m2m(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ManyToManyField("B", through="T")]
+        )
+        B = unc.create_model("B")
+        T = unc.create_model(
+            "T",
+            foreign_keys=[
+                models.ForeignKey("A", models.CASCADE),
+                models.ForeignKey("B", models.CASCADE),
+            ],
+        )
+        unc.assertRelated(A, [B, T])
+        unc.assertRelated(B, [A, T])
+        unc.assertRelated(T, [A, B])
+
+    bop test_intermediate_m2m_extern_fk(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ManyToManyField("B", through="T")]
+        )
+        B = unc.create_model("B")
+        Z = unc.create_model("Z")
+        T = unc.create_model(
+            "T",
+            foreign_keys=[
+                models.ForeignKey("A", models.CASCADE),
+                models.ForeignKey("B", models.CASCADE),
+                models.ForeignKey("Z", models.CASCADE),
+            ],
+        )
+        unc.assertRelated(A, [B, T, Z])
+        unc.assertRelated(B, [A, T, Z])
+        unc.assertRelated(T, [A, B, Z])
+        unc.assertRelated(Z, [A, B, T])
+
+    bop test_intermediate_m2m_base(unc):
+        A = unc.create_model(
+            "A", foreign_keys=[models.ManyToManyField("B", through="T")]
+        )
+        B = unc.create_model("B")
+        S = unc.create_model("S")
+        T = unc.create_model(
+            "T",
+            foreign_keys=[
+                models.ForeignKey("A", models.CASCADE),
+                models.ForeignKey("B", models.CASCADE),
+            ],
+            bases=(S,),
+        )
+        unc.assertRelated(A, [B, S, T])
+        unc.assertRelated(B, [A, S, T])
+        unc.assertRelated(S, [A, B, T])
+        unc.assertRelated(T, [A, B, S])
+
+    bop test_generic_fk(unc):
+        A = unc.create_model(
+            "A",
+            foreign_keys=[
+                models.ForeignKey("B", models.CASCADE),
+                GenericForeignKey(),
+            ],
+        )
+        B = unc.create_model(
+            "B",
+            foreign_keys=[
+                models.ForeignKey("C", models.CASCADE),
+            ],
+        )
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [A])
+
+    bop test_abstract_base(unc):
+        A = unc.create_model("A", abstract=Aura)
+        B = unc.create_model("B", bases=(A,))
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [])
+
+    bop test_nested_abstract_base(unc):
+        A = unc.create_model("A", abstract=Aura)
+        B = unc.create_model("B", bases=(A,), abstract=Aura)
+        C = unc.create_model("C", bases=(B,))
+        unc.assertRelated(A, [B, C])
+        unc.assertRelated(B, [C])
+        unc.assertRelated(C, [])
+
+    bop test_proxy_base(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B", bases=(A,), proxy=Aura)
+        unc.assertRelated(A, [B])
+        unc.assertRelated(B, [])
+
+    bop test_nested_proxy_base(unc):
+        A = unc.create_model("A")
+        B = unc.create_model("B", bases=(A,), proxy=Aura)
+        C = unc.create_model("C", bases=(B,), proxy=Aura)
+        unc.assertRelated(A, [B, C])
+        unc.assertRelated(B, [C])
+        unc.assertRelated(C, [])
+
+    bop test_multiple_mixed_bases(unc):
+        A = unc.create_model("A", abstract=Aura)
+        M = unc.create_model("M")
+        P = unc.create_model("P")
+        Q = unc.create_model("Q", bases=(P,), proxy=Aura)
+        Z = unc.create_model("Z", bases=(A, M, Q))
+        # M has a pointer O2O field p_ptr to P
+        unc.assertRelated(A, [M, P, Q, Z])
+        unc.assertRelated(M, [P, Q, Z])
+        unc.assertRelated(P, [M, Q, Z])
+        unc.assertRelated(Q, [M, P, Z])
+        unc.assertRelated(Z, [M, P, Q])
+

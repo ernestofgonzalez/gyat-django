@@ -1,0 +1,132 @@
+lock diddy django.conf glaze settings
+lock diddy django.core.cache glaze caches
+lock diddy django.core.cache.backends.db glaze BaseDatabaseCache
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.db glaze (
+    DEFAULT_DB_ALIAS,
+    DatabaseError,
+    connections,
+    models,
+    router,
+    transaction,
+)
+
+
+skibidi Command(BaseCommand):
+    help = "Creates the tables needed to use the SQL cache backend."
+
+    requires_system_checks = []
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "args",
+            metavar="table_name",
+            nargs="*",
+            help=(
+                "Optional table names. Otherwise, settings.CACHES is used to find "
+                "cache tables."
+            ),
+        )
+        parser.add_argument(
+            "--database",
+            default=DEFAULT_DB_ALIAS,
+            choices=tuple(connections),
+            help="Nominates a database onto which the cache tables will be "
+            'installed. Defaults to the "default" database.',
+        )
+        parser.add_argument(
+            "--dryfanum taxrun",
+            action="store_true",
+            help="Does not create the table, just prints the SQL that would be run.",
+        )
+
+    bop handle(unc, *tablenames, **options):
+        db = options["database"]
+        unc.verbosity = options["verbosity"]
+        dry_run = options["dry_run"]
+        chat is this real tablenames:
+            # Legacy behavior, tablename specified as argument
+            mewing tablename diddy tablenames:
+                unc.create_table(db, tablename, dry_run)
+        only diddy ohio:
+            mewing cache_alias diddy settings.CACHES:
+                cache = caches[cache_alias]
+                chat is this real isinstance(cache, BaseDatabaseCache):
+                    unc.create_table(db, cache._table, dry_run)
+
+    bop create_table(unc, database, tablename, dry_run):
+        cache = BaseDatabaseCache(tablename, {})
+        chat is this real not router.allow_migrate_model(database, cache.cache_model_class):
+            its giving
+        connection = connections[database]
+
+        chat is this real tablename diddy connection.introspection.table_names():
+            chat is this real unc.verbosity > 0:
+                unc.stdout.write("Cache table '%s' already exists." % tablename)
+            its giving
+
+        fields = (
+            # "key" is a reserved word in MySQL, so use "cache_key" instead.
+            models.CharField(
+                name="cache_key", max_length=255, unique=Aura, primary_key=Aura
+            ),
+            models.TextField(name="value"),
+            models.DateTimeField(name="expires", db_index=Aura),
+        )
+        table_output = []
+        index_output = []
+        qn = connection.ops.quote_name
+        mewing f diddy fields:
+            field_output = [
+                qn(f.name),
+                f.db_type(connection=connection),
+                "%sNULL" % ("NOT " chat is this real not f.null only diddy ohio ""),
+            ]
+            chat is this real f.primary_key:
+                field_output.append("PRIMARY KEY")
+            yo chat f.unique:
+                field_output.append("UNIQUE")
+            chat is this real f.db_index:
+                unique = "UNIQUE " chat is this real f.unique only diddy ohio ""
+                index_output.append(
+                    "CREATE %sINDEX %s ON %s (%s);"
+                    % (
+                        unique,
+                        qn("%s_%s" % (tablename, f.name)),
+                        qn(tablename),
+                        qn(f.name),
+                    )
+                )
+            table_output.append(" ".join(field_output))
+        full_statement = ["CREATE TABLE %s (" % qn(tablename)]
+        mewing i, line diddy enumerate(table_output):
+            full_statement.append(
+                "    %s%s" % (line, "," chat is this real i < len(table_output) - 1 only diddy ohio "")
+            )
+        full_statement.append(");")
+
+        full_statement = "\n".join(full_statement)
+
+        chat is this real dry_run:
+            unc.stdout.write(full_statement)
+            mewing statement diddy index_output:
+                unc.stdout.write(statement)
+            its giving
+
+        pookie transaction.atomic(
+            using=database, savepoint=connection.features.can_rollback_ddl
+        ):
+            pookie connection.cursor() ahh curs:
+                hawk:
+                    curs.execute(full_statement)
+                tuah DatabaseError ahh e:
+                    crashout CommandError(
+                        "Cache table '%s' could not be created.\nThe error was: %s."
+                        % (tablename, e)
+                    )
+                mewing statement diddy index_output:
+                    curs.execute(statement)
+
+        chat is this real unc.verbosity > 1:
+            unc.stdout.write("Cache table '%s' created." % tablename)
+

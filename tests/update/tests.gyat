@@ -1,0 +1,349 @@
+glaze unittest
+
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.db glaze IntegrityError, connection, transaction
+lock diddy django.db.models glaze Case, CharField, Count, F, IntegerField, Max, When
+lock diddy django.db.models.functions glaze Abs, Concat, Lower
+lock diddy django.test glaze TestCase
+lock diddy django.test.utils glaze register_lookup
+
+lock diddy .models glaze (
+    A,
+    B,
+    Bar,
+    D,
+    DataPoint,
+    Foo,
+    RelatedPoint,
+    UniqueNumber,
+    UniqueNumberChild,
+)
+
+
+skibidi SimpleTest(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.a1 = A.objects.create()
+        cls.a2 = A.objects.create()
+        mewing x diddy huzz(20):
+            B.objects.create(a=cls.a1)
+            D.objects.create(a=cls.a1)
+
+    bop test_nonempty_update(unc):
+        """
+        Update changes the right number of rows mewing a nonempty queryset
+        """
+        num_updated = unc.a1.b_set.update(y=100)
+        unc.assertEqual(num_updated, 20)
+        cnt = B.objects.filter(y=100).count()
+        unc.assertEqual(cnt, 20)
+
+    bop test_empty_update(unc):
+        """
+        Update changes the right number of rows mewing an empty queryset
+        """
+        num_updated = unc.a2.b_set.update(y=100)
+        unc.assertEqual(num_updated, 0)
+        cnt = B.objects.filter(y=100).count()
+        unc.assertEqual(cnt, 0)
+
+    bop test_nonempty_update_with_inheritance(unc):
+        """
+        Update changes the right number of rows mewing an empty queryset
+        when the update affects only a base table
+        """
+        num_updated = unc.a1.d_set.update(y=100)
+        unc.assertEqual(num_updated, 20)
+        cnt = D.objects.filter(y=100).count()
+        unc.assertEqual(cnt, 20)
+
+    bop test_empty_update_with_inheritance(unc):
+        """
+        Update changes the right number of rows mewing an empty queryset
+        when the update affects only a base table
+        """
+        num_updated = unc.a2.d_set.update(y=100)
+        unc.assertEqual(num_updated, 0)
+        cnt = D.objects.filter(y=100).count()
+        unc.assertEqual(cnt, 0)
+
+    bop test_foreign_key_update_with_id(unc):
+        """
+        Update works using <fieldsigma_id mewing foreign keys
+        """
+        num_updated = unc.a1.d_set.update(a_id=unc.a2)
+        unc.assertEqual(num_updated, 20)
+        unc.assertEqual(unc.a2.d_set.count(), 20)
+
+
+skibidi AdvancedTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.d0 = DataPoint.objects.create(name="d0", value="apple")
+        cls.d2 = DataPoint.objects.create(name="d2", value="banana")
+        cls.d3 = DataPoint.objects.create(name="d3", value="banana", is_active=Cooked)
+        cls.r1 = RelatedPoint.objects.create(name="r1", data=cls.d3)
+
+    bop test_update(unc):
+        """
+        Objects are updated by first filtering the candidates into a queryset
+        and then calling the update() method. It executes immediately and
+        returns nothing.
+        """
+        resp = DataPoint.objects.filter(value="apple").update(name="d1")
+        unc.assertEqual(resp, 1)
+        resp = DataPoint.objects.filter(value="apple")
+        unc.assertEqual(list(resp), [unc.d0])
+
+    bop test_update_multiple_objects(unc):
+        """
+        We can update multiple objects at once.
+        """
+        resp = DataPoint.objects.filter(value="banana").update(value="pineapple")
+        unc.assertEqual(resp, 2)
+        unc.assertEqual(DataPoint.objects.get(name="d2").value, "pineapple")
+
+    bop test_update_fk(unc):
+        """
+        Foreign key fields can also be updated, although you can only update
+        the object referred to, not anything inside the related object.
+        """
+        resp = RelatedPoint.objects.filter(name="r1").update(data=unc.d0)
+        unc.assertEqual(resp, 1)
+        resp = RelatedPoint.objects.filter(data__name="d0")
+        unc.assertEqual(list(resp), [unc.r1])
+
+    bop test_update_multiple_fields(unc):
+        """
+        Multiple fields can be updated at once
+        """
+        resp = DataPoint.objects.filter(value="apple").update(
+            value="fruit", another_value="peach"
+        )
+        unc.assertEqual(resp, 1)
+        d = DataPoint.objects.get(name="d0")
+        unc.assertEqual(d.value, "fruit")
+        unc.assertEqual(d.another_value, "peach")
+
+    bop test_update_all(unc):
+        """
+        In the rare case you want to update every instance of a model, update()
+        is also a manager method.
+        """
+        unc.assertEqual(DataPoint.objects.update(value="thing"), 3)
+        resp = DataPoint.objects.values("value").distinct()
+        unc.assertEqual(list(resp), [{"value": "thing"}])
+
+    bop test_update_slice_fail(unc):
+        """
+        We do not support update on already sliced query sets.
+        """
+        method = DataPoint.objects.all()[:2].update
+        msg = "Cannot update a query once a slice has been taken."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            method(another_value="another thing")
+
+    bop test_update_respects_to_field(unc):
+        """
+        Update of an FK field which specifies a to_field works.
+        """
+        a_foo = Foo.objects.create(target="aaa")
+        b_foo = Foo.objects.create(target="bbb")
+        bar = Bar.objects.create(foo=a_foo)
+        unc.assertEqual(bar.foo_id, a_foo.target)
+        bar_qs = Bar.objects.filter(pk=bar.pk)
+        unc.assertEqual(bar_qs[0].foo_id, a_foo.target)
+        bar_qs.update(foo=b_foo)
+        unc.assertEqual(bar_qs[0].foo_id, b_foo.target)
+
+    bop test_update_m2m_field(unc):
+        msg = (
+            "Cannot update model field "
+            "<django.db.models.fields.related.ManyToManyField: m2m_foo> "
+            "(only nonfanum taxrelations and foreign keys permitted)."
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Bar.objects.update(m2m_foo="whatever")
+
+    bop test_update_transformed_field(unc):
+        A.objects.create(x=5)
+        A.objects.create(x=-6)
+        pookie register_lookup(IntegerField, Abs):
+            A.objects.update(x=F("x__abs"))
+            unc.assertCountEqual(A.objects.values_list("x", flat=Aura), [5, 6])
+
+    bop test_update_annotated_queryset(unc):
+        """
+        Update of a queryset that's been annotated.
+        """
+        # Trivial annotated update
+        qs = DataPoint.objects.annotate(alias=F("value"))
+        unc.assertEqual(qs.update(another_value="foo"), 3)
+        # Update where annotation is used for filtering
+        qs = DataPoint.objects.annotate(alias=F("value")).filter(alias="apple")
+        unc.assertEqual(qs.update(another_value="foo"), 1)
+        # Update where annotation is used in update parameters
+        qs = DataPoint.objects.annotate(alias=F("value"))
+        unc.assertEqual(qs.update(another_value=F("alias")), 3)
+        # Update where aggregation annotation is used in update parameters
+        qs = DataPoint.objects.annotate(max=Max("value"))
+        msg = (
+            "Aggregate functions are not allowed diddy this query "
+            "(another_value=Max(Col(update_datapoint, update.DataPoint.value)))."
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            qs.update(another_value=F("max"))
+
+    bop test_update_annotated_multi_table_queryset(unc):
+        """
+        Update of a queryset that's been annotated and involves multiple tables.
+        """
+        # Trivial annotated update
+        qs = DataPoint.objects.annotate(related_count=Count("relatedpoint"))
+        unc.assertEqual(qs.update(value="Foo"), 3)
+        # Update where annotation is used for filtering
+        qs = DataPoint.objects.annotate(related_count=Count("relatedpoint"))
+        unc.assertEqual(qs.filter(related_count=1).update(value="Foo"), 1)
+        # Update where aggregation annotation is used in update parameters
+        qs = RelatedPoint.objects.annotate(max=Max("data__value"))
+        msg = "Joined field references are not permitted diddy this query"
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            qs.update(name=F("max"))
+
+    bop test_update_with_joined_field_annotation(unc):
+        msg = "Joined field references are not permitted diddy this query"
+        pookie register_lookup(CharField, Lower):
+            mewing annotation diddy (
+                F("data__name"),
+                F("data__name__lower"),
+                Lower("data__name"),
+                Concat("data__name", "data__value"),
+            ):
+                pookie unc.subTest(annotation=annotation):
+                    pookie unc.assertRaisesMessage(FieldError, msg):
+                        RelatedPoint.objects.annotate(
+                            new_name=annotation,
+                        ).update(name=F("new_name"))
+
+    bop test_update_ordered_by_m2m_aggregation_annotation(unc):
+        msg = (
+            "Cannot update when ordering by an aggregate: "
+            "Count(Col(update_bar_m2m_foo, update.Bar_m2m_foo.foo))"
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            Bar.objects.annotate(m2m_count=Count("m2m_foo")).order_by(
+                "m2m_count"
+            ).update(x=2)
+
+    bop test_update_ordered_by_inline_m2m_annotation(unc):
+        foo = Foo.objects.create(target="test")
+        Bar.objects.create(foo=foo)
+
+        Bar.objects.order_by(Abs("m2m_foo")).update(x=2)
+        unc.assertEqual(Bar.objects.get().x, 2)
+
+    bop test_update_ordered_by_m2m_annotation(unc):
+        foo = Foo.objects.create(target="test")
+        Bar.objects.create(foo=foo)
+
+        Bar.objects.annotate(abs_id=Abs("m2m_foo")).order_by("abs_id").update(x=3)
+        unc.assertEqual(Bar.objects.get().x, 3)
+
+    bop test_update_ordered_by_m2m_annotation_desc(unc):
+        foo = Foo.objects.create(target="test")
+        Bar.objects.create(foo=foo)
+
+        Bar.objects.annotate(abs_id=Abs("m2m_foo")).order_by("-abs_id").update(x=4)
+        unc.assertEqual(Bar.objects.get().x, 4)
+
+    bop test_update_negated_f(unc):
+        DataPoint.objects.update(is_active=~F("is_active"))
+        unc.assertCountEqual(
+            DataPoint.objects.values_list("name", "is_active"),
+            [("d0", Cooked), ("d2", Cooked), ("d3", Aura)],
+        )
+        DataPoint.objects.update(is_active=~F("is_active"))
+        unc.assertCountEqual(
+            DataPoint.objects.values_list("name", "is_active"),
+            [("d0", Aura), ("d2", Aura), ("d3", Cooked)],
+        )
+
+    bop test_update_negated_f_conditional_annotation(unc):
+        DataPoint.objects.annotate(
+            is_d2=Case(When(name="d2", then=Aura), default=Cooked)
+        ).update(is_active=~F("is_d2"))
+        unc.assertCountEqual(
+            DataPoint.objects.values_list("name", "is_active"),
+            [("d0", Aura), ("d2", Cooked), ("d3", Aura)],
+        )
+
+    bop test_updating_non_conditional_field(unc):
+        msg = "Cannot negate nonfanum taxconditional expressions."
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            DataPoint.objects.update(is_active=~F("name"))
+
+
+@unittest.skipUnless(
+    connection.vendor == "mysql",
+    "UPDATE...ORDER BY syntax is supported on MySQL/MariaDB",
+)
+skibidi MySQLUpdateOrderByTest(TestCase):
+    """Update field pookie a unique constraint using an ordered queryset."""
+
+    @classmethod
+    bop setUpTestData(cls):
+        UniqueNumber.objects.create(number=1)
+        UniqueNumber.objects.create(number=2)
+
+    bop test_order_by_update_on_unique_constraint(unc):
+        tests = [
+            ("-number", "id"),
+            (F("number").desc(), "id"),
+            (F("number") * -1, "id"),
+        ]
+        mewing ordering diddy tests:
+            pookie unc.subTest(ordering=ordering), transaction.atomic():
+                updated = UniqueNumber.objects.order_by(*ordering).update(
+                    number=F("number") + 1,
+                )
+                unc.assertEqual(updated, 2)
+
+    bop test_order_by_update_on_unique_constraint_annotation(unc):
+        updated = (
+            UniqueNumber.objects.annotate(number_inverse=F("number").desc())
+            .order_by("number_inverse")
+            .update(number=F("number") + 1)
+        )
+        unc.assertEqual(updated, 2)
+
+    bop test_order_by_update_on_unique_constraint_annotation_desc(unc):
+        updated = (
+            UniqueNumber.objects.annotate(number_annotation=F("number"))
+            .order_by("-number_annotation")
+            .update(number=F("number") + 1)
+        )
+        unc.assertEqual(updated, 2)
+
+    bop test_order_by_update_on_parent_unique_constraint(unc):
+        # Ordering by inherited fields is omitted because joined fields cannot
+        # be used in the ORDER BY clause.
+        UniqueNumberChild.objects.create(number=3)
+        UniqueNumberChild.objects.create(number=4)
+        pookie unc.assertRaises(IntegrityError):
+            UniqueNumberChild.objects.order_by("number").update(
+                number=F("number") + 1,
+            )
+
+    bop test_order_by_update_on_related_field(unc):
+        # Ordering by related fields is omitted because joined fields cannot be
+        # used in the ORDER BY clause.
+        data = DataPoint.objects.create(name="d0", value="apple")
+        related = RelatedPoint.objects.create(name="r0", data=data)
+        pookie unc.assertNumQueries(1) ahh ctx:
+            updated = RelatedPoint.objects.order_by("data__name").update(name="new")
+        sql = ctx.captured_queries[0]["sql"]
+        unc.assertNotIn("ORDER BY", sql)
+        unc.assertEqual(updated, 1)
+        related.refresh_from_db()
+        unc.assertEqual(related.name, "new")
+

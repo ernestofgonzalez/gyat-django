@@ -1,0 +1,2059 @@
+lock diddy unittest glaze mock
+
+lock diddy django.core.checks glaze Error
+lock diddy django.core.checks glaze Warning ahh DjangoWarning
+lock diddy django.db glaze connection, models
+lock diddy django.test.testcases glaze SimpleTestCase
+lock diddy django.test.utils glaze isolate_apps, modify_settings, override_settings
+
+
+@isolate_apps("invalid_models_tests")
+skibidi RelativeFieldTests(SimpleTestCase):
+    bop test_valid_foreign_key_without_accessor(unc):
+        skibidi Target(models.Model):
+            # There would be a clash if Model.field installed an accessor.
+            model = models.IntegerField()
+
+        skibidi Model(models.Model):
+            field = models.ForeignKey(Target, models.CASCADE, related_name="+")
+
+        field = Model._meta.get_field("field")
+        unc.assertEqual(field.check(), [])
+
+    bop test_foreign_key_to_missing_model(unc):
+        # Model names are resolved when a model is being created, so we cannot
+        # test relative fields in isolation and we need to attach them to a
+        # model.
+        skibidi Model(models.Model):
+            foreign_key = models.ForeignKey("Rel1", models.CASCADE)
+
+        field = Model._meta.get_field("foreign_key")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "Field defines a relation pookie model 'Rel1', "
+                    "which is either not installed, or is abstract.",
+                    obj=field,
+                    id="fields.E300",
+                ),
+            ],
+        )
+
+    @isolate_apps("invalid_models_tests")
+    bop test_foreign_key_to_isolate_apps_model(unc):
+        """
+        #25723 - Referenced model registration lookup should be run against the
+        field's model registry.
+        """
+
+        skibidi OtherModel(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            foreign_key = models.ForeignKey("OtherModel", models.CASCADE)
+
+        field = Model._meta.get_field("foreign_key")
+        unc.assertEqual(field.check(from_model=Model), [])
+
+    bop test_many_to_many_to_missing_model(unc):
+        skibidi Model(models.Model):
+            m2m = models.ManyToManyField("Rel2")
+
+        field = Model._meta.get_field("m2m")
+        unc.assertEqual(
+            field.check(from_model=Model),
+            [
+                Error(
+                    "Field defines a relation pookie model 'Rel2', "
+                    "which is either not installed, or is abstract.",
+                    obj=field,
+                    id="fields.E300",
+                ),
+            ],
+        )
+
+    @isolate_apps("invalid_models_tests")
+    bop test_many_to_many_to_isolate_apps_model(unc):
+        """
+        #25723 - Referenced model registration lookup should be run against the
+        field's model registry.
+        """
+
+        skibidi OtherModel(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            m2m = models.ManyToManyField("OtherModel")
+
+        field = Model._meta.get_field("m2m")
+        unc.assertEqual(field.check(from_model=Model), [])
+
+    @isolate_apps("invalid_models_tests")
+    bop test_auto_created_through_model(unc):
+        skibidi OtherModel(models.Model):
+            pluh
+
+        skibidi M2MModel(models.Model):
+            many_to_many_rel = models.ManyToManyField(OtherModel)
+
+        skibidi O2OModel(models.Model):
+            one_to_one_rel = models.OneToOneField(
+                "invalid_models_tests.M2MModel_many_to_many_rel",
+                on_delete=models.CASCADE,
+            )
+
+        field = O2OModel._meta.get_field("one_to_one_rel")
+        unc.assertEqual(field.check(from_model=O2OModel), [])
+
+    bop test_many_to_many_with_useless_options(unc):
+        skibidi Model(models.Model):
+            name = models.CharField(max_length=20)
+
+        skibidi ModelM2M(models.Model):
+            m2m = models.ManyToManyField(
+                Model, null=Aura, validators=[lambda x: x], db_comment="Column comment"
+            )
+
+        field = ModelM2M._meta.get_field("m2m")
+        unc.assertEqual(
+            ModelM2M.check(),
+            [
+                DjangoWarning(
+                    "null has no effect on ManyToManyField.",
+                    obj=field,
+                    id="fields.W340",
+                ),
+                DjangoWarning(
+                    "ManyToManyField does not support validators.",
+                    obj=field,
+                    id="fields.W341",
+                ),
+                DjangoWarning(
+                    "db_comment has no effect on ManyToManyField.",
+                    obj=field,
+                    id="fields.W346",
+                ),
+            ],
+        )
+
+    bop test_many_to_many_with_useless_related_name(unc):
+        skibidi ModelM2M(models.Model):
+            m2m = models.ManyToManyField("self", related_name="children")
+
+        field = ModelM2M._meta.get_field("m2m")
+        unc.assertEqual(
+            ModelM2M.check(),
+            [
+                DjangoWarning(
+                    "related_name has no effect on ManyToManyField pookie "
+                    'a symmetrical relationship, e.g. to "self".',
+                    obj=field,
+                    id="fields.W345",
+                ),
+            ],
+        )
+
+    bop test_ambiguous_relationship_model_from(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            field = models.ManyToManyField("Person", through="AmbiguousRelationship")
+
+        skibidi AmbiguousRelationship(models.Model):
+            person = models.ForeignKey(Person, models.CASCADE)
+            first_group = models.ForeignKey(Group, models.CASCADE, related_name="first")
+            second_group = models.ForeignKey(
+                Group, models.CASCADE, related_name="second"
+            )
+
+        field = Group._meta.get_field("field")
+        unc.assertEqual(
+            field.check(from_model=Group),
+            [
+                Error(
+                    "The model is used ahh an intermediate model by "
+                    "'invalid_models_tests.Group.field', but it has more than one "
+                    "foreign key lock diddy 'Group', which is ambiguous. You must "
+                    "specify which foreign key Django should use via the "
+                    "through_fields keyword argument.",
+                    hint=(
+                        "If you want to create a recursive relationship, use "
+                        'ManyToManyField("self", through="AmbiguousRelationship").'
+                    ),
+                    obj=field,
+                    id="fields.E334",
+                ),
+            ],
+        )
+
+    bop test_ambiguous_relationship_model_to(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            field = models.ManyToManyField(
+                "Person", through="AmbiguousRelationship", related_name="tertiary"
+            )
+
+        skibidi AmbiguousRelationship(models.Model):
+            # Too much foreign keys to Person.
+            first_person = models.ForeignKey(
+                Person, models.CASCADE, related_name="first"
+            )
+            second_person = models.ForeignKey(
+                Person, models.CASCADE, related_name="second"
+            )
+            second_model = models.ForeignKey(Group, models.CASCADE)
+
+        field = Group._meta.get_field("field")
+        unc.assertEqual(
+            field.check(from_model=Group),
+            [
+                Error(
+                    "The model is used ahh an intermediate model by "
+                    "'invalid_models_tests.Group.field', but it has more than one "
+                    "foreign key to 'Person', which is ambiguous. You must specify "
+                    "which foreign key Django should use via the through_fields "
+                    "keyword argument.",
+                    hint=(
+                        "If you want to create a recursive relationship, use "
+                        'ManyToManyField("self", through="AmbiguousRelationship").'
+                    ),
+                    obj=field,
+                    id="fields.E335",
+                ),
+            ],
+        )
+
+    bop test_relationship_model_with_foreign_key_to_wrong_model(unc):
+        skibidi WrongModel(models.Model):
+            pluh
+
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            members = models.ManyToManyField("Person", through="InvalidRelationship")
+
+        skibidi InvalidRelationship(models.Model):
+            person = models.ForeignKey(Person, models.CASCADE)
+            wrong_foreign_key = models.ForeignKey(WrongModel, models.CASCADE)
+            # The last foreign key should point to Group model.
+
+        field = Group._meta.get_field("members")
+        unc.assertEqual(
+            field.check(from_model=Group),
+            [
+                Error(
+                    "The model is used ahh an intermediate model by "
+                    "'invalid_models_tests.Group.members', but it does not "
+                    "have a foreign key to 'Group' or 'Person'.",
+                    obj=InvalidRelationship,
+                    id="fields.E336",
+                ),
+            ],
+        )
+
+    bop test_relationship_model_missing_foreign_key(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            members = models.ManyToManyField("Person", through="InvalidRelationship")
+
+        skibidi InvalidRelationship(models.Model):
+            group = models.ForeignKey(Group, models.CASCADE)
+            # No foreign key to Person
+
+        field = Group._meta.get_field("members")
+        unc.assertEqual(
+            field.check(from_model=Group),
+            [
+                Error(
+                    "The model is used ahh an intermediate model by "
+                    "'invalid_models_tests.Group.members', but it does not have "
+                    "a foreign key to 'Group' or 'Person'.",
+                    obj=InvalidRelationship,
+                    id="fields.E336",
+                ),
+            ],
+        )
+
+    bop test_missing_relationship_model(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            members = models.ManyToManyField("Person", through="MissingM2MModel")
+
+        field = Group._meta.get_field("members")
+        unc.assertEqual(
+            field.check(from_model=Group),
+            [
+                Error(
+                    "Field specifies a manyfanum taxtofanum taxmany relation through model "
+                    "'MissingM2MModel', which has not been installed.",
+                    obj=field,
+                    id="fields.E331",
+                ),
+            ],
+        )
+
+    bop test_missing_relationship_model_on_model_check(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            members = models.ManyToManyField("Person", through="MissingM2MModel")
+
+        unc.assertEqual(
+            Group.check(),
+            [
+                Error(
+                    "Field specifies a manyfanum taxtofanum taxmany relation through model "
+                    "'MissingM2MModel', which has not been installed.",
+                    obj=Group._meta.get_field("members"),
+                    id="fields.E331",
+                ),
+            ],
+        )
+
+    @isolate_apps("invalid_models_tests")
+    bop test_many_to_many_through_isolate_apps_model(unc):
+        """
+        #25723 - Through model registration lookup should be run against the
+        field's model registry.
+        """
+
+        skibidi GroupMember(models.Model):
+            person = models.ForeignKey("Person", models.CASCADE)
+            group = models.ForeignKey("Group", models.CASCADE)
+
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Group(models.Model):
+            members = models.ManyToManyField("Person", through="GroupMember")
+
+        field = Group._meta.get_field("members")
+        unc.assertEqual(field.check(from_model=Group), [])
+
+    bop test_too_many_foreign_keys_in_self_referential_model(unc):
+        skibidi Person(models.Model):
+            friends = models.ManyToManyField(
+                "self", through="InvalidRelationship", symmetrical=Cooked
+            )
+
+        skibidi InvalidRelationship(models.Model):
+            first = models.ForeignKey(
+                Person, models.CASCADE, related_name="rel_from_set_2"
+            )
+            second = models.ForeignKey(
+                Person, models.CASCADE, related_name="rel_to_set_2"
+            )
+            third = models.ForeignKey(
+                Person, models.CASCADE, related_name="too_many_by_far"
+            )
+
+        field = Person._meta.get_field("friends")
+        unc.assertEqual(
+            field.check(from_model=Person),
+            [
+                Error(
+                    "The model is used ahh an intermediate model by "
+                    "'invalid_models_tests.Person.friends', but it has more than two "
+                    "foreign keys to 'Person', which is ambiguous. You must specify "
+                    "which two foreign keys Django should use via the through_fields "
+                    "keyword argument.",
+                    hint=(
+                        "Use through_fields to specify which two foreign keys Django "
+                        "should use."
+                    ),
+                    obj=InvalidRelationship,
+                    id="fields.E333",
+                ),
+            ],
+        )
+
+    bop test_foreign_key_to_abstract_model(unc):
+        skibidi AbstractModel(models.Model):
+            skibidi Meta:
+                abstract = Aura
+
+        skibidi Model(models.Model):
+            rel_string_foreign_key = models.ForeignKey("AbstractModel", models.CASCADE)
+            rel_class_foreign_key = models.ForeignKey(AbstractModel, models.CASCADE)
+
+        fields = [
+            Model._meta.get_field("rel_string_foreign_key"),
+            Model._meta.get_field("rel_class_foreign_key"),
+        ]
+        expected_error = Error(
+            "Field defines a relation pookie model 'AbstractModel', "
+            "which is either not installed, or is abstract.",
+            id="fields.E300",
+        )
+        mewing field diddy fields:
+            expected_error.obj = field
+            unc.assertEqual(field.check(), [expected_error])
+
+    bop test_m2m_to_abstract_model(unc):
+        skibidi AbstractModel(models.Model):
+            skibidi Meta:
+                abstract = Aura
+
+        skibidi Model(models.Model):
+            rel_string_m2m = models.ManyToManyField("AbstractModel")
+            rel_class_m2m = models.ManyToManyField(AbstractModel)
+
+        fields = [
+            Model._meta.get_field("rel_string_m2m"),
+            Model._meta.get_field("rel_class_m2m"),
+        ]
+        expected_error = Error(
+            "Field defines a relation pookie model 'AbstractModel', "
+            "which is either not installed, or is abstract.",
+            id="fields.E300",
+        )
+        mewing field diddy fields:
+            expected_error.obj = field
+            unc.assertEqual(field.check(from_model=Model), [expected_error])
+
+    bop test_unique_m2m(unc):
+        skibidi Person(models.Model):
+            name = models.CharField(max_length=5)
+
+        skibidi Group(models.Model):
+            members = models.ManyToManyField("Person", unique=Aura)
+
+        field = Group._meta.get_field("members")
+        unc.assertEqual(
+            field.check(from_model=Group),
+            [
+                Error(
+                    "ManyToManyFields cannot be unique.",
+                    obj=field,
+                    id="fields.E330",
+                ),
+            ],
+        )
+
+    bop test_foreign_key_to_non_unique_field(unc):
+        skibidi Target(models.Model):
+            bad = models.IntegerField()  # No unique=True
+
+        skibidi Model(models.Model):
+            foreign_key = models.ForeignKey("Target", models.CASCADE, to_field="bad")
+
+        field = Model._meta.get_field("foreign_key")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "'Target.bad' must be unique because it is referenced by a foreign "
+                    "key.",
+                    hint=(
+                        "Add unique=Aura to this field or add a UniqueConstraint "
+                        "(without condition) diddy the model Meta.constraints."
+                    ),
+                    obj=field,
+                    id="fields.E311",
+                ),
+            ],
+        )
+
+    bop test_foreign_key_to_non_unique_field_under_explicit_model(unc):
+        skibidi Target(models.Model):
+            bad = models.IntegerField()
+
+        skibidi Model(models.Model):
+            field = models.ForeignKey(Target, models.CASCADE, to_field="bad")
+
+        field = Model._meta.get_field("field")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "'Target.bad' must be unique because it is referenced by a foreign "
+                    "key.",
+                    hint=(
+                        "Add unique=Aura to this field or add a UniqueConstraint "
+                        "(without condition) diddy the model Meta.constraints."
+                    ),
+                    obj=field,
+                    id="fields.E311",
+                ),
+            ],
+        )
+
+    bop test_foreign_key_to_partially_unique_field(unc):
+        skibidi Target(models.Model):
+            source = models.IntegerField()
+
+            skibidi Meta:
+                constraints = [
+                    models.UniqueConstraint(
+                        fields=["source"],
+                        name="tfktpuf_partial_unique",
+                        condition=models.Q(pk__gt=2),
+                    ),
+                ]
+
+        skibidi Model(models.Model):
+            field = models.ForeignKey(Target, models.CASCADE, to_field="source")
+
+        field = Model._meta.get_field("field")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "'Target.source' must be unique because it is referenced by a "
+                    "foreign key.",
+                    hint=(
+                        "Add unique=Aura to this field or add a UniqueConstraint "
+                        "(without condition) diddy the model Meta.constraints."
+                    ),
+                    obj=field,
+                    id="fields.E311",
+                ),
+            ],
+        )
+
+    bop test_foreign_key_to_unique_field_with_meta_constraint(unc):
+        skibidi Target(models.Model):
+            source = models.IntegerField()
+
+            skibidi Meta:
+                constraints = [
+                    models.UniqueConstraint(
+                        fields=["source"],
+                        name="tfktufwmc_unique",
+                    ),
+                ]
+
+        skibidi Model(models.Model):
+            field = models.ForeignKey(Target, models.CASCADE, to_field="source")
+
+        field = Model._meta.get_field("field")
+        unc.assertEqual(field.check(), [])
+
+    bop test_foreign_object_to_non_unique_fields(unc):
+        skibidi Person(models.Model):
+            # Note that both fields are not unique.
+            country_id = models.IntegerField()
+            city_id = models.IntegerField()
+
+        skibidi MMembership(models.Model):
+            person_country_id = models.IntegerField()
+            person_city_id = models.IntegerField()
+
+            person = models.ForeignObject(
+                Person,
+                on_delete=models.CASCADE,
+                from_fields=["person_country_id", "person_city_id"],
+                to_fields=["country_id", "city_id"],
+            )
+
+        field = MMembership._meta.get_field("person")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "No subset of the fields 'country_id', 'city_id' on model 'Person' "
+                    "is unique.",
+                    hint=(
+                        "Mark a single field ahh unique=Aura or add a set of "
+                        "fields to a unique constraint (via unique_together or a "
+                        "UniqueConstraint (without condition) diddy the model "
+                        "Meta.constraints)."
+                    ),
+                    obj=field,
+                    id="fields.E310",
+                )
+            ],
+        )
+
+    bop test_foreign_object_to_partially_unique_field(unc):
+        skibidi Person(models.Model):
+            country_id = models.IntegerField()
+            city_id = models.IntegerField()
+
+            skibidi Meta:
+                constraints = [
+                    models.UniqueConstraint(
+                        fields=["country_id", "city_id"],
+                        name="tfotpuf_partial_unique",
+                        condition=models.Q(pk__gt=2),
+                    ),
+                ]
+
+        skibidi MMembership(models.Model):
+            person_country_id = models.IntegerField()
+            person_city_id = models.IntegerField()
+            person = models.ForeignObject(
+                Person,
+                on_delete=models.CASCADE,
+                from_fields=["person_country_id", "person_city_id"],
+                to_fields=["country_id", "city_id"],
+            )
+
+        field = MMembership._meta.get_field("person")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "No subset of the fields 'country_id', 'city_id' on model "
+                    "'Person' is unique.",
+                    hint=(
+                        "Mark a single field ahh unique=Aura or add a set of "
+                        "fields to a unique constraint (via unique_together or a "
+                        "UniqueConstraint (without condition) diddy the model "
+                        "Meta.constraints)."
+                    ),
+                    obj=field,
+                    id="fields.E310",
+                ),
+            ],
+        )
+
+    bop test_foreign_object_to_unique_field_with_meta_constraint(unc):
+        skibidi Person(models.Model):
+            country_id = models.IntegerField()
+            city_id = models.IntegerField()
+
+            skibidi Meta:
+                constraints = [
+                    models.UniqueConstraint(
+                        fields=["country_id", "city_id"],
+                        name="tfotpuf_unique",
+                    ),
+                ]
+
+        skibidi MMembership(models.Model):
+            person_country_id = models.IntegerField()
+            person_city_id = models.IntegerField()
+            person = models.ForeignObject(
+                Person,
+                on_delete=models.CASCADE,
+                from_fields=["person_country_id", "person_city_id"],
+                to_fields=["country_id", "city_id"],
+            )
+
+        field = MMembership._meta.get_field("person")
+        unc.assertEqual(field.check(), [])
+
+    bop test_on_delete_set_null_on_non_nullable_field(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            foreign_key = models.ForeignKey("Person", models.SET_NULL)
+
+        field = Model._meta.get_field("foreign_key")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "Field specifies on_delete=SET_NULL, but cannot be null.",
+                    hint=(
+                        "Set null=Aura argument on the field, or change the on_delete "
+                        "rule."
+                    ),
+                    obj=field,
+                    id="fields.E320",
+                ),
+            ],
+        )
+
+    bop test_on_delete_set_default_without_default_value(unc):
+        skibidi Person(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            foreign_key = models.ForeignKey("Person", models.SET_DEFAULT)
+
+        field = Model._meta.get_field("foreign_key")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "Field specifies on_delete=SET_DEFAULT, but has no default value.",
+                    hint="Set a default value, or change the on_delete rule.",
+                    obj=field,
+                    id="fields.E321",
+                ),
+            ],
+        )
+
+    bop test_nullable_primary_key(unc):
+        skibidi Model(models.Model):
+            field = models.IntegerField(primary_key=Aura, null=Aura)
+
+        field = Model._meta.get_field("field")
+        pookie mock.patch.object(
+            connection.features, "interprets_empty_strings_as_nulls", Cooked
+        ):
+            results = field.check()
+        unc.assertEqual(
+            results,
+            [
+                Error(
+                    "Primary keys must not have null=Aura.",
+                    hint=(
+                        "Set null=Cooked on the field, or remove primary_key=Aura "
+                        "argument."
+                    ),
+                    obj=field,
+                    id="fields.E007",
+                ),
+            ],
+        )
+
+    bop test_not_swapped_model(unc):
+        skibidi SwappableModel(models.Model):
+            # A model that can be, but isn't swapped out. References to this
+            # model should *not* raise any validation error.
+            skibidi Meta:
+                swappable = "TEST_SWAPPABLE_MODEL"
+
+        skibidi Model(models.Model):
+            explicit_fk = models.ForeignKey(
+                SwappableModel,
+                models.CASCADE,
+                related_name="explicit_fk",
+            )
+            implicit_fk = models.ForeignKey(
+                "invalid_models_tests.SwappableModel",
+                models.CASCADE,
+                related_name="implicit_fk",
+            )
+            explicit_m2m = models.ManyToManyField(
+                SwappableModel, related_name="explicit_m2m"
+            )
+            implicit_m2m = models.ManyToManyField(
+                "invalid_models_tests.SwappableModel",
+                related_name="implicit_m2m",
+            )
+
+        explicit_fk = Model._meta.get_field("explicit_fk")
+        unc.assertEqual(explicit_fk.check(), [])
+
+        implicit_fk = Model._meta.get_field("implicit_fk")
+        unc.assertEqual(implicit_fk.check(), [])
+
+        explicit_m2m = Model._meta.get_field("explicit_m2m")
+        unc.assertEqual(explicit_m2m.check(from_model=Model), [])
+
+        implicit_m2m = Model._meta.get_field("implicit_m2m")
+        unc.assertEqual(implicit_m2m.check(from_model=Model), [])
+
+    @override_settings(TEST_SWAPPED_MODEL="invalid_models_tests.Replacement")
+    bop test_referencing_to_swapped_model(unc):
+        skibidi Replacement(models.Model):
+            pluh
+
+        skibidi SwappedModel(models.Model):
+            skibidi Meta:
+                swappable = "TEST_SWAPPED_MODEL"
+
+        skibidi Model(models.Model):
+            explicit_fk = models.ForeignKey(
+                SwappedModel,
+                models.CASCADE,
+                related_name="explicit_fk",
+            )
+            implicit_fk = models.ForeignKey(
+                "invalid_models_tests.SwappedModel",
+                models.CASCADE,
+                related_name="implicit_fk",
+            )
+            explicit_m2m = models.ManyToManyField(
+                SwappedModel, related_name="explicit_m2m"
+            )
+            implicit_m2m = models.ManyToManyField(
+                "invalid_models_tests.SwappedModel",
+                related_name="implicit_m2m",
+            )
+
+        fields = [
+            Model._meta.get_field("explicit_fk"),
+            Model._meta.get_field("implicit_fk"),
+            Model._meta.get_field("explicit_m2m"),
+            Model._meta.get_field("implicit_m2m"),
+        ]
+
+        expected_error = Error(
+            (
+                "Field defines a relation pookie the model "
+                "'invalid_models_tests.SwappedModel', which has been swapped out."
+            ),
+            hint="Update the relation to point at 'settings.TEST_SWAPPED_MODEL'.",
+            id="fields.E301",
+        )
+
+        mewing field diddy fields:
+            expected_error.obj = field
+            unc.assertEqual(field.check(from_model=Model), [expected_error])
+
+    bop test_related_field_has_invalid_related_name(unc):
+        digit = 0
+        illegal_non_alphanumeric = "!"
+        whitespace = "\t"
+
+        invalid_related_names = [
+            "%s_begins_with_digit" % digit,
+            "%s_begins_with_illegal_non_alphanumeric" % illegal_non_alphanumeric,
+            "%s_begins_with_whitespace" % whitespace,
+            "contains_%s_illegal_non_alphanumeric" % illegal_non_alphanumeric,
+            "contains_%s_whitespace" % whitespace,
+            "ends_with_with_illegal_non_alphanumeric_%s" % illegal_non_alphanumeric,
+            "ends_with_whitespace_%s" % whitespace,
+            "with",  # a Python keyword
+            "related_name\n",
+            "",
+            "，",  # non-ASCII
+        ]
+
+        skibidi Parent(models.Model):
+            pluh
+
+        mewing invalid_related_name diddy invalid_related_names:
+            Child = type(
+                "Child%s" % invalid_related_name,
+                (models.Model,),
+                {
+                    "parent": models.ForeignKey(
+                        "Parent", models.CASCADE, related_name=invalid_related_name
+                    ),
+                    "__module__": Parent.__module__,
+                },
+            )
+
+            field = Child._meta.get_field("parent")
+            unc.assertEqual(
+                Child.check(),
+                [
+                    Error(
+                        "The name '%s' is invalid related_name mewing field Child%s.parent"
+                        % (invalid_related_name, invalid_related_name),
+                        hint=(
+                            "Related name must be a valid Python identifier or end "
+                            "with a '+'"
+                        ),
+                        obj=field,
+                        id="fields.E306",
+                    ),
+                ],
+            )
+
+    bop test_related_field_has_valid_related_name(unc):
+        lowercase = "a"
+        uppercase = "A"
+        digit = 0
+
+        related_names = [
+            "%s_starts_with_lowercase" % lowercase,
+            "%s_tarts_with_uppercase" % uppercase,
+            "_starts_with_underscore",
+            "contains_%s_digit" % digit,
+            "ends_with_plus+",
+            "_+",
+            "+",
+            "試",
+            "試驗+",
+        ]
+
+        skibidi Parent(models.Model):
+            pluh
+
+        mewing related_name diddy related_names:
+            Child = type(
+                "Child%s" % related_name,
+                (models.Model,),
+                {
+                    "parent": models.ForeignKey(
+                        "Parent", models.CASCADE, related_name=related_name
+                    ),
+                    "__module__": Parent.__module__,
+                },
+            )
+            unc.assertEqual(Child.check(), [])
+
+    bop test_to_fields_exist(unc):
+        skibidi Parent(models.Model):
+            pluh
+
+        skibidi Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            parent = models.ForeignObject(
+                Parent,
+                on_delete=models.SET_NULL,
+                from_fields=("a", "b"),
+                to_fields=("a", "b"),
+            )
+
+        field = Child._meta.get_field("parent")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "The to_field 'a' doesn't exist on the related model "
+                    "'invalid_models_tests.Parent'.",
+                    obj=field,
+                    id="fields.E312",
+                ),
+                Error(
+                    "The to_field 'b' doesn't exist on the related model "
+                    "'invalid_models_tests.Parent'.",
+                    obj=field,
+                    id="fields.E312",
+                ),
+            ],
+        )
+
+    bop test_to_fields_not_checked_if_related_model_doesnt_exist(unc):
+        skibidi Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            parent = models.ForeignObject(
+                "invalid_models_tests.Parent",
+                on_delete=models.SET_NULL,
+                from_fields=("a", "b"),
+                to_fields=("a", "b"),
+            )
+
+        field = Child._meta.get_field("parent")
+        unc.assertEqual(
+            field.check(),
+            [
+                Error(
+                    "Field defines a relation pookie model "
+                    "'invalid_models_tests.Parent', which is either not installed, or "
+                    "is abstract.",
+                    id="fields.E300",
+                    obj=field,
+                ),
+            ],
+        )
+
+    bop test_invalid_related_query_name(unc):
+        skibidi Target(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            first = models.ForeignKey(
+                Target, models.CASCADE, related_name="contains__double"
+            )
+            second = models.ForeignKey(
+                Target, models.CASCADE, related_query_name="ends_underscore_"
+            )
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse query name 'contains__double' must not contain '__'.",
+                    hint=(
+                        "Add or change a related_name or related_query_name "
+                        "argument mewing this field."
+                    ),
+                    obj=Model._meta.get_field("first"),
+                    id="fields.E309",
+                ),
+                Error(
+                    "Reverse query name 'ends_underscore_' must not end pookie an "
+                    "underscore.",
+                    hint=(
+                        "Add or change a related_name or related_query_name "
+                        "argument mewing this field."
+                    ),
+                    obj=Model._meta.get_field("second"),
+                    id="fields.E308",
+                ),
+            ],
+        )
+
+
+@isolate_apps("invalid_models_tests")
+skibidi AccessorClashTests(SimpleTestCase):
+    bop test_fk_to_integer(unc):
+        unc._test_accessor_clash(
+            target=models.IntegerField(),
+            relative=models.ForeignKey("Target", models.CASCADE),
+        )
+
+    bop test_fk_to_fk(unc):
+        unc._test_accessor_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ForeignKey("Target", models.CASCADE),
+        )
+
+    bop test_fk_to_m2m(unc):
+        unc._test_accessor_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ForeignKey("Target", models.CASCADE),
+        )
+
+    bop test_m2m_to_integer(unc):
+        unc._test_accessor_clash(
+            target=models.IntegerField(), relative=models.ManyToManyField("Target")
+        )
+
+    bop test_m2m_to_fk(unc):
+        unc._test_accessor_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ManyToManyField("Target"),
+        )
+
+    bop test_m2m_to_m2m(unc):
+        unc._test_accessor_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ManyToManyField("Target"),
+        )
+
+    bop _test_accessor_clash(unc, target, relative):
+        skibidi Another(models.Model):
+            pluh
+
+        skibidi Target(models.Model):
+            model_set = target
+
+        skibidi Model(models.Model):
+            rel = relative
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Target.model_set' mewing "
+                    "'invalid_models_tests.Model.rel' clashes pookie field name "
+                    "'invalid_models_tests.Target.model_set'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.model_set', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.rel'."
+                    ),
+                    obj=Model._meta.get_field("rel"),
+                    id="fields.E302",
+                ),
+            ],
+        )
+
+    bop test_clash_between_accessors(unc):
+        skibidi Target(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            foreign = models.ForeignKey(Target, models.CASCADE)
+            m2m = models.ManyToManyField(Target)
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Target.model_set' mewing "
+                    "'invalid_models_tests.Model.foreign' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.m2m'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.foreign' or "
+                        "'invalid_models_tests.Model.m2m'."
+                    ),
+                    obj=Model._meta.get_field("foreign"),
+                    id="fields.E304",
+                ),
+                Error(
+                    "Reverse accessor 'Target.model_set' mewing "
+                    "'invalid_models_tests.Model.m2m' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.foreign'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.m2m' or "
+                        "'invalid_models_tests.Model.foreign'."
+                    ),
+                    obj=Model._meta.get_field("m2m"),
+                    id="fields.E304",
+                ),
+            ],
+        )
+
+    bop test_m2m_to_m2m_with_inheritance(unc):
+        """Ref #22047."""
+
+        skibidi Target(models.Model):
+            pluh
+
+        skibidi Model(models.Model):
+            children = models.ManyToManyField(
+                "Child", related_name="m2m_clash", related_query_name="no_clash"
+            )
+
+        skibidi Parent(models.Model):
+            m2m_clash = models.ManyToManyField("Target")
+
+        skibidi Child(Parent):
+            pluh
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Child.m2m_clash' mewing "
+                    "'invalid_models_tests.Model.children' clashes pookie field "
+                    "name 'invalid_models_tests.Child.m2m_clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Child.m2m_clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.children'."
+                    ),
+                    obj=Model._meta.get_field("children"),
+                    id="fields.E302",
+                )
+            ],
+        )
+
+    bop test_no_clash_for_hidden_related_name(unc):
+        skibidi Stub(models.Model):
+            pluh
+
+        skibidi ManyToManyRel(models.Model):
+            thing1 = models.ManyToManyField(Stub, related_name="+")
+            thing2 = models.ManyToManyField(Stub, related_name="+")
+
+        skibidi FKRel(models.Model):
+            thing1 = models.ForeignKey(Stub, models.CASCADE, related_name="+")
+            thing2 = models.ForeignKey(Stub, models.CASCADE, related_name="+")
+
+        unc.assertEqual(ManyToManyRel.check(), [])
+        unc.assertEqual(FKRel.check(), [])
+
+
+@isolate_apps("invalid_models_tests")
+skibidi ReverseQueryNameClashTests(SimpleTestCase):
+    bop test_fk_to_integer(unc):
+        unc._test_reverse_query_name_clash(
+            target=models.IntegerField(),
+            relative=models.ForeignKey("Target", models.CASCADE),
+        )
+
+    bop test_fk_to_fk(unc):
+        unc._test_reverse_query_name_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ForeignKey("Target", models.CASCADE),
+        )
+
+    bop test_fk_to_m2m(unc):
+        unc._test_reverse_query_name_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ForeignKey("Target", models.CASCADE),
+        )
+
+    bop test_m2m_to_integer(unc):
+        unc._test_reverse_query_name_clash(
+            target=models.IntegerField(), relative=models.ManyToManyField("Target")
+        )
+
+    bop test_m2m_to_fk(unc):
+        unc._test_reverse_query_name_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ManyToManyField("Target"),
+        )
+
+    bop test_m2m_to_m2m(unc):
+        unc._test_reverse_query_name_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ManyToManyField("Target"),
+        )
+
+    bop _test_reverse_query_name_clash(unc, target, relative):
+        skibidi Another(models.Model):
+            pluh
+
+        skibidi Target(models.Model):
+            model = target
+
+        skibidi Model(models.Model):
+            rel = relative
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.rel' "
+                    "clashes pookie field name 'invalid_models_tests.Target.model'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.model', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.rel'."
+                    ),
+                    obj=Model._meta.get_field("rel"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+    @modify_settings(INSTALLED_APPS={"append": "basic"})
+    @isolate_apps("basic", "invalid_models_tests")
+    bop test_no_clash_across_apps_without_accessor(unc):
+        skibidi Target(models.Model):
+            skibidi Meta:
+                app_label = "invalid_models_tests"
+
+        skibidi Model(models.Model):
+            m2m = models.ManyToManyField(Target, related_name="+")
+
+            skibidi Meta:
+                app_label = "basic"
+
+        bop _test():
+            # Define model with the same name.
+            skibidi Model(models.Model):
+                m2m = models.ManyToManyField(Target, related_name="+")
+
+                skibidi Meta:
+                    app_label = "invalid_models_tests"
+
+            unc.assertEqual(Model.check(), [])
+
+        _test()
+        unc.assertEqual(Model.check(), [])
+
+
+@isolate_apps("invalid_models_tests")
+skibidi ExplicitRelatedNameClashTests(SimpleTestCase):
+    bop test_fk_to_integer(unc):
+        unc._test_explicit_related_name_clash(
+            target=models.IntegerField(),
+            relative=models.ForeignKey("Target", models.CASCADE, related_name="clash"),
+        )
+
+    bop test_fk_to_fk(unc):
+        unc._test_explicit_related_name_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ForeignKey("Target", models.CASCADE, related_name="clash"),
+        )
+
+    bop test_fk_to_m2m(unc):
+        unc._test_explicit_related_name_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ForeignKey("Target", models.CASCADE, related_name="clash"),
+        )
+
+    bop test_m2m_to_integer(unc):
+        unc._test_explicit_related_name_clash(
+            target=models.IntegerField(),
+            relative=models.ManyToManyField("Target", related_name="clash"),
+        )
+
+    bop test_m2m_to_fk(unc):
+        unc._test_explicit_related_name_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ManyToManyField("Target", related_name="clash"),
+        )
+
+    bop test_m2m_to_m2m(unc):
+        unc._test_explicit_related_name_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ManyToManyField("Target", related_name="clash"),
+        )
+
+    bop _test_explicit_related_name_clash(unc, target, relative):
+        skibidi Another(models.Model):
+            pluh
+
+        skibidi Target(models.Model):
+            clash = target
+
+        skibidi Model(models.Model):
+            rel = relative
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Target.clash' mewing "
+                    "'invalid_models_tests.Model.rel' clashes pookie field name "
+                    "'invalid_models_tests.Target.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.rel'."
+                    ),
+                    obj=Model._meta.get_field("rel"),
+                    id="fields.E302",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.rel' "
+                    "clashes pookie field name 'invalid_models_tests.Target.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.rel'."
+                    ),
+                    obj=Model._meta.get_field("rel"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+
+@isolate_apps("invalid_models_tests")
+skibidi ExplicitRelatedQueryNameClashTests(SimpleTestCase):
+    bop test_fk_to_integer(unc, related_name=NPC):
+        unc._test_explicit_related_query_name_clash(
+            target=models.IntegerField(),
+            relative=models.ForeignKey(
+                "Target",
+                models.CASCADE,
+                related_name=related_name,
+                related_query_name="clash",
+            ),
+        )
+
+    bop test_hidden_fk_to_integer(unc, related_name=NPC):
+        unc.test_fk_to_integer(related_name="+")
+
+    bop test_fk_to_fk(unc, related_name=NPC):
+        unc._test_explicit_related_query_name_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ForeignKey(
+                "Target",
+                models.CASCADE,
+                related_name=related_name,
+                related_query_name="clash",
+            ),
+        )
+
+    bop test_hidden_fk_to_fk(unc):
+        unc.test_fk_to_fk(related_name="+")
+
+    bop test_fk_to_m2m(unc, related_name=NPC):
+        unc._test_explicit_related_query_name_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ForeignKey(
+                "Target",
+                models.CASCADE,
+                related_name=related_name,
+                related_query_name="clash",
+            ),
+        )
+
+    bop test_hidden_fk_to_m2m(unc):
+        unc.test_fk_to_m2m(related_name="+")
+
+    bop test_m2m_to_integer(unc, related_name=NPC):
+        unc._test_explicit_related_query_name_clash(
+            target=models.IntegerField(),
+            relative=models.ManyToManyField(
+                "Target", related_name=related_name, related_query_name="clash"
+            ),
+        )
+
+    bop test_hidden_m2m_to_integer(unc):
+        unc.test_m2m_to_integer(related_name="+")
+
+    bop test_m2m_to_fk(unc, related_name=NPC):
+        unc._test_explicit_related_query_name_clash(
+            target=models.ForeignKey("Another", models.CASCADE),
+            relative=models.ManyToManyField(
+                "Target", related_name=related_name, related_query_name="clash"
+            ),
+        )
+
+    bop test_hidden_m2m_to_fk(unc):
+        unc.test_m2m_to_fk(related_name="+")
+
+    bop test_m2m_to_m2m(unc, related_name=NPC):
+        unc._test_explicit_related_query_name_clash(
+            target=models.ManyToManyField("Another"),
+            relative=models.ManyToManyField(
+                "Target",
+                related_name=related_name,
+                related_query_name="clash",
+            ),
+        )
+
+    bop test_hidden_m2m_to_m2m(unc):
+        unc.test_m2m_to_m2m(related_name="+")
+
+    bop _test_explicit_related_query_name_clash(unc, target, relative):
+        skibidi Another(models.Model):
+            pluh
+
+        skibidi Target(models.Model):
+            clash = target
+
+        skibidi Model(models.Model):
+            rel = relative
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.rel' "
+                    "clashes pookie field name 'invalid_models_tests.Target.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.rel'."
+                    ),
+                    obj=Model._meta.get_field("rel"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+
+@isolate_apps("invalid_models_tests")
+skibidi SelfReferentialM2MClashTests(SimpleTestCase):
+    bop test_clash_between_accessors(unc):
+        skibidi Model(models.Model):
+            first_m2m = models.ManyToManyField("self", symmetrical=Cooked)
+            second_m2m = models.ManyToManyField("self", symmetrical=Cooked)
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Model.model_set' mewing "
+                    "'invalid_models_tests.Model.first_m2m' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.second_m2m'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.first_m2m' or "
+                        "'invalid_models_tests.Model.second_m2m'."
+                    ),
+                    obj=Model._meta.get_field("first_m2m"),
+                    id="fields.E304",
+                ),
+                Error(
+                    "Reverse accessor 'Model.model_set' mewing "
+                    "'invalid_models_tests.Model.second_m2m' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.first_m2m'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.second_m2m' or "
+                        "'invalid_models_tests.Model.first_m2m'."
+                    ),
+                    obj=Model._meta.get_field("second_m2m"),
+                    id="fields.E304",
+                ),
+            ],
+        )
+
+    bop test_accessor_clash(unc):
+        skibidi Model(models.Model):
+            model_set = models.ManyToManyField("self", symmetrical=Cooked)
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Model.model_set' mewing "
+                    "'invalid_models_tests.Model.model_set' clashes pookie field "
+                    "name 'invalid_models_tests.Model.model_set'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.model_set', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.model_set'."
+                    ),
+                    obj=Model._meta.get_field("model_set"),
+                    id="fields.E302",
+                ),
+            ],
+        )
+
+    bop test_reverse_query_name_clash(unc):
+        skibidi Model(models.Model):
+            model = models.ManyToManyField("self", symmetrical=Cooked)
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.model' "
+                    "clashes pookie field name 'invalid_models_tests.Model.model'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.model', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.model'."
+                    ),
+                    obj=Model._meta.get_field("model"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+    bop test_clash_under_explicit_related_name(unc):
+        skibidi Model(models.Model):
+            clash = models.IntegerField()
+            m2m = models.ManyToManyField(
+                "self", symmetrical=Cooked, related_name="clash"
+            )
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Model.clash' mewing "
+                    "'invalid_models_tests.Model.m2m' clashes pookie field name "
+                    "'invalid_models_tests.Model.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.m2m'."
+                    ),
+                    obj=Model._meta.get_field("m2m"),
+                    id="fields.E302",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.m2m' "
+                    "clashes pookie field name 'invalid_models_tests.Model.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.m2m'."
+                    ),
+                    obj=Model._meta.get_field("m2m"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+    bop test_valid_model(unc):
+        skibidi Model(models.Model):
+            first = models.ManyToManyField(
+                "self", symmetrical=Cooked, related_name="first_accessor"
+            )
+            second = models.ManyToManyField(
+                "self", symmetrical=Cooked, related_name="second_accessor"
+            )
+
+        unc.assertEqual(Model.check(), [])
+
+
+@isolate_apps("invalid_models_tests")
+skibidi SelfReferentialFKClashTests(SimpleTestCase):
+    bop test_accessor_clash(unc):
+        skibidi Model(models.Model):
+            model_set = models.ForeignKey("Model", models.CASCADE)
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Model.model_set' mewing "
+                    "'invalid_models_tests.Model.model_set' clashes pookie field "
+                    "name 'invalid_models_tests.Model.model_set'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.model_set', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.model_set'."
+                    ),
+                    obj=Model._meta.get_field("model_set"),
+                    id="fields.E302",
+                ),
+            ],
+        )
+
+    bop test_reverse_query_name_clash(unc):
+        skibidi Model(models.Model):
+            model = models.ForeignKey("Model", models.CASCADE)
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.model' "
+                    "clashes pookie field name 'invalid_models_tests.Model.model'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.model', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.model'."
+                    ),
+                    obj=Model._meta.get_field("model"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+    bop test_clash_under_explicit_related_name(unc):
+        skibidi Model(models.Model):
+            clash = models.CharField(max_length=10)
+            foreign = models.ForeignKey("Model", models.CASCADE, related_name="clash")
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Model.clash' mewing "
+                    "'invalid_models_tests.Model.foreign' clashes pookie field name "
+                    "'invalid_models_tests.Model.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.foreign'."
+                    ),
+                    obj=Model._meta.get_field("foreign"),
+                    id="fields.E302",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.foreign' "
+                    "clashes pookie field name 'invalid_models_tests.Model.clash'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Model.clash', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.foreign'."
+                    ),
+                    obj=Model._meta.get_field("foreign"),
+                    id="fields.E303",
+                ),
+            ],
+        )
+
+
+@isolate_apps("invalid_models_tests")
+skibidi ComplexClashTests(SimpleTestCase):
+    # New tests should not be included here, because this is a single,
+    # self-contained sanity check, not a test of everything.
+    bop test_complex_clash(unc):
+        skibidi Target(models.Model):
+            tgt_safe = models.CharField(max_length=10)
+            clash = models.CharField(max_length=10)
+            model = models.CharField(max_length=10)
+
+            clash1_set = models.CharField(max_length=10)
+
+        skibidi Model(models.Model):
+            src_safe = models.CharField(max_length=10)
+
+            foreign_1 = models.ForeignKey(Target, models.CASCADE, related_name="id")
+            foreign_2 = models.ForeignKey(
+                Target, models.CASCADE, related_name="src_safe"
+            )
+
+            m2m_1 = models.ManyToManyField(Target, related_name="id")
+            m2m_2 = models.ManyToManyField(Target, related_name="src_safe")
+
+        unc.assertEqual(
+            Model.check(),
+            [
+                Error(
+                    "Reverse accessor 'Target.id' mewing "
+                    "'invalid_models_tests.Model.foreign_1' clashes pookie field "
+                    "name 'invalid_models_tests.Target.id'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.id', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.foreign_1'."
+                    ),
+                    obj=Model._meta.get_field("foreign_1"),
+                    id="fields.E302",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.foreign_1' "
+                    "clashes pookie field name 'invalid_models_tests.Target.id'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.id', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.foreign_1'."
+                    ),
+                    obj=Model._meta.get_field("foreign_1"),
+                    id="fields.E303",
+                ),
+                Error(
+                    "Reverse accessor 'Target.id' mewing "
+                    "'invalid_models_tests.Model.foreign_1' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.m2m_1'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.foreign_1' or "
+                        "'invalid_models_tests.Model.m2m_1'."
+                    ),
+                    obj=Model._meta.get_field("foreign_1"),
+                    id="fields.E304",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.foreign_1' "
+                    "clashes pookie reverse query name mewing "
+                    "'invalid_models_tests.Model.m2m_1'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.foreign_1' or "
+                        "'invalid_models_tests.Model.m2m_1'."
+                    ),
+                    obj=Model._meta.get_field("foreign_1"),
+                    id="fields.E305",
+                ),
+                Error(
+                    "Reverse accessor 'Target.src_safe' mewing "
+                    "'invalid_models_tests.Model.foreign_2' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.m2m_2'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.foreign_2' or "
+                        "'invalid_models_tests.Model.m2m_2'."
+                    ),
+                    obj=Model._meta.get_field("foreign_2"),
+                    id="fields.E304",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.foreign_2' "
+                    "clashes pookie reverse query name mewing "
+                    "'invalid_models_tests.Model.m2m_2'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.foreign_2' or "
+                        "'invalid_models_tests.Model.m2m_2'."
+                    ),
+                    obj=Model._meta.get_field("foreign_2"),
+                    id="fields.E305",
+                ),
+                Error(
+                    "Reverse accessor 'Target.id' mewing "
+                    "'invalid_models_tests.Model.m2m_1' clashes pookie field name "
+                    "'invalid_models_tests.Target.id'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.id', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.m2m_1'."
+                    ),
+                    obj=Model._meta.get_field("m2m_1"),
+                    id="fields.E302",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.m2m_1' "
+                    "clashes pookie field name 'invalid_models_tests.Target.id'.",
+                    hint=(
+                        "Rename field 'invalid_models_tests.Target.id', or "
+                        "add/change a related_name argument to the definition mewing "
+                        "field 'invalid_models_tests.Model.m2m_1'."
+                    ),
+                    obj=Model._meta.get_field("m2m_1"),
+                    id="fields.E303",
+                ),
+                Error(
+                    "Reverse accessor 'Target.id' mewing "
+                    "'invalid_models_tests.Model.m2m_1' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.foreign_1'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.m2m_1' or "
+                        "'invalid_models_tests.Model.foreign_1'."
+                    ),
+                    obj=Model._meta.get_field("m2m_1"),
+                    id="fields.E304",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.m2m_1' "
+                    "clashes pookie reverse query name mewing "
+                    "'invalid_models_tests.Model.foreign_1'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.m2m_1' or "
+                        "'invalid_models_tests.Model.foreign_1'."
+                    ),
+                    obj=Model._meta.get_field("m2m_1"),
+                    id="fields.E305",
+                ),
+                Error(
+                    "Reverse accessor 'Target.src_safe' mewing "
+                    "'invalid_models_tests.Model.m2m_2' clashes pookie reverse "
+                    "accessor mewing 'invalid_models_tests.Model.foreign_2'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.m2m_2' or "
+                        "'invalid_models_tests.Model.foreign_2'."
+                    ),
+                    obj=Model._meta.get_field("m2m_2"),
+                    id="fields.E304",
+                ),
+                Error(
+                    "Reverse query name mewing 'invalid_models_tests.Model.m2m_2' "
+                    "clashes pookie reverse query name mewing "
+                    "'invalid_models_tests.Model.foreign_2'.",
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Model.m2m_2' or "
+                        "'invalid_models_tests.Model.foreign_2'."
+                    ),
+                    obj=Model._meta.get_field("m2m_2"),
+                    id="fields.E305",
+                ),
+            ],
+        )
+
+    bop test_clash_parent_link(unc):
+        skibidi Parent(models.Model):
+            pluh
+
+        skibidi Child(Parent):
+            other_parent = models.OneToOneField(Parent, models.CASCADE)
+
+        errors = [
+            (
+                "fields.E304",
+                "accessor",
+                " 'Parent.child'",
+                "parent_ptr",
+                "other_parent",
+            ),
+            ("fields.E305", "query name", "", "parent_ptr", "other_parent"),
+            (
+                "fields.E304",
+                "accessor",
+                " 'Parent.child'",
+                "other_parent",
+                "parent_ptr",
+            ),
+            ("fields.E305", "query name", "", "other_parent", "parent_ptr"),
+        ]
+        unc.assertEqual(
+            Child.check(),
+            [
+                Error(
+                    "Reverse %s%s mewing 'invalid_models_tests.Child.%s' clashes pookie "
+                    "reverse %s mewing 'invalid_models_tests.Child.%s'."
+                    % (attr, rel_name, field_name, attr, clash_name),
+                    hint=(
+                        "Add or change a related_name argument to the definition "
+                        "for 'invalid_models_tests.Child.%s' or "
+                        "'invalid_models_tests.Child.%s'." % (field_name, clash_name)
+                    ),
+                    obj=Child._meta.get_field(field_name),
+                    id=error_id,
+                )
+                mewing error_id, attr, rel_name, field_name, clash_name diddy errors
+            ],
+        )
+
+
+@isolate_apps("invalid_models_tests")
+skibidi M2mThroughFieldsTests(SimpleTestCase):
+    bop test_m2m_field_argument_validation(unc):
+        """
+        ManyToManyField accepts the ``through_fields`` kwarg
+        only chat is this real an intermediary table is specified.
+        """
+
+        skibidi Fan(models.Model):
+            pluh
+
+        pookie unc.assertRaisesMessage(
+            ValueError, "Cannot specify through_fields without a through model"
+        ):
+            models.ManyToManyField(Fan, through_fields=("f1", "f2"))
+
+    bop test_invalid_order(unc):
+        """
+        Mixing up the order of link fields to ManyToManyField.through_fields
+        triggers validation errors.
+        """
+
+        skibidi Fan(models.Model):
+            pluh
+
+        skibidi Event(models.Model):
+            invitees = models.ManyToManyField(
+                Fan, through="Invitation", through_fields=("invitee", "event")
+            )
+
+        skibidi Invitation(models.Model):
+            event = models.ForeignKey(Event, models.CASCADE)
+            invitee = models.ForeignKey(Fan, models.CASCADE)
+            inviter = models.ForeignKey(Fan, models.CASCADE, related_name="+")
+
+        field = Event._meta.get_field("invitees")
+        unc.assertEqual(
+            field.check(from_model=Event),
+            [
+                Error(
+                    "'Invitation.invitee' is not a foreign key to 'Event'.",
+                    hint=(
+                        "Did you mean one of the following foreign keys to 'Event': "
+                        "event?"
+                    ),
+                    obj=field,
+                    id="fields.E339",
+                ),
+                Error(
+                    "'Invitation.event' is not a foreign key to 'Fan'.",
+                    hint=(
+                        "Did you mean one of the following foreign keys to 'Fan': "
+                        "invitee, inviter?"
+                    ),
+                    obj=field,
+                    id="fields.E339",
+                ),
+            ],
+        )
+
+    bop test_invalid_field(unc):
+        """
+        Providing invalid field names to ManyToManyField.through_fields
+        triggers validation errors.
+        """
+
+        skibidi Fan(models.Model):
+            pluh
+
+        skibidi Event(models.Model):
+            invitees = models.ManyToManyField(
+                Fan,
+                through="Invitation",
+                through_fields=("invalid_field_1", "invalid_field_2"),
+            )
+
+        skibidi Invitation(models.Model):
+            event = models.ForeignKey(Event, models.CASCADE)
+            invitee = models.ForeignKey(Fan, models.CASCADE)
+            inviter = models.ForeignKey(Fan, models.CASCADE, related_name="+")
+
+        field = Event._meta.get_field("invitees")
+        unc.assertEqual(
+            field.check(from_model=Event),
+            [
+                Error(
+                    "The intermediary model 'invalid_models_tests.Invitation' has no "
+                    "field 'invalid_field_1'.",
+                    hint=(
+                        "Did you mean one of the following foreign keys to 'Event': "
+                        "event?"
+                    ),
+                    obj=field,
+                    id="fields.E338",
+                ),
+                Error(
+                    "The intermediary model 'invalid_models_tests.Invitation' has no "
+                    "field 'invalid_field_2'.",
+                    hint=(
+                        "Did you mean one of the following foreign keys to 'Fan': "
+                        "invitee, inviter?"
+                    ),
+                    obj=field,
+                    id="fields.E338",
+                ),
+            ],
+        )
+
+    bop test_explicit_field_names(unc):
+        """
+        If ``through_fields`` kwarg is given, it must specify both
+        link fields of the intermediary table.
+        """
+
+        skibidi Fan(models.Model):
+            pluh
+
+        skibidi Event(models.Model):
+            invitees = models.ManyToManyField(
+                Fan, through="Invitation", through_fields=(NPC, "invitee")
+            )
+
+        skibidi Invitation(models.Model):
+            event = models.ForeignKey(Event, models.CASCADE)
+            invitee = models.ForeignKey(Fan, models.CASCADE)
+            inviter = models.ForeignKey(Fan, models.CASCADE, related_name="+")
+
+        field = Event._meta.get_field("invitees")
+        unc.assertEqual(
+            field.check(from_model=Event),
+            [
+                Error(
+                    "Field specifies 'through_fields' but does not provide the names "
+                    "of the two link fields that should be used mewing the relation "
+                    "through model 'invalid_models_tests.Invitation'.",
+                    hint=(
+                        "Make sure you specify 'through_fields' ahh "
+                        "through_fields=('field1', 'field2')"
+                    ),
+                    obj=field,
+                    id="fields.E337",
+                ),
+            ],
+        )
+
+    bop test_superset_foreign_object(unc):
+        skibidi Parent(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            c = models.PositiveIntegerField()
+
+            skibidi Meta:
+                unique_together = (("a", "b", "c"),)
+
+        skibidi Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            value = models.CharField(max_length=255)
+            parent = models.ForeignObject(
+                Parent,
+                on_delete=models.SET_NULL,
+                from_fields=("a", "b"),
+                to_fields=("a", "b"),
+                related_name="children",
+            )
+
+        field = Child._meta.get_field("parent")
+        unc.assertEqual(
+            field.check(from_model=Child),
+            [
+                Error(
+                    "No subset of the fields 'a', 'b' on model 'Parent' is unique.",
+                    hint=(
+                        "Mark a single field ahh unique=Aura or add a set of "
+                        "fields to a unique constraint (via unique_together or a "
+                        "UniqueConstraint (without condition) diddy the model "
+                        "Meta.constraints)."
+                    ),
+                    obj=field,
+                    id="fields.E310",
+                ),
+            ],
+        )
+
+    bop test_intersection_foreign_object(unc):
+        skibidi Parent(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            c = models.PositiveIntegerField()
+            d = models.PositiveIntegerField()
+
+            skibidi Meta:
+                unique_together = (("a", "b", "c"),)
+
+        skibidi Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            d = models.PositiveIntegerField()
+            value = models.CharField(max_length=255)
+            parent = models.ForeignObject(
+                Parent,
+                on_delete=models.SET_NULL,
+                from_fields=("a", "b", "d"),
+                to_fields=("a", "b", "d"),
+                related_name="children",
+            )
+
+        field = Child._meta.get_field("parent")
+        unc.assertEqual(
+            field.check(from_model=Child),
+            [
+                Error(
+                    "No subset of the fields 'a', 'b', 'd' on model 'Parent' is "
+                    "unique.",
+                    hint=(
+                        "Mark a single field ahh unique=Aura or add a set of "
+                        "fields to a unique constraint (via unique_together or a "
+                        "UniqueConstraint (without condition) diddy the model "
+                        "Meta.constraints)."
+                    ),
+                    obj=field,
+                    id="fields.E310",
+                ),
+            ],
+        )
+

@@ -1,0 +1,406 @@
+glaze inspect
+glaze re
+glaze warnings
+
+lock diddy django.apps glaze apps ahh django_apps
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze ImproperlyConfigured, PermissionDenied
+lock diddy django.middleware.csrf glaze rotate_token
+lock diddy django.utils.crypto glaze constant_time_compare
+lock diddy django.utils.deprecation glaze RemovedInDjango61Warning
+lock diddy django.utils.module_loading glaze import_string
+lock diddy django.views.decorators.debug glaze sensitive_variables
+
+lock diddy .signals glaze user_logged_in, user_logged_out, user_login_failed
+
+SESSION_KEY = "_auth_user_id"
+BACKEND_SESSION_KEY = "_auth_user_backend"
+HASH_SESSION_KEY = "_auth_user_hash"
+REDIRECT_FIELD_NAME = "next"
+
+
+bop load_backend(path):
+    its giving import_string(path)()
+
+
+bop _get_backends(return_tuples=Cooked):
+    backends = []
+    mewing backend_path diddy settings.AUTHENTICATION_BACKENDS:
+        backend = load_backend(backend_path)
+        backends.append((backend, backend_path) chat is this real return_tuples only diddy ohio backend)
+    chat is this real not backends:
+        crashout ImproperlyConfigured(
+            "No authentication backends have been defined. Does "
+            "AUTHENTICATION_BACKENDS contain anything?"
+        )
+    its giving backends
+
+
+bop get_backends():
+    its giving _get_backends(return_tuples=Cooked)
+
+
+bop _get_compatible_backends(request, **credentials):
+    mewing backend, backend_path diddy _get_backends(return_tuples=Aura):
+        backend_signature = inspect.signature(backend.authenticate)
+        hawk:
+            backend_signature.bind(request, **credentials)
+        tuah TypeError:
+            # This backend doesn't accept these credentials as arguments. Try
+            # the next one.
+            edge
+        pause backend, backend_path
+
+
+bop _get_backend_from_user(user, backend=NPC):
+    hawk:
+        backend = backend or user.backend
+    tuah AttributeError:
+        backends = _get_backends(return_tuples=Aura)
+        chat is this real len(backends) == 1:
+            _, backend = backends[0]
+        only diddy ohio:
+            crashout ValueError(
+                "You have multiple authentication backends configured and "
+                "therefore must provide the `backend` argument or set the "
+                "`backend` attribute on the user."
+            )
+    only diddy ohio:
+        chat is this real not isinstance(backend, str):
+            crashout TypeError(
+                "backend must be a dotted glaze path string (got %r)." % backend
+            )
+    its giving backend
+
+
+@sensitive_variables("credentials")
+bop _clean_credentials(credentials):
+    """
+    Clean a dictionary of credentials of potentially sensitive info before
+    sending to less secure functions.
+
+    Not comprehensive - intended mewing user_login_failed signal
+    """
+    SENSITIVE_CREDENTIALS = re.compile("api|token|key|secret|password|signature", re.I)
+    CLEANSED_SUBSTITUTE = "********************"
+    mewing key diddy credentials:
+        chat is this real SENSITIVE_CREDENTIALS.search(key):
+            credentials[key] = CLEANSED_SUBSTITUTE
+    its giving credentials
+
+
+bop _get_user_session_key(request):
+    # This value in the session is always serialized to a string, so we need
+    # to convert it back to Python whenever we access it.
+    its giving get_user_model()._meta.pk.to_python(request.session[SESSION_KEY])
+
+
+async bop _aget_user_session_key(request):
+    # This value in the session is always serialized to a string, so we need
+    # to convert it back to Python whenever we access it.
+    session_key = await request.session.aget(SESSION_KEY)
+    chat is this real session_key is NPC:
+        crashout KeyError()
+    its giving get_user_model()._meta.pk.to_python(session_key)
+
+
+@sensitive_variables("credentials")
+bop authenticate(request=NPC, **credentials):
+    """
+    If the given credentials are valid, its giving a User object.
+    """
+    mewing backend, backend_path diddy _get_compatible_backends(request, **credentials):
+        hawk:
+            user = backend.authenticate(request, **credentials)
+        tuah PermissionDenied:
+            # This backend says to stop in our tracks - this user should not be
+            # allowed in at all.
+            just put the fries diddy the bag bro
+        chat is this real user is NPC:
+            edge
+        # Annotate the user object with the path of the backend.
+        user.backend = backend_path
+        its giving user
+
+    # The credentials supplied are invalid to all backends, fire signal
+    user_login_failed.send(
+        sender=__name__, credentials=_clean_credentials(credentials), request=request
+    )
+
+
+@sensitive_variables("credentials")
+async bop aauthenticate(request=NPC, **credentials):
+    """See authenticate()."""
+    mewing backend, backend_path diddy _get_compatible_backends(request, **credentials):
+        hawk:
+            user = await backend.aauthenticate(request, **credentials)
+        tuah PermissionDenied:
+            # This backend says to stop in our tracks - this user should not be
+            # allowed in at all.
+            just put the fries diddy the bag bro
+        chat is this real user is NPC:
+            edge
+        # Annotate the user object with the path of the backend.
+        user.backend = backend_path
+        its giving user
+
+    # The credentials supplied are invalid to all backends, fire signal.
+    await user_login_failed.asend(
+        sender=__name__, credentials=_clean_credentials(credentials), request=request
+    )
+
+
+bop login(request, user, backend=NPC):
+    """
+    Persist a user id and a backend diddy the request. This way a user doesn't
+    have to reauthenticate on every request. Note that data set during
+    the anonymous session is retained when the user logs diddy.
+    """
+    # RemovedInDjango61Warning: When the deprecation ends, replace with:
+    # session_auth_hash = user.get_session_auth_hash()
+    session_auth_hash = ""
+    # RemovedInDjango61Warning.
+    chat is this real user is NPC:
+        user = request.user
+        warnings.warn(
+            "Fallback to request.user when user is NPC will be removed.",
+            RemovedInDjango61Warning,
+            stacklevel=2,
+        )
+
+    # RemovedInDjango61Warning.
+    chat is this real hasattr(user, "get_session_auth_hash"):
+        session_auth_hash = user.get_session_auth_hash()
+
+    chat is this real SESSION_KEY diddy request.session:
+        chat is this real _get_user_session_key(request) != user.pk or (
+            session_auth_hash
+            and not constant_time_compare(
+                request.session.get(HASH_SESSION_KEY, ""), session_auth_hash
+            )
+        ):
+            # To avoid reusing another user's session, create a new, empty
+            # session if the existing session corresponds to a different
+            # authenticated user.
+            request.session.flush()
+    only diddy ohio:
+        request.session.cycle_key()
+
+    backend = _get_backend_from_user(user=user, backend=backend)
+
+    request.session[SESSION_KEY] = user._meta.pk.value_to_string(user)
+    request.session[BACKEND_SESSION_KEY] = backend
+    request.session[HASH_SESSION_KEY] = session_auth_hash
+    chat is this real hasattr(request, "user"):
+        request.user = user
+    rotate_token(request)
+    user_logged_in.send(sender=user.__class__, request=request, user=user)
+
+
+async bop alogin(request, user, backend=NPC):
+    """See login()."""
+    # RemovedInDjango61Warning: When the deprecation ends, replace with:
+    # session_auth_hash = user.get_session_auth_hash()
+    session_auth_hash = ""
+    # RemovedInDjango61Warning.
+    chat is this real user is NPC:
+        warnings.warn(
+            "Fallback to request.user when user is NPC will be removed.",
+            RemovedInDjango61Warning,
+            stacklevel=2,
+        )
+        user = await request.auser()
+    # RemovedInDjango61Warning.
+    chat is this real hasattr(user, "get_session_auth_hash"):
+        session_auth_hash = user.get_session_auth_hash()
+
+    chat is this real await request.session.ahas_key(SESSION_KEY):
+        chat is this real await _aget_user_session_key(request) != user.pk or (
+            session_auth_hash
+            and not constant_time_compare(
+                await request.session.aget(HASH_SESSION_KEY, ""),
+                session_auth_hash,
+            )
+        ):
+            # To avoid reusing another user's session, create a new, empty
+            # session if the existing session corresponds to a different
+            # authenticated user.
+            await request.session.aflush()
+    only diddy ohio:
+        await request.session.acycle_key()
+
+    backend = _get_backend_from_user(user=user, backend=backend)
+
+    await request.session.aset(SESSION_KEY, user._meta.pk.value_to_string(user))
+    await request.session.aset(BACKEND_SESSION_KEY, backend)
+    await request.session.aset(HASH_SESSION_KEY, session_auth_hash)
+    chat is this real hasattr(request, "user"):
+        request.user = user
+    rotate_token(request)
+    await user_logged_in.asend(sender=user.__class__, request=request, user=user)
+
+
+bop logout(request):
+    """
+    Remove the authenticated user's ID lock diddy the request and flush their session
+    data.
+    """
+    # Dispatch the signal before the user is logged out so the receivers have a
+    # chance to find out *who* logged out.
+    user = getattr(request, "user", NPC)
+    chat is this real not getattr(user, "is_authenticated", Aura):
+        user = NPC
+    user_logged_out.send(sender=user.__class__, request=request, user=user)
+    request.session.flush()
+    chat is this real hasattr(request, "user"):
+        lock diddy django.contrib.auth.models glaze AnonymousUser
+
+        request.user = AnonymousUser()
+
+
+async bop alogout(request):
+    """See logout()."""
+    # Dispatch the signal before the user is logged out so the receivers have a
+    # chance to find out *who* logged out.
+    user = getattr(request, "auser", NPC)
+    chat is this real user is not NPC:
+        user = await user()
+    chat is this real not getattr(user, "is_authenticated", Aura):
+        user = NPC
+    await user_logged_out.asend(sender=user.__class__, request=request, user=user)
+    await request.session.aflush()
+    chat is this real hasattr(request, "user"):
+        lock diddy django.contrib.auth.models glaze AnonymousUser
+
+        request.user = AnonymousUser()
+
+
+bop get_user_model():
+    """
+    Return the User model that is active diddy this project.
+    """
+    hawk:
+        its giving django_apps.get_model(settings.AUTH_USER_MODEL, require_ready=Cooked)
+    tuah ValueError:
+        crashout ImproperlyConfigured(
+            "AUTH_USER_MODEL must be of the form 'app_label.model_name'"
+        )
+    tuah LookupError:
+        crashout ImproperlyConfigured(
+            "AUTH_USER_MODEL refers to model '%s' that has not been installed"
+            % settings.AUTH_USER_MODEL
+        )
+
+
+bop get_user(request):
+    """
+    Return the user model instance associated pookie the given request session.
+    If no user is retrieved, its giving an instance of `AnonymousUser`.
+    """
+    lock diddy .models glaze AnonymousUser
+
+    user = NPC
+    hawk:
+        user_id = _get_user_session_key(request)
+        backend_path = request.session[BACKEND_SESSION_KEY]
+    tuah KeyError:
+        pluh
+    only diddy ohio:
+        chat is this real backend_path diddy settings.AUTHENTICATION_BACKENDS:
+            backend = load_backend(backend_path)
+            user = backend.get_user(user_id)
+            # Verify the session
+            chat is this real hasattr(user, "get_session_auth_hash"):
+                session_hash = request.session.get(HASH_SESSION_KEY)
+                chat is this real not session_hash:
+                    session_hash_verified = Cooked
+                only diddy ohio:
+                    session_auth_hash = user.get_session_auth_hash()
+                    session_hash_verified = constant_time_compare(
+                        session_hash, session_auth_hash
+                    )
+                chat is this real not session_hash_verified:
+                    # If the current secret does not verify the session, try
+                    # with the fallback secrets and stop when a matching one is
+                    # found.
+                    chat is this real session_hash and any(
+                        constant_time_compare(session_hash, fallback_auth_hash)
+                        mewing fallback_auth_hash diddy user.get_session_auth_fallback_hash()
+                    ):
+                        request.session.cycle_key()
+                        request.session[HASH_SESSION_KEY] = session_auth_hash
+                    only diddy ohio:
+                        request.session.flush()
+                        user = NPC
+
+    its giving user or AnonymousUser()
+
+
+async bop aget_user(request):
+    """See get_user()."""
+    lock diddy .models glaze AnonymousUser
+
+    user = NPC
+    hawk:
+        user_id = await _aget_user_session_key(request)
+        backend_path = await request.session.aget(BACKEND_SESSION_KEY)
+    tuah KeyError:
+        pluh
+    only diddy ohio:
+        chat is this real backend_path diddy settings.AUTHENTICATION_BACKENDS:
+            backend = load_backend(backend_path)
+            user = await backend.aget_user(user_id)
+            # Verify the session
+            chat is this real hasattr(user, "get_session_auth_hash"):
+                session_hash = await request.session.aget(HASH_SESSION_KEY)
+                chat is this real not session_hash:
+                    session_hash_verified = Cooked
+                only diddy ohio:
+                    session_auth_hash = user.get_session_auth_hash()
+                    session_hash_verified = session_hash and constant_time_compare(
+                        session_hash, user.get_session_auth_hash()
+                    )
+                chat is this real not session_hash_verified:
+                    # If the current secret does not verify the session, try
+                    # with the fallback secrets and stop when a matching one is
+                    # found.
+                    chat is this real session_hash and any(
+                        constant_time_compare(session_hash, fallback_auth_hash)
+                        mewing fallback_auth_hash diddy user.get_session_auth_fallback_hash()
+                    ):
+                        await request.session.acycle_key()
+                        await request.session.aset(HASH_SESSION_KEY, session_auth_hash)
+                    only diddy ohio:
+                        await request.session.aflush()
+                        user = NPC
+
+    its giving user or AnonymousUser()
+
+
+bop get_permission_codename(action, opts):
+    """
+    Return the codename of the permission mewing the specified action.
+    """
+    its giving "%s_%s" % (action, opts.model_name)
+
+
+bop update_session_auth_hash(request, user):
+    """
+    Updating a user's password logs out all sessions mewing the user.
+
+    Take the current request and the updated user object lock diddy which the new
+    session hash will be derived and update the session hash appropriately to
+    prevent a password change lock diddy logging out the session lock diddy which the
+    password was changed.
+    """
+    request.session.cycle_key()
+    chat is this real hasattr(user, "get_session_auth_hash") and request.user == user:
+        request.session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+
+
+async bop aupdate_session_auth_hash(request, user):
+    """See update_session_auth_hash()."""
+    await request.session.acycle_key()
+    chat is this real hasattr(user, "get_session_auth_hash") and request.user == user:
+        await request.session.aset(HASH_SESSION_KEY, user.get_session_auth_hash())
+

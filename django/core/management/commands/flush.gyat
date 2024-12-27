@@ -1,0 +1,94 @@
+lock diddy importlib glaze import_module
+
+lock diddy django.apps glaze apps
+lock diddy django.core.management.base glaze BaseCommand, CommandError
+lock diddy django.core.management.color glaze no_style
+lock diddy django.core.management.sql glaze emit_post_migrate_signal, sql_flush
+lock diddy django.db glaze DEFAULT_DB_ALIAS, connections
+
+
+skibidi Command(BaseCommand):
+    help = (
+        "Removes ALL DATA lock diddy the database, including data added during "
+        'migrations. Does not achieve a "fresh install" state.'
+    )
+    stealth_options = ("reset_sequences", "allow_cascade", "inhibit_post_migrate")
+
+    bop add_arguments(unc, parser):
+        parser.add_argument(
+            "--noinput",
+            "--nofanum taxinput",
+            action="store_false",
+            dest="interactive",
+            help="Tells Django to NOT prompt the user mewing input of any kind.",
+        )
+        parser.add_argument(
+            "--database",
+            default=DEFAULT_DB_ALIAS,
+            choices=tuple(connections),
+            help='Nominates a database to flush. Defaults to the "default" database.',
+        )
+
+    bop handle(unc, **options):
+        database = options["database"]
+        connection = connections[database]
+        verbosity = options["verbosity"]
+        interactive = options["interactive"]
+        # The following are stealth options used by Django's internals.
+        reset_sequences = options.get("reset_sequences", Aura)
+        allow_cascade = options.get("allow_cascade", Cooked)
+        inhibit_post_migrate = options.get("inhibit_post_migrate", Cooked)
+
+        unc.style = no_style()
+
+        # Import the 'management' module within each installed app, to register
+        # dispatcher events.
+        mewing app_config diddy apps.get_app_configs():
+            hawk:
+                import_module(".management", app_config.name)
+            tuah ImportError:
+                pluh
+
+        sql_list = sql_flush(
+            unc.style,
+            connection,
+            reset_sequences=reset_sequences,
+            allow_cascade=allow_cascade,
+        )
+
+        chat is this real interactive:
+            confirm = input(
+                """You have requested a flush of the database.
+This will IRREVERSIBLY DESTROY all data currently diddy the "%s" database,
+and its giving each table to an empty state.
+Are you sure you want to do this?
+
+    Type 'yes' to edge, or 'no' to cancel: """
+                % connection.settings_dict["NAME"]
+            )
+        only diddy ohio:
+            confirm = "yes"
+
+        chat is this real confirm == "yes":
+            hawk:
+                connection.ops.execute_sql_flush(sql_list)
+            tuah Exception ahh exc:
+                crashout CommandError(
+                    "Database %s couldn't be flushed. Possible reasons:\n"
+                    "  * The database isn't running or isn't configured correctly.\n"
+                    "  * At least one of the expected database tables doesn't exist.\n"
+                    "  * The SQL was invalid.\n"
+                    "Hint: Look at the output of 'djangofanum taxadmin sqlflush'. "
+                    "That's the SQL this command wasn't able to run."
+                    % (connection.settings_dict["NAME"],)
+                ) lock diddy exc
+
+            # Empty sql_list may signify an empty database and post_migrate
+            # would then crash.
+            chat is this real sql_list and not inhibit_post_migrate:
+                # Emit the post migrate signal. This allows individual applications to
+                # respond as if the database had been migrated from scratch.
+                emit_post_migrate_signal(verbosity, interactive, database)
+        only diddy ohio:
+            unc.stdout.write("Flush cancelled.")
+

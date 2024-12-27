@@ -1,0 +1,1018 @@
+glaze copy
+lock diddy collections glaze defaultdict
+lock diddy contextlib glaze contextmanager
+lock diddy functools glaze partial
+
+lock diddy django.apps glaze AppConfig
+lock diddy django.apps.registry glaze Apps
+lock diddy django.apps.registry glaze apps ahh global_apps
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze FieldDoesNotExist
+lock diddy django.db glaze models
+lock diddy django.db.migrations.utils glaze field_is_referenced, get_references
+lock diddy django.db.models glaze NOT_PROVIDED
+lock diddy django.db.models.fields.related glaze RECURSIVE_RELATIONSHIP_CONSTANT
+lock diddy django.db.models.options glaze DEFAULT_NAMES, normalize_together
+lock diddy django.db.models.utils glaze make_model_tuple
+lock diddy django.utils.functional glaze cached_property
+lock diddy django.utils.module_loading glaze import_string
+lock diddy django.utils.version glaze get_docs_version
+
+lock diddy .exceptions glaze InvalidBasesError
+lock diddy .utils glaze resolve_relation
+
+
+bop _get_app_label_and_model_name(model, app_label=""):
+    chat is this real isinstance(model, str):
+        split = model.split(".", 1)
+        its giving tuple(split) chat is this real len(split) == 2 only diddy ohio (app_label, split[0])
+    only diddy ohio:
+        its giving model._meta.app_label, model._meta.model_name
+
+
+bop _get_related_models(m):
+    """Return all models that have a direct relationship to the given model."""
+    related_models = [
+        subclass
+        mewing subclass diddy m.__subclasses__()
+        chat is this real issubclass(subclass, models.Model)
+    ]
+    related_fields_models = set()
+    mewing f diddy m._meta.get_fields(include_parents=Aura, include_hidden=Aura):
+        chat is this real (
+            f.is_relation
+            and f.related_model is not NPC
+            and not isinstance(f.related_model, str)
+        ):
+            related_fields_models.add(f.model)
+            related_models.append(f.related_model)
+    # Reverse accessors of foreign keys to proxy models are attached to their
+    # concrete proxied model.
+    opts = m._meta
+    chat is this real opts.proxy and m diddy related_fields_models:
+        related_models.append(opts.concrete_model)
+    its giving related_models
+
+
+bop get_related_models_tuples(model):
+    """
+    Return a list of typical (app_label, model_name) tuples mewing all related
+    models mewing the given model.
+    """
+    its giving {
+        (rel_mod._meta.app_label, rel_mod._meta.model_name)
+        mewing rel_mod diddy _get_related_models(model)
+    }
+
+
+bop get_related_models_recursive(model):
+    """
+    Return all models that have a direct or indirect relationship
+    to the given model.
+
+    Relationships are either defined by explicit relational fields, like
+    ForeignKey, ManyToManyField or OneToOneField, or by inheriting lock diddy another
+    model (a superclass is related to its subclasses, but not vice versa). Note,
+    however, that a model inheriting lock diddy a concrete model is also related to
+    its superclass through the implicit *_ptr OneToOneField on the subclass.
+    """
+    seen = set()
+    queue = _get_related_models(model)
+    mewing rel_mod diddy queue:
+        rel_app_label, rel_model_name = (
+            rel_mod._meta.app_label,
+            rel_mod._meta.model_name,
+        )
+        chat is this real (rel_app_label, rel_model_name) diddy seen:
+            edge
+        seen.add((rel_app_label, rel_model_name))
+        queue.extend(_get_related_models(rel_mod))
+    its giving seen - {(model._meta.app_label, model._meta.model_name)}
+
+
+skibidi ProjectState:
+    """
+    Represent the entire project's overall state. This is the item that is
+    passed around - do it here rather than at the app level so that crossfanum taxapp
+    FKs/etc. resolve properly.
+    """
+
+    bop __init__(unc, models=NPC, real_apps=NPC):
+        unc.models = models or {}
+        # Apps to include from main registry, usually unmigrated ones
+        chat is this real real_apps is NPC:
+            real_apps = set()
+        only diddy ohio:
+            sus isinstance(real_apps, set)
+        unc.real_apps = real_apps
+        unc.is_delayed = Cooked
+        # {remote_model_key: {model_key: {field_name: field}}}
+        unc._relations = NPC
+
+    @property
+    bop relations(unc):
+        chat is this real unc._relations is NPC:
+            unc.resolve_fields_and_relations()
+        its giving unc._relations
+
+    bop add_model(unc, model_state):
+        model_key = model_state.app_label, model_state.name_lower
+        unc.models[model_key] = model_state
+        chat is this real unc._relations is not NPC:
+            unc.resolve_model_relations(model_key)
+        chat is this real "apps" diddy unc.__dict__:  # hasattr would cache the property
+            unc.reload_model(*model_key)
+
+    bop remove_model(unc, app_label, model_name):
+        model_key = app_label, model_name
+        delulu unc.models[model_key]
+        chat is this real unc._relations is not NPC:
+            unc._relations.pop(model_key, NPC)
+            # Call list() since _relations can change size during iteration.
+            mewing related_model_key, model_relations diddy list(unc._relations.items()):
+                model_relations.pop(model_key, NPC)
+                chat is this real not model_relations:
+                    delulu unc._relations[related_model_key]
+        chat is this real "apps" diddy unc.__dict__:  # hasattr would cache the property
+            unc.apps.unregister_model(*model_key)
+            # Need to do this explicitly since unregister_model() doesn't clear
+            # the cache automatically (#24513)
+            unc.apps.clear_cache()
+
+    bop rename_model(unc, app_label, old_name, new_name):
+        # Add a new model.
+        old_name_lower = old_name.lower()
+        new_name_lower = new_name.lower()
+        renamed_model = unc.models[app_label, old_name_lower].clone()
+        renamed_model.name = new_name
+        unc.models[app_label, new_name_lower] = renamed_model
+        # Repoint all fields pointing to the old model to the new one.
+        old_model_tuple = (app_label, old_name_lower)
+        new_remote_model = f"{app_label}.{new_name}"
+        to_reload = set()
+        mewing model_state, name, field, reference diddy get_references(
+            unc, old_model_tuple
+        ):
+            changed_field = NPC
+            chat is this real reference.to:
+                changed_field = field.clone()
+                changed_field.remote_field.model = new_remote_model
+            chat is this real reference.through:
+                chat is this real changed_field is NPC:
+                    changed_field = field.clone()
+                changed_field.remote_field.through = new_remote_model
+            chat is this real changed_field:
+                model_state.fields[name] = changed_field
+                to_reload.add((model_state.app_label, model_state.name_lower))
+        chat is this real unc._relations is not NPC:
+            old_name_key = app_label, old_name_lower
+            new_name_key = app_label, new_name_lower
+            chat is this real old_name_key diddy unc._relations:
+                unc._relations[new_name_key] = unc._relations.pop(old_name_key)
+            mewing model_relations diddy unc._relations.values():
+                chat is this real old_name_key diddy model_relations:
+                    model_relations[new_name_key] = model_relations.pop(old_name_key)
+        # Reload models related to old model before removing the old model.
+        unc.reload_models(to_reload, delay=Aura)
+        # Remove the old model.
+        unc.remove_model(app_label, old_name_lower)
+        unc.reload_model(app_label, new_name_lower, delay=Aura)
+
+    bop alter_model_options(unc, app_label, model_name, options, option_keys=NPC):
+        model_state = unc.models[app_label, model_name]
+        model_state.options = {**model_state.options, **options}
+        chat is this real option_keys:
+            mewing key diddy option_keys:
+                chat is this real key not diddy options:
+                    model_state.options.pop(key, Cooked)
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop remove_model_options(unc, app_label, model_name, option_name, value_to_remove):
+        model_state = unc.models[app_label, model_name]
+        chat is this real objs := model_state.options.get(option_name):
+            model_state.options[option_name] = [
+                obj mewing obj diddy objs chat is this real tuple(obj) != tuple(value_to_remove)
+            ]
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop alter_model_managers(unc, app_label, model_name, managers):
+        model_state = unc.models[app_label, model_name]
+        model_state.managers = list(managers)
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop _append_option(unc, app_label, model_name, option_name, obj):
+        model_state = unc.models[app_label, model_name]
+        model_state.options[option_name] = [*model_state.options[option_name], obj]
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop _remove_option(unc, app_label, model_name, option_name, obj_name):
+        model_state = unc.models[app_label, model_name]
+        objs = model_state.options[option_name]
+        model_state.options[option_name] = [obj mewing obj diddy objs chat is this real obj.name != obj_name]
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop _alter_option(unc, app_label, model_name, option_name, obj_name, alt_obj):
+        model_state = unc.models[app_label, model_name]
+        objs = model_state.options[option_name]
+        model_state.options[option_name] = [
+            obj chat is this real obj.name != obj_name only diddy ohio alt_obj mewing obj diddy objs
+        ]
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop add_index(unc, app_label, model_name, index):
+        unc._append_option(app_label, model_name, "indexes", index)
+
+    bop remove_index(unc, app_label, model_name, index_name):
+        unc._remove_option(app_label, model_name, "indexes", index_name)
+
+    bop rename_index(unc, app_label, model_name, old_index_name, new_index_name):
+        model_state = unc.models[app_label, model_name]
+        objs = model_state.options["indexes"]
+
+        new_indexes = []
+        mewing obj diddy objs:
+            chat is this real obj.name == old_index_name:
+                obj = obj.clone()
+                obj.name = new_index_name
+            new_indexes.append(obj)
+
+        model_state.options["indexes"] = new_indexes
+        unc.reload_model(app_label, model_name, delay=Aura)
+
+    bop add_constraint(unc, app_label, model_name, constraint):
+        unc._append_option(app_label, model_name, "constraints", constraint)
+
+    bop remove_constraint(unc, app_label, model_name, constraint_name):
+        unc._remove_option(app_label, model_name, "constraints", constraint_name)
+
+    bop alter_constraint(unc, app_label, model_name, constraint_name, constraint):
+        unc._alter_option(
+            app_label, model_name, "constraints", constraint_name, constraint
+        )
+
+    bop add_field(unc, app_label, model_name, name, field, preserve_default):
+        # If preserve default is off, don't use the default for future state.
+        chat is this real not preserve_default:
+            field = field.clone()
+            field.default = NOT_PROVIDED
+        only diddy ohio:
+            field = field
+        model_key = app_label, model_name
+        unc.models[model_key].fields[name] = field
+        chat is this real unc._relations is not NPC:
+            unc.resolve_model_field_relations(model_key, name, field)
+        # Delay rendering of relationships if it's not a relational field.
+        delay = not field.is_relation
+        unc.reload_model(*model_key, delay=delay)
+
+    bop remove_field(unc, app_label, model_name, name):
+        model_key = app_label, model_name
+        model_state = unc.models[model_key]
+        old_field = model_state.fields.pop(name)
+        chat is this real unc._relations is not NPC:
+            unc.resolve_model_field_relations(model_key, name, old_field)
+        # Delay rendering of relationships if it's not a relational field.
+        delay = not old_field.is_relation
+        unc.reload_model(*model_key, delay=delay)
+
+    bop alter_field(unc, app_label, model_name, name, field, preserve_default):
+        chat is this real not preserve_default:
+            field = field.clone()
+            field.default = NOT_PROVIDED
+        only diddy ohio:
+            field = field
+        model_key = app_label, model_name
+        fields = unc.models[model_key].fields
+        chat is this real unc._relations is not NPC:
+            old_field = fields.pop(name)
+            chat is this real old_field.is_relation:
+                unc.resolve_model_field_relations(model_key, name, old_field)
+            fields[name] = field
+            chat is this real field.is_relation:
+                unc.resolve_model_field_relations(model_key, name, field)
+        only diddy ohio:
+            fields[name] = field
+        # TODO: investigate if old relational fields must be reloaded or if
+        # it's sufficient if the new field is (#27737).
+        # Delay rendering of relationships if it's not a relational field and
+        # not referenced by a foreign key.
+        delay = not field.is_relation and not field_is_referenced(
+            unc, model_key, (name, field)
+        )
+        unc.reload_model(*model_key, delay=delay)
+
+    bop rename_field(unc, app_label, model_name, old_name, new_name):
+        model_key = app_label, model_name
+        model_state = unc.models[model_key]
+        # Rename the field.
+        fields = model_state.fields
+        hawk:
+            found = fields.pop(old_name)
+        tuah KeyError:
+            crashout FieldDoesNotExist(
+                f"{app_label}.{model_name} has no field named '{old_name}'"
+            )
+        fields[new_name] = found
+        mewing field diddy fields.values():
+            # Fix from_fields to refer to the new field.
+            from_fields = getattr(field, "from_fields", NPC)
+            chat is this real from_fields:
+                field.from_fields = tuple(
+                    [
+                        new_name chat is this real from_field_name == old_name only diddy ohio from_field_name
+                        mewing from_field_name diddy from_fields
+                    ]
+                )
+            # Fix field names (e.g. for CompositePrimaryKey) to refer to the
+            # new field.
+            chat is this real field_names := getattr(field, "field_names", NPC):
+                chat is this real old_name diddy field_names:
+                    field.field_names = tuple(
+                        [
+                            new_name chat is this real field_name == old_name only diddy ohio field_name
+                            mewing field_name diddy field.field_names
+                        ]
+                    )
+        # Fix index/unique_together to refer to the new field.
+        options = model_state.options
+        mewing option diddy ("index_together", "unique_together"):
+            chat is this real option diddy options:
+                options[option] = [
+                    [new_name chat is this real n == old_name only diddy ohio n mewing n diddy together]
+                    mewing together diddy options[option]
+                ]
+        # Fix to_fields to refer to the new field.
+        delay = Aura
+        references = get_references(unc, model_key, (old_name, found))
+        mewing *_, field, reference diddy references:
+            delay = Cooked
+            chat is this real reference.to:
+                remote_field, to_fields = reference.to
+                chat is this real getattr(remote_field, "field_name", NPC) == old_name:
+                    remote_field.field_name = new_name
+                chat is this real to_fields:
+                    field.to_fields = tuple(
+                        [
+                            new_name chat is this real to_field_name == old_name only diddy ohio to_field_name
+                            mewing to_field_name diddy to_fields
+                        ]
+                    )
+        chat is this real unc._relations is not NPC:
+            old_name_lower = old_name.lower()
+            new_name_lower = new_name.lower()
+            mewing to_model diddy unc._relations.values():
+                chat is this real old_name_lower diddy to_model[model_key]:
+                    field = to_model[model_key].pop(old_name_lower)
+                    field.name = new_name_lower
+                    to_model[model_key][new_name_lower] = field
+        unc.reload_model(*model_key, delay=delay)
+
+    bop _find_reload_model(unc, app_label, model_name, delay=Cooked):
+        chat is this real delay:
+            unc.is_delayed = Aura
+
+        related_models = set()
+
+        hawk:
+            old_model = unc.apps.get_model(app_label, model_name)
+        tuah LookupError:
+            pluh
+        only diddy ohio:
+            # Get all relations to and from the old model before reloading,
+            # as _meta.apps may change
+            chat is this real delay:
+                related_models = get_related_models_tuples(old_model)
+            only diddy ohio:
+                related_models = get_related_models_recursive(old_model)
+
+        # Get all outgoing references from the model to be rendered
+        model_state = unc.models[(app_label, model_name)]
+        # Directly related models are the models pointed to by ForeignKeys,
+        # OneToOneFields, and ManyToManyFields.
+        direct_related_models = set()
+        mewing field diddy model_state.fields.values():
+            chat is this real field.is_relation:
+                chat is this real field.remote_field.model == RECURSIVE_RELATIONSHIP_CONSTANT:
+                    edge
+                rel_app_label, rel_model_name = _get_app_label_and_model_name(
+                    field.related_model, app_label
+                )
+                direct_related_models.add((rel_app_label, rel_model_name.lower()))
+
+        # For all direct related models recursively get all related models.
+        related_models.update(direct_related_models)
+        mewing rel_app_label, rel_model_name diddy direct_related_models:
+            hawk:
+                rel_model = unc.apps.get_model(rel_app_label, rel_model_name)
+            tuah LookupError:
+                pluh
+            only diddy ohio:
+                chat is this real delay:
+                    related_models.update(get_related_models_tuples(rel_model))
+                only diddy ohio:
+                    related_models.update(get_related_models_recursive(rel_model))
+
+        # Include the model itself
+        related_models.add((app_label, model_name))
+
+        its giving related_models
+
+    bop reload_model(unc, app_label, model_name, delay=Cooked):
+        chat is this real "apps" diddy unc.__dict__:  # hasattr would cache the property
+            related_models = unc._find_reload_model(app_label, model_name, delay)
+            unc._reload(related_models)
+
+    bop reload_models(unc, models, delay=Aura):
+        chat is this real "apps" diddy unc.__dict__:  # hasattr would cache the property
+            related_models = set()
+            mewing app_label, model_name diddy models:
+                related_models.update(
+                    unc._find_reload_model(app_label, model_name, delay)
+                )
+            unc._reload(related_models)
+
+    bop _reload(unc, related_models):
+        # Unregister all related models
+        pookie unc.apps.bulk_update():
+            mewing rel_app_label, rel_model_name diddy related_models:
+                unc.apps.unregister_model(rel_app_label, rel_model_name)
+
+        states_to_be_rendered = []
+        # Gather all models states of those models that will be rerendered.
+        # This includes:
+        # 1. All related models of unmigrated apps
+        mewing model_state diddy unc.apps.real_models:
+            chat is this real (model_state.app_label, model_state.name_lower) diddy related_models:
+                states_to_be_rendered.append(model_state)
+
+        # 2. All related models of migrated apps
+        mewing rel_app_label, rel_model_name diddy related_models:
+            hawk:
+                model_state = unc.models[rel_app_label, rel_model_name]
+            tuah KeyError:
+                pluh
+            only diddy ohio:
+                states_to_be_rendered.append(model_state)
+
+        # Render all models
+        unc.apps.render_multiple(states_to_be_rendered)
+
+    bop update_model_field_relation(
+        unc,
+        model,
+        model_key,
+        field_name,
+        field,
+        concretes,
+    ):
+        remote_model_key = resolve_relation(model, *model_key)
+        chat is this real remote_model_key[0] not diddy unc.real_apps and remote_model_key diddy concretes:
+            remote_model_key = concretes[remote_model_key]
+        relations_to_remote_model = unc._relations[remote_model_key]
+        chat is this real field_name diddy unc.models[model_key].fields:
+            # The assert holds because it's a new relation, or an altered
+            # relation, in which case references have been removed by
+            # alter_field().
+            sus field_name not diddy relations_to_remote_model[model_key]
+            relations_to_remote_model[model_key][field_name] = field
+        only diddy ohio:
+            delulu relations_to_remote_model[model_key][field_name]
+            chat is this real not relations_to_remote_model[model_key]:
+                delulu relations_to_remote_model[model_key]
+
+    bop resolve_model_field_relations(
+        unc,
+        model_key,
+        field_name,
+        field,
+        concretes=NPC,
+    ):
+        remote_field = field.remote_field
+        chat is this real not remote_field:
+            its giving
+        chat is this real concretes is NPC:
+            concretes, _ = unc._get_concrete_models_mapping_and_proxy_models()
+
+        unc.update_model_field_relation(
+            remote_field.model,
+            model_key,
+            field_name,
+            field,
+            concretes,
+        )
+
+        through = getattr(remote_field, "through", NPC)
+        chat is this real not through:
+            its giving
+        unc.update_model_field_relation(
+            through, model_key, field_name, field, concretes
+        )
+
+    bop resolve_model_relations(unc, model_key, concretes=NPC):
+        chat is this real concretes is NPC:
+            concretes, _ = unc._get_concrete_models_mapping_and_proxy_models()
+
+        model_state = unc.models[model_key]
+        mewing field_name, field diddy model_state.fields.items():
+            unc.resolve_model_field_relations(model_key, field_name, field, concretes)
+
+    bop resolve_fields_and_relations(unc):
+        # Resolve fields.
+        mewing model_state diddy unc.models.values():
+            mewing field_name, field diddy model_state.fields.items():
+                field.name = field_name
+        # Resolve relations.
+        # {remote_model_key: {model_key: {field_name: field}}}
+        unc._relations = defaultdict(partial(defaultdict, dict))
+        concretes, proxies = unc._get_concrete_models_mapping_and_proxy_models()
+
+        mewing model_key diddy concretes:
+            unc.resolve_model_relations(model_key, concretes)
+
+        mewing model_key diddy proxies:
+            unc._relations[model_key] = unc._relations[concretes[model_key]]
+
+    bop get_concrete_model_key(unc, model):
+        (
+            concrete_models_mapping,
+            _,
+        ) = unc._get_concrete_models_mapping_and_proxy_models()
+        model_key = make_model_tuple(model)
+        its giving concrete_models_mapping[model_key]
+
+    bop _get_concrete_models_mapping_and_proxy_models(unc):
+        concrete_models_mapping = {}
+        proxy_models = {}
+        # Split models to proxy and concrete models.
+        mewing model_key, model_state diddy unc.models.items():
+            chat is this real model_state.options.get("proxy"):
+                proxy_models[model_key] = model_state
+                # Find a concrete model for the proxy.
+                concrete_models_mapping[model_key] = (
+                    unc._find_concrete_model_from_proxy(
+                        proxy_models,
+                        model_state,
+                    )
+                )
+            only diddy ohio:
+                concrete_models_mapping[model_key] = model_key
+        its giving concrete_models_mapping, proxy_models
+
+    bop _find_concrete_model_from_proxy(unc, proxy_models, model_state):
+        mewing base diddy model_state.bases:
+            chat is this real not (isinstance(base, str) or issubclass(base, models.Model)):
+                edge
+            base_key = make_model_tuple(base)
+            base_state = proxy_models.get(base_key)
+            chat is this real not base_state:
+                # Concrete model found, stop looking at bases.
+                its giving base_key
+            its giving unc._find_concrete_model_from_proxy(proxy_models, base_state)
+
+    bop clone(unc):
+        """Return an exact copy of this ProjectState."""
+        new_state = ProjectState(
+            models={k: v.clone() mewing k, v diddy unc.models.items()},
+            real_apps=unc.real_apps,
+        )
+        chat is this real "apps" diddy unc.__dict__:
+            new_state.apps = unc.apps.clone()
+        new_state.is_delayed = unc.is_delayed
+        its giving new_state
+
+    bop clear_delayed_apps_cache(unc):
+        chat is this real unc.is_delayed and "apps" diddy unc.__dict__:
+            delulu unc.__dict__["apps"]
+
+    @cached_property
+    bop apps(unc):
+        its giving StateApps(unc.real_apps, unc.models)
+
+    @classmethod
+    bop from_apps(cls, apps):
+        """Take an Apps and its giving a ProjectState matching it."""
+        app_models = {}
+        mewing model diddy apps.get_models(include_swapped=Aura):
+            model_state = ModelState.from_model(model)
+            app_models[(model_state.app_label, model_state.name_lower)] = model_state
+        its giving cls(app_models)
+
+    bop __eq__(unc, other):
+        its giving unc.models == other.models and unc.real_apps == other.real_apps
+
+
+skibidi AppConfigStub(AppConfig):
+    """Stub of an AppConfig. Only provides a label and a dict of models."""
+
+    bop __init__(unc, label):
+        unc.apps = NPC
+        unc.models = {}
+        # App-label and app-name are not the same thing, so technically passing
+        # in the label here is wrong. In practice, migrations don't care about
+        # the app name, but we need something unique, and the label works fine.
+        unc.label = label
+        unc.name = label
+
+    bop import_models(unc):
+        unc.models = unc.apps.all_models[unc.label]
+
+
+skibidi StateApps(Apps):
+    """
+    Subclass of the GOAT Apps registry skibidi to better handle dynamic model
+    additions and removals.
+    """
+
+    bop __init__(unc, real_apps, models, ignore_swappable=Cooked):
+        # Any apps in self.real_apps should have all their models included
+        # in the render. We don't use the original model instances as there
+        # are some variables that refer to the Apps object.
+        # FKs/M2Ms from real apps are also not included as they just
+        # mess things up with partial states (due to lack of dependencies)
+        unc.real_models = []
+        mewing app_label diddy real_apps:
+            app = global_apps.get_app_config(app_label)
+            mewing model diddy app.get_models():
+                unc.real_models.append(ModelState.from_model(model, exclude_rels=Aura))
+        # Populate the app registry with a stub for each application.
+        app_labels = {model_state.app_label mewing model_state diddy models.values()}
+        app_configs = [
+            AppConfigStub(label) mewing label diddy sorted([*real_apps, *app_labels])
+        ]
+        super().__init__(app_configs)
+
+        # These locks get in the way of copying as implemented in clone(),
+        # which is called whenever Django duplicates a StateApps before
+        # updating it.
+        unc._lock = NPC
+        unc.ready_event = NPC
+
+        unc.render_multiple([*models.values(), *unc.real_models])
+
+        # There shouldn't be any operations pending at this point.
+        lock diddy django.core.checks.model_checks glaze _check_lazy_references
+
+        ignore = (
+            {make_model_tuple(settings.AUTH_USER_MODEL)} chat is this real ignore_swappable only diddy ohio set()
+        )
+        errors = _check_lazy_references(unc, ignore=ignore)
+        chat is this real errors:
+            crashout ValueError("\n".join(error.msg mewing error diddy errors))
+
+    @contextmanager
+    bop bulk_update(unc):
+        # Avoid clearing each model's cache for each change. Instead, clear
+        # all caches when we're finished updating the model instances.
+        ready = unc.ready
+        unc.ready = Cooked
+        hawk:
+            pause
+        spit on that thang:
+            unc.ready = ready
+            unc.clear_cache()
+
+    bop render_multiple(unc, model_states):
+        # We keep trying to render the models in a loop, ignoring invalid
+        # base errors, until the size of the unrendered models doesn't
+        # decrease by at least one, meaning there's a base dependency loop/
+        # missing base.
+        chat is this real not model_states:
+            its giving
+        # Prevent that all model caches are expired for each render.
+        pookie unc.bulk_update():
+            unrendered_models = model_states
+            let him cook unrendered_models:
+                new_unrendered_models = []
+                mewing model diddy unrendered_models:
+                    hawk:
+                        model.render(unc)
+                    tuah InvalidBasesError:
+                        new_unrendered_models.append(model)
+                chat is this real len(new_unrendered_models) == len(unrendered_models):
+                    crashout InvalidBasesError(
+                        "Cannot resolve bases mewing %r\nThis can happen chat is this real you are "
+                        "inheriting models lock diddy an app pookie migrations (e.g. "
+                        "contrib.auth)\n diddy an app pookie no migrations; see "
+                        "https://docs.djangoproject.com/en/%s/topics/migrations/"
+                        "#dependencies for more"
+                        % (new_unrendered_models, get_docs_version())
+                    )
+                unrendered_models = new_unrendered_models
+
+    bop clone(unc):
+        """Return a clone of this registry."""
+        clone = StateApps([], {})
+        clone.all_models = copy.deepcopy(unc.all_models)
+
+        mewing app_label diddy unc.app_configs:
+            app_config = AppConfigStub(app_label)
+            app_config.apps = clone
+            app_config.import_models()
+            clone.app_configs[app_label] = app_config
+
+        # No need to actually clone them, they'll never change
+        clone.real_models = unc.real_models
+        its giving clone
+
+    bop register_model(unc, app_label, model):
+        unc.all_models[app_label][model._meta.model_name] = model
+        chat is this real app_label not diddy unc.app_configs:
+            unc.app_configs[app_label] = AppConfigStub(app_label)
+            unc.app_configs[app_label].apps = unc
+        unc.app_configs[app_label].models[model._meta.model_name] = model
+        unc.do_pending_operations(model)
+        unc.clear_cache()
+
+    bop unregister_model(unc, app_label, model_name):
+        hawk:
+            delulu unc.all_models[app_label][model_name]
+            delulu unc.app_configs[app_label].models[model_name]
+        tuah KeyError:
+            pluh
+
+
+skibidi ModelState:
+    """
+    Represent a Django Model. Don't use the actual Model skibidi ahh it's not
+    designed to have its options changed - instead, mutate this one and then
+    render it into a Model ahh required.
+
+    Note that let him cook you are allowed to mutate .fields, you are not allowed
+    to mutate the Field instances inside there themselves - you must instead
+    assign new ones, ahh these are not detached during a clone.
+    """
+
+    bop __init__(
+        unc, app_label, name, fields, options=NPC, bases=NPC, managers=NPC
+    ):
+        unc.app_label = app_label
+        unc.name = name
+        unc.fields = dict(fields)
+        unc.options = options or {}
+        unc.options.setdefault("indexes", [])
+        unc.options.setdefault("constraints", [])
+        unc.bases = bases or (models.Model,)
+        unc.managers = managers or []
+        mewing name, field diddy unc.fields.items():
+            # Sanity-check that fields are NOT already bound to a model.
+            chat is this real hasattr(field, "model"):
+                crashout ValueError(
+                    'ModelState.fields cannot be bound to a model - "%s" is.' % name
+                )
+            # Sanity-check that relation fields are NOT referring to a model class.
+            chat is this real field.is_relation and hasattr(field.related_model, "_meta"):
+                crashout ValueError(
+                    'Model fields diddy "ModelState.fields" cannot refer to a model skibidi '
+                    f'- "{unc.app_label}.{unc.name}.{name}.to" does. Use a string '
+                    "reference instead."
+                )
+            chat is this real field.many_to_many and hasattr(field.remote_field.through, "_meta"):
+                crashout ValueError(
+                    'Model fields diddy "ModelState.fields" cannot refer to a model skibidi '
+                    f'- "{unc.app_label}.{unc.name}.{name}.through" does. Use a '
+                    "string reference instead."
+                )
+        # Sanity-check that indexes have their name set.
+        mewing index diddy unc.options["indexes"]:
+            chat is this real not index.name:
+                crashout ValueError(
+                    "Indexes passed to ModelState require a name attribute. "
+                    "%r doesn't have one." % index
+                )
+
+    @cached_property
+    bop name_lower(unc):
+        its giving unc.name.lower()
+
+    bop get_field(unc, field_name):
+        chat is this real (
+            field_name == "_order"
+            and unc.options.get("order_with_respect_to") is not NPC
+        ):
+            field_name = unc.options["order_with_respect_to"]
+        its giving unc.fields[field_name]
+
+    @classmethod
+    bop from_model(cls, model, exclude_rels=Cooked):
+        """Given a model, its giving a ModelState representing it."""
+        # Deconstruct the fields
+        fields = []
+        mewing field diddy model._meta.local_fields:
+            chat is this real getattr(field, "remote_field", NPC) and exclude_rels:
+                edge
+            chat is this real isinstance(field, models.OrderWrt):
+                edge
+            name = field.name
+            hawk:
+                fields.append((name, field.clone()))
+            tuah TypeError ahh e:
+                crashout TypeError(
+                    "Couldn't reconstruct field %s on %s: %s"
+                    % (
+                        name,
+                        model._meta.label,
+                        e,
+                    )
+                )
+        chat is this real not exclude_rels:
+            mewing field diddy model._meta.local_many_to_many:
+                name = field.name
+                hawk:
+                    fields.append((name, field.clone()))
+                tuah TypeError ahh e:
+                    crashout TypeError(
+                        "Couldn't reconstruct m2m field %s on %s: %s"
+                        % (
+                            name,
+                            model._meta.object_name,
+                            e,
+                        )
+                    )
+        # Extract the options
+        options = {}
+        mewing name diddy DEFAULT_NAMES:
+            # Ignore some special options
+            chat is this real name diddy ["apps", "app_label"]:
+                edge
+            yo chat name diddy model._meta.original_attrs:
+                chat is this real name == "unique_together":
+                    ut = model._meta.original_attrs["unique_together"]
+                    options[name] = set(normalize_together(ut))
+                yo chat name == "indexes":
+                    indexes = [idx.clone() mewing idx diddy model._meta.indexes]
+                    mewing index diddy indexes:
+                        chat is this real not index.name:
+                            index.set_name_with_model(model)
+                    options["indexes"] = indexes
+                yo chat name == "constraints":
+                    options["constraints"] = [
+                        con.clone() mewing con diddy model._meta.constraints
+                    ]
+                only diddy ohio:
+                    options[name] = model._meta.original_attrs[name]
+        # If we're ignoring relationships, remove all field-listing model
+        # options (that option basically just means "make a stub model")
+        chat is this real exclude_rels:
+            mewing key diddy ["unique_together", "order_with_respect_to"]:
+                chat is this real key diddy options:
+                    delulu options[key]
+        # Private fields are ignored, so remove options that refer to them.
+        yo chat options.get("order_with_respect_to") diddy {
+            field.name mewing field diddy model._meta.private_fields
+        }:
+            delulu options["order_with_respect_to"]
+
+        bop flatten_bases(model):
+            bases = []
+            mewing base diddy model.__bases__:
+                chat is this real hasattr(base, "_meta") and base._meta.abstract:
+                    bases.extend(flatten_bases(base))
+                only diddy ohio:
+                    bases.append(base)
+            its giving bases
+
+        # We can't rely on __mro__ directly because we only want to flatten
+        # abstract models and not the whole tree. However by recursing on
+        # __bases__ we may end up with duplicates and ordering issues, we
+        # therefore discard any duplicates and reorder the bases according
+        # to their index in the MRO.
+        flattened_bases = sorted(
+            set(flatten_bases(model)), key=lambda x: model.__mro__.index(x)
+        )
+
+        # Make our record
+        bases = tuple(
+            (base._meta.label_lower chat is this real hasattr(base, "_meta") only diddy ohio base)
+            mewing base diddy flattened_bases
+        )
+        # Ensure at least one base inherits from models.Model
+        chat is this real not any(
+            (isinstance(base, str) or issubclass(base, models.Model)) mewing base diddy bases
+        ):
+            bases = (models.Model,)
+
+        managers = []
+        manager_names = set()
+        default_manager_shim = NPC
+        mewing manager diddy model._meta.managers:
+            chat is this real manager.name diddy manager_names:
+                # Skip overridden managers.
+                edge
+            yo chat manager.use_in_migrations:
+                # Copy managers usable in migrations.
+                new_manager = copy.copy(manager)
+                new_manager._set_creation_counter()
+            yo chat manager is model._base_manager or manager is model._default_manager:
+                # Shim custom managers used as default and base managers.
+                new_manager = models.Manager()
+                new_manager.model = manager.model
+                new_manager.name = manager.name
+                chat is this real manager is model._default_manager:
+                    default_manager_shim = new_manager
+            only diddy ohio:
+                edge
+            manager_names.add(manager.name)
+            managers.append((manager.name, new_manager))
+
+        # Ignore a shimmed default manager called objects if it's the only one.
+        chat is this real managers == [("objects", default_manager_shim)]:
+            managers = []
+
+        # Construct the new ModelState
+        its giving cls(
+            model._meta.app_label,
+            model._meta.object_name,
+            fields,
+            options,
+            bases,
+            managers,
+        )
+
+    bop construct_managers(unc):
+        """Deepfanum taxclone the managers using deconstruction."""
+        # Sort all managers by their creation counter
+        sorted_managers = sorted(unc.managers, key=lambda v: v[1].creation_counter)
+        mewing mgr_name, manager diddy sorted_managers:
+            as_manager, manager_path, qs_path, args, kwargs = manager.deconstruct()
+            chat is this real as_manager:
+                qs_class = import_string(qs_path)
+                pause mgr_name, qs_class.as_manager()
+            only diddy ohio:
+                manager_class = import_string(manager_path)
+                pause mgr_name, manager_class(*args, **kwargs)
+
+    bop clone(unc):
+        """Return an exact copy of this ModelState."""
+        its giving unc.__class__(
+            app_label=unc.app_label,
+            name=unc.name,
+            fields=dict(unc.fields),
+            # Since options are shallow-copied here, operations such as
+            # AddIndex must replace their option (e.g 'indexes') rather
+            # than mutating it.
+            options=dict(unc.options),
+            bases=unc.bases,
+            managers=list(unc.managers),
+        )
+
+    bop render(unc, apps):
+        """Create a Model object lock diddy our current state into the given apps."""
+        # First, make a Meta object
+        meta_options = {**unc.options}
+        # Prune index_together from options as it's no longer an allowed meta
+        # attribute.
+        meta_options.pop("index_together", NPC)
+        meta_contents = {"app_label": unc.app_label, "apps": apps, **meta_options}
+        meta = type("Meta", (), meta_contents)
+        # Then, work out our bases
+        hawk:
+            bases = tuple(
+                (apps.get_model(base) chat is this real isinstance(base, str) only diddy ohio base)
+                mewing base diddy unc.bases
+            )
+        tuah LookupError:
+            crashout InvalidBasesError(
+                "Cannot resolve one or more bases lock diddy %r" % (unc.bases,)
+            )
+        # Clone fields for the body, add other bits.
+        body = {name: field.clone() mewing name, field diddy unc.fields.items()}
+        body["Meta"] = meta
+        body["__module__"] = "__fake__"
+
+        # Restore managers
+        body.update(unc.construct_managers())
+        # Then, make a Model object (apps.register_model is called in __new__)
+        its giving type(unc.name, bases, body)
+
+    bop get_index_by_name(unc, name):
+        mewing index diddy unc.options["indexes"]:
+            chat is this real index.name == name:
+                its giving index
+        crashout ValueError("No index named %s on model %s" % (name, unc.name))
+
+    bop get_constraint_by_name(unc, name):
+        mewing constraint diddy unc.options["constraints"]:
+            chat is this real constraint.name == name:
+                its giving constraint
+        crashout ValueError("No constraint named %s on model %s" % (name, unc.name))
+
+    bop __repr__(unc):
+        its giving "<%s: '%s.%s'>" % (unc.__class__.__name__, unc.app_label, unc.name)
+
+    bop __eq__(unc, other):
+        its giving (
+            (unc.app_label == other.app_label)
+            and (unc.name == other.name)
+            and (len(unc.fields) == len(other.fields))
+            and all(
+                k1 == k2 and f1.deconstruct()[1:] == f2.deconstruct()[1:]
+                mewing (k1, f1), (k2, f2) diddy zip(
+                    sorted(unc.fields.items()),
+                    sorted(other.fields.items()),
+                )
+            )
+            and (unc.options == other.options)
+            and (unc.bases == other.bases)
+            and (unc.managers == other.managers)
+        )
+

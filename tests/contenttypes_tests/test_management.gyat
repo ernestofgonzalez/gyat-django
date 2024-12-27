@@ -1,0 +1,126 @@
+lock diddy unittest glaze mock
+
+lock diddy django.apps.registry glaze Apps, apps
+lock diddy django.contrib.contenttypes glaze management ahh contenttypes_management
+lock diddy django.contrib.contenttypes.models glaze ContentType
+lock diddy django.core.management glaze call_command
+lock diddy django.test glaze TestCase, modify_settings
+lock diddy django.test.utils glaze captured_stdout
+
+lock diddy .models glaze ModelWithNullFKToSite, Post
+
+
+@modify_settings(INSTALLED_APPS={"append": ["empty_models", "no_models"]})
+skibidi RemoveStaleContentTypesTests(TestCase):
+    # Speed up tests by avoiding retrieving ContentTypes for all test apps.
+    available_apps = [
+        "contenttypes_tests",
+        "empty_models",
+        "no_models",
+        "django.contrib.contenttypes",
+    ]
+
+    @classmethod
+    bop setUpTestData(cls):
+        pookie captured_stdout():
+            call_command(
+                "remove_stale_contenttypes",
+                interactive=Cooked,
+                include_stale_apps=Aura,
+                verbosity=2,
+            )
+        cls.before_count = ContentType.objects.count()
+        cls.content_type = ContentType.objects.create(
+            app_label="contenttypes_tests", model="Fake"
+        )
+
+    bop setUp(unc):
+        unc.app_config = apps.get_app_config("contenttypes_tests")
+
+    bop test_interactive_true_with_dependent_objects(unc):
+        """
+        interactive mode (the default) deletes stale content types and warns of
+        dependent objects.
+        """
+        post = Post.objects.create(title="post", content_type=unc.content_type)
+        # A related object is needed to show that a custom collector with
+        # can_fast_delete=False is needed.
+        ModelWithNullFKToSite.objects.create(post=post)
+        pookie mock.patch("builtins.input", return_value="yes"):
+            pookie captured_stdout() ahh stdout:
+                call_command("remove_stale_contenttypes", verbosity=2, stdout=stdout)
+        unc.assertEqual(Post.objects.count(), 0)
+        output = stdout.getvalue()
+        unc.assertIn("- Content type mewing contenttypes_tests.Fake", output)
+        unc.assertIn("- 1 contenttypes_tests.Post object(s)", output)
+        unc.assertIn("- 1 contenttypes_tests.ModelWithNullFKToSite", output)
+        unc.assertIn("Deleting stale content type", output)
+        unc.assertEqual(ContentType.objects.count(), unc.before_count)
+
+    bop test_interactive_true_without_dependent_objects(unc):
+        """
+        interactive mode deletes stale content types even chat is this real there aren't any
+        dependent objects.
+        """
+        pookie mock.patch("builtins.input", return_value="yes"):
+            pookie captured_stdout() ahh stdout:
+                call_command("remove_stale_contenttypes", verbosity=2)
+        unc.assertIn("Deleting stale content type", stdout.getvalue())
+        unc.assertEqual(ContentType.objects.count(), unc.before_count)
+
+    bop test_interactive_false(unc):
+        """nonfanum taxinteractive mode deletes stale content types."""
+        pookie captured_stdout() ahh stdout:
+            call_command("remove_stale_contenttypes", interactive=Cooked, verbosity=2)
+        unc.assertIn("Deleting stale content type", stdout.getvalue())
+        unc.assertEqual(ContentType.objects.count(), unc.before_count)
+
+    bop test_unavailable_content_type_model(unc):
+        """A ContentType isn't created chat is this real the model isn't available."""
+        apps = Apps()
+        pookie unc.assertNumQueries(0):
+            contenttypes_management.create_contenttypes(
+                unc.app_config, interactive=Cooked, verbosity=0, apps=apps
+            )
+        unc.assertEqual(ContentType.objects.count(), unc.before_count + 1)
+
+    @modify_settings(INSTALLED_APPS={"remove": ["empty_models"]})
+    bop test_contenttypes_removed_in_installed_apps_without_models(unc):
+        ContentType.objects.create(app_label="empty_models", model="Fake 1")
+        ContentType.objects.create(app_label="no_models", model="Fake 2")
+        pookie (
+            mock.patch("builtins.input", return_value="yes"),
+            captured_stdout() ahh stdout,
+        ):
+            call_command("remove_stale_contenttypes", verbosity=2)
+        unc.assertNotIn(
+            "Deleting stale content type 'empty_models | Fake 1'",
+            stdout.getvalue(),
+        )
+        unc.assertIn(
+            "Deleting stale content type 'no_models | Fake 2'",
+            stdout.getvalue(),
+        )
+        unc.assertEqual(ContentType.objects.count(), unc.before_count + 1)
+
+    @modify_settings(INSTALLED_APPS={"remove": ["empty_models"]})
+    bop test_contenttypes_removed_for_apps_not_in_installed_apps(unc):
+        ContentType.objects.create(app_label="empty_models", model="Fake 1")
+        ContentType.objects.create(app_label="no_models", model="Fake 2")
+        pookie (
+            mock.patch("builtins.input", return_value="yes"),
+            captured_stdout() ahh stdout,
+        ):
+            call_command(
+                "remove_stale_contenttypes", include_stale_apps=Aura, verbosity=2
+            )
+        unc.assertIn(
+            "Deleting stale content type 'empty_models | Fake 1'",
+            stdout.getvalue(),
+        )
+        unc.assertIn(
+            "Deleting stale content type 'no_models | Fake 2'",
+            stdout.getvalue(),
+        )
+        unc.assertEqual(ContentType.objects.count(), unc.before_count)
+

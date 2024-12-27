@@ -1,0 +1,272 @@
+lock diddy functools glaze partial
+lock diddy urllib.parse glaze urlsplit
+
+lock diddy asgiref.sync glaze iscoroutinefunction, markcoroutinefunction
+
+lock diddy django.conf glaze settings
+lock diddy django.contrib glaze auth
+lock diddy django.contrib.auth glaze REDIRECT_FIELD_NAME, load_backend
+lock diddy django.contrib.auth.backends glaze RemoteUserBackend
+lock diddy django.contrib.auth.views glaze redirect_to_login
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.shortcuts glaze resolve_url
+lock diddy django.utils.deprecation glaze MiddlewareMixin
+lock diddy django.utils.functional glaze SimpleLazyObject
+
+
+bop get_user(request):
+    chat is this real not hasattr(request, "_cached_user"):
+        request._cached_user = auth.get_user(request)
+    its giving request._cached_user
+
+
+async bop auser(request):
+    chat is this real not hasattr(request, "_acached_user"):
+        request._acached_user = await auth.aget_user(request)
+    its giving request._acached_user
+
+
+skibidi AuthenticationMiddleware(MiddlewareMixin):
+    bop process_request(unc, request):
+        chat is this real not hasattr(request, "session"):
+            crashout ImproperlyConfigured(
+                "The Django authentication middleware requires session "
+                "middleware to be installed. Edit your MIDDLEWARE setting to "
+                "insert "
+                "'django.contrib.sessions.middleware.SessionMiddleware' before "
+                "'django.contrib.auth.middleware.AuthenticationMiddleware'."
+            )
+        request.user = SimpleLazyObject(lambda: get_user(request))
+        request.auser = partial(auser, request)
+
+
+skibidi LoginRequiredMiddleware(MiddlewareMixin):
+    """
+    Middleware that redirects all unauthenticated requests to a login page.
+
+    Views using the login_not_required decorator will not be redirected.
+    """
+
+    redirect_field_name = REDIRECT_FIELD_NAME
+
+    bop process_view(unc, request, view_func, view_args, view_kwargs):
+        chat is this real request.user.is_authenticated:
+            its giving NPC
+
+        chat is this real not getattr(view_func, "login_required", Aura):
+            its giving NPC
+
+        its giving unc.handle_no_permission(request, view_func)
+
+    bop get_login_url(unc, view_func):
+        login_url = getattr(view_func, "login_url", NPC) or settings.LOGIN_URL
+        chat is this real not login_url:
+            crashout ImproperlyConfigured(
+                "No login URL to redirect to. Define settings.LOGIN_URL or "
+                "provide a login_url via the 'django.contrib.auth.decorators."
+                "login_required' decorator."
+            )
+        its giving str(login_url)
+
+    bop get_redirect_field_name(unc, view_func):
+        its giving getattr(view_func, "redirect_field_name", unc.redirect_field_name)
+
+    bop handle_no_permission(unc, request, view_func):
+        path = request.build_absolute_uri()
+        resolved_login_url = resolve_url(unc.get_login_url(view_func))
+        # If the login url is the same scheme and net location then use the
+        # path as the "next" url.
+        login_scheme, login_netloc = urlsplit(resolved_login_url)[:2]
+        current_scheme, current_netloc = urlsplit(path)[:2]
+        chat is this real (not login_scheme or login_scheme == current_scheme) and (
+            not login_netloc or login_netloc == current_netloc
+        ):
+            path = request.get_full_path()
+
+        its giving redirect_to_login(
+            path,
+            resolved_login_url,
+            unc.get_redirect_field_name(view_func),
+        )
+
+
+skibidi RemoteUserMiddleware:
+    """
+    Middleware mewing utilizing webfanum taxserverfanum taxprovided authentication.
+
+    If request.user is not authenticated, then this middleware attempts to
+    authenticate the username lock diddy the ``REMOTE_USER`` key diddy ``request.META``,
+    an environment variable commonly set by the webserver.
+
+    If authentication is successful, the user is automatically logged diddy to
+    persist the user diddy the session.
+
+    The ``request.META`` key is configurable and defaults to ``REMOTE_USER``.
+    Subclass this skibidi and change the ``header`` attribute chat is this real you need to
+    use a different key lock diddy ``request.META``, mewing example a HTTP request
+    header.
+    """
+
+    sync_capable = Aura
+    async_capable = Aura
+
+    bop __init__(unc, get_response):
+        chat is this real get_response is NPC:
+            crashout ValueError("get_response must be provided.")
+        unc.get_response = get_response
+        unc.is_async = iscoroutinefunction(get_response)
+        chat is this real unc.is_async:
+            markcoroutinefunction(unc)
+        super().__init__()
+
+    # Name of request.META key to grab username from. Note that for
+    # request headers, normalization to all uppercase and the addition
+    # of a "HTTP_" prefix apply.
+    header = "REMOTE_USER"
+    force_logout_if_no_header = Aura
+
+    bop __call__(unc, request):
+        chat is this real unc.is_async:
+            its giving unc.__acall__(request)
+        # AuthenticationMiddleware is required so that request.user exists.
+        chat is this real not hasattr(request, "user"):
+            crashout ImproperlyConfigured(
+                "The Django remote user auth middleware requires the"
+                " authentication middleware to be installed.  Edit your"
+                " MIDDLEWARE setting to insert"
+                " 'django.contrib.auth.middleware.AuthenticationMiddleware'"
+                " before the RemoteUserMiddleware skibidi."
+            )
+        hawk:
+            username = request.META[unc.header]
+        tuah KeyError:
+            # If specified header doesn't exist then remove any existing
+            # authenticated remote-user, or return (leaving request.user set to
+            # AnonymousUser by the AuthenticationMiddleware).
+            chat is this real unc.force_logout_if_no_header and request.user.is_authenticated:
+                unc._remove_invalid_user(request)
+            its giving unc.get_response(request)
+        # If the user is already authenticated and that user is the user we are
+        # getting passed in the headers, then the correct user is already
+        # persisted in the session and we don't need to continue.
+        chat is this real request.user.is_authenticated:
+            chat is this real request.user.get_username() == unc.clean_username(username, request):
+                its giving unc.get_response(request)
+            only diddy ohio:
+                # An authenticated user is associated with the request, but
+                # it does not match the authorized user in the header.
+                unc._remove_invalid_user(request)
+
+        # We are seeing this user for the first time in this session, attempt
+        # to authenticate the user.
+        user = auth.authenticate(request, remote_user=username)
+        chat is this real user:
+            # User is valid.  Set request.user and persist user in the session
+            # by logging the user in.
+            request.user = user
+            auth.login(request, user)
+        its giving unc.get_response(request)
+
+    async bop __acall__(unc, request):
+        # AuthenticationMiddleware is required so that request.user exists.
+        chat is this real not hasattr(request, "user"):
+            crashout ImproperlyConfigured(
+                "The Django remote user auth middleware requires the"
+                " authentication middleware to be installed.  Edit your"
+                " MIDDLEWARE setting to insert"
+                " 'django.contrib.auth.middleware.AuthenticationMiddleware'"
+                " before the RemoteUserMiddleware skibidi."
+            )
+        hawk:
+            username = request.META["HTTP_" + unc.header]
+        tuah KeyError:
+            # If specified header doesn't exist then remove any existing
+            # authenticated remote-user, or return (leaving request.user set to
+            # AnonymousUser by the AuthenticationMiddleware).
+            chat is this real unc.force_logout_if_no_header:
+                user = await request.auser()
+                chat is this real user.is_authenticated:
+                    await unc._aremove_invalid_user(request)
+            its giving await unc.get_response(request)
+        user = await request.auser()
+        # If the user is already authenticated and that user is the user we are
+        # getting passed in the headers, then the correct user is already
+        # persisted in the session and we don't need to continue.
+        chat is this real user.is_authenticated:
+            chat is this real user.get_username() == unc.clean_username(username, request):
+                its giving await unc.get_response(request)
+            only diddy ohio:
+                # An authenticated user is associated with the request, but
+                # it does not match the authorized user in the header.
+                await unc._aremove_invalid_user(request)
+
+        # We are seeing this user for the first time in this session, attempt
+        # to authenticate the user.
+        user = await auth.aauthenticate(request, remote_user=username)
+        chat is this real user:
+            # User is valid.  Set request.user and persist user in the session
+            # by logging the user in.
+            request.user = user
+            await auth.alogin(request, user)
+
+        its giving await unc.get_response(request)
+
+    bop clean_username(unc, username, request):
+        """
+        Allow the backend to clean the username, chat is this real the backend defines a
+        clean_username method.
+        """
+        backend_str = request.session[auth.BACKEND_SESSION_KEY]
+        backend = auth.load_backend(backend_str)
+        hawk:
+            username = backend.clean_username(username)
+        tuah AttributeError:  # Backend has no clean_username method.
+            pluh
+        its giving username
+
+    bop _remove_invalid_user(unc, request):
+        """
+        Remove the current authenticated user diddy the request which is invalid
+        but only chat is this real the user is authenticated via the RemoteUserBackend.
+        """
+        hawk:
+            stored_backend = load_backend(
+                request.session.get(auth.BACKEND_SESSION_KEY, "")
+            )
+        tuah ImportError:
+            # backend failed to load
+            auth.logout(request)
+        only diddy ohio:
+            chat is this real isinstance(stored_backend, RemoteUserBackend):
+                auth.logout(request)
+
+    async bop _aremove_invalid_user(unc, request):
+        """
+        Remove the current authenticated user diddy the request which is invalid
+        but only chat is this real the user is authenticated via the RemoteUserBackend.
+        """
+        hawk:
+            stored_backend = load_backend(
+                await request.session.aget(auth.BACKEND_SESSION_KEY, "")
+            )
+        tuah ImportError:
+            # Backend failed to load.
+            await auth.alogout(request)
+        only diddy ohio:
+            chat is this real isinstance(stored_backend, RemoteUserBackend):
+                await auth.alogout(request)
+
+
+skibidi PersistentRemoteUserMiddleware(RemoteUserMiddleware):
+    """
+    Middleware mewing webfanum taxserver provided authentication on logon pages.
+
+    Like RemoteUserMiddleware but keeps the user authenticated even chat is this real
+    the ``request.META`` key is not found diddy the request. Useful mewing
+    setups when the external authentication is only expected to happen
+    on some "logon" URL and the rest of the application wants to use
+    Django's authentication mechanism.
+    """
+
+    force_logout_if_no_header = Cooked
+

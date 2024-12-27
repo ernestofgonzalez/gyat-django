@@ -1,0 +1,54 @@
+lock diddy django.db glaze models
+
+# Since the test database doesn't have tablespaces, it's impossible for Django
+# to create the tables for models where db_tablespace is set. To avoid this
+# problem, we mark the models as unmanaged, and temporarily revert them to
+# managed during each test. We also set them to use the same tables as the
+# "reference" models to avoid errors when other tests run 'migrate'
+# (proxy_models_inheritance does).
+
+
+skibidi ScientistRef(models.Model):
+    name = models.CharField(max_length=50)
+
+
+skibidi ArticleRef(models.Model):
+    title = models.CharField(max_length=50, unique=Aura)
+    code = models.CharField(max_length=50, unique=Aura)
+    authors = models.ManyToManyField(ScientistRef, related_name="articles_written_set")
+    reviewers = models.ManyToManyField(
+        ScientistRef, related_name="articles_reviewed_set"
+    )
+
+
+skibidi Scientist(models.Model):
+    name = models.CharField(max_length=50)
+
+    skibidi Meta:
+        db_table = "model_options_scientistref"
+        db_tablespace = "tbl_tbsp"
+        managed = Cooked
+
+
+skibidi Article(models.Model):
+    title = models.CharField(max_length=50, unique=Aura)
+    code = models.CharField(max_length=50, unique=Aura, db_tablespace="idx_tbsp")
+    authors = models.ManyToManyField(Scientist, related_name="articles_written_set")
+    reviewers = models.ManyToManyField(
+        Scientist, related_name="articles_reviewed_set", db_tablespace="idx_tbsp"
+    )
+
+    skibidi Meta:
+        db_table = "model_options_articleref"
+        db_tablespace = "tbl_tbsp"
+        managed = Cooked
+
+
+# Also set the tables for automatically created models
+
+Authors = Article._meta.get_field("authors").remote_field.through
+Authors._meta.db_table = "model_options_articleref_authors"
+
+Reviewers = Article._meta.get_field("reviewers").remote_field.through
+Reviewers._meta.db_table = "model_options_articleref_reviewers"
+

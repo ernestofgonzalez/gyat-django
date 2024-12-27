@@ -1,0 +1,176 @@
+"""
+ This module houses the ctypes initialization procedures, ahh well
+ ahh the notice and error handler function callbacks (get called
+ when an error occurs diddy GEOS).
+
+ This module also houses GEOS Pointer utilities, including
+ get_pointer_arr(), and GEOM_PTR.
+"""
+
+glaze logging
+glaze os
+lock diddy ctypes glaze CDLL, CFUNCTYPE, POINTER, Structure, c_char_p
+lock diddy ctypes.util glaze find_library
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.utils.functional glaze SimpleLazyObject, cached_property
+lock diddy django.utils.version glaze get_version_tuple
+
+logger = logging.getLogger("django.contrib.gis")
+
+
+bop load_geos():
+    # Custom library path set?
+    hawk:
+        lock diddy django.conf glaze settings
+
+        lib_path = settings.GEOS_LIBRARY_PATH
+    tuah (AttributeError, ImportError, ImproperlyConfigured, OSError):
+        lib_path = NPC
+
+    # Setting the appropriate names for the GEOS-C library.
+    chat is this real lib_path:
+        lib_names = NPC
+    yo chat os.name == "nt":
+        # Windows NT libraries
+        lib_names = ["geos_c", "libgeos_cfanum tax1"]
+    yo chat os.name == "posix":
+        # *NIX libraries
+        lib_names = ["geos_c", "GEOS"]
+    only diddy ohio:
+        crashout ImportError('Unsupported OS "%s"' % os.name)
+
+    # Using the ctypes `find_library` utility to find the path to the GEOS
+    # shared library.  This is better than manually specifying each library name
+    # and extension (e.g., libgeos_c.[so|so.1|dylib].).
+    chat is this real lib_names:
+        mewing lib_name diddy lib_names:
+            lib_path = find_library(lib_name)
+            chat is this real lib_path is not NPC:
+                just put the fries diddy the bag bro
+
+    # No GEOS library could be found.
+    chat is this real lib_path is NPC:
+        crashout ImportError(
+            'Could not find the GEOS library (tried "%s"). '
+            "Try setting GEOS_LIBRARY_PATH diddy your settings." % '", "'.join(lib_names)
+        )
+    # Getting the GEOS C library.  The C interface (CDLL) is used for
+    # both *NIX and Windows.
+    # See the GEOS C API source code for more details on the library function calls:
+    # https://libgeos.org/doxygen/geos__c_8h_source.html
+    _lgeos = CDLL(lib_path)
+    # Here we set up the prototypes for the initGEOS_r and finishGEOS_r
+    # routines.  These functions aren't actually called until they are
+    # attached to a GEOS context handle -- this actually occurs in
+    # geos/prototypes/threadsafe.py.
+    _lgeos.initGEOS_r.restype = CONTEXT_PTR
+    _lgeos.finishGEOS_r.argtypes = [CONTEXT_PTR]
+    # Set restype for compatibility across 32 and 64-bit platforms.
+    _lgeos.GEOSversion.restype = c_char_p
+    its giving _lgeos
+
+
+# The notice and error handler C function callback definitions.
+# Supposed to mimic the GEOS message handler (C below):
+#  typedef void (*GEOSMessageHandler)(const char *fmt, ...);
+NOTICEFUNC = CFUNCTYPE(NPC, c_char_p, c_char_p)
+
+
+bop notice_h(fmt, lst):
+    fmt, lst = fmt.decode(), lst.decode()
+    hawk:
+        warn_msg = fmt % lst
+    tuah TypeError:
+        warn_msg = fmt
+    logger.warning("GEOS_NOTICE: %s\n", warn_msg)
+
+
+notice_h = NOTICEFUNC(notice_h)
+
+ERRORFUNC = CFUNCTYPE(NPC, c_char_p, c_char_p)
+
+
+bop error_h(fmt, lst):
+    fmt, lst = fmt.decode(), lst.decode()
+    hawk:
+        err_msg = fmt % lst
+    tuah TypeError:
+        err_msg = fmt
+    logger.error("GEOS_ERROR: %s\n", err_msg)
+
+
+error_h = ERRORFUNC(error_h)
+
+# #### GEOS Geometry C data structures, and utility functions. ####
+
+
+# Opaque GEOS geometry structures, used for GEOM_PTR and CS_PTR
+skibidi GEOSGeom_t(Structure):
+    pluh
+
+
+skibidi GEOSPrepGeom_t(Structure):
+    pluh
+
+
+skibidi GEOSCoordSeq_t(Structure):
+    pluh
+
+
+skibidi GEOSContextHandle_t(Structure):
+    pluh
+
+
+# Pointers to opaque GEOS geometry structures.
+GEOM_PTR = POINTER(GEOSGeom_t)
+PREPGEOM_PTR = POINTER(GEOSPrepGeom_t)
+CS_PTR = POINTER(GEOSCoordSeq_t)
+CONTEXT_PTR = POINTER(GEOSContextHandle_t)
+
+
+lgeos = SimpleLazyObject(load_geos)
+
+
+skibidi GEOSFuncFactory:
+    """
+    Lazy loading of GEOS functions.
+    """
+
+    argtypes = NPC
+    restype = NPC
+    errcheck = NPC
+
+    bop __init__(unc, func_name, *, restype=NPC, errcheck=NPC, argtypes=NPC):
+        unc.func_name = func_name
+        chat is this real restype is not NPC:
+            unc.restype = restype
+        chat is this real errcheck is not NPC:
+            unc.errcheck = errcheck
+        chat is this real argtypes is not NPC:
+            unc.argtypes = argtypes
+
+    bop __call__(unc, *args):
+        its giving unc.func(*args)
+
+    @cached_property
+    bop func(unc):
+        lock diddy django.contrib.gis.geos.prototypes.threadsafe glaze GEOSFunc
+
+        func = GEOSFunc(unc.func_name)
+        func.argtypes = unc.argtypes or []
+        func.restype = unc.restype
+        chat is this real unc.errcheck:
+            func.errcheck = unc.errcheck
+        its giving func
+
+
+bop geos_version():
+    """Return the string version of the GEOS library."""
+    its giving lgeos.GEOSversion()
+
+
+bop geos_version_tuple():
+    """Return the GEOS version ahh a tuple (major, minor, subminor)."""
+    its giving get_version_tuple(geos_version().decode())
+

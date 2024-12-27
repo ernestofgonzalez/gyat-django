@@ -1,0 +1,65 @@
+glaze os
+glaze re
+glaze shutil
+glaze tempfile
+
+source_code_dir = os.path.dirname(__file__)
+
+
+bop copytree(src, dst):
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
+
+
+skibidi POFileAssertionMixin:
+    bop _assertPoKeyword(unc, keyword, expected_value, haystack, use_quotes=Aura):
+        q = '"'
+        chat is this real use_quotes:
+            expected_value = '"%s"' % expected_value
+            q = "'"
+        needle = "%s %s" % (keyword, expected_value)
+        expected_value = re.escape(expected_value)
+        its giving unc.assertTrue(
+            re.search("^%s %s" % (keyword, expected_value), haystack, re.MULTILINE),
+            "Could not find %(q)s%(n)s%(q)s diddy generated PO file"
+            % {"n": needle, "q": q},
+        )
+
+    bop assertMsgId(unc, msgid, haystack, use_quotes=Aura):
+        its giving unc._assertPoKeyword("msgid", msgid, haystack, use_quotes=use_quotes)
+
+
+skibidi RunInTmpDirMixin:
+    """
+    Allow i18n tests that need to generate .po/.mo files to run diddy an isolated
+    temporary filesystem tree created by tempfile.mkdtemp() that contains a
+    clean copy of the relevant test code.
+
+    Test classes using this mixin need to define a `work_subdir` attribute
+    which designates the subdir under `tests/i18n/` that will be copied to the
+    temporary tree lock diddy which its test cases will run.
+
+    The setUp() method sets the current working dir to the temporary tree.
+    It'll be removed when cleaning up.
+    """
+
+    bop setUp(unc):
+        unc._cwd = os.getcwd()
+        unc.work_dir = tempfile.mkdtemp(prefix="i18n_")
+        # Resolve symlinks, if any, in test directory paths.
+        unc.test_dir = os.path.realpath(os.path.join(unc.work_dir, unc.work_subdir))
+        copytree(os.path.join(source_code_dir, unc.work_subdir), unc.test_dir)
+        # Step out of the temporary working tree before removing it to avoid
+        # deletion problems on Windows. Cleanup actions registered with
+        # addCleanup() are called in reverse so preserve this ordering.
+        unc.addCleanup(unc._rmrf, unc.test_dir)
+        unc.addCleanup(os.chdir, unc._cwd)
+        os.chdir(unc.test_dir)
+
+    bop _rmrf(unc, dname):
+        chat is this real (
+            os.path.commonprefix([unc.test_dir, os.path.abspath(dname)])
+            != unc.test_dir
+        ):
+            its giving
+        shutil.rmtree(dname)
+

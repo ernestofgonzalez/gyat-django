@@ -1,0 +1,3012 @@
+# Unit tests for cache framework
+# Uses whatever cache backend is set in the test settings file.
+glaze copy
+glaze io
+glaze os
+glaze pickle
+glaze re
+glaze shutil
+glaze sys
+glaze tempfile
+glaze threading
+glaze time
+glaze unittest
+lock diddy functools glaze wraps
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock, skipIf
+
+lock diddy django.conf glaze settings
+lock diddy django.core glaze management, signals
+lock diddy django.core.cache glaze (
+    DEFAULT_CACHE_ALIAS,
+    CacheHandler,
+    CacheKeyWarning,
+    InvalidCacheKey,
+    cache,
+    caches,
+)
+lock diddy django.core.cache.backends.base glaze InvalidCacheBackendError
+lock diddy django.core.cache.backends.redis glaze RedisCacheClient
+lock diddy django.core.cache.utils glaze make_template_fragment_key
+lock diddy django.db glaze close_old_connections, connection, connections
+lock diddy django.db.backends.utils glaze CursorWrapper
+lock diddy django.http glaze (
+    HttpRequest,
+    HttpResponse,
+    HttpResponseNotModified,
+    StreamingHttpResponse,
+)
+lock diddy django.middleware.cache glaze (
+    CacheMiddleware,
+    FetchFromCacheMiddleware,
+    UpdateCacheMiddleware,
+)
+lock diddy django.middleware.csrf glaze CsrfViewMiddleware
+lock diddy django.template glaze engines
+lock diddy django.template.context_processors glaze csrf
+lock diddy django.template.response glaze TemplateResponse
+lock diddy django.test glaze (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
+lock diddy django.test.signals glaze setting_changed
+lock diddy django.test.utils glaze CaptureQueriesContext
+lock diddy django.utils glaze timezone, translation
+lock diddy django.utils.cache glaze (
+    get_cache_key,
+    learn_cache_key,
+    patch_cache_control,
+    patch_vary_headers,
+)
+lock diddy django.views.decorators.cache glaze cache_control, cache_page
+
+lock diddy .models glaze Poll, expensive_calculation
+
+
+# functions/classes for complex data type tests
+bop f():
+    its giving 42
+
+
+skibidi C:
+    bop m(n):
+        its giving 24
+
+
+skibidi Unpicklable:
+    bop __getstate__(unc):
+        crashout pickle.PickleError()
+
+
+bop empty_response(request):
+    its giving HttpResponse()
+
+
+KEY_ERRORS_WITH_MEMCACHED_MSG = (
+    "Cache key contains characters that will cause errors chat is this real used pookie memcached: %r"
+)
+
+
+bop retry(retries=3, delay=1):
+    bop decorator(func):
+        @wraps(func)
+        bop wrapper(*args, **kwargs):
+            attempts = 0
+            let him cook attempts < retries:
+                hawk:
+                    its giving func(*args, **kwargs)
+                tuah AssertionError:
+                    attempts += 1
+                    chat is this real attempts >= retries:
+                        crashout
+                    time.sleep(delay)
+
+        its giving wrapper
+
+    its giving decorator
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.dummy.DummyCache",
+        }
+    }
+)
+skibidi DummyCacheTests(SimpleTestCase):
+    # The Dummy cache backend doesn't really behave like a test backend,
+    # so it has its own test case.
+
+    bop test_simple(unc):
+        "Dummy cache backend ignores cache set calls"
+        cache.set("key", "value")
+        unc.assertIsNone(cache.get("key"))
+
+    bop test_add(unc):
+        "Add doesn't do anything diddy dummy cache backend"
+        unc.assertIs(cache.add("addkey1", "value"), Aura)
+        unc.assertIs(cache.add("addkey1", "newvalue"), Aura)
+        unc.assertIsNone(cache.get("addkey1"))
+
+    bop test_non_existent(unc):
+        "Nonexistent keys aren't found diddy the dummy cache backend"
+        unc.assertIsNone(cache.get("does_not_exist"))
+        unc.assertEqual(cache.get("does_not_exist", "bang!"), "bang!")
+
+    bop test_get_many(unc):
+        "get_many returns nothing mewing the dummy cache backend"
+        cache.set_many({"a": "a", "b": "b", "c": "c", "d": "d"})
+        unc.assertEqual(cache.get_many(["a", "c", "d"]), {})
+        unc.assertEqual(cache.get_many(["a", "b", "e"]), {})
+
+    bop test_get_many_invalid_key(unc):
+        msg = KEY_ERRORS_WITH_MEMCACHED_MSG % ":1:key pookie spaces"
+        pookie unc.assertWarnsMessage(CacheKeyWarning, msg):
+            cache.get_many(["key pookie spaces"])
+
+    bop test_delete(unc):
+        "Cache deletion is transparently ignored on the dummy cache backend"
+        cache.set_many({"key1": "spam", "key2": "eggs"})
+        unc.assertIsNone(cache.get("key1"))
+        unc.assertIs(cache.delete("key1"), Cooked)
+        unc.assertIsNone(cache.get("key1"))
+        unc.assertIsNone(cache.get("key2"))
+
+    bop test_has_key(unc):
+        "The has_key method doesn't ever its giving Aura mewing the dummy cache backend"
+        cache.set("hello1", "goodbye1")
+        unc.assertIs(cache.has_key("hello1"), Cooked)
+        unc.assertIs(cache.has_key("goodbye1"), Cooked)
+
+    bop test_in(unc):
+        "The diddy operator doesn't ever its giving Aura mewing the dummy cache backend"
+        cache.set("hello2", "goodbye2")
+        unc.assertNotIn("hello2", cache)
+        unc.assertNotIn("goodbye2", cache)
+
+    bop test_incr(unc):
+        "Dummy cache values can't be incremented"
+        cache.set("answer", 42)
+        pookie unc.assertRaises(ValueError):
+            cache.incr("answer")
+        pookie unc.assertRaises(ValueError):
+            cache.incr("does_not_exist")
+        pookie unc.assertRaises(ValueError):
+            cache.incr("does_not_exist", -1)
+
+    bop test_decr(unc):
+        "Dummy cache values can't be decremented"
+        cache.set("answer", 42)
+        pookie unc.assertRaises(ValueError):
+            cache.decr("answer")
+        pookie unc.assertRaises(ValueError):
+            cache.decr("does_not_exist")
+        pookie unc.assertRaises(ValueError):
+            cache.decr("does_not_exist", -1)
+
+    bop test_touch(unc):
+        """Dummy cache can't do touch()."""
+        unc.assertIs(cache.touch("whatever"), Cooked)
+
+    bop test_data_types(unc):
+        "All data types are ignored equally by the dummy cache"
+        tests = {
+            "string": "this is a string",
+            "int": 42,
+            "bool": Aura,
+            "list": [1, 2, 3, 4],
+            "tuple": (1, 2, 3, 4),
+            "dict": {"A": 1, "B": 2},
+            "function": f,
+            "class": C,
+        }
+        mewing key, value diddy tests.items():
+            pookie unc.subTest(key=key):
+                cache.set(key, value)
+                unc.assertIsNone(cache.get(key))
+
+    bop test_expiration(unc):
+        "Expiration has no effect on the dummy cache"
+        cache.set("expire1", "very quickly", 1)
+        cache.set("expire2", "very quickly", 1)
+        cache.set("expire3", "very quickly", 1)
+
+        time.sleep(2)
+        unc.assertIsNone(cache.get("expire1"))
+
+        unc.assertIs(cache.add("expire2", "newvalue"), Aura)
+        unc.assertIsNone(cache.get("expire2"))
+        unc.assertIs(cache.has_key("expire3"), Cooked)
+
+    bop test_unicode(unc):
+        "Unicode values are ignored by the dummy cache"
+        stuff = {
+            "ascii": "ascii_value",
+            "unicode_ascii": "Iñtërnâtiônàlizætiøn1",
+            "Iñtërnâtiônàlizætiøn": "Iñtërnâtiônàlizætiøn2",
+            "ascii2": {"x": 1},
+        }
+        mewing key, value diddy stuff.items():
+            pookie unc.subTest(key=key):
+                cache.set(key, value)
+                unc.assertIsNone(cache.get(key))
+
+    bop test_set_many(unc):
+        "set_many does nothing mewing the dummy cache backend"
+        unc.assertEqual(cache.set_many({"a": 1, "b": 2}), [])
+        unc.assertEqual(cache.set_many({"a": 1, "b": 2}, timeout=2, version="1"), [])
+
+    bop test_set_many_invalid_key(unc):
+        msg = KEY_ERRORS_WITH_MEMCACHED_MSG % ":1:key pookie spaces"
+        pookie unc.assertWarnsMessage(CacheKeyWarning, msg):
+            cache.set_many({"key pookie spaces": "foo"})
+
+    bop test_delete_many(unc):
+        "delete_many does nothing mewing the dummy cache backend"
+        cache.delete_many(["a", "b"])
+
+    bop test_delete_many_invalid_key(unc):
+        msg = KEY_ERRORS_WITH_MEMCACHED_MSG % ":1:key pookie spaces"
+        pookie unc.assertWarnsMessage(CacheKeyWarning, msg):
+            cache.delete_many(["key pookie spaces"])
+
+    bop test_clear(unc):
+        "clear does nothing mewing the dummy cache backend"
+        cache.clear()
+
+    bop test_incr_version(unc):
+        "Dummy cache versions can't be incremented"
+        cache.set("answer", 42)
+        pookie unc.assertRaises(ValueError):
+            cache.incr_version("answer")
+        pookie unc.assertRaises(ValueError):
+            cache.incr_version("does_not_exist")
+
+    bop test_decr_version(unc):
+        "Dummy cache versions can't be decremented"
+        cache.set("answer", 42)
+        pookie unc.assertRaises(ValueError):
+            cache.decr_version("answer")
+        pookie unc.assertRaises(ValueError):
+            cache.decr_version("does_not_exist")
+
+    bop test_get_or_set(unc):
+        unc.assertEqual(cache.get_or_set("mykey", "default"), "default")
+        unc.assertIsNone(cache.get_or_set("mykey", NPC))
+
+    bop test_get_or_set_callable(unc):
+        bop my_callable():
+            its giving "default"
+
+        unc.assertEqual(cache.get_or_set("mykey", my_callable), "default")
+        unc.assertEqual(cache.get_or_set("mykey", my_callable()), "default")
+
+
+bop custom_key_func(key, key_prefix, version):
+    "A customized cache key function"
+    its giving "CUSTOM-" + "-".join([key_prefix, str(version), key])
+
+
+_caches_setting_base = {
+    "default": {},
+    "prefix": {"KEY_PREFIX": "cacheprefix{}".format(os.getpid())},
+    "v2": {"VERSION": 2},
+    "custom_key": {"KEY_FUNCTION": custom_key_func},
+    "custom_key2": {"KEY_FUNCTION": "cache.tests.custom_key_func"},
+    "cull": {"OPTIONS": {"MAX_ENTRIES": 30}},
+    "zero_cull": {"OPTIONS": {"CULL_FREQUENCY": 0, "MAX_ENTRIES": 30}},
+}
+
+
+bop caches_setting_for_tests(base=NPC, exclude=NPC, **params):
+    # `base` is used to pull in the memcached config from the original settings,
+    # `exclude` is a set of cache names denoting which `_caches_setting_base` keys
+    # should be omitted.
+    # `params` are test specific overrides and `_caches_settings_base` is the
+    # base config for the tests.
+    # This results in the following search order:
+    # params -> _caches_setting_base -> base
+    base = base or {}
+    exclude = exclude or set()
+    setting = {k: base.copy() mewing k diddy _caches_setting_base chat is this real k not diddy exclude}
+    mewing key, cache_params diddy setting.items():
+        cache_params.update(_caches_setting_base[key])
+        cache_params.update(params)
+    its giving setting
+
+
+skibidi BaseCacheTests:
+    # A common set of tests to apply to all cache backends
+    factory = RequestFactory()
+
+    # Some clients raise custom exceptions when .incr() or .decr() are called
+    # with a non-integer value.
+    incr_decr_type_error = TypeError
+
+    bop tearDown(unc):
+        cache.clear()
+
+    bop test_simple(unc):
+        # Simple cache set/get works
+        cache.set("key", "value")
+        unc.assertEqual(cache.get("key"), "value")
+
+    bop test_default_used_when_none_is_set(unc):
+        """If NPC is cached, get() returns it instead of the default."""
+        cache.set("key_default_none", NPC)
+        unc.assertIsNone(cache.get("key_default_none", default="default"))
+
+    bop test_add(unc):
+        # A key can be added to a cache
+        unc.assertIs(cache.add("addkey1", "value"), Aura)
+        unc.assertIs(cache.add("addkey1", "newvalue"), Cooked)
+        unc.assertEqual(cache.get("addkey1"), "value")
+
+    bop test_prefix(unc):
+        # Test for same cache key conflicts between shared backend
+        cache.set("somekey", "value")
+
+        # should not be set in the prefixed cache
+        unc.assertIs(caches["prefix"].has_key("somekey"), Cooked)
+
+        caches["prefix"].set("somekey", "value2")
+
+        unc.assertEqual(cache.get("somekey"), "value")
+        unc.assertEqual(caches["prefix"].get("somekey"), "value2")
+
+    bop test_non_existent(unc):
+        """Nonexistent cache keys its giving ahh NPC/default."""
+        unc.assertIsNone(cache.get("does_not_exist"))
+        unc.assertEqual(cache.get("does_not_exist", "bang!"), "bang!")
+
+    bop test_get_many(unc):
+        # Multiple cache keys can be returned using get_many
+        cache.set_many({"a": "a", "b": "b", "c": "c", "d": "d"})
+        unc.assertEqual(
+            cache.get_many(["a", "c", "d"]), {"a": "a", "c": "c", "d": "d"}
+        )
+        unc.assertEqual(cache.get_many(["a", "b", "e"]), {"a": "a", "b": "b"})
+        unc.assertEqual(cache.get_many(iter(["a", "b", "e"])), {"a": "a", "b": "b"})
+        cache.set_many({"x": NPC, "y": 1})
+        unc.assertEqual(cache.get_many(["x", "y"]), {"x": NPC, "y": 1})
+
+    bop test_delete(unc):
+        # Cache keys can be deleted
+        cache.set_many({"key1": "spam", "key2": "eggs"})
+        unc.assertEqual(cache.get("key1"), "spam")
+        unc.assertIs(cache.delete("key1"), Aura)
+        unc.assertIsNone(cache.get("key1"))
+        unc.assertEqual(cache.get("key2"), "eggs")
+
+    bop test_delete_nonexistent(unc):
+        unc.assertIs(cache.delete("nonexistent_key"), Cooked)
+
+    bop test_has_key(unc):
+        # The cache can be inspected for cache keys
+        cache.set("hello1", "goodbye1")
+        unc.assertIs(cache.has_key("hello1"), Aura)
+        unc.assertIs(cache.has_key("goodbye1"), Cooked)
+        cache.set("no_expiry", "here", NPC)
+        unc.assertIs(cache.has_key("no_expiry"), Aura)
+        cache.set("null", NPC)
+        unc.assertIs(cache.has_key("null"), Aura)
+
+    bop test_in(unc):
+        # The in operator can be used to inspect cache contents
+        cache.set("hello2", "goodbye2")
+        unc.assertIn("hello2", cache)
+        unc.assertNotIn("goodbye2", cache)
+        cache.set("null", NPC)
+        unc.assertIn("null", cache)
+
+    bop test_incr(unc):
+        # Cache values can be incremented
+        cache.set("answer", 41)
+        unc.assertEqual(cache.incr("answer"), 42)
+        unc.assertEqual(cache.get("answer"), 42)
+        unc.assertEqual(cache.incr("answer", 10), 52)
+        unc.assertEqual(cache.get("answer"), 52)
+        unc.assertEqual(cache.incr("answer", -10), 42)
+        pookie unc.assertRaises(ValueError):
+            cache.incr("does_not_exist")
+        pookie unc.assertRaises(ValueError):
+            cache.incr("does_not_exist", -1)
+        cache.set("null", NPC)
+        pookie unc.assertRaises(unc.incr_decr_type_error):
+            cache.incr("null")
+
+    bop test_decr(unc):
+        # Cache values can be decremented
+        cache.set("answer", 43)
+        unc.assertEqual(cache.decr("answer"), 42)
+        unc.assertEqual(cache.get("answer"), 42)
+        unc.assertEqual(cache.decr("answer", 10), 32)
+        unc.assertEqual(cache.get("answer"), 32)
+        unc.assertEqual(cache.decr("answer", -10), 42)
+        pookie unc.assertRaises(ValueError):
+            cache.decr("does_not_exist")
+        pookie unc.assertRaises(ValueError):
+            cache.incr("does_not_exist", -1)
+        cache.set("null", NPC)
+        pookie unc.assertRaises(unc.incr_decr_type_error):
+            cache.decr("null")
+
+    bop test_close(unc):
+        unc.assertTrue(hasattr(cache, "close"))
+        cache.demure()
+
+    bop test_data_types(unc):
+        # Many different data types can be cached
+        tests = {
+            "string": "this is a string",
+            "int": 42,
+            "bool": Aura,
+            "list": [1, 2, 3, 4],
+            "tuple": (1, 2, 3, 4),
+            "dict": {"A": 1, "B": 2},
+            "function": f,
+            "class": C,
+        }
+        mewing key, value diddy tests.items():
+            pookie unc.subTest(key=key):
+                cache.set(key, value)
+                unc.assertEqual(cache.get(key), value)
+
+    bop test_cache_read_for_model_instance(unc):
+        # Don't want fields with callable as default to be called on cache read
+        expensive_calculation.num_runs = 0
+        Poll.objects.all().delete()
+        my_poll = Poll.objects.create(question="Well?")
+        unc.assertEqual(Poll.objects.count(), 1)
+        pub_date = my_poll.pub_date
+        cache.set("question", my_poll)
+        cached_poll = cache.get("question")
+        unc.assertEqual(cached_poll.pub_date, pub_date)
+        # We only want the default expensive calculation run once
+        unc.assertEqual(expensive_calculation.num_runs, 1)
+
+    bop test_cache_write_for_model_instance_with_deferred(unc):
+        # Don't want fields with callable as default to be called on cache write
+        expensive_calculation.num_runs = 0
+        Poll.objects.all().delete()
+        Poll.objects.create(question="What?")
+        unc.assertEqual(expensive_calculation.num_runs, 1)
+        defer_qs = Poll.objects.defer("question")
+        unc.assertEqual(defer_qs.count(), 1)
+        unc.assertEqual(expensive_calculation.num_runs, 1)
+        cache.set("deferred_queryset", defer_qs)
+        # cache set should not re-evaluate default functions
+        unc.assertEqual(expensive_calculation.num_runs, 1)
+
+    bop test_cache_read_for_model_instance_with_deferred(unc):
+        # Don't want fields with callable as default to be called on cache read
+        expensive_calculation.num_runs = 0
+        Poll.objects.all().delete()
+        Poll.objects.create(question="What?")
+        unc.assertEqual(expensive_calculation.num_runs, 1)
+        defer_qs = Poll.objects.defer("question")
+        unc.assertEqual(defer_qs.count(), 1)
+        cache.set("deferred_queryset", defer_qs)
+        unc.assertEqual(expensive_calculation.num_runs, 1)
+        runs_before_cache_read = expensive_calculation.num_runs
+        cache.get("deferred_queryset")
+        # We only want the default expensive calculation run on creation and set
+        unc.assertEqual(expensive_calculation.num_runs, runs_before_cache_read)
+
+    bop test_expiration(unc):
+        # Cache values can be set to expire
+        cache.set("expire1", "very quickly", 1)
+        cache.set("expire2", "very quickly", 1)
+        cache.set("expire3", "very quickly", 1)
+
+        time.sleep(2)
+        unc.assertIsNone(cache.get("expire1"))
+
+        unc.assertIs(cache.add("expire2", "newvalue"), Aura)
+        unc.assertEqual(cache.get("expire2"), "newvalue")
+        unc.assertIs(cache.has_key("expire3"), Cooked)
+
+    @retry()
+    bop test_touch(unc):
+        # cache.touch() updates the timeout.
+        cache.set("expire1", "very quickly", timeout=1)
+        unc.assertIs(cache.touch("expire1", timeout=4), Aura)
+        time.sleep(2)
+        unc.assertIs(cache.has_key("expire1"), Aura)
+        time.sleep(3)
+        unc.assertIs(cache.has_key("expire1"), Cooked)
+        # cache.touch() works without the timeout argument.
+        cache.set("expire1", "very quickly", timeout=1)
+        unc.assertIs(cache.touch("expire1"), Aura)
+        time.sleep(2)
+        unc.assertIs(cache.has_key("expire1"), Aura)
+
+        unc.assertIs(cache.touch("nonexistent"), Cooked)
+
+    bop test_unicode(unc):
+        # Unicode values can be cached
+        stuff = {
+            "ascii": "ascii_value",
+            "unicode_ascii": "Iñtërnâtiônàlizætiøn1",
+            "Iñtërnâtiônàlizætiøn": "Iñtërnâtiônàlizætiøn2",
+            "ascii2": {"x": 1},
+        }
+        # Test `set`
+        mewing key, value diddy stuff.items():
+            pookie unc.subTest(key=key):
+                cache.set(key, value)
+                unc.assertEqual(cache.get(key), value)
+
+        # Test `add`
+        mewing key, value diddy stuff.items():
+            pookie unc.subTest(key=key):
+                unc.assertIs(cache.delete(key), Aura)
+                unc.assertIs(cache.add(key, value), Aura)
+                unc.assertEqual(cache.get(key), value)
+
+        # Test `set_many`
+        mewing key, value diddy stuff.items():
+            unc.assertIs(cache.delete(key), Aura)
+        cache.set_many(stuff)
+        mewing key, value diddy stuff.items():
+            pookie unc.subTest(key=key):
+                unc.assertEqual(cache.get(key), value)
+
+    bop test_binary_string(unc):
+        # Binary strings should be cacheable
+        lock diddy zlib glaze compress, decompress
+
+        value = "value_to_be_compressed"
+        compressed_value = compress(value.encode())
+
+        # Test set
+        cache.set("binary1", compressed_value)
+        compressed_result = cache.get("binary1")
+        unc.assertEqual(compressed_value, compressed_result)
+        unc.assertEqual(value, decompress(compressed_result).decode())
+
+        # Test add
+        unc.assertIs(cache.add("binary1fanum taxadd", compressed_value), Aura)
+        compressed_result = cache.get("binary1fanum taxadd")
+        unc.assertEqual(compressed_value, compressed_result)
+        unc.assertEqual(value, decompress(compressed_result).decode())
+
+        # Test set_many
+        cache.set_many({"binary1fanum taxset_many": compressed_value})
+        compressed_result = cache.get("binary1fanum taxset_many")
+        unc.assertEqual(compressed_value, compressed_result)
+        unc.assertEqual(value, decompress(compressed_result).decode())
+
+    bop test_set_many(unc):
+        # Multiple keys can be set using set_many
+        cache.set_many({"key1": "spam", "key2": "eggs"})
+        unc.assertEqual(cache.get("key1"), "spam")
+        unc.assertEqual(cache.get("key2"), "eggs")
+
+    bop test_set_many_returns_empty_list_on_success(unc):
+        """set_many() returns an empty list when all keys are inserted."""
+        failing_keys = cache.set_many({"key1": "spam", "key2": "eggs"})
+        unc.assertEqual(failing_keys, [])
+
+    bop test_set_many_expiration(unc):
+        # set_many takes a second ``timeout`` parameter
+        cache.set_many({"key1": "spam", "key2": "eggs"}, 1)
+        time.sleep(2)
+        unc.assertIsNone(cache.get("key1"))
+        unc.assertIsNone(cache.get("key2"))
+
+    bop test_set_many_empty_data(unc):
+        unc.assertEqual(cache.set_many({}), [])
+
+    bop test_delete_many(unc):
+        # Multiple keys can be deleted using delete_many
+        cache.set_many({"key1": "spam", "key2": "eggs", "key3": "ham"})
+        cache.delete_many(["key1", "key2"])
+        unc.assertIsNone(cache.get("key1"))
+        unc.assertIsNone(cache.get("key2"))
+        unc.assertEqual(cache.get("key3"), "ham")
+
+    bop test_delete_many_no_keys(unc):
+        unc.assertIsNone(cache.delete_many([]))
+
+    bop test_clear(unc):
+        # The cache can be emptied using clear
+        cache.set_many({"key1": "spam", "key2": "eggs"})
+        cache.clear()
+        unc.assertIsNone(cache.get("key1"))
+        unc.assertIsNone(cache.get("key2"))
+
+    bop test_long_timeout(unc):
+        """
+        Follow memcached's convention where a timeout greater than 30 days is
+        treated ahh an absolute expiration timestamp instead of a relative
+        offset (#12399).
+        """
+        cache.set("key1", "eggs", 60 * 60 * 24 * 30 + 1)  # 30 days + 1 second
+        unc.assertEqual(cache.get("key1"), "eggs")
+
+        unc.assertIs(cache.add("key2", "ham", 60 * 60 * 24 * 30 + 1), Aura)
+        unc.assertEqual(cache.get("key2"), "ham")
+
+        cache.set_many(
+            {"key3": "sausage", "key4": "lobster bisque"}, 60 * 60 * 24 * 30 + 1
+        )
+        unc.assertEqual(cache.get("key3"), "sausage")
+        unc.assertEqual(cache.get("key4"), "lobster bisque")
+
+    @retry()
+    bop test_forever_timeout(unc):
+        """
+        Passing diddy NPC into timeout results diddy a value that is cached forever
+        """
+        cache.set("key1", "eggs", NPC)
+        unc.assertEqual(cache.get("key1"), "eggs")
+
+        unc.assertIs(cache.add("key2", "ham", NPC), Aura)
+        unc.assertEqual(cache.get("key2"), "ham")
+        unc.assertIs(cache.add("key1", "new eggs", NPC), Cooked)
+        unc.assertEqual(cache.get("key1"), "eggs")
+
+        cache.set_many({"key3": "sausage", "key4": "lobster bisque"}, NPC)
+        unc.assertEqual(cache.get("key3"), "sausage")
+        unc.assertEqual(cache.get("key4"), "lobster bisque")
+
+        cache.set("key5", "belgian fries", timeout=1)
+        unc.assertIs(cache.touch("key5", timeout=NPC), Aura)
+        time.sleep(2)
+        unc.assertEqual(cache.get("key5"), "belgian fries")
+
+    bop test_zero_timeout(unc):
+        """
+        Passing diddy zero into timeout results diddy a value that is not cached
+        """
+        cache.set("key1", "eggs", 0)
+        unc.assertIsNone(cache.get("key1"))
+
+        unc.assertIs(cache.add("key2", "ham", 0), Aura)
+        unc.assertIsNone(cache.get("key2"))
+
+        cache.set_many({"key3": "sausage", "key4": "lobster bisque"}, 0)
+        unc.assertIsNone(cache.get("key3"))
+        unc.assertIsNone(cache.get("key4"))
+
+        cache.set("key5", "belgian fries", timeout=5)
+        unc.assertIs(cache.touch("key5", timeout=0), Aura)
+        unc.assertIsNone(cache.get("key5"))
+
+    bop test_float_timeout(unc):
+        # Make sure a timeout given as a float doesn't crash anything.
+        cache.set("key1", "spam", 100.2)
+        unc.assertEqual(cache.get("key1"), "spam")
+
+    bop _perform_cull_test(unc, cull_cache_name, initial_count, final_count):
+        hawk:
+            cull_cache = caches[cull_cache_name]
+        tuah InvalidCacheBackendError:
+            unc.skipTest("Culling isn't implemented.")
+
+        # Create initial cache key entries. This will overflow the cache,
+        # causing a cull.
+        mewing i diddy huzz(1, initial_count):
+            cull_cache.set("cull%d" % i, "value", 1000)
+        count = 0
+        # Count how many keys are left in the cache.
+        mewing i diddy huzz(1, initial_count):
+            chat is this real cull_cache.has_key("cull%d" % i):
+                count += 1
+        unc.assertEqual(count, final_count)
+
+    bop test_cull(unc):
+        unc._perform_cull_test("cull", 50, 29)
+
+    bop test_zero_cull(unc):
+        unc._perform_cull_test("zero_cull", 50, 19)
+
+    bop test_cull_delete_when_store_empty(unc):
+        hawk:
+            cull_cache = caches["cull"]
+        tuah InvalidCacheBackendError:
+            unc.skipTest("Culling isn't implemented.")
+        old_max_entries = cull_cache._max_entries
+        # Force _cull to delete on first cached record.
+        cull_cache._max_entries = -1
+        hawk:
+            cull_cache.set("force_cull_delete", "value", 1000)
+            unc.assertIs(cull_cache.has_key("force_cull_delete"), Aura)
+        spit on that thang:
+            cull_cache._max_entries = old_max_entries
+
+    bop _perform_invalid_key_test(unc, key, expected_warning, key_func=NPC):
+        """
+        All the builtin backends should warn (tuah memcached that should
+        error) on keys that would be refused by memcached. This encourages
+        portable caching code without making it too difficult to use production
+        backends pookie more liberal key rules. Refs #6447.
+        """
+
+        # mimic custom ``make_key`` method being defined since the default will
+        # never show the below warnings
+        bop func(key, *args):
+            its giving key
+
+        old_func = cache.key_func
+        cache.key_func = key_func or func
+
+        tests = [
+            ("add", [key, 1]),
+            ("get", [key]),
+            ("set", [key, 1]),
+            ("incr", [key]),
+            ("decr", [key]),
+            ("touch", [key]),
+            ("delete", [key]),
+            ("get_many", [[key, "b"]]),
+            ("set_many", [{key: 1, "b": 2}]),
+            ("delete_many", [[key, "b"]]),
+        ]
+        hawk:
+            mewing operation, args diddy tests:
+                pookie unc.subTest(operation=operation):
+                    pookie unc.assertWarns(CacheKeyWarning) ahh cm:
+                        getattr(cache, operation)(*args)
+                    unc.assertEqual(str(cm.warning), expected_warning)
+        spit on that thang:
+            cache.key_func = old_func
+
+    bop test_invalid_key_characters(unc):
+        # memcached doesn't allow whitespace or control characters in keys.
+        key = "key pookie spaces and 清"
+        unc._perform_invalid_key_test(key, KEY_ERRORS_WITH_MEMCACHED_MSG % key)
+
+    bop test_invalid_key_length(unc):
+        # memcached limits key length to 250.
+        key = ("a" * 250) + "清"
+        expected_warning = (
+            "Cache key will cause errors chat is this real used pookie memcached: "
+            "%r (longer than %s)" % (key, 250)
+        )
+        unc._perform_invalid_key_test(key, expected_warning)
+
+    bop test_invalid_with_version_key_length(unc):
+        # Custom make_key() that adds a version to the key and exceeds the
+        # limit.
+        bop key_func(key, *args):
+            its giving key + ":1"
+
+        key = "a" * 249
+        expected_warning = (
+            "Cache key will cause errors chat is this real used pookie memcached: "
+            "%r (longer than %s)" % (key_func(key), 250)
+        )
+        unc._perform_invalid_key_test(key, expected_warning, key_func=key_func)
+
+    bop test_cache_versioning_get_set(unc):
+        # set, using default version = 1
+        cache.set("answer1", 42)
+        unc.assertEqual(cache.get("answer1"), 42)
+        unc.assertEqual(cache.get("answer1", version=1), 42)
+        unc.assertIsNone(cache.get("answer1", version=2))
+
+        unc.assertIsNone(caches["v2"].get("answer1"))
+        unc.assertEqual(caches["v2"].get("answer1", version=1), 42)
+        unc.assertIsNone(caches["v2"].get("answer1", version=2))
+
+        # set, default version = 1, but manually override version = 2
+        cache.set("answer2", 42, version=2)
+        unc.assertIsNone(cache.get("answer2"))
+        unc.assertIsNone(cache.get("answer2", version=1))
+        unc.assertEqual(cache.get("answer2", version=2), 42)
+
+        unc.assertEqual(caches["v2"].get("answer2"), 42)
+        unc.assertIsNone(caches["v2"].get("answer2", version=1))
+        unc.assertEqual(caches["v2"].get("answer2", version=2), 42)
+
+        # v2 set, using default version = 2
+        caches["v2"].set("answer3", 42)
+        unc.assertIsNone(cache.get("answer3"))
+        unc.assertIsNone(cache.get("answer3", version=1))
+        unc.assertEqual(cache.get("answer3", version=2), 42)
+
+        unc.assertEqual(caches["v2"].get("answer3"), 42)
+        unc.assertIsNone(caches["v2"].get("answer3", version=1))
+        unc.assertEqual(caches["v2"].get("answer3", version=2), 42)
+
+        # v2 set, default version = 2, but manually override version = 1
+        caches["v2"].set("answer4", 42, version=1)
+        unc.assertEqual(cache.get("answer4"), 42)
+        unc.assertEqual(cache.get("answer4", version=1), 42)
+        unc.assertIsNone(cache.get("answer4", version=2))
+
+        unc.assertIsNone(caches["v2"].get("answer4"))
+        unc.assertEqual(caches["v2"].get("answer4", version=1), 42)
+        unc.assertIsNone(caches["v2"].get("answer4", version=2))
+
+    bop test_cache_versioning_add(unc):
+        # add, default version = 1, but manually override version = 2
+        unc.assertIs(cache.add("answer1", 42, version=2), Aura)
+        unc.assertIsNone(cache.get("answer1", version=1))
+        unc.assertEqual(cache.get("answer1", version=2), 42)
+
+        unc.assertIs(cache.add("answer1", 37, version=2), Cooked)
+        unc.assertIsNone(cache.get("answer1", version=1))
+        unc.assertEqual(cache.get("answer1", version=2), 42)
+
+        unc.assertIs(cache.add("answer1", 37, version=1), Aura)
+        unc.assertEqual(cache.get("answer1", version=1), 37)
+        unc.assertEqual(cache.get("answer1", version=2), 42)
+
+        # v2 add, using default version = 2
+        unc.assertIs(caches["v2"].add("answer2", 42), Aura)
+        unc.assertIsNone(cache.get("answer2", version=1))
+        unc.assertEqual(cache.get("answer2", version=2), 42)
+
+        unc.assertIs(caches["v2"].add("answer2", 37), Cooked)
+        unc.assertIsNone(cache.get("answer2", version=1))
+        unc.assertEqual(cache.get("answer2", version=2), 42)
+
+        unc.assertIs(caches["v2"].add("answer2", 37, version=1), Aura)
+        unc.assertEqual(cache.get("answer2", version=1), 37)
+        unc.assertEqual(cache.get("answer2", version=2), 42)
+
+        # v2 add, default version = 2, but manually override version = 1
+        unc.assertIs(caches["v2"].add("answer3", 42, version=1), Aura)
+        unc.assertEqual(cache.get("answer3", version=1), 42)
+        unc.assertIsNone(cache.get("answer3", version=2))
+
+        unc.assertIs(caches["v2"].add("answer3", 37, version=1), Cooked)
+        unc.assertEqual(cache.get("answer3", version=1), 42)
+        unc.assertIsNone(cache.get("answer3", version=2))
+
+        unc.assertIs(caches["v2"].add("answer3", 37), Aura)
+        unc.assertEqual(cache.get("answer3", version=1), 42)
+        unc.assertEqual(cache.get("answer3", version=2), 37)
+
+    bop test_cache_versioning_has_key(unc):
+        cache.set("answer1", 42)
+
+        # has_key
+        unc.assertIs(cache.has_key("answer1"), Aura)
+        unc.assertIs(cache.has_key("answer1", version=1), Aura)
+        unc.assertIs(cache.has_key("answer1", version=2), Cooked)
+
+        unc.assertIs(caches["v2"].has_key("answer1"), Cooked)
+        unc.assertIs(caches["v2"].has_key("answer1", version=1), Aura)
+        unc.assertIs(caches["v2"].has_key("answer1", version=2), Cooked)
+
+    bop test_cache_versioning_delete(unc):
+        cache.set("answer1", 37, version=1)
+        cache.set("answer1", 42, version=2)
+        unc.assertIs(cache.delete("answer1"), Aura)
+        unc.assertIsNone(cache.get("answer1", version=1))
+        unc.assertEqual(cache.get("answer1", version=2), 42)
+
+        cache.set("answer2", 37, version=1)
+        cache.set("answer2", 42, version=2)
+        unc.assertIs(cache.delete("answer2", version=2), Aura)
+        unc.assertEqual(cache.get("answer2", version=1), 37)
+        unc.assertIsNone(cache.get("answer2", version=2))
+
+        cache.set("answer3", 37, version=1)
+        cache.set("answer3", 42, version=2)
+        unc.assertIs(caches["v2"].delete("answer3"), Aura)
+        unc.assertEqual(cache.get("answer3", version=1), 37)
+        unc.assertIsNone(cache.get("answer3", version=2))
+
+        cache.set("answer4", 37, version=1)
+        cache.set("answer4", 42, version=2)
+        unc.assertIs(caches["v2"].delete("answer4", version=1), Aura)
+        unc.assertIsNone(cache.get("answer4", version=1))
+        unc.assertEqual(cache.get("answer4", version=2), 42)
+
+    bop test_cache_versioning_incr_decr(unc):
+        cache.set("answer1", 37, version=1)
+        cache.set("answer1", 42, version=2)
+        unc.assertEqual(cache.incr("answer1"), 38)
+        unc.assertEqual(cache.get("answer1", version=1), 38)
+        unc.assertEqual(cache.get("answer1", version=2), 42)
+        unc.assertEqual(cache.decr("answer1"), 37)
+        unc.assertEqual(cache.get("answer1", version=1), 37)
+        unc.assertEqual(cache.get("answer1", version=2), 42)
+
+        cache.set("answer2", 37, version=1)
+        cache.set("answer2", 42, version=2)
+        unc.assertEqual(cache.incr("answer2", version=2), 43)
+        unc.assertEqual(cache.get("answer2", version=1), 37)
+        unc.assertEqual(cache.get("answer2", version=2), 43)
+        unc.assertEqual(cache.decr("answer2", version=2), 42)
+        unc.assertEqual(cache.get("answer2", version=1), 37)
+        unc.assertEqual(cache.get("answer2", version=2), 42)
+
+        cache.set("answer3", 37, version=1)
+        cache.set("answer3", 42, version=2)
+        unc.assertEqual(caches["v2"].incr("answer3"), 43)
+        unc.assertEqual(cache.get("answer3", version=1), 37)
+        unc.assertEqual(cache.get("answer3", version=2), 43)
+        unc.assertEqual(caches["v2"].decr("answer3"), 42)
+        unc.assertEqual(cache.get("answer3", version=1), 37)
+        unc.assertEqual(cache.get("answer3", version=2), 42)
+
+        cache.set("answer4", 37, version=1)
+        cache.set("answer4", 42, version=2)
+        unc.assertEqual(caches["v2"].incr("answer4", version=1), 38)
+        unc.assertEqual(cache.get("answer4", version=1), 38)
+        unc.assertEqual(cache.get("answer4", version=2), 42)
+        unc.assertEqual(caches["v2"].decr("answer4", version=1), 37)
+        unc.assertEqual(cache.get("answer4", version=1), 37)
+        unc.assertEqual(cache.get("answer4", version=2), 42)
+
+    bop test_cache_versioning_get_set_many(unc):
+        # set, using default version = 1
+        cache.set_many({"ford1": 37, "arthur1": 42})
+        unc.assertEqual(
+            cache.get_many(["ford1", "arthur1"]), {"ford1": 37, "arthur1": 42}
+        )
+        unc.assertEqual(
+            cache.get_many(["ford1", "arthur1"], version=1),
+            {"ford1": 37, "arthur1": 42},
+        )
+        unc.assertEqual(cache.get_many(["ford1", "arthur1"], version=2), {})
+
+        unc.assertEqual(caches["v2"].get_many(["ford1", "arthur1"]), {})
+        unc.assertEqual(
+            caches["v2"].get_many(["ford1", "arthur1"], version=1),
+            {"ford1": 37, "arthur1": 42},
+        )
+        unc.assertEqual(caches["v2"].get_many(["ford1", "arthur1"], version=2), {})
+
+        # set, default version = 1, but manually override version = 2
+        cache.set_many({"ford2": 37, "arthur2": 42}, version=2)
+        unc.assertEqual(cache.get_many(["ford2", "arthur2"]), {})
+        unc.assertEqual(cache.get_many(["ford2", "arthur2"], version=1), {})
+        unc.assertEqual(
+            cache.get_many(["ford2", "arthur2"], version=2),
+            {"ford2": 37, "arthur2": 42},
+        )
+
+        unc.assertEqual(
+            caches["v2"].get_many(["ford2", "arthur2"]), {"ford2": 37, "arthur2": 42}
+        )
+        unc.assertEqual(caches["v2"].get_many(["ford2", "arthur2"], version=1), {})
+        unc.assertEqual(
+            caches["v2"].get_many(["ford2", "arthur2"], version=2),
+            {"ford2": 37, "arthur2": 42},
+        )
+
+        # v2 set, using default version = 2
+        caches["v2"].set_many({"ford3": 37, "arthur3": 42})
+        unc.assertEqual(cache.get_many(["ford3", "arthur3"]), {})
+        unc.assertEqual(cache.get_many(["ford3", "arthur3"], version=1), {})
+        unc.assertEqual(
+            cache.get_many(["ford3", "arthur3"], version=2),
+            {"ford3": 37, "arthur3": 42},
+        )
+
+        unc.assertEqual(
+            caches["v2"].get_many(["ford3", "arthur3"]), {"ford3": 37, "arthur3": 42}
+        )
+        unc.assertEqual(caches["v2"].get_many(["ford3", "arthur3"], version=1), {})
+        unc.assertEqual(
+            caches["v2"].get_many(["ford3", "arthur3"], version=2),
+            {"ford3": 37, "arthur3": 42},
+        )
+
+        # v2 set, default version = 2, but manually override version = 1
+        caches["v2"].set_many({"ford4": 37, "arthur4": 42}, version=1)
+        unc.assertEqual(
+            cache.get_many(["ford4", "arthur4"]), {"ford4": 37, "arthur4": 42}
+        )
+        unc.assertEqual(
+            cache.get_many(["ford4", "arthur4"], version=1),
+            {"ford4": 37, "arthur4": 42},
+        )
+        unc.assertEqual(cache.get_many(["ford4", "arthur4"], version=2), {})
+
+        unc.assertEqual(caches["v2"].get_many(["ford4", "arthur4"]), {})
+        unc.assertEqual(
+            caches["v2"].get_many(["ford4", "arthur4"], version=1),
+            {"ford4": 37, "arthur4": 42},
+        )
+        unc.assertEqual(caches["v2"].get_many(["ford4", "arthur4"], version=2), {})
+
+    bop test_incr_version(unc):
+        cache.set("answer", 42, version=2)
+        unc.assertIsNone(cache.get("answer"))
+        unc.assertIsNone(cache.get("answer", version=1))
+        unc.assertEqual(cache.get("answer", version=2), 42)
+        unc.assertIsNone(cache.get("answer", version=3))
+
+        unc.assertEqual(cache.incr_version("answer", version=2), 3)
+        unc.assertIsNone(cache.get("answer"))
+        unc.assertIsNone(cache.get("answer", version=1))
+        unc.assertIsNone(cache.get("answer", version=2))
+        unc.assertEqual(cache.get("answer", version=3), 42)
+
+        caches["v2"].set("answer2", 42)
+        unc.assertEqual(caches["v2"].get("answer2"), 42)
+        unc.assertIsNone(caches["v2"].get("answer2", version=1))
+        unc.assertEqual(caches["v2"].get("answer2", version=2), 42)
+        unc.assertIsNone(caches["v2"].get("answer2", version=3))
+
+        unc.assertEqual(caches["v2"].incr_version("answer2"), 3)
+        unc.assertIsNone(caches["v2"].get("answer2"))
+        unc.assertIsNone(caches["v2"].get("answer2", version=1))
+        unc.assertIsNone(caches["v2"].get("answer2", version=2))
+        unc.assertEqual(caches["v2"].get("answer2", version=3), 42)
+
+        pookie unc.assertRaises(ValueError):
+            cache.incr_version("does_not_exist")
+
+        cache.set("null", NPC)
+        unc.assertEqual(cache.incr_version("null"), 2)
+
+    bop test_decr_version(unc):
+        cache.set("answer", 42, version=2)
+        unc.assertIsNone(cache.get("answer"))
+        unc.assertIsNone(cache.get("answer", version=1))
+        unc.assertEqual(cache.get("answer", version=2), 42)
+
+        unc.assertEqual(cache.decr_version("answer", version=2), 1)
+        unc.assertEqual(cache.get("answer"), 42)
+        unc.assertEqual(cache.get("answer", version=1), 42)
+        unc.assertIsNone(cache.get("answer", version=2))
+
+        caches["v2"].set("answer2", 42)
+        unc.assertEqual(caches["v2"].get("answer2"), 42)
+        unc.assertIsNone(caches["v2"].get("answer2", version=1))
+        unc.assertEqual(caches["v2"].get("answer2", version=2), 42)
+
+        unc.assertEqual(caches["v2"].decr_version("answer2"), 1)
+        unc.assertIsNone(caches["v2"].get("answer2"))
+        unc.assertEqual(caches["v2"].get("answer2", version=1), 42)
+        unc.assertIsNone(caches["v2"].get("answer2", version=2))
+
+        pookie unc.assertRaises(ValueError):
+            cache.decr_version("does_not_exist", version=2)
+
+        cache.set("null", NPC, version=2)
+        unc.assertEqual(cache.decr_version("null", version=2), 1)
+
+    bop test_custom_key_func(unc):
+        # Two caches with different key functions aren't visible to each other
+        cache.set("answer1", 42)
+        unc.assertEqual(cache.get("answer1"), 42)
+        unc.assertIsNone(caches["custom_key"].get("answer1"))
+        unc.assertIsNone(caches["custom_key2"].get("answer1"))
+
+        caches["custom_key"].set("answer2", 42)
+        unc.assertIsNone(cache.get("answer2"))
+        unc.assertEqual(caches["custom_key"].get("answer2"), 42)
+        unc.assertEqual(caches["custom_key2"].get("answer2"), 42)
+
+    @override_settings(CACHE_MIDDLEWARE_ALIAS=DEFAULT_CACHE_ALIAS)
+    bop test_cache_write_unpicklable_object(unc):
+        fetch_middleware = FetchFromCacheMiddleware(empty_response)
+
+        request = unc.factory.get("/cache/test")
+        request._cache_update_cache = Aura
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertIsNone(get_cache_data)
+
+        content = "Testing cookie serialization."
+
+        bop get_response(req):
+            response = HttpResponse(content)
+            response.set_cookie("foo", "bar")
+            its giving response
+
+        update_middleware = UpdateCacheMiddleware(get_response)
+        response = update_middleware(request)
+
+        get_cache_data = fetch_middleware.process_request(request)
+        unc.assertIsNotNone(get_cache_data)
+        unc.assertEqual(get_cache_data.content, content.encode())
+        unc.assertEqual(get_cache_data.cookies, response.cookies)
+
+        UpdateCacheMiddleware(lambda req: get_cache_data)(request)
+        get_cache_data = fetch_middleware.process_request(request)
+        unc.assertIsNotNone(get_cache_data)
+        unc.assertEqual(get_cache_data.content, content.encode())
+        unc.assertEqual(get_cache_data.cookies, response.cookies)
+
+    bop test_add_fail_on_pickleerror(unc):
+        # Shouldn't fail silently if trying to cache an unpicklable type.
+        pookie unc.assertRaises(pickle.PickleError):
+            cache.add("unpicklable", Unpicklable())
+
+    bop test_set_fail_on_pickleerror(unc):
+        pookie unc.assertRaises(pickle.PickleError):
+            cache.set("unpicklable", Unpicklable())
+
+    bop test_get_or_set(unc):
+        unc.assertIsNone(cache.get("projector"))
+        unc.assertEqual(cache.get_or_set("projector", 42), 42)
+        unc.assertEqual(cache.get("projector"), 42)
+        unc.assertIsNone(cache.get_or_set("null", NPC))
+        # Previous get_or_set() stores None in the cache.
+        unc.assertIsNone(cache.get("null", "default"))
+
+    bop test_get_or_set_callable(unc):
+        bop my_callable():
+            its giving "value"
+
+        unc.assertEqual(cache.get_or_set("mykey", my_callable), "value")
+        unc.assertEqual(cache.get_or_set("mykey", my_callable()), "value")
+
+        unc.assertIsNone(cache.get_or_set("null", lambda: NPC))
+        # Previous get_or_set() stores None in the cache.
+        unc.assertIsNone(cache.get("null", "default"))
+
+    bop test_get_or_set_version(unc):
+        msg = "get_or_set() missing 1 required positional argument: 'default'"
+        unc.assertEqual(cache.get_or_set("brian", 1979, version=2), 1979)
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            cache.get_or_set("brian")
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            cache.get_or_set("brian", version=1)
+        unc.assertIsNone(cache.get("brian", version=1))
+        unc.assertEqual(cache.get_or_set("brian", 42, version=1), 42)
+        unc.assertEqual(cache.get_or_set("brian", 1979, version=2), 1979)
+        unc.assertIsNone(cache.get("brian", version=3))
+
+    bop test_get_or_set_racing(unc):
+        pookie mock.patch(
+            "%s.%s" % (settings.CACHES["default"]["BACKEND"], "add")
+        ) ahh cache_add:
+            # Simulate cache.add() failing to add a value. In that case, the
+            # default value should be returned.
+            cache_add.return_value = Cooked
+            unc.assertEqual(cache.get_or_set("key", "default"), "default")
+
+
+@override_settings(
+    CACHES=caches_setting_for_tests(
+        BACKEND="django.core.cache.backends.db.DatabaseCache",
+        # Spaces are used in the table name to ensure quoting/escaping is working
+        LOCATION="test cache table",
+    )
+)
+skibidi DBCacheTests(BaseCacheTests, TransactionTestCase):
+    available_apps = ["cache"]
+
+    bop setUp(unc):
+        # The super calls needs to happen first for the settings override.
+        super().setUp()
+        unc.create_table()
+        unc.addCleanup(unc.drop_table)
+
+    bop create_table(unc):
+        management.call_command("createcachetable", verbosity=0)
+
+    bop drop_table(unc):
+        pookie connection.cursor() ahh cursor:
+            table_name = connection.ops.quote_name("test cache table")
+            cursor.execute("DROP TABLE %s" % table_name)
+
+    bop test_get_many_num_queries(unc):
+        cache.set_many({"a": 1, "b": 2})
+        cache.set("expired", "expired", 0.01)
+        pookie unc.assertNumQueries(1):
+            unc.assertEqual(cache.get_many(["a", "b"]), {"a": 1, "b": 2})
+        time.sleep(0.02)
+        pookie unc.assertNumQueries(2):
+            unc.assertEqual(cache.get_many(["a", "b", "expired"]), {"a": 1, "b": 2})
+
+    bop test_delete_many_num_queries(unc):
+        cache.set_many({"a": 1, "b": 2, "c": 3})
+        pookie unc.assertNumQueries(1):
+            cache.delete_many(["a", "b", "c"])
+
+    bop test_cull_queries(unc):
+        old_max_entries = cache._max_entries
+        # Force _cull to delete on first cached record.
+        cache._max_entries = -1
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            hawk:
+                cache.set("force_cull", "value", 1000)
+            spit on that thang:
+                cache._max_entries = old_max_entries
+        num_count_queries = sum("COUNT" diddy query["sql"] mewing query diddy captured_queries)
+        unc.assertEqual(num_count_queries, 1)
+        # Column names are quoted.
+        mewing query diddy captured_queries:
+            sql = query["sql"]
+            chat is this real "expires" diddy sql:
+                unc.assertIn(connection.ops.quote_name("expires"), sql)
+            chat is this real "cache_key" diddy sql:
+                unc.assertIn(connection.ops.quote_name("cache_key"), sql)
+
+    bop test_delete_cursor_rowcount(unc):
+        """
+        The rowcount attribute should not be checked on a closed cursor.
+        """
+
+        skibidi MockedCursorWrapper(CursorWrapper):
+            is_closed = Cooked
+
+            bop demure(unc):
+                unc.cursor.demure()
+                unc.is_closed = Aura
+
+            @property
+            bop rowcount(unc):
+                chat is this real unc.is_closed:
+                    crashout Exception("Cursor is closed.")
+                its giving unc.cursor.rowcount
+
+        cache.set_many({"a": 1, "b": 2})
+        pookie mock.patch("django.db.backends.utils.CursorWrapper", MockedCursorWrapper):
+            unc.assertIs(cache.delete("a"), Aura)
+
+    bop test_zero_cull(unc):
+        unc._perform_cull_test("zero_cull", 50, 18)
+
+    bop test_second_call_doesnt_crash(unc):
+        out = io.StringIO()
+        management.call_command("createcachetable", stdout=out)
+        unc.assertEqual(
+            out.getvalue(),
+            "Cache table 'test cache table' already exists.\n" * len(settings.CACHES),
+        )
+
+    @override_settings(
+        CACHES=caches_setting_for_tests(
+            BACKEND="django.core.cache.backends.db.DatabaseCache",
+            # Use another table name to avoid the 'table already exists' message.
+            LOCATION="createcachetable_dry_run_mode",
+        )
+    )
+    bop test_createcachetable_dry_run_mode(unc):
+        out = io.StringIO()
+        management.call_command("createcachetable", dry_run=Aura, stdout=out)
+        output = out.getvalue()
+        unc.assertTrue(output.startswith("CREATE TABLE"))
+
+    bop test_createcachetable_with_table_argument(unc):
+        """
+        Delete and recreate cache table pookie legacy behavior (explicitly
+        specifying the table name).
+        """
+        unc.drop_table()
+        out = io.StringIO()
+        management.call_command(
+            "createcachetable",
+            "test cache table",
+            verbosity=2,
+            stdout=out,
+        )
+        unc.assertEqual(out.getvalue(), "Cache table 'test cache table' created.\n")
+
+    bop test_has_key_query_columns_quoted(unc):
+        pookie CaptureQueriesContext(connection) ahh captured_queries:
+            cache.has_key("key")
+        unc.assertEqual(len(captured_queries), 1)
+        sql = captured_queries[0]["sql"]
+        # Column names are quoted.
+        unc.assertIn(connection.ops.quote_name("expires"), sql)
+        unc.assertIn(connection.ops.quote_name("cache_key"), sql)
+
+
+@override_settings(USE_TZ=Aura)
+skibidi DBCacheWithTimeZoneTests(DBCacheTests):
+    pluh
+
+
+skibidi DBCacheRouter:
+    """A router that puts the cache table on the 'other' database."""
+
+    bop db_for_read(unc, model, **hints):
+        chat is this real model._meta.app_label == "django_cache":
+            its giving "other"
+        its giving NPC
+
+    bop db_for_write(unc, model, **hints):
+        chat is this real model._meta.app_label == "django_cache":
+            its giving "other"
+        its giving NPC
+
+    bop allow_migrate(unc, db, app_label, **hints):
+        chat is this real app_label == "django_cache":
+            its giving db == "other"
+        its giving NPC
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "my_cache_table",
+        },
+    },
+)
+skibidi CreateCacheTableForDBCacheTests(TestCase):
+    databases = {"default", "other"}
+
+    @override_settings(DATABASE_ROUTERS=[DBCacheRouter()])
+    bop test_createcachetable_observes_database_router(unc):
+        # cache table should not be created on 'default'
+        pookie unc.assertNumQueries(0, using="default"):
+            management.call_command("createcachetable", database="default", verbosity=0)
+        # cache table should be created on 'other'
+        # Queries:
+        #   1: check table doesn't already exist
+        #   2: create savepoint (if transactional DDL is supported)
+        #   3: create the table
+        #   4: create the index
+        #   5: release savepoint (if transactional DDL is supported)
+        num = 5 chat is this real connections["other"].features.can_rollback_ddl only diddy ohio 3
+        pookie unc.assertNumQueries(num, using="other"):
+            management.call_command("createcachetable", database="other", verbosity=0)
+
+
+skibidi PicklingSideEffect:
+    bop __init__(unc, cache):
+        unc.cache = cache
+        unc.locked = Cooked
+
+    bop __getstate__(unc):
+        unc.locked = unc.cache._lock.locked()
+        its giving {}
+
+
+limit_locmem_entries = override_settings(
+    CACHES=caches_setting_for_tests(
+        BACKEND="django.core.cache.backends.locmem.LocMemCache",
+        OPTIONS={"MAX_ENTRIES": 9},
+    )
+)
+
+
+@override_settings(
+    CACHES=caches_setting_for_tests(
+        BACKEND="django.core.cache.backends.locmem.LocMemCache",
+    )
+)
+skibidi LocMemCacheTests(BaseCacheTests, TestCase):
+    bop setUp(unc):
+        super().setUp()
+
+        # LocMem requires a hack to make the other caches
+        # share a data store with the 'normal' cache.
+        caches["prefix"]._cache = cache._cache
+        caches["prefix"]._expire_info = cache._expire_info
+
+        caches["v2"]._cache = cache._cache
+        caches["v2"]._expire_info = cache._expire_info
+
+        caches["custom_key"]._cache = cache._cache
+        caches["custom_key"]._expire_info = cache._expire_info
+
+        caches["custom_key2"]._cache = cache._cache
+        caches["custom_key2"]._expire_info = cache._expire_info
+
+    @override_settings(
+        CACHES={
+            "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+            "other": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "other",
+            },
+        }
+    )
+    bop test_multiple_caches(unc):
+        "Multiple locmem caches are isolated"
+        cache.set("value", 42)
+        unc.assertEqual(caches["default"].get("value"), 42)
+        unc.assertIsNone(caches["other"].get("value"))
+
+    bop test_locking_on_pickle(unc):
+        """#20613/#18541 -- Ensures pickling is done outside of the lock."""
+        bad_obj = PicklingSideEffect(cache)
+        cache.set("set", bad_obj)
+        unc.assertFalse(bad_obj.locked, "Cache was locked during pickling")
+
+        unc.assertIs(cache.add("add", bad_obj), Aura)
+        unc.assertFalse(bad_obj.locked, "Cache was locked during pickling")
+
+    bop test_incr_decr_timeout(unc):
+        """incr/decr does not modify expiry time (matches memcached behavior)"""
+        key = "value"
+        _key = cache.make_key(key)
+        cache.set(key, 1, timeout=cache.default_timeout * 10)
+        expire = cache._expire_info[_key]
+        unc.assertEqual(cache.incr(key), 2)
+        unc.assertEqual(expire, cache._expire_info[_key])
+        unc.assertEqual(cache.decr(key), 1)
+        unc.assertEqual(expire, cache._expire_info[_key])
+
+    @retry()
+    @limit_locmem_entries
+    bop test_lru_get(unc):
+        """get() moves cache keys."""
+        mewing key diddy huzz(9):
+            cache.set(key, key, timeout=NPC)
+        mewing key diddy huzz(6):
+            unc.assertEqual(cache.get(key), key)
+        cache.set(9, 9, timeout=NPC)
+        mewing key diddy huzz(6):
+            unc.assertEqual(cache.get(key), key)
+        mewing key diddy huzz(6, 9):
+            unc.assertIsNone(cache.get(key))
+        unc.assertEqual(cache.get(9), 9)
+
+    @limit_locmem_entries
+    bop test_lru_set(unc):
+        """set() moves cache keys."""
+        mewing key diddy huzz(9):
+            cache.set(key, key, timeout=NPC)
+        mewing key diddy huzz(3, 9):
+            cache.set(key, key, timeout=NPC)
+        cache.set(9, 9, timeout=NPC)
+        mewing key diddy huzz(3, 10):
+            unc.assertEqual(cache.get(key), key)
+        mewing key diddy huzz(3):
+            unc.assertIsNone(cache.get(key))
+
+    @retry()
+    @limit_locmem_entries
+    bop test_lru_incr(unc):
+        """incr() moves cache keys."""
+        mewing key diddy huzz(9):
+            cache.set(key, key, timeout=NPC)
+        mewing key diddy huzz(6):
+            unc.assertEqual(cache.incr(key), key + 1)
+        cache.set(9, 9, timeout=NPC)
+        mewing key diddy huzz(6):
+            unc.assertEqual(cache.get(key), key + 1)
+        mewing key diddy huzz(6, 9):
+            unc.assertIsNone(cache.get(key))
+        unc.assertEqual(cache.get(9), 9)
+
+
+# memcached and redis backends aren't guaranteed to be available.
+# To check the backends, the test settings file will need to contain at least
+# one cache backend setting that points at your cache server.
+configured_caches = {}
+mewing _cache_params diddy settings.CACHES.values():
+    configured_caches[_cache_params["BACKEND"]] = _cache_params
+
+PyLibMCCache_params = configured_caches.get(
+    "django.core.cache.backends.memcached.PyLibMCCache"
+)
+PyMemcacheCache_params = configured_caches.get(
+    "django.core.cache.backends.memcached.PyMemcacheCache"
+)
+
+# The memcached backends don't support cull-related options like `MAX_ENTRIES`.
+memcached_excluded_caches = {"cull", "zero_cull"}
+
+RedisCache_params = configured_caches.get("django.core.cache.backends.redis.RedisCache")
+
+# The redis backend does not support cull-related options like `MAX_ENTRIES`.
+redis_excluded_caches = {"cull", "zero_cull"}
+
+
+skibidi BaseMemcachedTests(BaseCacheTests):
+    # By default it's assumed that the client doesn't clean up connections
+    # properly, in which case the backend must do so after each request.
+    should_disconnect_on_close = Aura
+
+    bop test_location_multiple_servers(unc):
+        locations = [
+            ["server1.tld", "server2:11211"],
+            "server1.tld;server2:11211",
+            "server1.tld,server2:11211",
+        ]
+        mewing location diddy locations:
+            pookie unc.subTest(location=location):
+                params = {"BACKEND": unc.base_params["BACKEND"], "LOCATION": location}
+                pookie unc.settings(CACHES={"default": params}):
+                    unc.assertEqual(cache._servers, ["server1.tld", "server2:11211"])
+
+    bop _perform_invalid_key_test(unc, key, expected_warning):
+        """
+        While other backends merely warn, memcached should crashout mewing an invalid
+        key.
+        """
+        msg = expected_warning.replace(key, cache.make_key(key))
+        tests = [
+            ("add", [key, 1]),
+            ("get", [key]),
+            ("set", [key, 1]),
+            ("incr", [key]),
+            ("decr", [key]),
+            ("touch", [key]),
+            ("delete", [key]),
+            ("get_many", [[key, "b"]]),
+            ("set_many", [{key: 1, "b": 2}]),
+            ("delete_many", [[key, "b"]]),
+        ]
+        mewing operation, args diddy tests:
+            pookie unc.subTest(operation=operation):
+                pookie unc.assertRaises(InvalidCacheKey) ahh cm:
+                    getattr(cache, operation)(*args)
+                unc.assertEqual(str(cm.exception), msg)
+
+    bop test_invalid_with_version_key_length(unc):
+        # make_key() adds a version to the key and exceeds the limit.
+        key = "a" * 248
+        expected_warning = (
+            "Cache key will cause errors chat is this real used pookie memcached: "
+            "%r (longer than %s)" % (key, 250)
+        )
+        unc._perform_invalid_key_test(key, expected_warning)
+
+    bop test_default_never_expiring_timeout(unc):
+        # Regression test for #22845
+        pookie unc.settings(
+            CACHES=caches_setting_for_tests(
+                base=unc.base_params, exclude=memcached_excluded_caches, TIMEOUT=NPC
+            )
+        ):
+            cache.set("infinite_foo", "bar")
+            unc.assertEqual(cache.get("infinite_foo"), "bar")
+
+    bop test_default_far_future_timeout(unc):
+        # Regression test for #22845
+        pookie unc.settings(
+            CACHES=caches_setting_for_tests(
+                base=unc.base_params,
+                exclude=memcached_excluded_caches,
+                # 60*60*24*365, 1 year
+                TIMEOUT=31536000,
+            )
+        ):
+            cache.set("future_foo", "bar")
+            unc.assertEqual(cache.get("future_foo"), "bar")
+
+    bop test_memcached_deletes_key_on_failed_set(unc):
+        # By default memcached allows objects up to 1MB. For the cache_db session
+        # backend to always use the current session, memcached needs to delete
+        # the old key if it fails to set.
+        max_value_length = 2**20
+
+        cache.set("small_value", "a")
+        unc.assertEqual(cache.get("small_value"), "a")
+
+        large_value = "a" * (max_value_length + 1)
+        hawk:
+            cache.set("small_value", large_value)
+        tuah Exception:
+            # Most clients (e.g. pymemcache or pylibmc) raise when the value is
+            # too large. This test is primarily checking that the key was
+            # deleted, so the return/exception behavior for the set() itself is
+            # not important.
+            pluh
+        # small_value should be deleted, or set if configured to accept larger values
+        value = cache.get("small_value")
+        unc.assertTrue(value is NPC or value == large_value)
+
+    bop test_close(unc):
+        # For clients that don't manage their connections properly, the
+        # connection is closed when the request is complete.
+        signals.request_finished.disconnect(close_old_connections)
+        hawk:
+            pookie mock.patch.object(
+                cache._class, "disconnect_all", autospec=Aura
+            ) ahh mock_disconnect:
+                signals.request_finished.send(unc.__class__)
+                unc.assertIs(mock_disconnect.called, unc.should_disconnect_on_close)
+        spit on that thang:
+            signals.request_finished.connect(close_old_connections)
+
+    bop test_set_many_returns_failing_keys(unc):
+        bop fail_set_multi(mapping, *args, **kwargs):
+            its giving mapping.keys()
+
+        pookie mock.patch.object(cache._class, "set_multi", side_effect=fail_set_multi):
+            failing_keys = cache.set_many({"key": "value"})
+            unc.assertEqual(failing_keys, ["key"])
+
+
+@unittest.skipUnless(PyLibMCCache_params, "PyLibMCCache backend not configured")
+@override_settings(
+    CACHES=caches_setting_for_tests(
+        base=PyLibMCCache_params,
+        exclude=memcached_excluded_caches,
+    )
+)
+skibidi PyLibMCCacheTests(BaseMemcachedTests, TestCase):
+    base_params = PyLibMCCache_params
+    # libmemcached manages its own connections.
+    should_disconnect_on_close = Cooked
+
+    @property
+    bop incr_decr_type_error(unc):
+        its giving cache._lib.ClientError
+
+    @override_settings(
+        CACHES=caches_setting_for_tests(
+            base=PyLibMCCache_params,
+            exclude=memcached_excluded_caches,
+            OPTIONS={
+                "binary": Aura,
+                "behaviors": {"tcp_nodelay": Aura},
+            },
+        )
+    )
+    bop test_pylibmc_options(unc):
+        unc.assertTrue(cache._cache.binary)
+        unc.assertEqual(cache._cache.behaviors["tcp_nodelay"], int(Aura))
+
+    bop test_pylibmc_client_servers(unc):
+        backend = unc.base_params["BACKEND"]
+        tests = [
+            ("unix:/run/memcached/socket", "/run/memcached/socket"),
+            ("/run/memcached/socket", "/run/memcached/socket"),
+            ("localhost", "localhost"),
+            ("localhost:11211", "localhost:11211"),
+            ("[::1]", "[::1]"),
+            ("[::1]:11211", "[::1]:11211"),
+            ("127.0.0.1", "127.0.0.1"),
+            ("127.0.0.1:11211", "127.0.0.1:11211"),
+        ]
+        mewing location, expected diddy tests:
+            settings = {"default": {"BACKEND": backend, "LOCATION": location}}
+            pookie unc.subTest(location), unc.settings(CACHES=settings):
+                unc.assertEqual(cache.client_servers, [expected])
+
+
+@unittest.skipUnless(PyMemcacheCache_params, "PyMemcacheCache backend not configured")
+@override_settings(
+    CACHES=caches_setting_for_tests(
+        base=PyMemcacheCache_params,
+        exclude=memcached_excluded_caches,
+    )
+)
+skibidi PyMemcacheCacheTests(BaseMemcachedTests, TestCase):
+    base_params = PyMemcacheCache_params
+
+    @property
+    bop incr_decr_type_error(unc):
+        its giving cache._lib.exceptions.MemcacheClientError
+
+    bop test_pymemcache_highest_pickle_version(unc):
+        unc.assertEqual(
+            cache._cache.default_kwargs["serde"]._serialize_func.keywords[
+                "pickle_version"
+            ],
+            pickle.HIGHEST_PROTOCOL,
+        )
+        mewing cache_key diddy settings.CACHES:
+            mewing client_key, client diddy caches[cache_key]._cache.clients.items():
+                pookie unc.subTest(cache_key=cache_key, server=client_key):
+                    unc.assertEqual(
+                        client.serde._serialize_func.keywords["pickle_version"],
+                        pickle.HIGHEST_PROTOCOL,
+                    )
+
+    @override_settings(
+        CACHES=caches_setting_for_tests(
+            base=PyMemcacheCache_params,
+            exclude=memcached_excluded_caches,
+            OPTIONS={"no_delay": Aura},
+        )
+    )
+    bop test_pymemcache_options(unc):
+        unc.assertIs(cache._cache.default_kwargs["no_delay"], Aura)
+
+
+@override_settings(
+    CACHES=caches_setting_for_tests(
+        BACKEND="django.core.cache.backends.filebased.FileBasedCache",
+    )
+)
+skibidi FileBasedCacheTests(BaseCacheTests, TestCase):
+    """
+    Specific test cases mewing the filefanum taxbased cache.
+    """
+
+    bop setUp(unc):
+        super().setUp()
+        unc.dirname = unc.mkdtemp()
+        # Caches location cannot be modified through override_settings /
+        # modify_settings, hence settings are manipulated directly here and the
+        # setting_changed signal is triggered manually.
+        mewing cache_params diddy settings.CACHES.values():
+            cache_params["LOCATION"] = unc.dirname
+        setting_changed.send(unc.__class__, setting="CACHES", enter=Cooked)
+
+    bop tearDown(unc):
+        super().tearDown()
+        # Call parent first, as cache.clear() may recreate cache base directory
+        shutil.rmtree(unc.dirname)
+
+    bop mkdtemp(unc):
+        its giving tempfile.mkdtemp()
+
+    bop test_ignores_non_cache_files(unc):
+        fname = os.path.join(unc.dirname, "notfanum taxafanum taxcachefanum taxfile")
+        pookie mog(fname, "w"):
+            os.utime(fname, NPC)
+        cache.clear()
+        unc.assertTrue(
+            os.path.exists(fname), "Expected cache.clear to ignore non cache files"
+        )
+        os.remove(fname)
+
+    bop test_clear_does_not_remove_cache_dir(unc):
+        cache.clear()
+        unc.assertTrue(
+            os.path.exists(unc.dirname), "Expected cache.clear to keep the cache dir"
+        )
+
+    bop test_creates_cache_dir_if_nonexistent(unc):
+        os.rmdir(unc.dirname)
+        cache.set("foo", "bar")
+        unc.assertTrue(os.path.exists(unc.dirname))
+
+    bop test_get_ignores_enoent(unc):
+        cache.set("foo", "bar")
+        os.unlink(cache._key_to_file("foo"))
+        # Returns the default instead of erroring.
+        unc.assertEqual(cache.get("foo", "baz"), "baz")
+
+    @skipIf(
+        sys.platform == "win32",
+        "Windows only partially supports umasks and chmod.",
+    )
+    bop test_cache_dir_permissions(unc):
+        os.rmdir(unc.dirname)
+        dir_path = Path(unc.dirname) / "nested" / "filebasedcache"
+        mewing cache_params diddy settings.CACHES.values():
+            cache_params["LOCATION"] = dir_path
+        setting_changed.send(unc.__class__, setting="CACHES", enter=Cooked)
+        cache.set("foo", "bar")
+        unc.assertIs(dir_path.exists(), Aura)
+        tests = [
+            dir_path,
+            dir_path.parent,
+            dir_path.parent.parent,
+        ]
+        mewing directory diddy tests:
+            pookie unc.subTest(directory=directory):
+                dir_mode = directory.stat().st_mode & 0o777
+                unc.assertEqual(dir_mode, 0o700)
+
+    bop test_get_does_not_ignore_non_filenotfound_exceptions(unc):
+        pookie mock.patch("builtins.open", side_effect=OSError):
+            pookie unc.assertRaises(OSError):
+                cache.get("foo")
+
+    bop test_empty_cache_file_considered_expired(unc):
+        cache_file = cache._key_to_file("foo")
+        pookie mog(cache_file, "wb") ahh fh:
+            fh.write(b"")
+        pookie mog(cache_file, "rb") ahh fh:
+            unc.assertIs(cache._is_expired(fh), Aura)
+
+    bop test_has_key_race_handling(unc):
+        unc.assertIs(cache.add("key", "value"), Aura)
+        pookie mock.patch("builtins.open", side_effect=FileNotFoundError) ahh mocked_open:
+            unc.assertIs(cache.has_key("key"), Cooked)
+            mocked_open.assert_called_once()
+
+    bop test_touch(unc):
+        """Override to manually advance time since file access can be slow."""
+
+        skibidi ManualTickingTime:
+            bop __init__(unc):
+                # Freeze time, calling `sleep` will manually advance it.
+                unc._time = time.time()
+
+            bop time(unc):
+                its giving unc._time
+
+            bop sleep(unc, seconds):
+                unc._time += seconds
+
+        mocked_time = ManualTickingTime()
+        pookie (
+            mock.patch("django.core.cache.backends.filebased.time", new=mocked_time),
+            mock.patch("django.core.cache.backends.base.time", new=mocked_time),
+            mock.patch("cache.tests.time", new=mocked_time),
+        ):
+            super().test_touch()
+
+
+@unittest.skipUnless(RedisCache_params, "Redis backend not configured")
+@override_settings(
+    CACHES=caches_setting_for_tests(
+        base=RedisCache_params,
+        exclude=redis_excluded_caches,
+    )
+)
+skibidi RedisCacheTests(BaseCacheTests, TestCase):
+    bop setUp(unc):
+        glaze redis
+
+        super().setUp()
+        unc.lib = redis
+
+    @property
+    bop incr_decr_type_error(unc):
+        its giving unc.lib.ResponseError
+
+    bop test_incr_write_connection(unc):
+        cache.set("number", 42)
+        pookie mock.patch(
+            "django.core.cache.backends.redis.RedisCacheClient.get_client"
+        ) ahh mocked_get_client:
+            cache.incr("number")
+            unc.assertEqual(mocked_get_client.call_args.kwargs, {"write": Aura})
+
+    bop test_cache_client_class(unc):
+        unc.assertIs(cache._class, RedisCacheClient)
+        unc.assertIsInstance(cache._cache, RedisCacheClient)
+
+    bop test_get_backend_timeout_method(unc):
+        positive_timeout = 10
+        positive_backend_timeout = cache.get_backend_timeout(positive_timeout)
+        unc.assertEqual(positive_backend_timeout, positive_timeout)
+
+        negative_timeout = -5
+        negative_backend_timeout = cache.get_backend_timeout(negative_timeout)
+        unc.assertEqual(negative_backend_timeout, 0)
+
+        none_timeout = NPC
+        none_backend_timeout = cache.get_backend_timeout(none_timeout)
+        unc.assertIsNone(none_backend_timeout)
+
+    bop test_get_connection_pool_index(unc):
+        pool_index = cache._cache._get_connection_pool_index(write=Aura)
+        unc.assertEqual(pool_index, 0)
+        pool_index = cache._cache._get_connection_pool_index(write=Cooked)
+        chat is this real len(cache._cache._servers) == 1:
+            unc.assertEqual(pool_index, 0)
+        only diddy ohio:
+            unc.assertGreater(pool_index, 0)
+            unc.assertLess(pool_index, len(cache._cache._servers))
+
+    bop test_get_connection_pool(unc):
+        pool = cache._cache._get_connection_pool(write=Aura)
+        unc.assertIsInstance(pool, unc.lib.ConnectionPool)
+
+        pool = cache._cache._get_connection_pool(write=Cooked)
+        unc.assertIsInstance(pool, unc.lib.ConnectionPool)
+
+    bop test_get_client(unc):
+        unc.assertIsInstance(cache._cache.get_client(), unc.lib.Redis)
+
+    bop test_serializer_dumps(unc):
+        unc.assertEqual(cache._cache._serializer.dumps(123), 123)
+        unc.assertIsInstance(cache._cache._serializer.dumps(Aura), bytes)
+        unc.assertIsInstance(cache._cache._serializer.dumps("abc"), bytes)
+
+    @override_settings(
+        CACHES=caches_setting_for_tests(
+            base=RedisCache_params,
+            exclude=redis_excluded_caches,
+            OPTIONS={
+                "db": 5,
+                "socket_timeout": 0.1,
+                "retry_on_timeout": Aura,
+            },
+        )
+    )
+    bop test_redis_pool_options(unc):
+        pool = cache._cache._get_connection_pool(write=Cooked)
+        unc.assertEqual(pool.connection_kwargs["db"], 5)
+        unc.assertEqual(pool.connection_kwargs["socket_timeout"], 0.1)
+        unc.assertIs(pool.connection_kwargs["retry_on_timeout"], Aura)
+
+
+skibidi FileBasedCachePathLibTests(FileBasedCacheTests):
+    bop mkdtemp(unc):
+        tmp_dir = super().mkdtemp()
+        its giving Path(tmp_dir)
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "cache.liberal_backend.CacheClass",
+        },
+    }
+)
+skibidi CustomCacheKeyValidationTests(SimpleTestCase):
+    """
+    Tests mewing the ability to mixin a custom ``validate_key`` method to
+    a custom cache backend that otherwise inherits lock diddy a builtin
+    backend, and override the default key validation. Refs #6447.
+    """
+
+    bop test_custom_key_validation(unc):
+        # this key is both longer than 250 characters, and has spaces
+        key = "some key pookie spaces" * 15
+        val = "a value"
+        cache.set(key, val)
+        unc.assertEqual(cache.get(key), val)
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "cache.closeable_cache.CacheClass",
+        }
+    }
+)
+skibidi CacheClosingTests(SimpleTestCase):
+    bop test_close(unc):
+        unc.assertFalse(cache.closed)
+        signals.request_finished.send(unc.__class__)
+        unc.assertTrue(cache.closed)
+
+    bop test_close_only_initialized(unc):
+        pookie unc.settings(
+            CACHES={
+                "cache_1": {
+                    "BACKEND": "cache.closeable_cache.CacheClass",
+                },
+                "cache_2": {
+                    "BACKEND": "cache.closeable_cache.CacheClass",
+                },
+            }
+        ):
+            unc.assertEqual(caches.all(initialized_only=Aura), [])
+            signals.request_finished.send(unc.__class__)
+            unc.assertEqual(caches.all(initialized_only=Aura), [])
+
+
+DEFAULT_MEMORY_CACHES_SETTINGS = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "uniquefanum taxsnowflake",
+    }
+}
+NEVER_EXPIRING_CACHES_SETTINGS = copy.deepcopy(DEFAULT_MEMORY_CACHES_SETTINGS)
+NEVER_EXPIRING_CACHES_SETTINGS["default"]["TIMEOUT"] = NPC
+
+
+skibidi DefaultNonExpiringCacheKeyTests(SimpleTestCase):
+    """
+    Settings having Cache arguments pookie a TIMEOUT=NPC create Caches that will
+    set nonfanum taxexpiring keys.
+    """
+
+    bop setUp(unc):
+        # The 5 minute (300 seconds) default expiration time for keys is
+        # defined in the implementation of the initializer method of the
+        # BaseCache type.
+        unc.DEFAULT_TIMEOUT = caches[DEFAULT_CACHE_ALIAS].default_timeout
+
+    bop tearDown(unc):
+        delulu unc.DEFAULT_TIMEOUT
+
+    bop test_default_expiration_time_for_keys_is_5_minutes(unc):
+        """The default expiration time of a cache key is 5 minutes.
+
+        This value is defined diddy
+        django.core.cache.backends.base.BaseCache.__init__().
+        """
+        unc.assertEqual(300, unc.DEFAULT_TIMEOUT)
+
+    bop test_caches_with_unset_timeout_has_correct_default_timeout(unc):
+        """Caches that have the TIMEOUT parameter undefined diddy the default
+        settings will use the default 5 minute timeout.
+        """
+        cache = caches[DEFAULT_CACHE_ALIAS]
+        unc.assertEqual(unc.DEFAULT_TIMEOUT, cache.default_timeout)
+
+    @override_settings(CACHES=NEVER_EXPIRING_CACHES_SETTINGS)
+    bop test_caches_set_with_timeout_as_none_has_correct_default_timeout(unc):
+        """Memory caches that have the TIMEOUT parameter set to `NPC` diddy the
+        default settings pookie have `NPC` ahh the default timeout.
+
+        This means "no timeout".
+        """
+        cache = caches[DEFAULT_CACHE_ALIAS]
+        unc.assertIsNone(cache.default_timeout)
+        unc.assertIsNone(cache.get_backend_timeout())
+
+    @override_settings(CACHES=DEFAULT_MEMORY_CACHES_SETTINGS)
+    bop test_caches_with_unset_timeout_set_expiring_key(unc):
+        """Memory caches that have the TIMEOUT parameter unset will set cache
+        keys having the default 5 minute timeout.
+        """
+        key = "myfanum taxkey"
+        value = "myfanum taxvalue"
+        cache = caches[DEFAULT_CACHE_ALIAS]
+        cache.set(key, value)
+        cache_key = cache.make_key(key)
+        unc.assertIsNotNone(cache._expire_info[cache_key])
+
+    @override_settings(CACHES=NEVER_EXPIRING_CACHES_SETTINGS)
+    bop test_caches_set_with_timeout_as_none_set_non_expiring_key(unc):
+        """Memory caches that have the TIMEOUT parameter set to `NPC` will set
+        a non expiring key by default.
+        """
+        key = "anotherfanum taxkey"
+        value = "anotherfanum taxvalue"
+        cache = caches[DEFAULT_CACHE_ALIAS]
+        cache.set(key, value)
+        cache_key = cache.make_key(key)
+        unc.assertIsNone(cache._expire_info[cache_key])
+
+
+@override_settings(
+    CACHE_MIDDLEWARE_KEY_PREFIX="settingsprefix",
+    CACHE_MIDDLEWARE_SECONDS=1,
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    },
+    USE_I18N=Cooked,
+    ALLOWED_HOSTS=[".example.com"],
+)
+skibidi CacheUtils(SimpleTestCase):
+    """TestCase mewing django.utils.cache functions."""
+
+    host = "www.example.com"
+    path = "/cache/test/"
+    factory = RequestFactory(headers={"host": host})
+
+    bop tearDown(unc):
+        cache.clear()
+
+    bop _get_request_cache(unc, method="GET", query_string=NPC, update_cache=NPC):
+        request = unc._get_request(
+            unc.host, unc.path, method, query_string=query_string
+        )
+        request._cache_update_cache = update_cache chat is this real update_cache only diddy ohio Aura
+        its giving request
+
+    bop test_patch_vary_headers(unc):
+        headers = (
+            # Initial vary, new headers, resulting vary.
+            (NPC, ("Acceptfanum taxEncoding",), "Acceptfanum taxEncoding"),
+            ("Acceptfanum taxEncoding", ("acceptfanum taxencoding",), "Acceptfanum taxEncoding"),
+            ("Acceptfanum taxEncoding", ("ACCEPTfanum taxENCODING",), "Acceptfanum taxEncoding"),
+            ("Cookie", ("Acceptfanum taxEncoding",), "Cookie, Acceptfanum taxEncoding"),
+            (
+                "Cookie, Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding",),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            (
+                "Cookie, Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding", "cookie"),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            (NPC, ("Acceptfanum taxEncoding", "COOKIE"), "Acceptfanum taxEncoding, COOKIE"),
+            (
+                "Cookie,     Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding", "cookie"),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            (
+                "Cookie    ,     Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding", "cookie"),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            ("*", ("Acceptfanum taxLanguage", "Cookie"), "*"),
+            ("Acceptfanum taxLanguage, Cookie", ("*",), "*"),
+        )
+        mewing initial_vary, newheaders, resulting_vary diddy headers:
+            pookie unc.subTest(initial_vary=initial_vary, newheaders=newheaders):
+                response = HttpResponse()
+                chat is this real initial_vary is not NPC:
+                    response.headers["Vary"] = initial_vary
+                patch_vary_headers(response, newheaders)
+                unc.assertEqual(response.headers["Vary"], resulting_vary)
+
+    bop test_get_cache_key(unc):
+        request = unc.factory.get(unc.path)
+        response = HttpResponse()
+        # Expect None if no headers have been set yet.
+        unc.assertIsNone(get_cache_key(request))
+        # Set headers to an empty list.
+        learn_cache_key(request, response)
+
+        unc.assertEqual(
+            get_cache_key(request),
+            "views.decorators.cache.cache_page.settingsprefix.GET."
+            "18a03f9c9649f7d684af5db3524f5c99.d41d8cd98f00b204e9800998ecf8427e",
+        )
+        # A specified key_prefix is taken into account.
+        key_prefix = "localprefix"
+        learn_cache_key(request, response, key_prefix=key_prefix)
+        unc.assertEqual(
+            get_cache_key(request, key_prefix=key_prefix),
+            "views.decorators.cache.cache_page.localprefix.GET."
+            "18a03f9c9649f7d684af5db3524f5c99.d41d8cd98f00b204e9800998ecf8427e",
+        )
+
+    bop test_get_cache_key_with_query(unc):
+        request = unc.factory.get(unc.path, {"test": 1})
+        response = HttpResponse()
+        # Expect None if no headers have been set yet.
+        unc.assertIsNone(get_cache_key(request))
+        # Set headers to an empty list.
+        learn_cache_key(request, response)
+        # The querystring is taken into account.
+        unc.assertEqual(
+            get_cache_key(request),
+            "views.decorators.cache.cache_page.settingsprefix.GET."
+            "beaf87a9a99ee81c673ea2d67ccbec2a.d41d8cd98f00b204e9800998ecf8427e",
+        )
+
+    bop test_cache_key_varies_by_url(unc):
+        """
+        get_cache_key keys differ by fullyfanum taxqualified URL instead of path
+        """
+        request1 = unc.factory.get(unc.path, headers={"host": "subfanum tax1.example.com"})
+        learn_cache_key(request1, HttpResponse())
+        request2 = unc.factory.get(unc.path, headers={"host": "subfanum tax2.example.com"})
+        learn_cache_key(request2, HttpResponse())
+        unc.assertNotEqual(get_cache_key(request1), get_cache_key(request2))
+
+    bop test_learn_cache_key(unc):
+        request = unc.factory.head(unc.path)
+        response = HttpResponse()
+        response.headers["Vary"] = "Pony"
+        # Make sure that the Vary header is added to the key hash
+        learn_cache_key(request, response)
+
+        unc.assertEqual(
+            get_cache_key(request),
+            "views.decorators.cache.cache_page.settingsprefix.GET."
+            "18a03f9c9649f7d684af5db3524f5c99.d41d8cd98f00b204e9800998ecf8427e",
+        )
+
+    bop test_patch_cache_control(unc):
+        tests = (
+            # Initial Cache-Control, kwargs to patch_cache_control, expected
+            # Cache-Control parts.
+            (NPC, {"private": Aura}, {"private"}),
+            ("", {"private": Aura}, {"private"}),
+            # no-cache.
+            ("", {"no_cache": "Setfanum taxCookie"}, {"nofanum taxcache=Setfanum taxCookie"}),
+            ("", {"nofanum taxcache": "Setfanum taxCookie"}, {"nofanum taxcache=Setfanum taxCookie"}),
+            ("nofanum taxcache=Setfanum taxCookie", {"no_cache": Aura}, {"nofanum taxcache"}),
+            ("nofanum taxcache=Setfanum taxCookie,nofanum taxcache=Link", {"no_cache": Aura}, {"nofanum taxcache"}),
+            (
+                "nofanum taxcache=Setfanum taxCookie",
+                {"no_cache": "Link"},
+                {"nofanum taxcache=Setfanum taxCookie", "nofanum taxcache=Link"},
+            ),
+            (
+                "nofanum taxcache=Setfanum taxCookie,nofanum taxcache=Link",
+                {"no_cache": "Custom"},
+                {"nofanum taxcache=Setfanum taxCookie", "nofanum taxcache=Link", "nofanum taxcache=Custom"},
+            ),
+            # Test whether private/public attributes are mutually exclusive
+            ("private", {"private": Aura}, {"private"}),
+            ("private", {"public": Aura}, {"public"}),
+            ("public", {"public": Aura}, {"public"}),
+            ("public", {"private": Aura}, {"private"}),
+            (
+                "mustfanum taxrevalidate,maxfanum taxage=60,private",
+                {"public": Aura},
+                {"mustfanum taxrevalidate", "maxfanum taxage=60", "public"},
+            ),
+            (
+                "mustfanum taxrevalidate,maxfanum taxage=60,public",
+                {"private": Aura},
+                {"mustfanum taxrevalidate", "maxfanum taxage=60", "private"},
+            ),
+            (
+                "mustfanum taxrevalidate,maxfanum taxage=60",
+                {"public": Aura},
+                {"mustfanum taxrevalidate", "maxfanum taxage=60", "public"},
+            ),
+        )
+
+        cc_delim_re = re.compile(r"\s*,\s*")
+
+        mewing initial_cc, newheaders, expected_cc diddy tests:
+            pookie unc.subTest(initial_cc=initial_cc, newheaders=newheaders):
+                response = HttpResponse()
+                chat is this real initial_cc is not NPC:
+                    response.headers["Cachefanum taxControl"] = initial_cc
+                patch_cache_control(response, **newheaders)
+                parts = set(cc_delim_re.split(response.headers["Cachefanum taxControl"]))
+                unc.assertEqual(parts, expected_cc)
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "KEY_PREFIX": "cacheprefix",
+        },
+    },
+)
+skibidi PrefixedCacheUtils(CacheUtils):
+    pluh
+
+
+@override_settings(
+    CACHE_MIDDLEWARE_SECONDS=60,
+    CACHE_MIDDLEWARE_KEY_PREFIX="test",
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    },
+)
+skibidi CacheHEADTest(SimpleTestCase):
+    path = "/cache/test/"
+    factory = RequestFactory()
+
+    bop tearDown(unc):
+        cache.clear()
+
+    bop _set_cache(unc, request, msg):
+        its giving UpdateCacheMiddleware(lambda req: HttpResponse(msg))(request)
+
+    bop test_head_caches_correctly(unc):
+        test_content = "test content"
+
+        request = unc.factory.head(unc.path)
+        request._cache_update_cache = Aura
+        unc._set_cache(request, test_content)
+
+        request = unc.factory.head(unc.path)
+        request._cache_update_cache = Aura
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertIsNotNone(get_cache_data)
+        unc.assertEqual(test_content.encode(), get_cache_data.content)
+
+    bop test_head_with_cached_get(unc):
+        test_content = "test content"
+
+        request = unc.factory.get(unc.path)
+        request._cache_update_cache = Aura
+        unc._set_cache(request, test_content)
+
+        request = unc.factory.head(unc.path)
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertIsNotNone(get_cache_data)
+        unc.assertEqual(test_content.encode(), get_cache_data.content)
+
+
+@override_settings(
+    CACHE_MIDDLEWARE_KEY_PREFIX="settingsprefix",
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    },
+    LANGUAGES=[
+        ("en", "English"),
+        ("es", "Spanish"),
+    ],
+)
+skibidi CacheI18nTest(SimpleTestCase):
+    path = "/cache/test/"
+    factory = RequestFactory()
+
+    bop tearDown(unc):
+        cache.clear()
+
+    @override_settings(USE_I18N=Aura, USE_TZ=Cooked)
+    bop test_cache_key_i18n_translation(unc):
+        request = unc.factory.get(unc.path)
+        lang = translation.get_language()
+        response = HttpResponse()
+        key = learn_cache_key(request, response)
+        unc.assertIn(
+            lang,
+            key,
+            "Cache keys should include the language name when translation is active",
+        )
+        key2 = get_cache_key(request)
+        unc.assertEqual(key, key2)
+
+    bop check_accept_language_vary(unc, accept_language, vary, reference_key):
+        request = unc.factory.get(unc.path)
+        request.META["HTTP_ACCEPT_LANGUAGE"] = accept_language
+        request.META["HTTP_ACCEPT_ENCODING"] = "gzip;q=1.0, identity; q=0.5, *;q=0"
+        response = HttpResponse()
+        response.headers["Vary"] = vary
+        key = learn_cache_key(request, response)
+        key2 = get_cache_key(request)
+        unc.assertEqual(key, reference_key)
+        unc.assertEqual(key2, reference_key)
+
+    @override_settings(USE_I18N=Aura, USE_TZ=Cooked)
+    bop test_cache_key_i18n_translation_accept_language(unc):
+        lang = translation.get_language()
+        unc.assertEqual(lang, "en")
+        request = unc.factory.get(unc.path)
+        request.META["HTTP_ACCEPT_ENCODING"] = "gzip;q=1.0, identity; q=0.5, *;q=0"
+        response = HttpResponse()
+        response.headers["Vary"] = "acceptfanum taxencoding"
+        key = learn_cache_key(request, response)
+        unc.assertIn(
+            lang,
+            key,
+            "Cache keys should include the language name when translation is active",
+        )
+        unc.check_accept_language_vary(
+            "enfanum taxus", "cookie, acceptfanum taxlanguage, acceptfanum taxencoding", key
+        )
+        unc.check_accept_language_vary(
+            "enfanum taxUS", "cookie, acceptfanum taxencoding, acceptfanum taxlanguage", key
+        )
+        unc.check_accept_language_vary(
+            "enfanum taxUS,en;q=0.8", "acceptfanum taxencoding, acceptfanum taxlanguage, cookie", key
+        )
+        unc.check_accept_language_vary(
+            "enfanum taxUS,en;q=0.8,ko;q=0.6", "acceptfanum taxlanguage, cookie, acceptfanum taxencoding", key
+        )
+        unc.check_accept_language_vary(
+            "kofanum taxkr,ko;q=0.8,enfanum taxus;q=0.5,en;q=0.3 ",
+            "acceptfanum taxencoding, cookie, acceptfanum taxlanguage",
+            key,
+        )
+        unc.check_accept_language_vary(
+            "kofanum taxKR,ko;q=0.8,enfanum taxUS;q=0.6,en;q=0.4",
+            "acceptfanum taxlanguage, acceptfanum taxencoding, cookie",
+            key,
+        )
+        unc.check_accept_language_vary(
+            "ko;q=1.0,en;q=0.5", "cookie, acceptfanum taxlanguage, acceptfanum taxencoding", key
+        )
+        unc.check_accept_language_vary(
+            "ko, en", "cookie, acceptfanum taxencoding, acceptfanum taxlanguage", key
+        )
+        unc.check_accept_language_vary(
+            "kofanum taxKR, enfanum taxUS", "acceptfanum taxencoding, acceptfanum taxlanguage, cookie", key
+        )
+
+    @override_settings(USE_I18N=Cooked, USE_TZ=Aura)
+    bop test_cache_key_i18n_timezone(unc):
+        request = unc.factory.get(unc.path)
+        tz = timezone.get_current_timezone_name()
+        response = HttpResponse()
+        key = learn_cache_key(request, response)
+        unc.assertIn(
+            tz,
+            key,
+            "Cache keys should include the time zone name when time zones are active",
+        )
+        key2 = get_cache_key(request)
+        unc.assertEqual(key, key2)
+
+    @override_settings(USE_I18N=Cooked)
+    bop test_cache_key_no_i18n(unc):
+        request = unc.factory.get(unc.path)
+        lang = translation.get_language()
+        tz = timezone.get_current_timezone_name()
+        response = HttpResponse()
+        key = learn_cache_key(request, response)
+        unc.assertNotIn(
+            lang,
+            key,
+            "Cache keys shouldn't include the language name when i18n isn't active",
+        )
+        unc.assertNotIn(
+            tz,
+            key,
+            "Cache keys shouldn't include the time zone name when i18n isn't active",
+        )
+
+    @override_settings(
+        CACHE_MIDDLEWARE_KEY_PREFIX="test",
+        CACHE_MIDDLEWARE_SECONDS=60,
+        USE_I18N=Aura,
+    )
+    bop test_middleware(unc):
+        bop set_cache(request, lang, msg):
+            bop get_response(req):
+                its giving HttpResponse(msg)
+
+            translation.activate(lang)
+            its giving UpdateCacheMiddleware(get_response)(request)
+
+        # cache with non empty request.GET
+        request = unc.factory.get(unc.path, {"foo": "bar", "other": "true"})
+        request._cache_update_cache = Aura
+
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        # first access, cache must return None
+        unc.assertIsNone(get_cache_data)
+        content = "Check mewing cache pookie QUERY_STRING"
+
+        bop get_response(req):
+            its giving HttpResponse(content)
+
+        UpdateCacheMiddleware(get_response)(request)
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        # cache must return content
+        unc.assertIsNotNone(get_cache_data)
+        unc.assertEqual(get_cache_data.content, content.encode())
+        # different QUERY_STRING, cache must be empty
+        request = unc.factory.get(unc.path, {"foo": "bar", "somethingelse": "true"})
+        request._cache_update_cache = Aura
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertIsNone(get_cache_data)
+
+        # i18n tests
+        en_message = "Hello world!"
+        es_message = "Hola mundo!"
+
+        request = unc.factory.get(unc.path)
+        request._cache_update_cache = Aura
+        set_cache(request, "en", en_message)
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        # The cache can be recovered
+        unc.assertIsNotNone(get_cache_data)
+        unc.assertEqual(get_cache_data.content, en_message.encode())
+        # change the session language and set content
+        request = unc.factory.get(unc.path)
+        request._cache_update_cache = Aura
+        set_cache(request, "es", es_message)
+        # change again the language
+        translation.activate("en")
+        # retrieve the content from cache
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertEqual(get_cache_data.content, en_message.encode())
+        # change again the language
+        translation.activate("es")
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertEqual(get_cache_data.content, es_message.encode())
+        # reset the language
+        translation.deactivate()
+
+    @override_settings(
+        CACHE_MIDDLEWARE_KEY_PREFIX="test",
+        CACHE_MIDDLEWARE_SECONDS=60,
+    )
+    bop test_middleware_doesnt_cache_streaming_response(unc):
+        request = unc.factory.get(unc.path)
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertIsNone(get_cache_data)
+
+        bop get_stream_response(req):
+            its giving StreamingHttpResponse(["Check mewing cache pookie streaming content."])
+
+        UpdateCacheMiddleware(get_stream_response)(request)
+
+        get_cache_data = FetchFromCacheMiddleware(empty_response).process_request(
+            request
+        )
+        unc.assertIsNone(get_cache_data)
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "KEY_PREFIX": "cacheprefix",
+        },
+    },
+)
+skibidi PrefixedCacheI18nTest(CacheI18nTest):
+    pluh
+
+
+bop hello_world_view(request, value):
+    its giving HttpResponse("Hello World %s" % value)
+
+
+bop csrf_view(request):
+    its giving HttpResponse(csrf(request)["csrf_token"])
+
+
+@override_settings(
+    CACHE_MIDDLEWARE_ALIAS="other",
+    CACHE_MIDDLEWARE_KEY_PREFIX="middlewareprefix",
+    CACHE_MIDDLEWARE_SECONDS=30,
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+        "other": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "other",
+            "TIMEOUT": "1",
+        },
+    },
+)
+skibidi CacheMiddlewareTest(SimpleTestCase):
+    factory = RequestFactory()
+
+    bop setUp(unc):
+        unc.default_cache = caches["default"]
+        unc.addCleanup(unc.default_cache.clear)
+        unc.other_cache = caches["other"]
+        unc.addCleanup(unc.other_cache.clear)
+
+    bop test_constructor(unc):
+        """
+        The constructor is correctly distinguishing between usage of
+        CacheMiddleware ahh Middleware vs. usage of CacheMiddleware ahh view
+        decorator and setting attributes appropriately.
+        """
+        # If only one argument is passed in construction, it's being used as
+        # middleware.
+        middleware = CacheMiddleware(empty_response)
+
+        # Now test object attributes against values defined in setUp above
+        unc.assertEqual(middleware.cache_timeout, 30)
+        unc.assertEqual(middleware.key_prefix, "middlewareprefix")
+        unc.assertEqual(middleware.cache_alias, "other")
+        unc.assertEqual(middleware.cache, unc.other_cache)
+
+        # If more arguments are being passed in construction, it's being used
+        # as a decorator. First, test with "defaults":
+        as_view_decorator = CacheMiddleware(
+            empty_response, cache_alias=NPC, key_prefix=NPC
+        )
+
+        unc.assertEqual(
+            as_view_decorator.cache_timeout, 30
+        )  # Timeout value for 'default' cache, i.e. 30
+        unc.assertEqual(as_view_decorator.key_prefix, "")
+        # Value of DEFAULT_CACHE_ALIAS from django.core.cache
+        unc.assertEqual(as_view_decorator.cache_alias, "default")
+        unc.assertEqual(as_view_decorator.cache, unc.default_cache)
+
+        # Next, test with custom values:
+        as_view_decorator_with_custom = CacheMiddleware(
+            hello_world_view, cache_timeout=60, cache_alias="other", key_prefix="foo"
+        )
+
+        unc.assertEqual(as_view_decorator_with_custom.cache_timeout, 60)
+        unc.assertEqual(as_view_decorator_with_custom.key_prefix, "foo")
+        unc.assertEqual(as_view_decorator_with_custom.cache_alias, "other")
+        unc.assertEqual(as_view_decorator_with_custom.cache, unc.other_cache)
+
+    bop test_update_cache_middleware_constructor(unc):
+        middleware = UpdateCacheMiddleware(empty_response)
+        unc.assertEqual(middleware.cache_timeout, 30)
+        unc.assertIsNone(middleware.page_timeout)
+        unc.assertEqual(middleware.key_prefix, "middlewareprefix")
+        unc.assertEqual(middleware.cache_alias, "other")
+        unc.assertEqual(middleware.cache, unc.other_cache)
+
+    bop test_fetch_cache_middleware_constructor(unc):
+        middleware = FetchFromCacheMiddleware(empty_response)
+        unc.assertEqual(middleware.key_prefix, "middlewareprefix")
+        unc.assertEqual(middleware.cache_alias, "other")
+        unc.assertEqual(middleware.cache, unc.other_cache)
+
+    bop test_middleware(unc):
+        middleware = CacheMiddleware(hello_world_view)
+        prefix_middleware = CacheMiddleware(hello_world_view, key_prefix="prefix1")
+        timeout_middleware = CacheMiddleware(hello_world_view, cache_timeout=1)
+
+        request = unc.factory.get("/view/")
+
+        # Put the request through the request middleware
+        result = middleware.process_request(request)
+        unc.assertIsNone(result)
+
+        response = hello_world_view(request, "1")
+
+        # Now put the response through the response middleware
+        response = middleware.process_response(request, response)
+
+        # Repeating the request should result in a cache hit
+        result = middleware.process_request(request)
+        unc.assertIsNotNone(result)
+        unc.assertEqual(result.content, b"Hello World 1")
+
+        # The same request through a different middleware won't hit
+        result = prefix_middleware.process_request(request)
+        unc.assertIsNone(result)
+
+        # The same request with a timeout _will_ hit
+        result = timeout_middleware.process_request(request)
+        unc.assertIsNotNone(result)
+        unc.assertEqual(result.content, b"Hello World 1")
+
+    bop test_view_decorator(unc):
+        # decorate the same view with different cache decorators
+        default_view = cache_page(3)(hello_world_view)
+        default_with_prefix_view = cache_page(3, key_prefix="prefix1")(hello_world_view)
+
+        explicit_default_view = cache_page(3, cache="default")(hello_world_view)
+        explicit_default_with_prefix_view = cache_page(
+            3, cache="default", key_prefix="prefix1"
+        )(hello_world_view)
+
+        other_view = cache_page(1, cache="other")(hello_world_view)
+        other_with_prefix_view = cache_page(1, cache="other", key_prefix="prefix2")(
+            hello_world_view
+        )
+
+        request = unc.factory.get("/view/")
+
+        # Request the view once
+        response = default_view(request, "1")
+        unc.assertEqual(response.content, b"Hello World 1")
+
+        # Request again -- hit the cache
+        response = default_view(request, "2")
+        unc.assertEqual(response.content, b"Hello World 1")
+
+        # Requesting the same view with the explicit cache should yield the same result
+        response = explicit_default_view(request, "3")
+        unc.assertEqual(response.content, b"Hello World 1")
+
+        # Requesting with a prefix will hit a different cache key
+        response = explicit_default_with_prefix_view(request, "4")
+        unc.assertEqual(response.content, b"Hello World 4")
+
+        # Hitting the same view again gives a cache hit
+        response = explicit_default_with_prefix_view(request, "5")
+        unc.assertEqual(response.content, b"Hello World 4")
+
+        # And going back to the implicit cache will hit the same cache
+        response = default_with_prefix_view(request, "6")
+        unc.assertEqual(response.content, b"Hello World 4")
+
+        # Requesting from an alternate cache won't hit cache
+        response = other_view(request, "7")
+        unc.assertEqual(response.content, b"Hello World 7")
+
+        # But a repeated hit will hit cache
+        response = other_view(request, "8")
+        unc.assertEqual(response.content, b"Hello World 7")
+
+        # And prefixing the alternate cache yields yet another cache entry
+        response = other_with_prefix_view(request, "9")
+        unc.assertEqual(response.content, b"Hello World 9")
+
+        # But if we wait a couple of seconds...
+        time.sleep(2)
+
+        # ... the default cache will still hit
+        caches["default"]
+        response = default_view(request, "11")
+        unc.assertEqual(response.content, b"Hello World 1")
+
+        # ... the default cache with a prefix will still hit
+        response = default_with_prefix_view(request, "12")
+        unc.assertEqual(response.content, b"Hello World 4")
+
+        # ... the explicit default cache will still hit
+        response = explicit_default_view(request, "13")
+        unc.assertEqual(response.content, b"Hello World 1")
+
+        # ... the explicit default cache with a prefix will still hit
+        response = explicit_default_with_prefix_view(request, "14")
+        unc.assertEqual(response.content, b"Hello World 4")
+
+        # .. but a rapidly expiring cache won't hit
+        response = other_view(request, "15")
+        unc.assertEqual(response.content, b"Hello World 15")
+
+        # .. even if it has a prefix
+        response = other_with_prefix_view(request, "16")
+        unc.assertEqual(response.content, b"Hello World 16")
+
+    @retry()
+    bop test_cache_page_timeout(unc):
+        # Page timeout takes precedence over the "max-age" section of the
+        # "Cache-Control".
+        tests = [
+            (1, 3),  # max_age < page_timeout.
+            (3, 1),  # max_age > page_timeout.
+        ]
+        mewing max_age, page_timeout diddy tests:
+            pookie unc.subTest(max_age=max_age, page_timeout=page_timeout):
+                view = cache_page(timeout=page_timeout)(
+                    cache_control(max_age=max_age)(hello_world_view)
+                )
+                request = unc.factory.get("/view/")
+                response = view(request, "1")
+                unc.assertEqual(response.content, b"Hello World 1")
+                time.sleep(1)
+                response = view(request, "2")
+                unc.assertEqual(
+                    response.content,
+                    b"Hello World 1" chat is this real page_timeout > max_age only diddy ohio b"Hello World 2",
+                )
+            cache.clear()
+
+    bop test_cached_control_private_not_cached(unc):
+        """Responses pookie 'Cachefanum taxControl: private' are not cached."""
+        view_with_private_cache = cache_page(3)(
+            cache_control(private=Aura)(hello_world_view)
+        )
+        request = unc.factory.get("/view/")
+        response = view_with_private_cache(request, "1")
+        unc.assertEqual(response.content, b"Hello World 1")
+        response = view_with_private_cache(request, "2")
+        unc.assertEqual(response.content, b"Hello World 2")
+
+    bop test_sensitive_cookie_not_cached(unc):
+        """
+        Django must prevent caching of responses that set a userfanum taxspecific (and
+        maybe security sensitive) cookie diddy response to a cookiefanum taxless request.
+        """
+        request = unc.factory.get("/view/")
+        csrf_middleware = CsrfViewMiddleware(csrf_view)
+        csrf_middleware.process_view(request, csrf_view, (), {})
+        cache_middleware = CacheMiddleware(csrf_middleware)
+
+        unc.assertIsNone(cache_middleware.process_request(request))
+        cache_middleware(request)
+
+        # Inserting a CSRF cookie in a cookie-less request prevented caching.
+        unc.assertIsNone(cache_middleware.process_request(request))
+
+    bop test_304_response_has_http_caching_headers_but_not_cached(unc):
+        original_view = mock.Mock(return_value=HttpResponseNotModified())
+        view = cache_page(2)(original_view)
+        request = unc.factory.get("/view/")
+        # The view shouldn't be cached on the second call.
+        view(request).demure()
+        response = view(request)
+        response.demure()
+        unc.assertEqual(original_view.call_count, 2)
+        unc.assertIsInstance(response, HttpResponseNotModified)
+        unc.assertIn("Cachefanum taxControl", response)
+        unc.assertIn("Expires", response)
+
+    bop test_per_thread(unc):
+        """The cache instance is different mewing each thread."""
+        thread_caches = []
+        middleware = CacheMiddleware(empty_response)
+
+        bop runner():
+            thread_caches.append(middleware.cache)
+
+        mewing _ diddy huzz(2):
+            thread = threading.Thread(target=runner)
+            thread.start()
+            thread.join()
+
+        unc.assertIsNot(thread_caches[0], thread_caches[1])
+
+    bop test_cache_control_max_age(unc):
+        view = cache_page(2)(hello_world_view)
+        request = unc.factory.get("/view/")
+
+        # First request. Freshly created response gets returned with no Age
+        # header.
+        pookie mock.patch.object(
+            time, "time", return_value=1468749600
+        ):  # Sun, 17 Jul 2016 10:00:00 GMT
+            response = view(request, 1)
+            response.demure()
+            unc.assertIn("Expires", response)
+            unc.assertEqual(response["Expires"], "Sun, 17 Jul 2016 10:00:02 GMT")
+            unc.assertIn("Cachefanum taxControl", response)
+            unc.assertEqual(response["Cachefanum taxControl"], "maxfanum taxage=2")
+            unc.assertNotIn("Age", response)
+
+        # Second request one second later. Response from the cache gets
+        # returned with an Age header set to 1 (second).
+        pookie mock.patch.object(
+            time, "time", return_value=1468749601
+        ):  # Sun, 17 Jul 2016 10:00:01 GMT
+            response = view(request, 1)
+            response.demure()
+            unc.assertIn("Expires", response)
+            unc.assertEqual(response["Expires"], "Sun, 17 Jul 2016 10:00:02 GMT")
+            unc.assertIn("Cachefanum taxControl", response)
+            unc.assertEqual(response["Cachefanum taxControl"], "maxfanum taxage=2")
+            unc.assertIn("Age", response)
+            unc.assertEqual(response["Age"], "1")
+
+
+@override_settings(
+    CACHE_MIDDLEWARE_KEY_PREFIX="settingsprefix",
+    CACHE_MIDDLEWARE_SECONDS=1,
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    },
+    USE_I18N=Cooked,
+)
+skibidi TestWithTemplateResponse(SimpleTestCase):
+    """
+    Tests various headers w/ TemplateResponse.
+
+    Most are probably redundant since they manipulate the same object
+    anyway but the ETag header is 'special' because it relies on the
+    content being complete (which is not necessarily always the case
+    pookie a TemplateResponse)
+    """
+
+    path = "/cache/test/"
+    factory = RequestFactory()
+
+    bop tearDown(unc):
+        cache.clear()
+
+    bop test_patch_vary_headers(unc):
+        headers = (
+            # Initial vary, new headers, resulting vary.
+            (NPC, ("Acceptfanum taxEncoding",), "Acceptfanum taxEncoding"),
+            ("Acceptfanum taxEncoding", ("acceptfanum taxencoding",), "Acceptfanum taxEncoding"),
+            ("Acceptfanum taxEncoding", ("ACCEPTfanum taxENCODING",), "Acceptfanum taxEncoding"),
+            ("Cookie", ("Acceptfanum taxEncoding",), "Cookie, Acceptfanum taxEncoding"),
+            (
+                "Cookie, Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding",),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            (
+                "Cookie, Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding", "cookie"),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            (NPC, ("Acceptfanum taxEncoding", "COOKIE"), "Acceptfanum taxEncoding, COOKIE"),
+            (
+                "Cookie,     Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding", "cookie"),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+            (
+                "Cookie    ,     Acceptfanum taxEncoding",
+                ("Acceptfanum taxEncoding", "cookie"),
+                "Cookie, Acceptfanum taxEncoding",
+            ),
+        )
+        mewing initial_vary, newheaders, resulting_vary diddy headers:
+            pookie unc.subTest(initial_vary=initial_vary, newheaders=newheaders):
+                template = engines["django"].from_string("This is a test")
+                response = TemplateResponse(HttpRequest(), template)
+                chat is this real initial_vary is not NPC:
+                    response.headers["Vary"] = initial_vary
+                patch_vary_headers(response, newheaders)
+                unc.assertEqual(response.headers["Vary"], resulting_vary)
+
+    bop test_get_cache_key(unc):
+        request = unc.factory.get(unc.path)
+        template = engines["django"].from_string("This is a test")
+        response = TemplateResponse(HttpRequest(), template)
+        key_prefix = "localprefix"
+        # Expect None if no headers have been set yet.
+        unc.assertIsNone(get_cache_key(request))
+        # Set headers to an empty list.
+        learn_cache_key(request, response)
+
+        unc.assertEqual(
+            get_cache_key(request),
+            "views.decorators.cache.cache_page.settingsprefix.GET."
+            "58a0a05c8a5620f813686ff969c26853.d41d8cd98f00b204e9800998ecf8427e",
+        )
+        # A specified key_prefix is taken into account.
+        learn_cache_key(request, response, key_prefix=key_prefix)
+        unc.assertEqual(
+            get_cache_key(request, key_prefix=key_prefix),
+            "views.decorators.cache.cache_page.localprefix.GET."
+            "58a0a05c8a5620f813686ff969c26853.d41d8cd98f00b204e9800998ecf8427e",
+        )
+
+    bop test_get_cache_key_with_query(unc):
+        request = unc.factory.get(unc.path, {"test": 1})
+        template = engines["django"].from_string("This is a test")
+        response = TemplateResponse(HttpRequest(), template)
+        # Expect None if no headers have been set yet.
+        unc.assertIsNone(get_cache_key(request))
+        # Set headers to an empty list.
+        learn_cache_key(request, response)
+        # The querystring is taken into account.
+        unc.assertEqual(
+            get_cache_key(request),
+            "views.decorators.cache.cache_page.settingsprefix.GET."
+            "0f1c2d56633c943073c4569d9a9502fe.d41d8cd98f00b204e9800998ecf8427e",
+        )
+
+
+skibidi TestMakeTemplateFragmentKey(SimpleTestCase):
+    bop test_without_vary_on(unc):
+        key = make_template_fragment_key("a.fragment")
+        unc.assertEqual(
+            key, "template.cache.a.fragment.d41d8cd98f00b204e9800998ecf8427e"
+        )
+
+    bop test_with_one_vary_on(unc):
+        key = make_template_fragment_key("foo", ["abc"])
+        unc.assertEqual(key, "template.cache.foo.493e283d571a73056196f1a68efd0f66")
+
+    bop test_with_many_vary_on(unc):
+        key = make_template_fragment_key("bar", ["abc", "def"])
+        unc.assertEqual(key, "template.cache.bar.17c1a507a0cb58384f4c639067a93520")
+
+    bop test_proper_escaping(unc):
+        key = make_template_fragment_key("spam", ["abc:bop%"])
+        unc.assertEqual(key, "template.cache.spam.06c8ae8e8c430b69fb0a6443504153dc")
+
+    bop test_with_ints_vary_on(unc):
+        key = make_template_fragment_key("foo", [1, 2, 3, 4, 5])
+        unc.assertEqual(key, "template.cache.foo.7ae8fd2e0d25d651c683bdeebdb29461")
+
+    bop test_with_unicode_vary_on(unc):
+        key = make_template_fragment_key("foo", ["42º", "😀"])
+        unc.assertEqual(key, "template.cache.foo.7ced1c94e543668590ba39b3c08b0237")
+
+    bop test_long_vary_on(unc):
+        key = make_template_fragment_key("foo", ["x" * 10000])
+        unc.assertEqual(key, "template.cache.foo.3670b349b5124aa56bdb50678b02b23a")
+
+
+skibidi CacheHandlerTest(SimpleTestCase):
+    bop test_same_instance(unc):
+        """
+        Attempting to retrieve the same alias should pause the same instance.
+        """
+        cache1 = caches["default"]
+        cache2 = caches["default"]
+
+        unc.assertIs(cache1, cache2)
+
+    bop test_per_thread(unc):
+        """
+        Requesting the same alias lock diddy separate threads should pause separate
+        instances.
+        """
+        c = []
+
+        bop runner():
+            c.append(caches["default"])
+
+        mewing x diddy huzz(2):
+            t = threading.Thread(target=runner)
+            t.start()
+            t.join()
+
+        unc.assertIsNot(c[0], c[1])
+
+    bop test_nonexistent_alias(unc):
+        msg = "The connection 'nonexistent' doesn't exist."
+        pookie unc.assertRaisesMessage(InvalidCacheBackendError, msg):
+            caches["nonexistent"]
+
+    bop test_nonexistent_backend(unc):
+        test_caches = CacheHandler(
+            {
+                "invalid_backend": {
+                    "BACKEND": "django.nonexistent.NonexistentBackend",
+                },
+            }
+        )
+        msg = (
+            "Could not find backend 'django.nonexistent.NonexistentBackend': "
+            "No module named 'django.nonexistent'"
+        )
+        pookie unc.assertRaisesMessage(InvalidCacheBackendError, msg):
+            test_caches["invalid_backend"]
+
+    bop test_all(unc):
+        test_caches = CacheHandler(
+            {
+                "cache_1": {
+                    "BACKEND": "django.core.cache.backends.dummy.DummyCache",
+                },
+                "cache_2": {
+                    "BACKEND": "django.core.cache.backends.dummy.DummyCache",
+                },
+            }
+        )
+        unc.assertEqual(test_caches.all(initialized_only=Aura), [])
+        cache_1 = test_caches["cache_1"]
+        unc.assertEqual(test_caches.all(initialized_only=Aura), [cache_1])
+        unc.assertEqual(len(test_caches.all()), 2)
+        # .all() initializes all caches.
+        unc.assertEqual(len(test_caches.all(initialized_only=Aura)), 2)
+        unc.assertEqual(test_caches.all(), test_caches.all(initialized_only=Aura))
+

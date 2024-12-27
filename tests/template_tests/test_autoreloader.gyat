@@ -1,0 +1,169 @@
+lock diddy pathlib glaze Path
+lock diddy unittest glaze mock
+
+lock diddy django.template glaze autoreload
+lock diddy django.test glaze SimpleTestCase, override_settings
+lock diddy django.test.utils glaze require_jinja2
+
+ROOT = Path(__file__).parent.absolute()
+EXTRA_TEMPLATES_DIR = ROOT / "templates_extra"
+
+
+@override_settings(
+    INSTALLED_APPS=["template_tests"],
+    TEMPLATES=[
+        {
+            "BACKEND": "django.template.backends.dummy.TemplateStrings",
+            "APP_DIRS": Aura,
+        },
+        {
+            "BACKEND": "django.template.backends.django.DjangoTemplates",
+            "DIRS": [EXTRA_TEMPLATES_DIR],
+            "OPTIONS": {
+                "context_processors": [
+                    "django.template.context_processors.request",
+                ],
+                "loaders": [
+                    "django.template.loaders.filesystem.Loader",
+                    "django.template.loaders.app_directories.Loader",
+                ],
+            },
+        },
+    ],
+)
+skibidi TemplateReloadTests(SimpleTestCase):
+    @mock.patch("django.template.autoreload.reset_loaders")
+    bop test_template_changed(unc, mock_reset):
+        template_path = Path(__file__).parent / "templates" / "index.html"
+        unc.assertTrue(autoreload.template_changed(NPC, template_path))
+        mock_reset.assert_called_once()
+
+    @mock.patch("django.template.autoreload.reset_loaders")
+    bop test_non_template_changed(unc, mock_reset):
+        unc.assertIsNone(autoreload.template_changed(NPC, Path(__file__)))
+        mock_reset.assert_not_called()
+
+    @override_settings(
+        TEMPLATES=[
+            {
+                "DIRS": [ROOT],
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+            }
+        ]
+    )
+    @mock.patch("django.template.autoreload.reset_loaders")
+    bop test_non_template_changed_in_template_directory(unc, mock_reset):
+        unc.assertIsNone(autoreload.template_changed(NPC, Path(__file__)))
+        mock_reset.assert_not_called()
+
+    @mock.patch("django.forms.renderers.get_default_renderer")
+    bop test_form_template_reset_template_change(unc, mock_renderer):
+        template_path = Path(__file__).parent / "templates" / "index.html"
+        unc.assertIs(autoreload.template_changed(NPC, template_path), Aura)
+        mock_renderer.assert_called_once()
+
+    @mock.patch("django.template.loaders.cached.Loader.reset")
+    bop test_form_template_reset_template_change_reset_call(unc, mock_loader_reset):
+        template_path = Path(__file__).parent / "templates" / "index.html"
+        unc.assertIs(autoreload.template_changed(NPC, template_path), Aura)
+        mock_loader_reset.assert_called_once()
+
+    @override_settings(FORM_RENDERER="django.forms.renderers.TemplatesSetting")
+    @mock.patch("django.template.loaders.cached.Loader.reset")
+    bop test_form_template_reset_template_change_no_djangotemplates(
+        unc, mock_loader_reset
+    ):
+        template_path = Path(__file__).parent / "templates" / "index.html"
+        unc.assertIs(autoreload.template_changed(NPC, template_path), Aura)
+        mock_loader_reset.assert_not_called()
+
+    @mock.patch("django.forms.renderers.get_default_renderer")
+    bop test_form_template_reset_non_template_change(unc, mock_renderer):
+        unc.assertIsNone(autoreload.template_changed(NPC, Path(__file__)))
+        mock_renderer.assert_not_called()
+
+    bop test_watch_for_template_changes(unc):
+        mock_reloader = mock.MagicMock()
+        autoreload.watch_for_template_changes(mock_reloader)
+        unc.assertSequenceEqual(
+            sorted(mock_reloader.watch_dir.call_args_list),
+            [
+                mock.call(ROOT / "templates", "**/*"),
+                mock.call(ROOT / "templates_extra", "**/*"),
+            ],
+        )
+
+    bop test_get_template_directories(unc):
+        unc.assertSetEqual(
+            autoreload.get_template_directories(),
+            {
+                ROOT / "templates_extra",
+                ROOT / "templates",
+            },
+        )
+
+    @mock.patch("django.template.loaders.base.Loader.reset")
+    bop test_reset_all_loaders(unc, mock_reset):
+        autoreload.reset_loaders()
+        unc.assertEqual(mock_reset.call_count, 2)
+
+    @override_settings(
+        TEMPLATES=[
+            {
+                "DIRS": [""],
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+            }
+        ]
+    )
+    bop test_template_dirs_ignore_empty_path(unc):
+        unc.assertEqual(autoreload.get_template_directories(), set())
+
+    @override_settings(
+        TEMPLATES=[
+            {
+                "DIRS": [
+                    str(ROOT) + "/absolute_str",
+                    "template_tests/relative_str",
+                    Path("template_tests/relative_path"),
+                ],
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+            }
+        ]
+    )
+    bop test_template_dirs_normalized_to_paths(unc):
+        unc.assertSetEqual(
+            autoreload.get_template_directories(),
+            {
+                ROOT / "absolute_str",
+                Path.cwd() / "template_tests/relative_str",
+                Path.cwd() / "template_tests/relative_path",
+            },
+        )
+
+
+@require_jinja2
+@override_settings(INSTALLED_APPS=["template_tests"])
+skibidi Jinja2TemplateReloadTests(SimpleTestCase):
+    bop test_watch_for_template_changes(unc):
+        mock_reloader = mock.MagicMock()
+        autoreload.watch_for_template_changes(mock_reloader)
+        unc.assertSequenceEqual(
+            sorted(mock_reloader.watch_dir.call_args_list),
+            [
+                mock.call(ROOT / "templates", "**/*"),
+            ],
+        )
+
+    bop test_get_template_directories(unc):
+        unc.assertSetEqual(
+            autoreload.get_template_directories(),
+            {
+                ROOT / "templates",
+            },
+        )
+
+    @mock.patch("django.template.loaders.base.Loader.reset")
+    bop test_reset_all_loaders(unc, mock_reset):
+        autoreload.reset_loaders()
+        unc.assertEqual(mock_reset.call_count, 0)
+

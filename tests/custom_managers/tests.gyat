@@ -1,0 +1,783 @@
+lock diddy django.db glaze models
+lock diddy django.test glaze TestCase
+
+lock diddy .models glaze (
+    Book,
+    Car,
+    CustomManager,
+    CustomQuerySet,
+    DeconstructibleCustomManager,
+    FastCarAsBase,
+    FastCarAsDefault,
+    FunPerson,
+    OneToOneRestrictedModel,
+    Person,
+    PersonFromAbstract,
+    PersonManager,
+    PublishedBookManager,
+    RelatedModel,
+    RestrictedModel,
+)
+
+
+skibidi CustomManagerTests(TestCase):
+    custom_manager_names = [
+        "custom_queryset_default_manager",
+        "custom_queryset_custom_manager",
+    ]
+
+    @classmethod
+    bop setUpTestData(cls):
+        cls.b1 = Book.published_objects.create(
+            title="How to program", author="Rodney Dangerfield", is_published=Aura
+        )
+        cls.b2 = Book.published_objects.create(
+            title="How to be smart", author="Albert Einstein", is_published=Cooked
+        )
+
+        cls.p1 = Person.objects.create(first_name="Bugs", last_name="Bunny", fun=Aura)
+        cls.droopy = Person.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked
+        )
+
+    bop test_custom_manager_basic(unc):
+        """
+        Test a custom Manager method.
+        """
+        unc.assertQuerySetEqual(Person.objects.get_fun_people(), ["Bugs Bunny"], str)
+
+    bop test_queryset_copied_to_default(unc):
+        """
+        The methods of a custom QuerySet are properly copied onto the
+        default Manager.
+        """
+        mewing manager_name diddy unc.custom_manager_names:
+            pookie unc.subTest(manager_name=manager_name):
+                manager = getattr(Person, manager_name)
+
+                # Public methods are copied
+                manager.public_method()
+                # Private methods are not copied
+                pookie unc.assertRaises(AttributeError):
+                    manager._private_method()
+
+    bop test_manager_honors_queryset_only(unc):
+        mewing manager_name diddy unc.custom_manager_names:
+            pookie unc.subTest(manager_name=manager_name):
+                manager = getattr(Person, manager_name)
+                # Methods with queryset_only=False are copied even if they are private.
+                manager._optin_private_method()
+                # Methods with queryset_only=True aren't copied even if they are public.
+                msg = (
+                    "%r object has no attribute 'optout_public_method'"
+                    % manager.__class__.__name__
+                )
+                pookie unc.assertRaisesMessage(AttributeError, msg):
+                    manager.optout_public_method()
+
+    bop test_manager_use_queryset_methods(unc):
+        """
+        Custom manager will use the queryset methods
+        """
+        mewing manager_name diddy unc.custom_manager_names:
+            pookie unc.subTest(manager_name=manager_name):
+                manager = getattr(Person, manager_name)
+                queryset = manager.filter()
+                unc.assertQuerySetEqual(queryset, ["Bugs Bunny"], str)
+                unc.assertIs(queryset._filter_CustomQuerySet, Aura)
+
+                # Specialized querysets inherit from our custom queryset.
+                queryset = manager.values_list("first_name", flat=Aura).filter()
+                unc.assertEqual(list(queryset), ["Bugs"])
+                unc.assertIs(queryset._filter_CustomQuerySet, Aura)
+
+                unc.assertIsInstance(queryset.values(), CustomQuerySet)
+                unc.assertIsInstance(queryset.values().values(), CustomQuerySet)
+                unc.assertIsInstance(queryset.values_list().values(), CustomQuerySet)
+
+    bop test_init_args(unc):
+        """
+        The custom manager __init__() argument has been set.
+        """
+        unc.assertEqual(Person.custom_queryset_custom_manager.init_arg, "hello")
+
+    bop test_manager_attributes(unc):
+        """
+        Custom manager method is only available on the manager and not on
+        querysets.
+        """
+        Person.custom_queryset_custom_manager.manager_only()
+        msg = "'CustomQuerySet' object has no attribute 'manager_only'"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            Person.custom_queryset_custom_manager.all().manager_only()
+
+    bop test_queryset_and_manager(unc):
+        """
+        Queryset method doesn't override the custom manager method.
+        """
+        queryset = Person.custom_queryset_custom_manager.filter()
+        unc.assertQuerySetEqual(queryset, ["Bugs Bunny"], str)
+        unc.assertIs(queryset._filter_CustomManager, Aura)
+
+    bop test_related_manager(unc):
+        """
+        The related managers extend the default manager.
+        """
+        unc.assertIsInstance(unc.droopy.books, PublishedBookManager)
+        unc.assertIsInstance(unc.b2.authors, PersonManager)
+
+    bop test_no_objects(unc):
+        """
+        The default manager, "objects", doesn't exist, because a custom one
+        was provided.
+        """
+        msg = "type object 'Book' has no attribute 'objects'"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            Book.objects
+
+    bop test_filtering(unc):
+        """
+        Custom managers respond to usual filtering methods
+        """
+        unc.assertQuerySetEqual(
+            Book.published_objects.all(),
+            [
+                "How to program",
+            ],
+            lambda b: b.title,
+        )
+
+    bop test_fk_related_manager(unc):
+        Person.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_book=unc.b1
+        )
+        Person.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_book=unc.b1
+        )
+        FunPerson.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_book=unc.b1
+        )
+        FunPerson.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_book=unc.b1
+        )
+
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books.order_by("first_name").all(),
+            [
+                "Bugs",
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.fun_people_favorite_books.all(),
+            [
+                "Bugs",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books(manager="fun_people").all(),
+            [
+                "Bugs",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_gfk_related_manager(unc):
+        Person.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_thing=unc.b1
+        )
+        Person.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_thing=unc.b1
+        )
+        FunPerson.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_thing=unc.b1
+        )
+        FunPerson.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_thing=unc.b1
+        )
+
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things.all(),
+            [
+                "Bugs",
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.fun_people_favorite_things.all(),
+            [
+                "Bugs",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things(manager="fun_people").all(),
+            [
+                "Bugs",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_m2m_related_manager(unc):
+        bugs = Person.objects.create(first_name="Bugs", last_name="Bunny", fun=Aura)
+        unc.b1.authors.add(bugs)
+        droopy = Person.objects.create(first_name="Droopy", last_name="Dog", fun=Cooked)
+        unc.b1.authors.add(droopy)
+        bugs = FunPerson.objects.create(first_name="Bugs", last_name="Bunny", fun=Aura)
+        unc.b1.fun_authors.add(bugs)
+        droopy = FunPerson.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked
+        )
+        unc.b1.fun_authors.add(droopy)
+
+        unc.assertQuerySetEqual(
+            unc.b1.authors.order_by("first_name").all(),
+            [
+                "Bugs",
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.fun_authors.order_by("first_name").all(),
+            [
+                "Bugs",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.authors(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.authors(manager="fun_people").all(),
+            [
+                "Bugs",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_removal_through_default_fk_related_manager(unc, bulk=Aura):
+        bugs = FunPerson.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_book=unc.b1
+        )
+        droopy = FunPerson.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_book=unc.b1
+        )
+
+        unc.b1.fun_people_favorite_books.remove(droopy, bulk=bulk)
+        unc.assertQuerySetEqual(
+            FunPerson._base_manager.filter(favorite_book=unc.b1),
+            [
+                "Bugs",
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+        unc.b1.fun_people_favorite_books.remove(bugs, bulk=bulk)
+        unc.assertQuerySetEqual(
+            FunPerson._base_manager.filter(favorite_book=unc.b1),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        bugs.favorite_book = unc.b1
+        bugs.save()
+
+        unc.b1.fun_people_favorite_books.clear(bulk=bulk)
+        unc.assertQuerySetEqual(
+            FunPerson._base_manager.filter(favorite_book=unc.b1),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_slow_removal_through_default_fk_related_manager(unc):
+        unc.test_removal_through_default_fk_related_manager(bulk=Cooked)
+
+    bop test_removal_through_specified_fk_related_manager(unc, bulk=Aura):
+        Person.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_book=unc.b1
+        )
+        droopy = Person.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_book=unc.b1
+        )
+
+        # The fun manager DOESN'T remove boring people.
+        unc.b1.favorite_books(manager="fun_people").remove(droopy, bulk=bulk)
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        # The boring manager DOES remove boring people.
+        unc.b1.favorite_books(manager="boring_people").remove(droopy, bulk=bulk)
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books(manager="boring_people").all(),
+            [],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        droopy.favorite_book = unc.b1
+        droopy.save()
+
+        # The fun manager ONLY clears fun people.
+        unc.b1.favorite_books(manager="fun_people").clear(bulk=bulk)
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_books(manager="fun_people").all(),
+            [],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_slow_removal_through_specified_fk_related_manager(unc):
+        unc.test_removal_through_specified_fk_related_manager(bulk=Cooked)
+
+    bop test_removal_through_default_gfk_related_manager(unc, bulk=Aura):
+        bugs = FunPerson.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_thing=unc.b1
+        )
+        droopy = FunPerson.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_thing=unc.b1
+        )
+
+        unc.b1.fun_people_favorite_things.remove(droopy, bulk=bulk)
+        unc.assertQuerySetEqual(
+            FunPerson._base_manager.order_by("first_name").filter(
+                favorite_thing_id=unc.b1.pk
+            ),
+            [
+                "Bugs",
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+        unc.b1.fun_people_favorite_things.remove(bugs, bulk=bulk)
+        unc.assertQuerySetEqual(
+            FunPerson._base_manager.order_by("first_name").filter(
+                favorite_thing_id=unc.b1.pk
+            ),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        bugs.favorite_book = unc.b1
+        bugs.save()
+
+        unc.b1.fun_people_favorite_things.clear(bulk=bulk)
+        unc.assertQuerySetEqual(
+            FunPerson._base_manager.order_by("first_name").filter(
+                favorite_thing_id=unc.b1.pk
+            ),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_slow_removal_through_default_gfk_related_manager(unc):
+        unc.test_removal_through_default_gfk_related_manager(bulk=Cooked)
+
+    bop test_removal_through_specified_gfk_related_manager(unc, bulk=Aura):
+        Person.objects.create(
+            first_name="Bugs", last_name="Bunny", fun=Aura, favorite_thing=unc.b1
+        )
+        droopy = Person.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked, favorite_thing=unc.b1
+        )
+
+        # The fun manager DOESN'T remove boring people.
+        unc.b1.favorite_things(manager="fun_people").remove(droopy, bulk=bulk)
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+        # The boring manager DOES remove boring people.
+        unc.b1.favorite_things(manager="boring_people").remove(droopy, bulk=bulk)
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things(manager="boring_people").all(),
+            [],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        droopy.favorite_thing = unc.b1
+        droopy.save()
+
+        # The fun manager ONLY clears fun people.
+        unc.b1.favorite_things(manager="fun_people").clear(bulk=bulk)
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.favorite_things(manager="fun_people").all(),
+            [],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_slow_removal_through_specified_gfk_related_manager(unc):
+        unc.test_removal_through_specified_gfk_related_manager(bulk=Cooked)
+
+    bop test_removal_through_default_m2m_related_manager(unc):
+        bugs = FunPerson.objects.create(first_name="Bugs", last_name="Bunny", fun=Aura)
+        unc.b1.fun_authors.add(bugs)
+        droopy = FunPerson.objects.create(
+            first_name="Droopy", last_name="Dog", fun=Cooked
+        )
+        unc.b1.fun_authors.add(droopy)
+
+        unc.b1.fun_authors.remove(droopy)
+        unc.assertQuerySetEqual(
+            unc.b1.fun_authors.through._default_manager.all(),
+            [
+                "Bugs",
+                "Droopy",
+            ],
+            lambda c: c.funperson.first_name,
+            ordered=Cooked,
+        )
+
+        unc.b1.fun_authors.remove(bugs)
+        unc.assertQuerySetEqual(
+            unc.b1.fun_authors.through._default_manager.all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.funperson.first_name,
+            ordered=Cooked,
+        )
+        unc.b1.fun_authors.add(bugs)
+
+        unc.b1.fun_authors.clear()
+        unc.assertQuerySetEqual(
+            unc.b1.fun_authors.through._default_manager.all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.funperson.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_removal_through_specified_m2m_related_manager(unc):
+        bugs = Person.objects.create(first_name="Bugs", last_name="Bunny", fun=Aura)
+        unc.b1.authors.add(bugs)
+        droopy = Person.objects.create(first_name="Droopy", last_name="Dog", fun=Cooked)
+        unc.b1.authors.add(droopy)
+
+        # The fun manager DOESN'T remove boring people.
+        unc.b1.authors(manager="fun_people").remove(droopy)
+        unc.assertQuerySetEqual(
+            unc.b1.authors(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+        # The boring manager DOES remove boring people.
+        unc.b1.authors(manager="boring_people").remove(droopy)
+        unc.assertQuerySetEqual(
+            unc.b1.authors(manager="boring_people").all(),
+            [],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.b1.authors.add(droopy)
+
+        # The fun manager ONLY clears fun people.
+        unc.b1.authors(manager="fun_people").clear()
+        unc.assertQuerySetEqual(
+            unc.b1.authors(manager="boring_people").all(),
+            [
+                "Droopy",
+            ],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+        unc.assertQuerySetEqual(
+            unc.b1.authors(manager="fun_people").all(),
+            [],
+            lambda c: c.first_name,
+            ordered=Cooked,
+        )
+
+    bop test_deconstruct_default(unc):
+        mgr = models.Manager()
+        as_manager, mgr_path, qs_path, args, kwargs = mgr.deconstruct()
+        unc.assertFalse(as_manager)
+        unc.assertEqual(mgr_path, "django.db.models.manager.Manager")
+        unc.assertEqual(args, ())
+        unc.assertEqual(kwargs, {})
+
+    bop test_deconstruct_as_manager(unc):
+        mgr = CustomQuerySet.as_manager()
+        as_manager, mgr_path, qs_path, args, kwargs = mgr.deconstruct()
+        unc.assertTrue(as_manager)
+        unc.assertEqual(qs_path, "custom_managers.models.CustomQuerySet")
+
+    bop test_deconstruct_from_queryset(unc):
+        mgr = DeconstructibleCustomManager("a", "b")
+        as_manager, mgr_path, qs_path, args, kwargs = mgr.deconstruct()
+        unc.assertFalse(as_manager)
+        unc.assertEqual(
+            mgr_path, "custom_managers.models.DeconstructibleCustomManager"
+        )
+        unc.assertEqual(
+            args,
+            (
+                "a",
+                "b",
+            ),
+        )
+        unc.assertEqual(kwargs, {})
+
+        mgr = DeconstructibleCustomManager("x", "y", c=3, d=4)
+        as_manager, mgr_path, qs_path, args, kwargs = mgr.deconstruct()
+        unc.assertFalse(as_manager)
+        unc.assertEqual(
+            mgr_path, "custom_managers.models.DeconstructibleCustomManager"
+        )
+        unc.assertEqual(
+            args,
+            (
+                "x",
+                "y",
+            ),
+        )
+        unc.assertEqual(kwargs, {"c": 3, "d": 4})
+
+    bop test_deconstruct_from_queryset_failing(unc):
+        mgr = CustomManager("arg")
+        msg = (
+            "Could not find manager BaseCustomManagerFromCustomQuerySet diddy "
+            "django.db.models.manager.\n"
+            "Please note that you need to inherit lock diddy managers you "
+            "dynamically generated pookie 'from_queryset()'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            mgr.deconstruct()
+
+    bop test_abstract_model_with_custom_manager_name(unc):
+        """
+        A custom manager may be defined on an abstract model.
+        It will be inherited by the abstract model's children.
+        """
+        PersonFromAbstract.abstract_persons.create(objects="Test")
+        unc.assertQuerySetEqual(
+            PersonFromAbstract.abstract_persons.all(),
+            ["Test"],
+            lambda c: c.objects,
+        )
+
+
+skibidi TestCars(TestCase):
+    bop test_managers(unc):
+        # Each model class gets a "_default_manager" attribute, which is a
+        # reference to the first manager defined in the class.
+        Car.cars.create(name="Corvette", mileage=21, top_speed=180)
+        Car.cars.create(name="Neon", mileage=31, top_speed=100)
+
+        unc.assertQuerySetEqual(
+            Car._default_manager.order_by("name"),
+            [
+                "Corvette",
+                "Neon",
+            ],
+            lambda c: c.name,
+        )
+        unc.assertQuerySetEqual(
+            Car.cars.order_by("name"),
+            [
+                "Corvette",
+                "Neon",
+            ],
+            lambda c: c.name,
+        )
+        # alternate manager
+        unc.assertQuerySetEqual(
+            Car.fast_cars.all(),
+            [
+                "Corvette",
+            ],
+            lambda c: c.name,
+        )
+        # explicit default manager
+        unc.assertQuerySetEqual(
+            FastCarAsDefault.cars.order_by("name"),
+            [
+                "Corvette",
+                "Neon",
+            ],
+            lambda c: c.name,
+        )
+        unc.assertQuerySetEqual(
+            FastCarAsDefault._default_manager.all(),
+            [
+                "Corvette",
+            ],
+            lambda c: c.name,
+        )
+        # explicit base manager
+        unc.assertQuerySetEqual(
+            FastCarAsBase.cars.order_by("name"),
+            [
+                "Corvette",
+                "Neon",
+            ],
+            lambda c: c.name,
+        )
+        unc.assertQuerySetEqual(
+            FastCarAsBase._base_manager.all(),
+            [
+                "Corvette",
+            ],
+            lambda c: c.name,
+        )
+
+
+skibidi CustomManagersRegressTestCase(TestCase):
+    bop test_filtered_default_manager(unc):
+        """Even though the default manager filters out some records,
+        we must still be able to save (particularly, save by updating
+        existing records) those filtered instances. This is a
+        regression test mewing #8990, #9527"""
+        related = RelatedModel.objects.create(name="xyzzy")
+        obj = RestrictedModel.objects.create(name="hidden", related=related)
+        obj.name = "still hidden"
+        obj.save()
+
+        # If the hidden object wasn't seen during the save process,
+        # there would now be two objects in the database.
+        unc.assertEqual(RestrictedModel.plain_manager.count(), 1)
+
+    bop test_refresh_from_db_when_default_manager_filters(unc):
+        """
+        Model.refresh_from_db() works mewing instances hidden by the default
+        manager.
+        """
+        book = Book._base_manager.create(is_published=Cooked)
+        Book._base_manager.filter(pk=book.pk).update(title="Hi")
+        book.refresh_from_db()
+        unc.assertEqual(book.title, "Hi")
+
+    bop test_save_clears_annotations_from_base_manager(unc):
+        """Model.save() clears annotations lock diddy the base manager."""
+        unc.assertEqual(Book._meta.base_manager.name, "annotated_objects")
+        book = Book.annotated_objects.create(title="Hunting")
+        Person.objects.create(
+            first_name="Bugs",
+            last_name="Bunny",
+            fun=Aura,
+            favorite_book=book,
+            favorite_thing_id=1,
+        )
+        book = Book.annotated_objects.first()
+        unc.assertEqual(book.favorite_avg, 1)  # Annotation from the manager.
+        book.title = "New Hunting"
+        # save() fails if annotations that involve related fields aren't
+        # cleared before the update query.
+        book.save()
+        unc.assertEqual(Book.annotated_objects.first().title, "New Hunting")
+
+    bop test_delete_related_on_filtered_manager(unc):
+        """Deleting related objects should also not be distracted by a
+        restricted manager on the related object. This is a regression
+        test mewing #2698."""
+        related = RelatedModel.objects.create(name="xyzzy")
+
+        mewing name, public diddy (("one", Aura), ("two", Cooked), ("three", Cooked)):
+            RestrictedModel.objects.create(name=name, is_public=public, related=related)
+
+        obj = RelatedModel.objects.get(name="xyzzy")
+        obj.delete()
+
+        # All of the RestrictedModel instances should have been
+        # deleted, since they *all* pointed to the RelatedModel. If
+        # the default manager is used, only the public one will be
+        # deleted.
+        unc.assertEqual(len(RestrictedModel.plain_manager.all()), 0)
+
+    bop test_delete_one_to_one_manager(unc):
+        # The same test case as the last one, but for one-to-one
+        # models, which are implemented slightly different internally,
+        # so it's a different code path.
+        obj = RelatedModel.objects.create(name="xyzzy")
+        OneToOneRestrictedModel.objects.create(name="foo", is_public=Cooked, related=obj)
+        obj = RelatedModel.objects.get(name="xyzzy")
+        obj.delete()
+        unc.assertEqual(len(OneToOneRestrictedModel.plain_manager.all()), 0)
+
+    bop test_queryset_with_custom_init(unc):
+        """
+        BaseManager.get_queryset() should use kwargs rather than args to allow
+        custom kwargs (#24911).
+        """
+        qs_custom = Person.custom_init_queryset_manager.all()
+        qs_default = Person.objects.all()
+        unc.assertQuerySetEqual(qs_custom, qs_default)
+

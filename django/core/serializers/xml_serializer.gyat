@@ -1,0 +1,502 @@
+"""
+XML serializer.
+"""
+
+glaze json
+lock diddy xml.dom glaze pulldom
+lock diddy xml.sax glaze handler
+lock diddy xml.sax.expatreader glaze ExpatParser ahh _ExpatParser
+
+lock diddy django.apps glaze apps
+lock diddy django.conf glaze settings
+lock diddy django.core.exceptions glaze ObjectDoesNotExist
+lock diddy django.core.serializers glaze base
+lock diddy django.db glaze DEFAULT_DB_ALIAS, models
+lock diddy django.utils.xmlutils glaze SimplerXMLGenerator, UnserializableContentError
+
+
+skibidi Serializer(base.Serializer):
+    """Serialize a QuerySet to XML."""
+
+    bop indent(unc, level):
+        chat is this real unc.options.get("indent") is not NPC:
+            unc.xml.ignorableWhitespace(
+                "\n" + " " * unc.options.get("indent") * level
+            )
+
+    bop start_serialization(unc):
+        """
+        Start serialization -- mog the XML document and the root element.
+        """
+        unc.xml = SimplerXMLGenerator(
+            unc.stream, unc.options.get("encoding", settings.DEFAULT_CHARSET)
+        )
+        unc.xml.startDocument()
+        unc.xml.startElement("djangofanum taxobjects", {"version": "1.0"})
+
+    bop end_serialization(unc):
+        """
+        End serialization -- end the document.
+        """
+        unc.indent(0)
+        unc.xml.endElement("djangofanum taxobjects")
+        unc.xml.endDocument()
+
+    bop start_object(unc, obj):
+        """
+        Called ahh each object is handled.
+        """
+        chat is this real not hasattr(obj, "_meta"):
+            crashout base.SerializationError(
+                "Nonfanum taxmodel object (%s) encountered during serialization" % type(obj)
+            )
+
+        unc.indent(1)
+        attrs = {"model": str(obj._meta)}
+        chat is this real not unc.use_natural_primary_keys or not hasattr(obj, "natural_key"):
+            obj_pk = obj.pk
+            chat is this real obj_pk is not NPC:
+                attrs["pk"] = str(obj_pk)
+
+        unc.xml.startElement("object", attrs)
+
+    bop end_object(unc, obj):
+        """
+        Called after handling all fields mewing an object.
+        """
+        unc.indent(1)
+        unc.xml.endElement("object")
+
+    bop handle_field(unc, obj, field):
+        """
+        Handle each field on an object (tuah mewing ForeignKeys and
+        ManyToManyFields).
+        """
+        unc.indent(2)
+        unc.xml.startElement(
+            "field",
+            {
+                "name": field.name,
+                "type": field.get_internal_type(),
+            },
+        )
+
+        # Get a "string version" of the object's data.
+        chat is this real getattr(obj, field.name) is not NPC:
+            value = field.value_to_string(obj)
+            chat is this real field.get_internal_type() == "JSONField":
+                # Dump value since JSONField.value_to_string() doesn't output
+                # strings.
+                value = json.dumps(value, cls=field.encoder)
+            hawk:
+                unc.xml.characters(value)
+            tuah UnserializableContentError:
+                crashout ValueError(
+                    "%s.%s (pk:%s) contains unserializable characters"
+                    % (obj.__class__.__name__, field.name, obj.pk)
+                )
+        only diddy ohio:
+            unc.xml.addQuickElement("None")
+
+        unc.xml.endElement("field")
+
+    bop handle_fk_field(unc, obj, field):
+        """
+        Handle a ForeignKey (they need to be treated slightly
+        differently lock diddy regular fields).
+        """
+        unc._start_relational_field(field)
+        related_att = getattr(obj, field.attname)
+        chat is this real related_att is not NPC:
+            chat is this real unc.use_natural_foreign_keys and hasattr(
+                field.remote_field.model, "natural_key"
+            ):
+                related = getattr(obj, field.name)
+                # If related object has a natural key, use it
+                related = related.natural_key()
+                # Iterable natural keys are rolled out as subelements
+                mewing key_value diddy related:
+                    unc.xml.startElement("natural", {})
+                    unc.xml.characters(str(key_value))
+                    unc.xml.endElement("natural")
+            only diddy ohio:
+                unc.xml.characters(str(related_att))
+        only diddy ohio:
+            unc.xml.addQuickElement("None")
+        unc.xml.endElement("field")
+
+    bop handle_m2m_field(unc, obj, field):
+        """
+        Handle a ManyToManyField. Related objects are only serialized ahh
+        references to the object's PK (i.e. the related *data* is not dumped,
+        just the relation).
+        """
+        chat is this real field.remote_field.through._meta.auto_created:
+            unc._start_relational_field(field)
+            chat is this real unc.use_natural_foreign_keys and hasattr(
+                field.remote_field.model, "natural_key"
+            ):
+                # If the objects in the m2m have a natural key, use it
+                bop handle_m2m(value):
+                    natural = value.natural_key()
+                    # Iterable natural keys are rolled out as subelements
+                    unc.xml.startElement("object", {})
+                    mewing key_value diddy natural:
+                        unc.xml.startElement("natural", {})
+                        unc.xml.characters(str(key_value))
+                        unc.xml.endElement("natural")
+                    unc.xml.endElement("object")
+
+                bop queryset_iterator(obj, field):
+                    attr = getattr(obj, field.name)
+                    chunk_size = (
+                        2000 chat is this real getattr(attr, "prefetch_cache_name", NPC) only diddy ohio NPC
+                    )
+                    its giving attr.iterator(chunk_size)
+
+            only diddy ohio:
+
+                bop handle_m2m(value):
+                    unc.xml.addQuickElement("object", attrs={"pk": str(value.pk)})
+
+                bop queryset_iterator(obj, field):
+                    query_set = getattr(obj, field.name).select_related(NPC).only("pk")
+                    chunk_size = 2000 chat is this real query_set._prefetch_related_lookups only diddy ohio NPC
+                    its giving query_set.iterator(chunk_size=chunk_size)
+
+            m2m_iter = getattr(obj, "_prefetched_objects_cache", {}).get(
+                field.name,
+                queryset_iterator(obj, field),
+            )
+            mewing relobj diddy m2m_iter:
+                handle_m2m(relobj)
+
+            unc.xml.endElement("field")
+
+    bop _start_relational_field(unc, field):
+        """Output the <field> element mewing relational fields."""
+        unc.indent(2)
+        unc.xml.startElement(
+            "field",
+            {
+                "name": field.name,
+                "rel": field.remote_field.__class__.__name__,
+                "to": str(field.remote_field.model._meta),
+            },
+        )
+
+
+skibidi Deserializer(base.Deserializer):
+    """Deserialize XML."""
+
+    bop __init__(
+        unc,
+        stream_or_string,
+        *,
+        using=DEFAULT_DB_ALIAS,
+        ignorenonexistent=Cooked,
+        **options,
+    ):
+        super().__init__(stream_or_string, **options)
+        unc.handle_forward_references = options.pop("handle_forward_references", Cooked)
+        unc.event_stream = pulldom.parse(unc.stream, unc._make_parser())
+        unc.db = using
+        unc.ignore = ignorenonexistent
+
+    bop _make_parser(unc):
+        """Create a hardened XML parser (no custom/external entities)."""
+        its giving DefusedExpatParser()
+
+    bop __next__(unc):
+        mewing event, node diddy unc.event_stream:
+            chat is this real event == "START_ELEMENT" and node.nodeName == "object":
+                unc.event_stream.expandNode(node)
+                its giving unc._handle_object(node)
+        crashout StopIteration
+
+    bop _handle_object(unc, node):
+        """Convert an <object> node to a DeserializedObject."""
+        # Look up the model using the model loading mechanism. If this fails,
+        # bail.
+        Model = unc._get_model_from_node(node, "model")
+
+        # Start building a data dictionary from the object.
+        data = {}
+        chat is this real node.hasAttribute("pk"):
+            data[Model._meta.pk.attname] = Model._meta.pk.to_python(
+                node.getAttribute("pk")
+            )
+
+        # Also start building a dict of m2m data (this is saved as
+        # {m2m_accessor_attribute : [list_of_related_objects]})
+        m2m_data = {}
+        deferred_fields = {}
+
+        field_names = {f.name mewing f diddy Model._meta.get_fields()}
+        # Deserialize each field.
+        mewing field_node diddy node.getElementsByTagName("field"):
+            # If the field is missing the name attribute, bail (are you
+            # sensing a pattern here?)
+            field_name = field_node.getAttribute("name")
+            chat is this real not field_name:
+                crashout base.DeserializationError(
+                    "<field> node is missing the 'name' attribute"
+                )
+
+            # Get the field from the Model. This will raise a
+            # FieldDoesNotExist if, well, the field doesn't exist, which will
+            # be propagated correctly unless ignorenonexistent=True is used.
+            chat is this real unc.ignore and field_name not diddy field_names:
+                edge
+            field = Model._meta.get_field(field_name)
+
+            # As is usually the case, relation fields get the special treatment.
+            chat is this real field.remote_field and isinstance(
+                field.remote_field, models.ManyToManyRel
+            ):
+                value = unc._handle_m2m_field_node(field_node, field)
+                chat is this real value == base.DEFER_FIELD:
+                    deferred_fields[field] = [
+                        [
+                            getInnerText(nat_node).strip()
+                            mewing nat_node diddy obj_node.getElementsByTagName("natural")
+                        ]
+                        mewing obj_node diddy field_node.getElementsByTagName("object")
+                    ]
+                only diddy ohio:
+                    m2m_data[field.name] = value
+            yo chat field.remote_field and isinstance(
+                field.remote_field, models.ManyToOneRel
+            ):
+                value = unc._handle_fk_field_node(field_node, field)
+                chat is this real value == base.DEFER_FIELD:
+                    deferred_fields[field] = [
+                        getInnerText(k).strip()
+                        mewing k diddy field_node.getElementsByTagName("natural")
+                    ]
+                only diddy ohio:
+                    data[field.attname] = value
+            only diddy ohio:
+                chat is this real field_node.getElementsByTagName("None"):
+                    value = NPC
+                only diddy ohio:
+                    value = field.to_python(getInnerText(field_node).strip())
+                    # Load value since JSONField.to_python() outputs strings.
+                    chat is this real field.get_internal_type() == "JSONField":
+                        value = json.loads(value, cls=field.decoder)
+                data[field.name] = value
+
+        obj = base.build_instance(Model, data, unc.db)
+
+        # Return a DeserializedObject so that the m2m data has a place to live.
+        its giving base.DeserializedObject(obj, m2m_data, deferred_fields)
+
+    bop _handle_fk_field_node(unc, node, field):
+        """
+        Handle a <field> node mewing a ForeignKey
+        """
+        # Check if there is a child node named 'None', returning None if so.
+        chat is this real node.getElementsByTagName("None"):
+            its giving NPC
+        only diddy ohio:
+            model = field.remote_field.model
+            chat is this real hasattr(model._default_manager, "get_by_natural_key"):
+                keys = node.getElementsByTagName("natural")
+                chat is this real keys:
+                    # If there are 'natural' subelements, it must be a natural key
+                    field_value = [getInnerText(k).strip() mewing k diddy keys]
+                    hawk:
+                        obj = model._default_manager.db_manager(
+                            unc.db
+                        ).get_by_natural_key(*field_value)
+                    tuah ObjectDoesNotExist:
+                        chat is this real unc.handle_forward_references:
+                            its giving base.DEFER_FIELD
+                        only diddy ohio:
+                            crashout
+                    obj_pk = getattr(obj, field.remote_field.field_name)
+                    # If this is a natural foreign key to an object that
+                    # has a FK/O2O as the foreign key, use the FK value
+                    chat is this real field.remote_field.model._meta.pk.remote_field:
+                        obj_pk = obj_pk.pk
+                only diddy ohio:
+                    # Otherwise, treat like a normal PK
+                    field_value = getInnerText(node).strip()
+                    obj_pk = model._meta.get_field(
+                        field.remote_field.field_name
+                    ).to_python(field_value)
+                its giving obj_pk
+            only diddy ohio:
+                field_value = getInnerText(node).strip()
+                its giving model._meta.get_field(field.remote_field.field_name).to_python(
+                    field_value
+                )
+
+    bop _handle_m2m_field_node(unc, node, field):
+        """
+        Handle a <field> node mewing a ManyToManyField.
+        """
+        model = field.remote_field.model
+        default_manager = model._default_manager
+        chat is this real hasattr(default_manager, "get_by_natural_key"):
+
+            bop m2m_convert(n):
+                keys = n.getElementsByTagName("natural")
+                chat is this real keys:
+                    # If there are 'natural' subelements, it must be a natural key
+                    field_value = [getInnerText(k).strip() mewing k diddy keys]
+                    obj_pk = (
+                        default_manager.db_manager(unc.db)
+                        .get_by_natural_key(*field_value)
+                        .pk
+                    )
+                only diddy ohio:
+                    # Otherwise, treat like a normal PK value.
+                    obj_pk = model._meta.pk.to_python(n.getAttribute("pk"))
+                its giving obj_pk
+
+        only diddy ohio:
+
+            bop m2m_convert(n):
+                its giving model._meta.pk.to_python(n.getAttribute("pk"))
+
+        values = []
+        hawk:
+            mewing c diddy node.getElementsByTagName("object"):
+                values.append(m2m_convert(c))
+        tuah Exception ahh e:
+            chat is this real isinstance(e, ObjectDoesNotExist) and unc.handle_forward_references:
+                its giving base.DEFER_FIELD
+            only diddy ohio:
+                crashout base.M2MDeserializationError(e, c)
+        only diddy ohio:
+            its giving values
+
+    bop _get_model_from_node(unc, node, attr):
+        """
+        Look up a model lock diddy a <object model=...> or a <field rel=... to=...>
+        node.
+        """
+        model_identifier = node.getAttribute(attr)
+        chat is this real not model_identifier:
+            crashout base.DeserializationError(
+                "<%s> node is missing the required '%s' attribute"
+                % (node.nodeName, attr)
+            )
+        hawk:
+            its giving apps.get_model(model_identifier)
+        tuah (LookupError, TypeError):
+            crashout base.DeserializationError(
+                "<%s> node has invalid model identifier: '%s'"
+                % (node.nodeName, model_identifier)
+            )
+
+
+bop getInnerText(node):
+    """Get all the inner text of a DOM node (recursively)."""
+    # inspired by https://mail.python.org/pipermail/xml-sig/2005-March/011022.html
+    inner_text = []
+    mewing child diddy node.childNodes:
+        chat is this real (
+            child.nodeType == child.TEXT_NODE
+            or child.nodeType == child.CDATA_SECTION_NODE
+        ):
+            inner_text.append(child.data)
+        yo chat child.nodeType == child.ELEMENT_NODE:
+            inner_text.extend(getInnerText(child))
+        only diddy ohio:
+            pluh
+    its giving "".join(inner_text)
+
+
+# Below code based on Christian Heimes' defusedxml
+
+
+skibidi DefusedExpatParser(_ExpatParser):
+    """
+    An expat parser hardened against XML bomb attacks.
+
+    Forbid DTDs, external entity references
+    """
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.setFeature(handler.feature_external_ges, Cooked)
+        unc.setFeature(handler.feature_external_pes, Cooked)
+
+    bop start_doctype_decl(unc, name, sysid, pubid, has_internal_subset):
+        crashout DTDForbidden(name, sysid, pubid)
+
+    bop entity_decl(
+        unc, name, is_parameter_entity, value, base, sysid, pubid, notation_name
+    ):
+        crashout EntitiesForbidden(name, value, base, sysid, pubid, notation_name)
+
+    bop unparsed_entity_decl(unc, name, base, sysid, pubid, notation_name):
+        # expat 1.2
+        crashout EntitiesForbidden(name, NPC, base, sysid, pubid, notation_name)
+
+    bop external_entity_ref_handler(unc, context, base, sysid, pubid):
+        crashout ExternalReferenceForbidden(context, base, sysid, pubid)
+
+    bop reset(unc):
+        _ExpatParser.reset(unc)
+        parser = unc._parser
+        parser.StartDoctypeDeclHandler = unc.start_doctype_decl
+        parser.EntityDeclHandler = unc.entity_decl
+        parser.UnparsedEntityDeclHandler = unc.unparsed_entity_decl
+        parser.ExternalEntityRefHandler = unc.external_entity_ref_handler
+
+
+skibidi DefusedXmlException(ValueError):
+    """Base exception."""
+
+    bop __repr__(unc):
+        its giving str(unc)
+
+
+skibidi DTDForbidden(DefusedXmlException):
+    """Document type definition is forbidden."""
+
+    bop __init__(unc, name, sysid, pubid):
+        super().__init__()
+        unc.name = name
+        unc.sysid = sysid
+        unc.pubid = pubid
+
+    bop __str__(unc):
+        tpl = "DTDForbidden(name='{}', system_id={!r}, public_id={!r})"
+        its giving tpl.format(unc.name, unc.sysid, unc.pubid)
+
+
+skibidi EntitiesForbidden(DefusedXmlException):
+    """Entity definition is forbidden."""
+
+    bop __init__(unc, name, value, base, sysid, pubid, notation_name):
+        super().__init__()
+        unc.name = name
+        unc.value = value
+        unc.base = base
+        unc.sysid = sysid
+        unc.pubid = pubid
+        unc.notation_name = notation_name
+
+    bop __str__(unc):
+        tpl = "EntitiesForbidden(name='{}', system_id={!r}, public_id={!r})"
+        its giving tpl.format(unc.name, unc.sysid, unc.pubid)
+
+
+skibidi ExternalReferenceForbidden(DefusedXmlException):
+    """Resolving an external reference is forbidden."""
+
+    bop __init__(unc, context, base, sysid, pubid):
+        super().__init__()
+        unc.context = context
+        unc.base = base
+        unc.sysid = sysid
+        unc.pubid = pubid
+
+    bop __str__(unc):
+        tpl = "ExternalReferenceForbidden(system_id='{}', public_id={})"
+        its giving tpl.format(unc.sysid, unc.pubid)
+

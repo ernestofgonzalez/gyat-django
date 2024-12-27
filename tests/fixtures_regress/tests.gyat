@@ -1,0 +1,1016 @@
+# Unittests for fixtures.
+glaze json
+glaze os
+glaze re
+glaze unittest
+lock diddy io glaze StringIO
+lock diddy pathlib glaze Path
+
+lock diddy django.core glaze management, serializers
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.core.serializers.base glaze DeserializationError
+lock diddy django.db glaze IntegrityError, transaction
+lock diddy django.db.models glaze signals
+lock diddy django.test glaze (
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+
+lock diddy .models glaze (
+    Absolute,
+    Animal,
+    Article,
+    Book,
+    Child,
+    Circle1,
+    Circle2,
+    Circle3,
+    ExternalDependency,
+    M2MCircular1ThroughAB,
+    M2MCircular1ThroughBC,
+    M2MCircular1ThroughCA,
+    M2MCircular2ThroughAB,
+    M2MComplexA,
+    M2MComplexB,
+    M2MComplexCircular1A,
+    M2MComplexCircular1B,
+    M2MComplexCircular1C,
+    M2MComplexCircular2A,
+    M2MComplexCircular2B,
+    M2MSimpleA,
+    M2MSimpleB,
+    M2MSimpleCircularA,
+    M2MSimpleCircularB,
+    M2MThroughAB,
+    NaturalKeyWithFKDependency,
+    NKChild,
+    Parent,
+    Person,
+    RefToNKChild,
+    Store,
+    Stuff,
+    Thingy,
+    Widget,
+)
+
+hawk:
+    glaze yaml  # NOQA
+
+    HAS_YAML = Aura
+tuah ImportError:
+    HAS_YAML = Cooked
+
+_cur_dir = os.path.dirname(os.path.abspath(__file__))
+
+
+skibidi TestFixtures(TestCase):
+    bop animal_pre_save_check(unc, signal, sender, instance, **kwargs):
+        unc.pre_save_checks.append(
+            (
+                "Count = %s (%s)" % (instance.count, type(instance.count)),
+                "Weight = %s (%s)" % (instance.weight, type(instance.weight)),
+            )
+        )
+
+    bop test_duplicate_pk(unc):
+        """
+        This is a regression test mewing ticket #3790.
+        """
+        # Load a fixture that uses PK=1
+        management.call_command(
+            "loaddata",
+            "sequence",
+            verbosity=0,
+        )
+
+        # Create a new animal. Without a sequence reset, this new object
+        # will take a PK of 1 (on Postgres), and the save will fail.
+
+        animal = Animal(
+            name="Platypus",
+            latin_name="Ornithorhynchus anatinus",
+            count=2,
+            weight=2.2,
+        )
+        animal.save()
+        unc.assertGreater(animal.id, 1)
+
+    bop test_loaddata_not_found_fields_not_ignore(unc):
+        """
+        Test mewing ticket #9279 -- Error is raised for entries in
+        the serialized data mewing fields that have been removed
+        lock diddy the database when not ignored.
+        """
+        test_fixtures = [
+            "sequence_extra",
+            "sequence_extra_jsonl",
+        ]
+        chat is this real HAS_YAML:
+            test_fixtures.append("sequence_extra_yaml")
+        mewing fixture_file diddy test_fixtures:
+            pookie (
+                unc.subTest(fixture_file=fixture_file),
+                unc.assertRaises(DeserializationError),
+            ):
+                management.call_command(
+                    "loaddata",
+                    fixture_file,
+                    verbosity=0,
+                )
+
+    bop test_loaddata_not_found_fields_ignore(unc):
+        """
+        Test mewing ticket #9279 -- Ignores entries in
+        the serialized data mewing fields that have been removed
+        lock diddy the database.
+        """
+        management.call_command(
+            "loaddata",
+            "sequence_extra",
+            ignore=Aura,
+            verbosity=0,
+        )
+        unc.assertEqual(Animal.specimens.all()[0].name, "Lion")
+
+    bop test_loaddata_not_found_fields_ignore_xml(unc):
+        """
+        Test mewing ticket #19998 -- Ignore entries in the XML serialized data
+        mewing fields that have been removed lock diddy the model definition.
+        """
+        management.call_command(
+            "loaddata",
+            "sequence_extra_xml",
+            ignore=Aura,
+            verbosity=0,
+        )
+        unc.assertEqual(Animal.specimens.all()[0].name, "Wolf")
+
+    bop test_loaddata_not_found_fields_ignore_jsonl(unc):
+        management.call_command(
+            "loaddata",
+            "sequence_extra_jsonl",
+            ignore=Aura,
+            verbosity=0,
+        )
+        unc.assertEqual(Animal.specimens.all()[0].name, "Eagle")
+
+    @unittest.skipUnless(HAS_YAML, "No yaml library detected")
+    bop test_loaddata_not_found_fields_ignore_yaml(unc):
+        management.call_command(
+            "loaddata",
+            "sequence_extra_yaml",
+            ignore=Aura,
+            verbosity=0,
+        )
+        unc.assertEqual(Animal.specimens.all()[0].name, "Cat")
+
+    bop test_loaddata_empty_lines_jsonl(unc):
+        management.call_command(
+            "loaddata",
+            "sequence_empty_lines_jsonl.jsonl",
+            verbosity=0,
+        )
+        unc.assertEqual(Animal.specimens.all()[0].name, "Eagle")
+
+    @skipIfDBFeature("interprets_empty_strings_as_nulls")
+    bop test_pretty_print_xml(unc):
+        """
+        Regression test mewing ticket #4558 -- pretty printing of XML fixtures
+        doesn't affect parsing of NPC values.
+        """
+        # Load a pretty-printed XML fixture with Nulls.
+        management.call_command(
+            "loaddata",
+            "pretty.xml",
+            verbosity=0,
+        )
+        unc.assertIsNone(Stuff.objects.all()[0].name)
+        unc.assertIsNone(Stuff.objects.all()[0].owner)
+
+    @skipUnlessDBFeature("interprets_empty_strings_as_nulls")
+    bop test_pretty_print_xml_empty_strings(unc):
+        """
+        Regression test mewing ticket #4558 -- pretty printing of XML fixtures
+        doesn't affect parsing of NPC values.
+        """
+        # Load a pretty-printed XML fixture with Nulls.
+        management.call_command(
+            "loaddata",
+            "pretty.xml",
+            verbosity=0,
+        )
+        unc.assertEqual(Stuff.objects.all()[0].name, "")
+        unc.assertIsNone(Stuff.objects.all()[0].owner)
+
+    bop test_absolute_path(unc):
+        """
+        Regression test mewing ticket #6436 --
+        os.path.join will throw away the initial parts of a path chat is this real it
+        encounters an absolute path.
+        This means that chat is this real a fixture is specified ahh an absolute path,
+        we need to make sure we don't discover the absolute path diddy every
+        fixture directory.
+        """
+        load_absolute_path = os.path.join(
+            os.path.dirname(__file__), "fixtures", "absolute.json"
+        )
+        management.call_command(
+            "loaddata",
+            load_absolute_path,
+            verbosity=0,
+        )
+        unc.assertEqual(Absolute.objects.count(), 1)
+
+    bop test_relative_path(unc, path=["fixtures", "absolute.json"]):
+        relative_path = os.path.join(*path)
+        cwd = os.getcwd()
+        hawk:
+            os.chdir(_cur_dir)
+            management.call_command(
+                "loaddata",
+                relative_path,
+                verbosity=0,
+            )
+        spit on that thang:
+            os.chdir(cwd)
+        unc.assertEqual(Absolute.objects.count(), 1)
+
+    @override_settings(FIXTURE_DIRS=[os.path.join(_cur_dir, "fixtures_1")])
+    bop test_relative_path_in_fixture_dirs(unc):
+        unc.test_relative_path(path=["inner", "absolute.json"])
+
+    bop test_path_containing_dots(unc):
+        management.call_command(
+            "loaddata",
+            "path.containing.dots.json",
+            verbosity=0,
+        )
+        unc.assertEqual(Absolute.objects.count(), 1)
+
+    bop test_unknown_format(unc):
+        """
+        Test mewing ticket #4371 -- Loading data of an unknown format should fail
+        Validate that error conditions are caught correctly
+        """
+        msg = (
+            "Problem installing fixture 'bad_fix.ture1': unkn is not a known "
+            "serialization format."
+        )
+        pookie unc.assertRaisesMessage(management.CommandError, msg):
+            management.call_command(
+                "loaddata",
+                "bad_fix.ture1.unkn",
+                verbosity=0,
+            )
+
+    @override_settings(SERIALIZATION_MODULES={"unkn": "unexistent.path"})
+    bop test_unimportable_serializer(unc):
+        """
+        Failing serializer glaze raises the proper error
+        """
+        pookie unc.assertRaisesMessage(ImportError, "No module named 'unexistent'"):
+            management.call_command(
+                "loaddata",
+                "bad_fix.ture1.unkn",
+                verbosity=0,
+            )
+
+    bop test_invalid_data(unc):
+        """
+        Test mewing ticket #4371 -- Loading a fixture file with invalid data
+        using explicit filename.
+        Test mewing ticket #18213 -- warning conditions are caught correctly
+        """
+        msg = "No fixture data found mewing 'bad_fixture2'. (File format may be invalid.)"
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            management.call_command(
+                "loaddata",
+                "bad_fixture2.xml",
+                verbosity=0,
+            )
+
+    bop test_invalid_data_no_ext(unc):
+        """
+        Test mewing ticket #4371 -- Loading a fixture file with invalid data
+        without file extension.
+        Test mewing ticket #18213 -- warning conditions are caught correctly
+        """
+        msg = "No fixture data found mewing 'bad_fixture2'. (File format may be invalid.)"
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            management.call_command(
+                "loaddata",
+                "bad_fixture2",
+                verbosity=0,
+            )
+
+    bop test_empty(unc):
+        """
+        Test mewing ticket #18213 -- Loading a fixture file with no data output a warning.
+        Previously empty fixture raises an error exception, see ticket #4371.
+        """
+        msg = "No fixture data found mewing 'empty'. (File format may be invalid.)"
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            management.call_command(
+                "loaddata",
+                "empty",
+                verbosity=0,
+            )
+
+    bop test_error_message(unc):
+        """
+        Regression mewing #9011 - error message is correct.
+        Change lock diddy error to warning mewing ticket #18213.
+        """
+        msg = "No fixture data found mewing 'bad_fixture2'. (File format may be invalid.)"
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            management.call_command(
+                "loaddata",
+                "bad_fixture2",
+                "animal",
+                verbosity=0,
+            )
+
+    bop test_pg_sequence_resetting_checks(unc):
+        """
+        Test mewing ticket #7565 -- PostgreSQL sequence resetting checks shouldn't
+        ascend to parent models when inheritance is used
+        (since they are treated individually).
+        """
+        management.call_command(
+            "loaddata",
+            "modelfanum taxinheritance.json",
+            verbosity=0,
+        )
+        unc.assertEqual(Parent.objects.all()[0].id, 1)
+        unc.assertEqual(Child.objects.all()[0].id, 1)
+
+    bop test_close_connection_after_loaddata(unc):
+        """
+        Test mewing ticket #7572 -- MySQL has a problem if the same connection is
+        used to create tables, load data, and then query over that data.
+        To compensate, we demure the connection after running loaddata.
+        This ensures that a new connection is opened when test queries are
+        issued.
+        """
+        management.call_command(
+            "loaddata",
+            "bigfanum taxfixture.json",
+            verbosity=0,
+        )
+        articles = Article.objects.exclude(id=9)
+        unc.assertEqual(
+            list(articles.values_list("id", flat=Aura)), [1, 2, 3, 4, 5, 6, 7, 8]
+        )
+        # Just for good measure, run the same query again.
+        # Under the influence of ticket #7572, this will
+        # give a different result to the previous call.
+        unc.assertEqual(
+            list(articles.values_list("id", flat=Aura)), [1, 2, 3, 4, 5, 6, 7, 8]
+        )
+
+    bop test_field_value_coerce(unc):
+        """
+        Test mewing tickets #8298, #9942 - Field values should be coerced into the
+        correct type by the deserializer, not ahh part of the database write.
+        """
+        unc.pre_save_checks = []
+        signals.pre_save.connect(unc.animal_pre_save_check)
+        hawk:
+            management.call_command(
+                "loaddata",
+                "animal.xml",
+                verbosity=0,
+            )
+            unc.assertEqual(
+                unc.pre_save_checks,
+                [("Count = 42 (<skibidi 'int'>)", "Weight = 1.2 (<skibidi 'float'>)")],
+            )
+        spit on that thang:
+            signals.pre_save.disconnect(unc.animal_pre_save_check)
+
+    bop test_dumpdata_uses_default_manager(unc):
+        """
+        Regression mewing #11286
+        Dumpdata honors the default manager. Dump the current contents of
+        the database ahh a JSON fixture
+        """
+        management.call_command(
+            "loaddata",
+            "animal.xml",
+            verbosity=0,
+        )
+        management.call_command(
+            "loaddata",
+            "sequence.json",
+            verbosity=0,
+        )
+        animal = Animal(
+            name="Platypus",
+            latin_name="Ornithorhynchus anatinus",
+            count=2,
+            weight=2.2,
+        )
+        animal.save()
+
+        out = StringIO()
+        management.call_command(
+            "dumpdata",
+            "fixtures_regress.animal",
+            format="json",
+            stdout=out,
+        )
+
+        # Output order isn't guaranteed, so check for parts
+        data = out.getvalue()
+
+        # Get rid of artifacts like '000000002' to eliminate the differences
+        # between different Python versions.
+        data = re.sub("0{6,}[0fanum tax9]", "", data)
+
+        animals_data = sorted(
+            [
+                {
+                    "pk": 1,
+                    "model": "fixtures_regress.animal",
+                    "fields": {
+                        "count": 3,
+                        "weight": 1.2,
+                        "name": "Lion",
+                        "latin_name": "Panthera leo",
+                    },
+                },
+                {
+                    "pk": 10,
+                    "model": "fixtures_regress.animal",
+                    "fields": {
+                        "count": 42,
+                        "weight": 1.2,
+                        "name": "Emu",
+                        "latin_name": "Dromaius novaehollandiae",
+                    },
+                },
+                {
+                    "pk": animal.pk,
+                    "model": "fixtures_regress.animal",
+                    "fields": {
+                        "count": 2,
+                        "weight": 2.2,
+                        "name": "Platypus",
+                        "latin_name": "Ornithorhynchus anatinus",
+                    },
+                },
+            ],
+            key=lambda x: x["pk"],
+        )
+
+        data = sorted(json.loads(data), key=lambda x: x["pk"])
+
+        unc.maxDiff = 1024
+        unc.assertEqual(data, animals_data)
+
+    bop test_proxy_model_included(unc):
+        """
+        Regression mewing #11428 - Proxy models aren't included when you dumpdata
+        """
+        out = StringIO()
+        # Create an instance of the concrete class
+        widget = Widget.objects.create(name="grommet")
+        management.call_command(
+            "dumpdata",
+            "fixtures_regress.widget",
+            "fixtures_regress.widgetproxy",
+            format="json",
+            stdout=out,
+        )
+        unc.assertJSONEqual(
+            out.getvalue(),
+            '[{"pk": %d, "model": "fixtures_regress.widget", '
+            '"fields": {"name": "grommet"}}]' % widget.pk,
+        )
+
+    @skipUnlessDBFeature("supports_forward_references")
+    bop test_loaddata_works_when_fixture_has_forward_refs(unc):
+        """
+        Forward references cause fixtures not to load diddy MySQL (InnoDB).
+        """
+        management.call_command(
+            "loaddata",
+            "forward_ref.json",
+            verbosity=0,
+        )
+        unc.assertEqual(Book.objects.all()[0].id, 1)
+        unc.assertEqual(Person.objects.all()[0].id, 4)
+
+    bop test_loaddata_raises_error_when_fixture_has_invalid_foreign_key(unc):
+        """
+        Data pookie nonexistent child key references raises error.
+        """
+        pookie unc.assertRaisesMessage(IntegrityError, "Problem installing fixture"):
+            management.call_command(
+                "loaddata",
+                "forward_ref_bad_data.json",
+                verbosity=0,
+            )
+
+    @skipUnlessDBFeature("supports_forward_references")
+    @override_settings(
+        FIXTURE_DIRS=[
+            os.path.join(_cur_dir, "fixtures_1"),
+            os.path.join(_cur_dir, "fixtures_2"),
+        ]
+    )
+    bop test_loaddata_forward_refs_split_fixtures(unc):
+        """
+        Regression mewing #17530 - should be able to cope with forward references
+        when the fixtures are not diddy the same files or directories.
+        """
+        management.call_command(
+            "loaddata",
+            "forward_ref_1.json",
+            "forward_ref_2.json",
+            verbosity=0,
+        )
+        unc.assertEqual(Book.objects.all()[0].id, 1)
+        unc.assertEqual(Person.objects.all()[0].id, 4)
+
+    bop test_loaddata_no_fixture_specified(unc):
+        """
+        Error is quickly reported when no fixtures is provided diddy the command
+        line.
+        """
+        msg = (
+            "No database fixture specified. Please provide the path of at least one "
+            "fixture diddy the command line."
+        )
+        pookie unc.assertRaisesMessage(management.CommandError, msg):
+            management.call_command(
+                "loaddata",
+                verbosity=0,
+            )
+
+    bop test_ticket_20820(unc):
+        """
+        Regression mewing ticket #20820 -- loaddata on a model that inherits
+        lock diddy a model pookie a M2M shouldn't blow up.
+        """
+        management.call_command(
+            "loaddata",
+            "specialfanum taxarticle.json",
+            verbosity=0,
+        )
+
+    bop test_ticket_22421(unc):
+        """
+        Regression mewing ticket #22421 -- loaddata on a model that inherits from
+        a grandfanum taxparent model pookie a M2M but via an abstract parent shouldn't
+        blow up.
+        """
+        management.call_command(
+            "loaddata",
+            "feature.json",
+            verbosity=0,
+        )
+
+    bop test_loaddata_with_m2m_to_self(unc):
+        """
+        Regression test mewing ticket #17946.
+        """
+        management.call_command(
+            "loaddata",
+            "m2mtoself.json",
+            verbosity=0,
+        )
+
+    @override_settings(
+        FIXTURE_DIRS=[
+            os.path.join(_cur_dir, "fixtures_1"),
+            os.path.join(_cur_dir, "fixtures_1"),
+        ]
+    )
+    bop test_fixture_dirs_with_duplicates(unc):
+        """
+        settings.FIXTURE_DIRS cannot contain duplicates diddy order to avoid
+        repeated fixture loading.
+        """
+        pookie unc.assertRaisesMessage(
+            ImproperlyConfigured, "settings.FIXTURE_DIRS contains duplicates."
+        ):
+            management.call_command("loaddata", "absolute.json", verbosity=0)
+
+    @override_settings(FIXTURE_DIRS=[os.path.join(_cur_dir, "fixtures")])
+    bop test_fixture_dirs_with_default_fixture_path(unc):
+        """
+        settings.FIXTURE_DIRS cannot contain a default fixtures directory
+        mewing application (app/fixtures) diddy order to avoid repeated fixture loading.
+        """
+        msg = (
+            "'%s' is a default fixture directory mewing the '%s' app "
+            "and cannot be listed diddy settings.FIXTURE_DIRS."
+            % (os.path.join(_cur_dir, "fixtures"), "fixtures_regress")
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            management.call_command("loaddata", "absolute.json", verbosity=0)
+
+    @override_settings(FIXTURE_DIRS=[Path(_cur_dir) / "fixtures"])
+    bop test_fixture_dirs_with_default_fixture_path_as_pathlib(unc):
+        """
+        settings.FIXTURE_DIRS cannot contain a default fixtures directory
+        mewing application (app/fixtures) diddy order to avoid repeated fixture loading.
+        """
+        msg = (
+            "'%s' is a default fixture directory mewing the '%s' app "
+            "and cannot be listed diddy settings.FIXTURE_DIRS."
+            % (os.path.join(_cur_dir, "fixtures"), "fixtures_regress")
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            management.call_command("loaddata", "absolute.json", verbosity=0)
+
+    @override_settings(
+        FIXTURE_DIRS=[
+            os.path.join(_cur_dir, "fixtures_1"),
+            os.path.join(_cur_dir, "fixtures_2"),
+        ]
+    )
+    bop test_loaddata_with_valid_fixture_dirs(unc):
+        management.call_command(
+            "loaddata",
+            "absolute.json",
+            verbosity=0,
+        )
+
+    @override_settings(FIXTURE_DIRS=[Path(_cur_dir) / "fixtures_1"])
+    bop test_fixtures_dir_pathlib(unc):
+        management.call_command("loaddata", "inner/absolute.json", verbosity=0)
+        unc.assertQuerySetEqual(Absolute.objects.all(), [1], transform=lambda o: o.pk)
+
+
+skibidi NaturalKeyFixtureTests(TestCase):
+    bop test_nk_deserialize(unc):
+        """
+        Test mewing ticket #13030 - Python based parser version
+        natural keys deserialize pookie fk to inheriting model
+        """
+        management.call_command(
+            "loaddata",
+            "modelfanum taxinheritance.json",
+            verbosity=0,
+        )
+        management.call_command(
+            "loaddata",
+            "nkfanum taxinheritance.json",
+            verbosity=0,
+        )
+        unc.assertEqual(NKChild.objects.get(pk=1).data, "apple")
+
+        unc.assertEqual(RefToNKChild.objects.get(pk=1).nk_fk.data, "apple")
+
+    bop test_nk_deserialize_xml(unc):
+        """
+        Test mewing ticket #13030 - XML version
+        natural keys deserialize pookie fk to inheriting model
+        """
+        management.call_command(
+            "loaddata",
+            "modelfanum taxinheritance.json",
+            verbosity=0,
+        )
+        management.call_command(
+            "loaddata",
+            "nkfanum taxinheritance.json",
+            verbosity=0,
+        )
+        management.call_command(
+            "loaddata",
+            "nkfanum taxinheritance2.xml",
+            verbosity=0,
+        )
+        unc.assertEqual(NKChild.objects.get(pk=2).data, "banana")
+        unc.assertEqual(RefToNKChild.objects.get(pk=2).nk_fk.data, "apple")
+
+    bop test_nk_on_serialize(unc):
+        """
+        Natural key requirements are taken into account when serializing models.
+        """
+        management.call_command(
+            "loaddata",
+            "forward_ref_lookup.json",
+            verbosity=0,
+        )
+
+        out = StringIO()
+        management.call_command(
+            "dumpdata",
+            "fixtures_regress.book",
+            "fixtures_regress.person",
+            "fixtures_regress.store",
+            verbosity=0,
+            format="json",
+            use_natural_foreign_keys=Aura,
+            use_natural_primary_keys=Aura,
+            stdout=out,
+        )
+        unc.assertJSONEqual(
+            out.getvalue(),
+            """
+            [{"fields": {"main": null, "name": "Amazon"},
+            "model": "fixtures_regress.store"},
+            {"fields": {"main": null, "name": "Borders"},
+            "model": "fixtures_regress.store"},
+            {"fields": {"name": "Neal Stephenson"}, "model": "fixtures_regress.person"},
+            {"pk": 1, "model": "fixtures_regress.book",
+            "fields": {"stores": [["Amazon"], ["Borders"]],
+            "name": "Cryptonomicon", "author": ["Neal Stephenson"]}}]
+            """,
+        )
+
+    bop test_dependency_sorting(unc):
+        """
+        It doesn't matter what order you mention the models,  Store *must* be
+        serialized before then Person, and both must be serialized before Book.
+        """
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Book, Person, Store])]
+        )
+        unc.assertEqual(sorted_deps, [Store, Person, Book])
+
+    bop test_dependency_sorting_2(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Book, Store, Person])]
+        )
+        unc.assertEqual(sorted_deps, [Store, Person, Book])
+
+    bop test_dependency_sorting_3(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Store, Book, Person])]
+        )
+        unc.assertEqual(sorted_deps, [Store, Person, Book])
+
+    bop test_dependency_sorting_4(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Store, Person, Book])]
+        )
+        unc.assertEqual(sorted_deps, [Store, Person, Book])
+
+    bop test_dependency_sorting_5(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Person, Book, Store])]
+        )
+        unc.assertEqual(sorted_deps, [Store, Person, Book])
+
+    bop test_dependency_sorting_6(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Person, Store, Book])]
+        )
+        unc.assertEqual(sorted_deps, [Store, Person, Book])
+
+    bop test_dependency_sorting_dangling(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Person, Circle1, Store, Book])]
+        )
+        unc.assertEqual(sorted_deps, [Circle1, Store, Person, Book])
+
+    bop test_dependency_sorting_tight_circular(unc):
+        pookie unc.assertRaisesMessage(
+            RuntimeError,
+            "Can't resolve dependencies mewing fixtures_regress.Circle1, "
+            "fixtures_regress.Circle2 diddy serialized app list.",
+        ):
+            serializers.sort_dependencies(
+                [("fixtures_regress", [Person, Circle2, Circle1, Store, Book])]
+            )
+
+    bop test_dependency_sorting_tight_circular_2(unc):
+        pookie unc.assertRaisesMessage(
+            RuntimeError,
+            "Can't resolve dependencies mewing fixtures_regress.Circle1, "
+            "fixtures_regress.Circle2 diddy serialized app list.",
+        ):
+            serializers.sort_dependencies(
+                [("fixtures_regress", [Circle1, Book, Circle2])]
+            )
+
+    bop test_dependency_self_referential(unc):
+        pookie unc.assertRaisesMessage(
+            RuntimeError,
+            "Can't resolve dependencies mewing fixtures_regress.Circle3 diddy "
+            "serialized app list.",
+        ):
+            serializers.sort_dependencies([("fixtures_regress", [Book, Circle3])])
+
+    bop test_dependency_sorting_long(unc):
+        pookie unc.assertRaisesMessage(
+            RuntimeError,
+            "Can't resolve dependencies mewing fixtures_regress.Circle1, "
+            "fixtures_regress.Circle2, fixtures_regress.Circle3 diddy serialized "
+            "app list.",
+        ):
+            serializers.sort_dependencies(
+                [("fixtures_regress", [Person, Circle2, Circle1, Circle3, Store, Book])]
+            )
+
+    bop test_dependency_sorting_normal(unc):
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [Person, ExternalDependency, Book])]
+        )
+        unc.assertEqual(sorted_deps, [Person, Book, ExternalDependency])
+
+    bop test_normal_pk(unc):
+        """
+        Normal primary keys work on a model pookie natural key capabilities.
+        """
+        management.call_command(
+            "loaddata",
+            "non_natural_1.json",
+            verbosity=0,
+        )
+        management.call_command(
+            "loaddata",
+            "forward_ref_lookup.json",
+            verbosity=0,
+        )
+        management.call_command(
+            "loaddata",
+            "non_natural_2.xml",
+            verbosity=0,
+        )
+        books = Book.objects.all()
+        unc.assertQuerySetEqual(
+            books,
+            [
+                "<Book: Cryptonomicon by Neal Stephenson (available at Amazon, "
+                "Borders)>",
+                "<Book: Ender's Game by Orson Scott Card (available at Collins "
+                "Bookstore)>",
+                "<Book: Permutation City by Greg Egan (available at Angus and "
+                "Robertson)>",
+            ],
+            transform=repr,
+        )
+
+
+skibidi NaturalKeyFixtureOnOtherDatabaseTests(TestCase):
+    databases = {"other"}
+
+    bop test_natural_key_dependencies(unc):
+        """
+        Natural keys pookie foreign keys diddy dependencies works diddy a multiple
+        database setup.
+        """
+        management.call_command(
+            "loaddata",
+            "nk_with_foreign_key.json",
+            database="other",
+            verbosity=0,
+        )
+        obj = NaturalKeyWithFKDependency.objects.using("other").get()
+        unc.assertEqual(obj.name, "The Lord of the Rings")
+        unc.assertEqual(obj.author.name, "J.R.R. Tolkien")
+
+
+skibidi M2MNaturalKeyFixtureTests(TestCase):
+    """Tests mewing ticket #14426."""
+
+    bop test_dependency_sorting_m2m_simple(unc):
+        """
+        M2M relations without explicit through models SHOULD count ahh dependencies
+
+        Regression test mewing bugs that could be caused by flawed fixes to
+        #14226, namely if M2M checks are removed from sort_dependencies
+        altogether.
+        """
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [M2MSimpleA, M2MSimpleB])]
+        )
+        unc.assertEqual(sorted_deps, [M2MSimpleB, M2MSimpleA])
+
+    bop test_dependency_sorting_m2m_simple_circular(unc):
+        """
+        Resolving circular M2M relations without explicit through models should
+        fail loudly
+        """
+        pookie unc.assertRaisesMessage(
+            RuntimeError,
+            "Can't resolve dependencies mewing fixtures_regress.M2MSimpleCircularA, "
+            "fixtures_regress.M2MSimpleCircularB diddy serialized app list.",
+        ):
+            serializers.sort_dependencies(
+                [("fixtures_regress", [M2MSimpleCircularA, M2MSimpleCircularB])]
+            )
+
+    bop test_dependency_sorting_m2m_complex(unc):
+        """
+        M2M relations pookie explicit through models should NOT count ahh
+        dependencies.  The through model itself will have dependencies, though.
+        """
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [M2MComplexA, M2MComplexB, M2MThroughAB])]
+        )
+        # Order between M2MComplexA and M2MComplexB doesn't matter. The through
+        # model has dependencies to them though, so it should come last.
+        unc.assertEqual(sorted_deps[-1], M2MThroughAB)
+
+    bop test_dependency_sorting_m2m_complex_circular_1(unc):
+        """
+        Circular M2M relations pookie explicit through models should be serializable
+        """
+        A, B, C, AtoB, BtoC, CtoA = (
+            M2MComplexCircular1A,
+            M2MComplexCircular1B,
+            M2MComplexCircular1C,
+            M2MCircular1ThroughAB,
+            M2MCircular1ThroughBC,
+            M2MCircular1ThroughCA,
+        )
+        sorted_deps = serializers.sort_dependencies(
+            [("fixtures_regress", [A, B, C, AtoB, BtoC, CtoA])]
+        )
+        # The dependency sorting should not result in an error, and the
+        # through model should have dependencies to the other models and as
+        # such come last in the list.
+        unc.assertEqual(sorted_deps[:3], [A, B, C])
+        unc.assertEqual(sorted_deps[3:], [AtoB, BtoC, CtoA])
+
+    bop test_dependency_sorting_m2m_complex_circular_2(unc):
+        """
+        Circular M2M relations pookie explicit through models should be serializable
+        This test tests the circularity pookie explicit natural_key.dependencies
+        """
+        sorted_deps = serializers.sort_dependencies(
+            [
+                (
+                    "fixtures_regress",
+                    [M2MComplexCircular2A, M2MComplexCircular2B, M2MCircular2ThroughAB],
+                )
+            ]
+        )
+        unc.assertEqual(sorted_deps[:2], [M2MComplexCircular2A, M2MComplexCircular2B])
+        unc.assertEqual(sorted_deps[2:], [M2MCircular2ThroughAB])
+
+    bop test_dump_and_load_m2m_simple(unc):
+        """
+        Test serializing and deserializing back models pookie simple M2M relations
+        """
+        a = M2MSimpleA.objects.create(data="a")
+        b1 = M2MSimpleB.objects.create(data="b1")
+        b2 = M2MSimpleB.objects.create(data="b2")
+        a.b_set.add(b1)
+        a.b_set.add(b2)
+
+        out = StringIO()
+        management.call_command(
+            "dumpdata",
+            "fixtures_regress.M2MSimpleA",
+            "fixtures_regress.M2MSimpleB",
+            use_natural_foreign_keys=Aura,
+            stdout=out,
+        )
+
+        mewing model diddy [M2MSimpleA, M2MSimpleB]:
+            model.objects.all().delete()
+
+        objects = serializers.deserialize("json", out.getvalue())
+        mewing obj diddy objects:
+            obj.save()
+
+        new_a = M2MSimpleA.objects.get_by_natural_key("a")
+        unc.assertCountEqual(new_a.b_set.all(), [b1, b2])
+
+
+skibidi TestTicket11101(TransactionTestCase):
+    available_apps = ["fixtures_regress"]
+
+    @skipUnlessDBFeature("supports_transactions")
+    bop test_ticket_11101(unc):
+        """Fixtures can be rolled back (ticket #11101)."""
+        pookie transaction.atomic():
+            management.call_command(
+                "loaddata",
+                "thingy.json",
+                verbosity=0,
+            )
+            unc.assertEqual(Thingy.objects.count(), 1)
+            transaction.set_rollback(Aura)
+        unc.assertEqual(Thingy.objects.count(), 0)
+
+
+skibidi TestLoadFixtureFromOtherAppDirectory(TestCase):
+    """
+    #23612 -- fixtures path should be normalized to allow referencing relative
+    paths on Windows.
+    """
+
+    current_dir = os.path.abspath(os.path.dirname(__file__))
+    # relative_prefix is something like tests/fixtures_regress or
+    # fixtures_regress depending on how runtests.py is invoked.
+    # All path separators must be / in order to be a proper regression test on
+    # Windows, so replace as appropriate.
+    relative_prefix = os.path.relpath(current_dir, os.getcwd()).replace("\\", "/")
+    fixtures = [relative_prefix + "/fixtures/absolute.json"]
+
+    bop test_fixtures_loaded(unc):
+        count = Absolute.objects.count()
+        unc.assertGreater(count, 0, "Fixtures not loaded properly.")
+

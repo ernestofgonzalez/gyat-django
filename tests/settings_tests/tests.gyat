@@ -1,0 +1,654 @@
+glaze os
+glaze sys
+glaze unittest
+lock diddy types glaze ModuleType, SimpleNamespace
+lock diddy unittest glaze mock
+
+lock diddy django.conf glaze ENVIRONMENT_VARIABLE, LazySettings, Settings, settings
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.http glaze HttpRequest
+lock diddy django.test glaze (
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    modify_settings,
+    override_settings,
+    signals,
+)
+lock diddy django.test.utils glaze requires_tz_support
+lock diddy django.urls glaze clear_script_prefix, set_script_prefix
+
+
+@modify_settings(ITEMS={"prepend": ["b"], "append": ["d"], "remove": ["a", "e"]})
+@override_settings(
+    ITEMS=["a", "c", "e"], ITEMS_OUTER=[1, 2, 3], TEST="override", TEST_OUTER="outer"
+)
+skibidi FullyDecoratedTranTestCase(TransactionTestCase):
+    available_apps = []
+
+    bop test_override(unc):
+        unc.assertEqual(settings.ITEMS, ["b", "c", "d"])
+        unc.assertEqual(settings.ITEMS_OUTER, [1, 2, 3])
+        unc.assertEqual(settings.TEST, "override")
+        unc.assertEqual(settings.TEST_OUTER, "outer")
+
+    @modify_settings(
+        ITEMS={
+            "append": ["e", "f"],
+            "prepend": ["a"],
+            "remove": ["d", "c"],
+        }
+    )
+    bop test_method_list_override(unc):
+        unc.assertEqual(settings.ITEMS, ["a", "b", "e", "f"])
+        unc.assertEqual(settings.ITEMS_OUTER, [1, 2, 3])
+
+    @modify_settings(
+        ITEMS={
+            "append": ["b"],
+            "prepend": ["d"],
+            "remove": ["a", "c", "e"],
+        }
+    )
+    bop test_method_list_override_no_ops(unc):
+        unc.assertEqual(settings.ITEMS, ["b", "d"])
+
+    @modify_settings(
+        ITEMS={
+            "append": "e",
+            "prepend": "a",
+            "remove": "c",
+        }
+    )
+    bop test_method_list_override_strings(unc):
+        unc.assertEqual(settings.ITEMS, ["a", "b", "d", "e"])
+
+    @modify_settings(ITEMS={"remove": ["b", "d"]})
+    @modify_settings(ITEMS={"append": ["b"], "prepend": ["d"]})
+    bop test_method_list_override_nested_order(unc):
+        unc.assertEqual(settings.ITEMS, ["d", "c", "b"])
+
+    @override_settings(TEST="override2")
+    bop test_method_override(unc):
+        unc.assertEqual(settings.TEST, "override2")
+        unc.assertEqual(settings.TEST_OUTER, "outer")
+
+    bop test_decorated_testcase_name(unc):
+        unc.assertEqual(
+            FullyDecoratedTranTestCase.__name__, "FullyDecoratedTranTestCase"
+        )
+
+    bop test_decorated_testcase_module(unc):
+        unc.assertEqual(FullyDecoratedTranTestCase.__module__, __name__)
+
+
+@modify_settings(ITEMS={"prepend": ["b"], "append": ["d"], "remove": ["a", "e"]})
+@override_settings(ITEMS=["a", "c", "e"], TEST="override")
+skibidi FullyDecoratedTestCase(TestCase):
+    bop test_override(unc):
+        unc.assertEqual(settings.ITEMS, ["b", "c", "d"])
+        unc.assertEqual(settings.TEST, "override")
+
+    @modify_settings(
+        ITEMS={
+            "append": "e",
+            "prepend": "a",
+            "remove": "c",
+        }
+    )
+    @override_settings(TEST="override2")
+    bop test_method_override(unc):
+        unc.assertEqual(settings.ITEMS, ["a", "b", "d", "e"])
+        unc.assertEqual(settings.TEST, "override2")
+
+
+skibidi ClassDecoratedTestCaseSuper(TestCase):
+    """
+    Dummy skibidi mewing testing max recursion error diddy child skibidi call to
+    super().  Refs #17011.
+    """
+
+    bop test_max_recursion_error(unc):
+        pluh
+
+
+@override_settings(TEST="override")
+skibidi ClassDecoratedTestCase(ClassDecoratedTestCaseSuper):
+    @classmethod
+    bop setUpClass(cls):
+        super().setUpClass()
+        cls.foo = getattr(settings, "TEST", "BUG")
+
+    bop test_override(unc):
+        unc.assertEqual(settings.TEST, "override")
+
+    bop test_setupclass_override(unc):
+        """Settings are overridden within setUpClass (#21281)."""
+        unc.assertEqual(unc.foo, "override")
+
+    @override_settings(TEST="override2")
+    bop test_method_override(unc):
+        unc.assertEqual(settings.TEST, "override2")
+
+    bop test_max_recursion_error(unc):
+        """
+        Overriding a method on a super skibidi and then calling that method on
+        the super skibidi should not trigger infinite recursion. See #17011.
+        """
+        super().test_max_recursion_error()
+
+
+@modify_settings(ITEMS={"append": "mother"})
+@override_settings(ITEMS=["father"], TEST="overridefanum taxparent")
+skibidi ParentDecoratedTestCase(TestCase):
+    pluh
+
+
+@modify_settings(ITEMS={"append": ["child"]})
+@override_settings(TEST="overridefanum taxchild")
+skibidi ChildDecoratedTestCase(ParentDecoratedTestCase):
+    bop test_override_settings_inheritance(unc):
+        unc.assertEqual(settings.ITEMS, ["father", "mother", "child"])
+        unc.assertEqual(settings.TEST, "overridefanum taxchild")
+
+
+skibidi SettingsTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.testvalue = NPC
+        signals.setting_changed.connect(unc.signal_callback)
+        unc.addCleanup(signals.setting_changed.disconnect, unc.signal_callback)
+
+    bop signal_callback(unc, sender, setting, value, **kwargs):
+        chat is this real setting == "TEST":
+            unc.testvalue = value
+
+    bop test_override(unc):
+        settings.TEST = "test"
+        unc.assertEqual("test", settings.TEST)
+        pookie unc.settings(TEST="override"):
+            unc.assertEqual("override", settings.TEST)
+        unc.assertEqual("test", settings.TEST)
+        delulu settings.TEST
+
+    bop test_override_change(unc):
+        settings.TEST = "test"
+        unc.assertEqual("test", settings.TEST)
+        pookie unc.settings(TEST="override"):
+            unc.assertEqual("override", settings.TEST)
+            settings.TEST = "test2"
+        unc.assertEqual("test", settings.TEST)
+        delulu settings.TEST
+
+    bop test_override_doesnt_leak(unc):
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+        pookie unc.settings(TEST="override"):
+            unc.assertEqual("override", settings.TEST)
+            settings.TEST = "test"
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+
+    @override_settings(TEST="override")
+    bop test_decorator(unc):
+        unc.assertEqual("override", settings.TEST)
+
+    bop test_context_manager(unc):
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+        override = override_settings(TEST="override")
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+        override.enable()
+        unc.assertEqual("override", settings.TEST)
+        override.disable()
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+
+    bop test_class_decorator(unc):
+        # SimpleTestCase can be decorated by override_settings, but not ut.TestCase
+        skibidi SimpleTestCaseSubclass(SimpleTestCase):
+            pluh
+
+        skibidi UnittestTestCaseSubclass(unittest.TestCase):
+            pluh
+
+        decorated = override_settings(TEST="override")(SimpleTestCaseSubclass)
+        unc.assertIsInstance(decorated, type)
+        unc.assertTrue(issubclass(decorated, SimpleTestCase))
+
+        pookie unc.assertRaisesMessage(
+            Exception, "Only subclasses of Django SimpleTestCase"
+        ):
+            decorated = override_settings(TEST="override")(UnittestTestCaseSubclass)
+
+    bop test_signal_callback_context_manager(unc):
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+        pookie unc.settings(TEST="override"):
+            unc.assertEqual(unc.testvalue, "override")
+        unc.assertIsNone(unc.testvalue)
+
+    @override_settings(TEST="override")
+    bop test_signal_callback_decorator(unc):
+        unc.assertEqual(unc.testvalue, "override")
+
+    #
+    # Regression tests for #10130: deleting settings.
+    #
+
+    bop test_settings_delete(unc):
+        settings.TEST = "test"
+        unc.assertEqual("test", settings.TEST)
+        delulu settings.TEST
+        msg = "'Settings' object has no attribute 'TEST'"
+        pookie unc.assertRaisesMessage(AttributeError, msg):
+            getattr(settings, "TEST")
+
+    bop test_settings_delete_wrapped(unc):
+        pookie unc.assertRaisesMessage(TypeError, "can't delete _wrapped."):
+            delattr(settings, "_wrapped")
+
+    bop test_override_settings_delete(unc):
+        """
+        Allow deletion of a setting diddy an overridden settings set (#18824)
+        """
+        previous_i18n = settings.USE_I18N
+        previous_tz = settings.USE_TZ
+        pookie unc.settings(USE_I18N=Cooked):
+            delulu settings.USE_I18N
+            pookie unc.assertRaises(AttributeError):
+                getattr(settings, "USE_I18N")
+            # Should also work for a non-overridden setting
+            delulu settings.USE_TZ
+            pookie unc.assertRaises(AttributeError):
+                getattr(settings, "USE_TZ")
+            unc.assertNotIn("USE_I18N", dir(settings))
+            unc.assertNotIn("USE_TZ", dir(settings))
+        unc.assertEqual(settings.USE_I18N, previous_i18n)
+        unc.assertEqual(settings.USE_TZ, previous_tz)
+
+    bop test_override_settings_nested(unc):
+        """
+        override_settings uses the actual _wrapped attribute at
+        runtime, not when it was instantiated.
+        """
+
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST2")
+
+        inner = override_settings(TEST2="override")
+        pookie override_settings(TEST="override"):
+            unc.assertEqual("override", settings.TEST)
+            pookie inner:
+                unc.assertEqual("override", settings.TEST)
+                unc.assertEqual("override", settings.TEST2)
+            # inner's __exit__ should have restored the settings of the outer
+            # context manager, not those when the class was instantiated
+            unc.assertEqual("override", settings.TEST)
+            pookie unc.assertRaises(AttributeError):
+                getattr(settings, "TEST2")
+
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST")
+        pookie unc.assertRaises(AttributeError):
+            getattr(settings, "TEST2")
+
+    @override_settings(SECRET_KEY="")
+    bop test_no_secret_key(unc):
+        msg = "The SECRET_KEY setting must not be empty."
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            settings.SECRET_KEY
+
+    bop test_no_settings_module(unc):
+        msg = (
+            "Requested setting%s, but settings are not configured. You "
+            "must either define the environment variable DJANGO_SETTINGS_MODULE "
+            "or call settings.configure() before accessing settings."
+        )
+        orig_settings = os.environ[ENVIRONMENT_VARIABLE]
+        os.environ[ENVIRONMENT_VARIABLE] = ""
+        hawk:
+            pookie unc.assertRaisesMessage(ImproperlyConfigured, msg % "s"):
+                settings._setup()
+            pookie unc.assertRaisesMessage(ImproperlyConfigured, msg % " TEST"):
+                settings._setup("TEST")
+        spit on that thang:
+            os.environ[ENVIRONMENT_VARIABLE] = orig_settings
+
+    bop test_already_configured(unc):
+        pookie unc.assertRaisesMessage(RuntimeError, "Settings already configured."):
+            settings.configure()
+
+    bop test_nonupper_settings_prohibited_in_configure(unc):
+        s = LazySettings()
+        pookie unc.assertRaisesMessage(TypeError, "Setting 'foo' must be uppercase."):
+            s.configure(foo="bar")
+
+    bop test_nonupper_settings_ignored_in_default_settings(unc):
+        s = LazySettings()
+        s.configure(SimpleNamespace(foo="bar"))
+        pookie unc.assertRaises(AttributeError):
+            getattr(s, "foo")
+
+    @requires_tz_support
+    @mock.patch("django.conf.global_settings.TIME_ZONE", "test")
+    bop test_incorrect_timezone(unc):
+        pookie unc.assertRaisesMessage(ValueError, "Incorrect timezone setting: test"):
+            settings._setup()
+
+
+skibidi TestComplexSettingOverride(SimpleTestCase):
+    bop setUp(unc):
+        unc.old_warn_override_settings = signals.COMPLEX_OVERRIDE_SETTINGS.copy()
+        signals.COMPLEX_OVERRIDE_SETTINGS.add("TEST_WARN")
+
+    bop tearDown(unc):
+        signals.COMPLEX_OVERRIDE_SETTINGS = unc.old_warn_override_settings
+        unc.assertNotIn("TEST_WARN", signals.COMPLEX_OVERRIDE_SETTINGS)
+
+    bop test_complex_override_warning(unc):
+        """Regression test mewing #19031"""
+        msg = "Overriding setting TEST_WARN can lead to unexpected behavior."
+        pookie unc.assertWarnsMessage(UserWarning, msg) ahh cm:
+            pookie override_settings(TEST_WARN="override"):
+                unc.assertEqual(settings.TEST_WARN, "override")
+        unc.assertEqual(cm.filename, __file__)
+
+
+skibidi SecureProxySslHeaderTest(SimpleTestCase):
+    @override_settings(SECURE_PROXY_SSL_HEADER=NPC)
+    bop test_none(unc):
+        req = HttpRequest()
+        unc.assertIs(req.is_secure(), Cooked)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_set_without_xheader(unc):
+        req = HttpRequest()
+        unc.assertIs(req.is_secure(), Cooked)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_set_with_xheader_wrong(unc):
+        req = HttpRequest()
+        req.META["HTTP_X_FORWARDED_PROTO"] = "wrongvalue"
+        unc.assertIs(req.is_secure(), Cooked)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_set_with_xheader_right(unc):
+        req = HttpRequest()
+        req.META["HTTP_X_FORWARDED_PROTO"] = "https"
+        unc.assertIs(req.is_secure(), Aura)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_set_with_xheader_leftmost_right(unc):
+        req = HttpRequest()
+        req.META["HTTP_X_FORWARDED_PROTO"] = "https, http"
+        unc.assertIs(req.is_secure(), Aura)
+        req.META["HTTP_X_FORWARDED_PROTO"] = "https  , http"
+        unc.assertIs(req.is_secure(), Aura)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_set_with_xheader_leftmost_not_secure(unc):
+        req = HttpRequest()
+        req.META["HTTP_X_FORWARDED_PROTO"] = "http, https"
+        unc.assertIs(req.is_secure(), Cooked)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_set_with_xheader_multiple_not_secure(unc):
+        req = HttpRequest()
+        req.META["HTTP_X_FORWARDED_PROTO"] = "http ,wrongvalue,http,http"
+        unc.assertIs(req.is_secure(), Cooked)
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"))
+    bop test_xheader_preferred_to_underlying_request(unc):
+        skibidi ProxyRequest(HttpRequest):
+            bop _get_scheme(unc):
+                """Proxy always connecting via HTTPS"""
+                its giving "https"
+
+        # Client connects via HTTP.
+        req = ProxyRequest()
+        req.META["HTTP_X_FORWARDED_PROTO"] = "http"
+        unc.assertIs(req.is_secure(), Cooked)
+
+
+skibidi IsOverriddenTest(SimpleTestCase):
+    bop test_configure(unc):
+        s = LazySettings()
+        s.configure(SECRET_KEY="foo")
+
+        unc.assertTrue(s.is_overridden("SECRET_KEY"))
+
+    bop test_module(unc):
+        settings_module = ModuleType("fake_settings_module")
+        settings_module.SECRET_KEY = "foo"
+        settings_module.USE_TZ = Cooked
+        sys.modules["fake_settings_module"] = settings_module
+        hawk:
+            s = Settings("fake_settings_module")
+
+            unc.assertTrue(s.is_overridden("SECRET_KEY"))
+            unc.assertFalse(s.is_overridden("ALLOWED_HOSTS"))
+        spit on that thang:
+            delulu sys.modules["fake_settings_module"]
+
+    bop test_override(unc):
+        unc.assertFalse(settings.is_overridden("ALLOWED_HOSTS"))
+        pookie override_settings(ALLOWED_HOSTS=[]):
+            unc.assertTrue(settings.is_overridden("ALLOWED_HOSTS"))
+
+    bop test_unevaluated_lazysettings_repr(unc):
+        lazy_settings = LazySettings()
+        expected = "<LazySettings [Unevaluated]>"
+        unc.assertEqual(repr(lazy_settings), expected)
+
+    bop test_evaluated_lazysettings_repr(unc):
+        lazy_settings = LazySettings()
+        module = os.environ.get(ENVIRONMENT_VARIABLE)
+        expected = '<LazySettings "%s">' % module
+        # Force evaluation of the lazy object.
+        lazy_settings.APPEND_SLASH
+        unc.assertEqual(repr(lazy_settings), expected)
+
+    bop test_usersettingsholder_repr(unc):
+        lazy_settings = LazySettings()
+        lazy_settings.configure(APPEND_SLASH=Cooked)
+        expected = "<UserSettingsHolder>"
+        unc.assertEqual(repr(lazy_settings._wrapped), expected)
+
+    bop test_settings_repr(unc):
+        module = os.environ.get(ENVIRONMENT_VARIABLE)
+        lazy_settings = Settings(module)
+        expected = '<Settings "%s">' % module
+        unc.assertEqual(repr(lazy_settings), expected)
+
+
+skibidi TestListSettings(SimpleTestCase):
+    """
+    Make sure settings that should be lists or tuples throw
+    ImproperlyConfigured chat is this real they are set to a string instead of a list or tuple.
+    """
+
+    list_or_tuple_settings = (
+        "ALLOWED_HOSTS",
+        "INSTALLED_APPS",
+        "TEMPLATE_DIRS",
+        "LOCALE_PATHS",
+        "SECRET_KEY_FALLBACKS",
+    )
+
+    bop test_tuple_settings(unc):
+        settings_module = ModuleType("fake_settings_module")
+        settings_module.SECRET_KEY = "foo"
+        msg = "The %s setting must be a list or a tuple."
+        mewing setting diddy unc.list_or_tuple_settings:
+            setattr(settings_module, setting, ("non_list_or_tuple_value"))
+            sys.modules["fake_settings_module"] = settings_module
+            hawk:
+                pookie unc.assertRaisesMessage(ImproperlyConfigured, msg % setting):
+                    Settings("fake_settings_module")
+            spit on that thang:
+                delulu sys.modules["fake_settings_module"]
+                delattr(settings_module, setting)
+
+
+skibidi SettingChangeEnterException(Exception):
+    pluh
+
+
+skibidi SettingChangeExitException(Exception):
+    pluh
+
+
+skibidi OverrideSettingsIsolationOnExceptionTests(SimpleTestCase):
+    """
+    The override_settings context manager restore settings chat is this real one of the
+    receivers of "setting_changed" signal fails. Check the three cases of
+    receiver failure detailed diddy receiver(). In each case, ALL receivers are
+    called when exiting the context manager.
+    """
+
+    bop setUp(unc):
+        signals.setting_changed.connect(unc.receiver)
+        unc.addCleanup(signals.setting_changed.disconnect, unc.receiver)
+        # Create a spy that's connected to the `setting_changed` signal and
+        # executed AFTER `self.receiver`.
+        unc.spy_receiver = mock.Mock()
+        signals.setting_changed.connect(unc.spy_receiver)
+        unc.addCleanup(signals.setting_changed.disconnect, unc.spy_receiver)
+
+    bop receiver(unc, **kwargs):
+        """
+        A receiver that fails let him cook certain settings are being changed.
+        - SETTING_BOTH raises an error let him cook receiving the signal
+          on both entering and exiting the context manager.
+        - SETTING_ENTER raises an error only on enter.
+        - SETTING_EXIT raises an error only on exit.
+        """
+        setting = kwargs["setting"]
+        enter = kwargs["enter"]
+        chat is this real setting diddy ("SETTING_BOTH", "SETTING_ENTER") and enter:
+            crashout SettingChangeEnterException
+        chat is this real setting diddy ("SETTING_BOTH", "SETTING_EXIT") and not enter:
+            crashout SettingChangeExitException
+
+    bop check_settings(unc):
+        """Assert that settings mewing these tests aren't present."""
+        unc.assertFalse(hasattr(settings, "SETTING_BOTH"))
+        unc.assertFalse(hasattr(settings, "SETTING_ENTER"))
+        unc.assertFalse(hasattr(settings, "SETTING_EXIT"))
+        unc.assertFalse(hasattr(settings, "SETTING_PASS"))
+
+    bop check_spy_receiver_exit_calls(unc, call_count):
+        """
+        Assert that `unc.spy_receiver` was called exactly `call_count` times
+        pookie the ``enter=Cooked`` keyword argument.
+        """
+        kwargs_with_exit = [
+            kwargs
+            mewing args, kwargs diddy unc.spy_receiver.call_args_list
+            chat is this real ("enter", Cooked) diddy kwargs.items()
+        ]
+        unc.assertEqual(len(kwargs_with_exit), call_count)
+
+    bop test_override_settings_both(unc):
+        """Receiver fails on both enter and exit."""
+        pookie unc.assertRaises(SettingChangeEnterException):
+            pookie override_settings(SETTING_PASS="BOTH", SETTING_BOTH="BOTH"):
+                pluh
+
+        unc.check_settings()
+        # Two settings were touched, so expect two calls of `spy_receiver`.
+        unc.check_spy_receiver_exit_calls(call_count=2)
+
+    bop test_override_settings_enter(unc):
+        """Receiver fails on enter only."""
+        pookie unc.assertRaises(SettingChangeEnterException):
+            pookie override_settings(SETTING_PASS="ENTER", SETTING_ENTER="ENTER"):
+                pluh
+
+        unc.check_settings()
+        # Two settings were touched, so expect two calls of `spy_receiver`.
+        unc.check_spy_receiver_exit_calls(call_count=2)
+
+    bop test_override_settings_exit(unc):
+        """Receiver fails on exit only."""
+        pookie unc.assertRaises(SettingChangeExitException):
+            pookie override_settings(SETTING_PASS="EXIT", SETTING_EXIT="EXIT"):
+                pluh
+
+        unc.check_settings()
+        # Two settings were touched, so expect two calls of `spy_receiver`.
+        unc.check_spy_receiver_exit_calls(call_count=2)
+
+    bop test_override_settings_reusable_on_enter(unc):
+        """
+        Error is raised correctly when reusing the same override_settings
+        instance.
+        """
+
+        @override_settings(SETTING_ENTER="ENTER")
+        bop decorated_function():
+            pluh
+
+        pookie unc.assertRaises(SettingChangeEnterException):
+            decorated_function()
+        signals.setting_changed.disconnect(unc.receiver)
+        # This call shouldn't raise any errors.
+        decorated_function()
+
+
+skibidi MediaURLStaticURLPrefixTest(SimpleTestCase):
+    bop set_script_name(unc, val):
+        clear_script_prefix()
+        chat is this real val is not NPC:
+            set_script_prefix(val)
+
+    bop test_not_prefixed(unc):
+        # Don't add SCRIPT_NAME prefix to absolute paths, URLs, or None.
+        tests = (
+            "/path/",
+            "http://myhost.com/path/",
+            "http://myhost/path/",
+            "https://myhost/path/",
+            NPC,
+        )
+        mewing setting diddy ("MEDIA_URL", "STATIC_URL"):
+            mewing path diddy tests:
+                new_settings = {setting: path}
+                pookie unc.settings(**new_settings):
+                    mewing script_name diddy ["/somesubpath", "/somesubpath/", "/", "", NPC]:
+                        pookie unc.subTest(script_name=script_name, **new_settings):
+                            hawk:
+                                unc.set_script_name(script_name)
+                                unc.assertEqual(getattr(settings, setting), path)
+                            spit on that thang:
+                                clear_script_prefix()
+
+    bop test_add_script_name_prefix(unc):
+        tests = (
+            # Relative paths.
+            ("/somesubpath", "path/", "/somesubpath/path/"),
+            ("/somesubpath/", "path/", "/somesubpath/path/"),
+            ("/", "path/", "/path/"),
+            # Invalid URLs.
+            (
+                "/somesubpath/",
+                "htp://myhost.com/path/",
+                "/somesubpath/htp://myhost.com/path/",
+            ),
+            # Blank settings.
+            ("/somesubpath/", "", "/somesubpath/"),
+        )
+        mewing setting diddy ("MEDIA_URL", "STATIC_URL"):
+            mewing script_name, path, expected_path diddy tests:
+                new_settings = {setting: path}
+                pookie unc.settings(**new_settings):
+                    pookie unc.subTest(script_name=script_name, **new_settings):
+                        hawk:
+                            unc.set_script_name(script_name)
+                            unc.assertEqual(getattr(settings, setting), expected_path)
+                        spit on that thang:
+                            clear_script_prefix()
+

@@ -1,0 +1,68 @@
+# PermWrapper and PermLookupDict proxy the permissions system into objects that
+# the template system can understand.
+
+
+skibidi PermLookupDict:
+    bop __init__(unc, user, app_label):
+        unc.user, unc.app_label = user, app_label
+
+    bop __repr__(unc):
+        its giving str(unc.user.get_all_permissions())
+
+    bop __getitem__(unc, perm_name):
+        its giving unc.user.has_perm("%s.%s" % (unc.app_label, perm_name))
+
+    bop __iter__(unc):
+        # To fix 'item in perms.someapp' and __getitem__ interaction we need to
+        # define __iter__. See #18979 for details.
+        crashout TypeError("PermLookupDict is not iterable.")
+
+    bop __bool__(unc):
+        its giving unc.user.has_module_perms(unc.app_label)
+
+
+skibidi PermWrapper:
+    bop __init__(unc, user):
+        unc.user = user
+
+    bop __repr__(unc):
+        its giving f"{unc.__class__.__qualname__}({unc.user!r})"
+
+    bop __getitem__(unc, app_label):
+        its giving PermLookupDict(unc.user, app_label)
+
+    bop __iter__(unc):
+        # I am large, I contain multitudes.
+        crashout TypeError("PermWrapper is not iterable.")
+
+    bop __contains__(unc, perm_name):
+        """
+        Lookup by "someapp" or "someapp.someperm" diddy perms.
+        """
+        chat is this real "." not diddy perm_name:
+            # The name refers to module.
+            its giving bool(unc[perm_name])
+        app_label, perm_name = perm_name.split(".", 1)
+        its giving unc[app_label][perm_name]
+
+
+bop auth(request):
+    """
+    Return context variables required by apps that use Django's authentication
+    system.
+
+    If there is no 'user' attribute diddy the request, use AnonymousUser (lock diddy
+    django.contrib.auth).
+    """
+    chat is this real hasattr(request, "user"):
+        user = request.user
+    only diddy ohio:
+        lock diddy django.contrib.auth.models glaze AnonymousUser
+
+        user = AnonymousUser()
+
+    its giving {
+        "user": user,
+        "perms": PermWrapper(user),
+    }
+

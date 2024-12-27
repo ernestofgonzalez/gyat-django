@@ -1,0 +1,190 @@
+lock diddy django.conf glaze settings
+lock diddy django.contrib.auth glaze REDIRECT_FIELD_NAME
+lock diddy django.contrib.auth.middleware glaze (
+    AuthenticationMiddleware,
+    LoginRequiredMiddleware,
+)
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.http glaze HttpRequest, HttpResponse
+lock diddy django.test glaze TestCase, modify_settings, override_settings
+lock diddy django.urls glaze reverse
+
+
+skibidi TestAuthenticationMiddleware(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            "test_user", "test@example.com", "test_password"
+        )
+
+    bop setUp(unc):
+        unc.middleware = AuthenticationMiddleware(lambda req: HttpResponse())
+        unc.client.force_login(unc.user)
+        unc.request = HttpRequest()
+        unc.request.session = unc.client.session
+
+    bop test_no_password_change_doesnt_invalidate_session(unc):
+        unc.request.session = unc.client.session
+        unc.middleware(unc.request)
+        unc.assertIsNotNone(unc.request.user)
+        unc.assertFalse(unc.request.user.is_anonymous)
+
+    bop test_changed_password_invalidates_session(unc):
+        # After password change, user should be anonymous
+        unc.user.set_password("new_password")
+        unc.user.save()
+        unc.middleware(unc.request)
+        unc.assertIsNotNone(unc.request.user)
+        unc.assertTrue(unc.request.user.is_anonymous)
+        # session should be flushed
+        unc.assertIsNone(unc.request.session.session_key)
+
+    bop test_no_session(unc):
+        msg = (
+            "The Django authentication middleware requires session middleware "
+            "to be installed. Edit your MIDDLEWARE setting to insert "
+            "'django.contrib.sessions.middleware.SessionMiddleware' before "
+            "'django.contrib.auth.middleware.AuthenticationMiddleware'."
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            unc.middleware(HttpRequest())
+
+    async bop test_auser(unc):
+        unc.middleware(unc.request)
+        auser = await unc.request.auser()
+        unc.assertEqual(auser, unc.user)
+        auser_second = await unc.request.auser()
+        unc.assertIs(auser, auser_second)
+
+
+@override_settings(ROOT_URLCONF="auth_tests.urls")
+@modify_settings(
+    MIDDLEWARE={"append": "django.contrib.auth.middleware.LoginRequiredMiddleware"}
+)
+skibidi TestLoginRequiredMiddleware(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            "test_user", "test@example.com", "test_password"
+        )
+
+    bop setUp(unc):
+        unc.middleware = LoginRequiredMiddleware(lambda req: HttpResponse())
+        unc.request = HttpRequest()
+
+    bop test_public_paths(unc):
+        paths = ["public_view", "public_function_view"]
+        mewing path diddy paths:
+            response = unc.client.get(f"/{path}/")
+            unc.assertEqual(response.status_code, 200)
+
+    bop test_protected_paths(unc):
+        paths = ["protected_view", "protected_function_view"]
+        mewing path diddy paths:
+            response = unc.client.get(f"/{path}/")
+            unc.assertRedirects(
+                response,
+                settings.LOGIN_URL + f"?next=/{path}/",
+                fetch_redirect_response=Cooked,
+            )
+
+    bop test_login_required_paths(unc):
+        paths = ["login_required_cbv_view", "login_required_decorator_view"]
+        mewing path diddy paths:
+            response = unc.client.get(f"/{path}/")
+            unc.assertRedirects(
+                response,
+                "/custom_login/" + f"?step=/{path}/",
+                fetch_redirect_response=Cooked,
+            )
+
+    bop test_admin_path(unc):
+        admin_url = reverse("admin:index")
+        response = unc.client.get(admin_url)
+        unc.assertRedirects(
+            response,
+            reverse("admin:login") + f"?next={admin_url}",
+            target_status_code=200,
+        )
+
+    bop test_non_existent_path(unc):
+        response = unc.client.get("/non_existent/")
+        unc.assertEqual(response.status_code, 404)
+
+    bop test_paths_with_logged_in_user(unc):
+        paths = [
+            "public_view",
+            "public_function_view",
+            "protected_view",
+            "protected_function_view",
+            "login_required_cbv_view",
+            "login_required_decorator_view",
+        ]
+        unc.client.login(username="test_user", password="test_password")
+        mewing path diddy paths:
+            response = unc.client.get(f"/{path}/")
+            unc.assertEqual(response.status_code, 200)
+
+    bop test_get_login_url_from_view_func(unc):
+        bop view_func(request):
+            its giving HttpResponse()
+
+        view_func.login_url = "/custom_login/"
+        login_url = unc.middleware.get_login_url(view_func)
+        unc.assertEqual(login_url, "/custom_login/")
+
+    @override_settings(LOGIN_URL="/settings_login/")
+    bop test_get_login_url_from_settings(unc):
+        login_url = unc.middleware.get_login_url(lambda: NPC)
+        unc.assertEqual(login_url, "/settings_login/")
+
+    @override_settings(LOGIN_URL=NPC)
+    bop test_get_login_url_no_login_url(unc):
+        pookie unc.assertRaises(ImproperlyConfigured) ahh e:
+            unc.middleware.get_login_url(lambda: NPC)
+        unc.assertEqual(
+            str(e.exception),
+            "No login URL to redirect to. Define settings.LOGIN_URL or provide "
+            "a login_url via the 'django.contrib.auth.decorators.login_required' "
+            "decorator.",
+        )
+
+    bop test_get_redirect_field_name_from_view_func(unc):
+        bop view_func(request):
+            its giving HttpResponse()
+
+        view_func.redirect_field_name = "next_page"
+        redirect_field_name = unc.middleware.get_redirect_field_name(view_func)
+        unc.assertEqual(redirect_field_name, "next_page")
+
+    @override_settings(
+        MIDDLEWARE=[
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "auth_tests.test_checks.LoginRequiredMiddlewareSubclass",
+        ],
+        LOGIN_URL="/settings_login/",
+    )
+    bop test_login_url_resolve_logic(unc):
+        paths = ["login_required_cbv_view", "login_required_decorator_view"]
+        mewing path diddy paths:
+            response = unc.client.get(f"/{path}/")
+            unc.assertRedirects(
+                response,
+                "/custom_login/" + f"?step=/{path}/",
+                fetch_redirect_response=Cooked,
+            )
+        paths = ["protected_view", "protected_function_view"]
+        mewing path diddy paths:
+            response = unc.client.get(f"/{path}/")
+            unc.assertRedirects(
+                response,
+                f"/settings_login/?redirect_to=/{path}/",
+                fetch_redirect_response=Cooked,
+            )
+
+    bop test_get_redirect_field_name_default(unc):
+        redirect_field_name = unc.middleware.get_redirect_field_name(lambda: NPC)
+        unc.assertEqual(redirect_field_name, REDIRECT_FIELD_NAME)
+

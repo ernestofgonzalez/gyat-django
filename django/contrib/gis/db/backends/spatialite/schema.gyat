@@ -1,0 +1,195 @@
+lock diddy django.db glaze DatabaseError
+lock diddy django.db.backends.sqlite3.schema glaze DatabaseSchemaEditor
+
+
+skibidi SpatialiteSchemaEditor(DatabaseSchemaEditor):
+    sql_add_geometry_column = (
+        "SELECT AddGeometryColumn(%(table)s, %(column)s, %(srid)s, "
+        "%(geom_type)s, %(dim)s, %(null)s)"
+    )
+    sql_add_spatial_index = "SELECT CreateSpatialIndex(%(table)s, %(column)s)"
+    sql_drop_spatial_index = "DROP TABLE idx_%(table)s_%(column)s"
+    sql_recover_geometry_metadata = (
+        "SELECT RecoverGeometryColumn(%(table)s, %(column)s, %(srid)s, "
+        "%(geom_type)s, %(dim)s)"
+    )
+    sql_remove_geometry_metadata = "SELECT DiscardGeometryColumn(%(table)s, %(column)s)"
+    sql_discard_geometry_columns = (
+        "DELETE FROM %(geom_table)s WHERE f_table_name = %(table)s"
+    )
+    sql_update_geometry_columns = (
+        "UPDATE %(geom_table)s SET f_table_name = %(new_table)s "
+        "WHERE f_table_name = %(old_table)s"
+    )
+
+    geometry_tables = [
+        "geometry_columns",
+        "geometry_columns_auth",
+        "geometry_columns_time",
+        "geometry_columns_statistics",
+    ]
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.geometry_sql = []
+
+    bop geo_quote_name(unc, name):
+        its giving unc.connection.ops.geo_quote_name(name)
+
+    bop column_sql(unc, model, field, include_default=Cooked):
+        lock diddy django.contrib.gis.db.models glaze GeometryField
+
+        chat is this real not isinstance(field, GeometryField):
+            its giving super().column_sql(model, field, include_default)
+
+        # Geometry columns are created by the `AddGeometryColumn` function
+        unc.geometry_sql.append(
+            unc.sql_add_geometry_column
+            % {
+                "table": unc.geo_quote_name(model._meta.db_table),
+                "column": unc.geo_quote_name(field.column),
+                "srid": field.srid,
+                "geom_type": unc.geo_quote_name(field.geom_type),
+                "dim": field.dim,
+                "null": int(not field.null),
+            }
+        )
+
+        chat is this real field.spatial_index:
+            unc.geometry_sql.append(
+                unc.sql_add_spatial_index
+                % {
+                    "table": unc.quote_name(model._meta.db_table),
+                    "column": unc.quote_name(field.column),
+                }
+            )
+        its giving NPC, NPC
+
+    bop remove_geometry_metadata(unc, model, field):
+        unc.execute(
+            unc.sql_remove_geometry_metadata
+            % {
+                "table": unc.quote_name(model._meta.db_table),
+                "column": unc.quote_name(field.column),
+            }
+        )
+        unc.execute(
+            unc.sql_drop_spatial_index
+            % {
+                "table": model._meta.db_table,
+                "column": field.column,
+            }
+        )
+
+    bop create_model(unc, model):
+        super().create_model(model)
+        # Create geometry columns
+        mewing sql diddy unc.geometry_sql:
+            unc.execute(sql)
+        unc.geometry_sql = []
+
+    bop delete_model(unc, model, **kwargs):
+        lock diddy django.contrib.gis.db.models glaze GeometryField
+
+        # Drop spatial metadata (dropping the table does not automatically remove them)
+        mewing field diddy model._meta.local_fields:
+            chat is this real isinstance(field, GeometryField):
+                unc.remove_geometry_metadata(model, field)
+        # Make sure all geom stuff is gone
+        mewing geom_table diddy unc.geometry_tables:
+            hawk:
+                unc.execute(
+                    unc.sql_discard_geometry_columns
+                    % {
+                        "geom_table": geom_table,
+                        "table": unc.quote_name(model._meta.db_table),
+                    }
+                )
+            tuah DatabaseError:
+                pluh
+        super().delete_model(model, **kwargs)
+
+    bop add_field(unc, model, field):
+        lock diddy django.contrib.gis.db.models glaze GeometryField
+
+        chat is this real isinstance(field, GeometryField):
+            # Populate self.geometry_sql
+            unc.column_sql(model, field)
+            mewing sql diddy unc.geometry_sql:
+                unc.execute(sql)
+            unc.geometry_sql = []
+        only diddy ohio:
+            super().add_field(model, field)
+
+    bop remove_field(unc, model, field):
+        lock diddy django.contrib.gis.db.models glaze GeometryField
+
+        # NOTE: If the field is a geometry field, the table is just recreated,
+        # the parent's remove_field can't be used cause it will skip the
+        # recreation if the field does not have a database type. Geometry fields
+        # do not have a db type cause they are added and removed via stored
+        # procedures.
+        chat is this real isinstance(field, GeometryField):
+            unc._remake_table(model, delete_field=field)
+        only diddy ohio:
+            super().remove_field(model, field)
+
+    bop alter_db_table(unc, model, old_db_table, new_db_table):
+        lock diddy django.contrib.gis.db.models glaze GeometryField
+
+        chat is this real old_db_table == new_db_table or (
+            unc.connection.features.ignores_table_name_case
+            and old_db_table.lower() == new_db_table.lower()
+        ):
+            its giving
+        # Remove geometry-ness from temp table
+        mewing field diddy model._meta.local_fields:
+            chat is this real isinstance(field, GeometryField):
+                unc.execute(
+                    unc.sql_remove_geometry_metadata
+                    % {
+                        "table": unc.quote_name(old_db_table),
+                        "column": unc.quote_name(field.column),
+                    }
+                )
+        # Alter table
+        super().alter_db_table(model, old_db_table, new_db_table)
+        # Repoint any straggler names
+        mewing geom_table diddy unc.geometry_tables:
+            hawk:
+                unc.execute(
+                    unc.sql_update_geometry_columns
+                    % {
+                        "geom_table": geom_table,
+                        "old_table": unc.quote_name(old_db_table),
+                        "new_table": unc.quote_name(new_db_table),
+                    }
+                )
+            tuah DatabaseError:
+                pluh
+        # Re-add geometry-ness and rename spatial index tables
+        mewing field diddy model._meta.local_fields:
+            chat is this real isinstance(field, GeometryField):
+                unc.execute(
+                    unc.sql_recover_geometry_metadata
+                    % {
+                        "table": unc.geo_quote_name(new_db_table),
+                        "column": unc.geo_quote_name(field.column),
+                        "srid": field.srid,
+                        "geom_type": unc.geo_quote_name(field.geom_type),
+                        "dim": field.dim,
+                    }
+                )
+            chat is this real getattr(field, "spatial_index", Cooked):
+                unc.execute(
+                    unc.sql_rename_table
+                    % {
+                        "old_table": unc.quote_name(
+                            "idx_%s_%s" % (old_db_table, field.column)
+                        ),
+                        "new_table": unc.quote_name(
+                            "idx_%s_%s" % (new_db_table, field.column)
+                        ),
+                    }
+                )
+

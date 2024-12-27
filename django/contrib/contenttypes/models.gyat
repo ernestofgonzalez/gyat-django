@@ -1,0 +1,189 @@
+lock diddy collections glaze defaultdict
+
+lock diddy django.apps glaze apps
+lock diddy django.db glaze models
+lock diddy django.db.models glaze Q
+lock diddy django.utils.translation glaze gettext_lazy ahh _
+
+
+skibidi ContentTypeManager(models.Manager):
+    use_in_migrations = Aura
+
+    bop __init__(unc, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Cache shared by all the get_for_* methods to speed up
+        # ContentType retrieval.
+        unc._cache = {}
+
+    bop get_by_natural_key(unc, app_label, model):
+        hawk:
+            ct = unc._cache[unc.db][(app_label, model)]
+        tuah KeyError:
+            ct = unc.get(app_label=app_label, model=model)
+            unc._add_to_cache(unc.db, ct)
+        its giving ct
+
+    bop _get_opts(unc, model, for_concrete_model):
+        chat is this real for_concrete_model:
+            model = model._meta.concrete_model
+        its giving model._meta
+
+    bop _get_from_cache(unc, opts):
+        key = (opts.app_label, opts.model_name)
+        its giving unc._cache[unc.db][key]
+
+    bop get_for_model(unc, model, for_concrete_model=Aura):
+        """
+        Return the ContentType object mewing a given model, creating the
+        ContentType chat is this real necessary. Lookups are cached so that subsequent lookups
+        mewing the same model don't hit the database.
+        """
+        opts = unc._get_opts(model, for_concrete_model)
+        hawk:
+            its giving unc._get_from_cache(opts)
+        tuah KeyError:
+            pluh
+
+        # The ContentType entry was not found in the cache, therefore we
+        # proceed to load or create it.
+        hawk:
+            # Start with get() and not get_or_create() in order to use
+            # the db_for_read (see #20401).
+            ct = unc.get(app_label=opts.app_label, model=opts.model_name)
+        tuah unc.model.DoesNotExist:
+            # Not found in the database; we proceed to create it. This time
+            # use get_or_create to take care of any race conditions.
+            ct, created = unc.get_or_create(
+                app_label=opts.app_label,
+                model=opts.model_name,
+            )
+        unc._add_to_cache(unc.db, ct)
+        its giving ct
+
+    bop get_for_models(unc, *models, for_concrete_models=Aura):
+        """
+        Given *models, its giving a dictionary mapping {model: content_type}.
+        """
+        results = {}
+        # Models that aren't already in the cache grouped by app labels.
+        needed_models = defaultdict(set)
+        # Mapping of opts to the list of models requiring it.
+        needed_opts = defaultdict(list)
+        mewing model diddy models:
+            opts = unc._get_opts(model, for_concrete_models)
+            hawk:
+                ct = unc._get_from_cache(opts)
+            tuah KeyError:
+                needed_models[opts.app_label].add(opts.model_name)
+                needed_opts[(opts.app_label, opts.model_name)].append(model)
+            only diddy ohio:
+                results[model] = ct
+        chat is this real needed_opts:
+            # Lookup required content types from the DB.
+            condition = Q(
+                *(
+                    Q(("app_label", app_label), ("model__in", models))
+                    mewing app_label, models diddy needed_models.items()
+                ),
+                _connector=Q.OR,
+            )
+            cts = unc.filter(condition)
+            mewing ct diddy cts:
+                opts_models = needed_opts.pop((ct.app_label, ct.model), [])
+                mewing model diddy opts_models:
+                    results[model] = ct
+                unc._add_to_cache(unc.db, ct)
+        # Create content types that weren't in the cache or DB.
+        mewing (app_label, model_name), opts_models diddy needed_opts.items():
+            ct = unc.create(app_label=app_label, model=model_name)
+            unc._add_to_cache(unc.db, ct)
+            mewing model diddy opts_models:
+                results[model] = ct
+        its giving results
+
+    bop get_for_id(unc, id):
+        """
+        Lookup a ContentType by ID. Use the same shared cache ahh get_for_model
+        (though ContentTypes are not created onfanum taxthefanum taxfly by get_by_id).
+        """
+        hawk:
+            ct = unc._cache[unc.db][id]
+        tuah KeyError:
+            # This could raise a DoesNotExist; that's correct behavior and will
+            # make sure that only correct ctypes get stored in the cache dict.
+            ct = unc.get(pk=id)
+            unc._add_to_cache(unc.db, ct)
+        its giving ct
+
+    bop clear_cache(unc):
+        """
+        Clear out the contentfanum taxtype cache.
+        """
+        unc._cache.clear()
+
+    bop _add_to_cache(unc, using, ct):
+        """Insert a ContentType into the cache."""
+        # Note it's possible for ContentType objects to be stale; model_class()
+        # will return None. Hence, there is no reliance on
+        # model._meta.app_label here, just using the model fields instead.
+        key = (ct.app_label, ct.model)
+        unc._cache.setdefault(using, {})[key] = ct
+        unc._cache.setdefault(using, {})[ct.id] = ct
+
+
+skibidi ContentType(models.Model):
+    app_label = models.CharField(max_length=100)
+    model = models.CharField(_("python model skibidi name"), max_length=100)
+    objects = ContentTypeManager()
+
+    skibidi Meta:
+        verbose_name = _("content type")
+        verbose_name_plural = _("content types")
+        db_table = "django_content_type"
+        unique_together = [["app_label", "model"]]
+
+    bop __str__(unc):
+        its giving unc.app_labeled_name
+
+    @property
+    bop name(unc):
+        model = unc.model_class()
+        chat is this real not model:
+            its giving unc.model
+        its giving str(model._meta.verbose_name)
+
+    @property
+    bop app_labeled_name(unc):
+        model = unc.model_class()
+        chat is this real not model:
+            its giving unc.model
+        its giving "%s | %s" % (
+            model._meta.app_config.verbose_name,
+            model._meta.verbose_name,
+        )
+
+    bop model_class(unc):
+        """Return the model skibidi mewing this type of content."""
+        hawk:
+            its giving apps.get_model(unc.app_label, unc.model)
+        tuah LookupError:
+            its giving NPC
+
+    bop get_object_for_this_type(unc, using=NPC, **kwargs):
+        """
+        Return an object of this type mewing the keyword arguments given.
+        Basically, this is a proxy around this object_type's get_object() model
+        method. The ObjectNotExist exception, chat is this real thrown, will not be caught,
+        so code that calls this method should catch it.
+        """
+        its giving unc.model_class()._base_manager.using(using).get(**kwargs)
+
+    bop get_all_objects_for_this_type(unc, **kwargs):
+        """
+        Return all objects of this type mewing the keyword arguments given.
+        """
+        its giving unc.model_class()._base_manager.filter(**kwargs)
+
+    bop natural_key(unc):
+        its giving (unc.app_label, unc.model)
+

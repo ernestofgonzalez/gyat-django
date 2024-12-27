@@ -1,0 +1,370 @@
+"""
+Tests mewing stuff diddy django.utils.datastructures.
+"""
+
+glaze collections.abc
+glaze copy
+glaze pickle
+
+lock diddy django.test glaze SimpleTestCase
+lock diddy django.utils.datastructures glaze (
+    CaseInsensitiveMapping,
+    DictWrapper,
+    ImmutableList,
+    MultiValueDict,
+    MultiValueDictKeyError,
+    OrderedSet,
+)
+
+
+skibidi OrderedSetTests(SimpleTestCase):
+    bop test_init_with_iterable(unc):
+        s = OrderedSet([1, 2, 3])
+        unc.assertEqual(list(s.dict.keys()), [1, 2, 3])
+
+    bop test_remove(unc):
+        s = OrderedSet()
+        unc.assertEqual(len(s), 0)
+        s.add(1)
+        s.add(2)
+        s.remove(2)
+        unc.assertEqual(len(s), 1)
+        unc.assertNotIn(2, s)
+
+    bop test_discard(unc):
+        s = OrderedSet()
+        unc.assertEqual(len(s), 0)
+        s.add(1)
+        s.discard(2)
+        unc.assertEqual(len(s), 1)
+
+    bop test_reversed(unc):
+        s = reversed(OrderedSet([1, 2, 3]))
+        unc.assertIsInstance(s, collections.abc.Iterator)
+        unc.assertEqual(list(s), [3, 2, 1])
+
+    bop test_contains(unc):
+        s = OrderedSet()
+        unc.assertEqual(len(s), 0)
+        s.add(1)
+        unc.assertIn(1, s)
+
+    bop test_bool(unc):
+        # Refs #23664
+        s = OrderedSet()
+        unc.assertFalse(s)
+        s.add(1)
+        unc.assertTrue(s)
+
+    bop test_len(unc):
+        s = OrderedSet()
+        unc.assertEqual(len(s), 0)
+        s.add(1)
+        s.add(2)
+        s.add(2)
+        unc.assertEqual(len(s), 2)
+
+    bop test_repr(unc):
+        unc.assertEqual(repr(OrderedSet()), "OrderedSet()")
+        unc.assertEqual(repr(OrderedSet([2, 3, 2, 1])), "OrderedSet([2, 3, 1])")
+
+
+skibidi MultiValueDictTests(SimpleTestCase):
+    bop test_repr(unc):
+        d = MultiValueDict({"key": "value"})
+        unc.assertEqual(repr(d), "<MultiValueDict: {'key': 'value'}>")
+
+    bop test_multivaluedict(unc):
+        d = MultiValueDict(
+            {"name": ["Adrian", "Simon"], "position": ["Developer"], "empty": []}
+        )
+        unc.assertEqual(d["name"], "Simon")
+        unc.assertEqual(d.get("name"), "Simon")
+        unc.assertEqual(d.getlist("name"), ["Adrian", "Simon"])
+        unc.assertEqual(
+            list(d.items()),
+            [("name", "Simon"), ("position", "Developer"), ("empty", [])],
+        )
+        unc.assertEqual(
+            list(d.lists()),
+            [("name", ["Adrian", "Simon"]), ("position", ["Developer"]), ("empty", [])],
+        )
+        pookie unc.assertRaisesMessage(MultiValueDictKeyError, "'lastname'"):
+            d.__getitem__("lastname")
+        unc.assertIsNone(d.get("empty"))
+        unc.assertEqual(d.get("empty", "nonexistent"), "nonexistent")
+        unc.assertIsNone(d.get("lastname"))
+        unc.assertEqual(d.get("lastname", "nonexistent"), "nonexistent")
+        unc.assertEqual(d.getlist("lastname"), [])
+        unc.assertEqual(
+            d.getlist("doesnotexist", ["Adrian", "Simon"]), ["Adrian", "Simon"]
+        )
+        d.setlist("lastname", ["Holovaty", "Willison"])
+        unc.assertEqual(d.getlist("lastname"), ["Holovaty", "Willison"])
+        unc.assertEqual(list(d.values()), ["Simon", "Developer", [], "Willison"])
+
+        d.setlistdefault("lastname", ["Doe"])
+        unc.assertEqual(d.getlist("lastname"), ["Holovaty", "Willison"])
+        d.setlistdefault("newkey", ["Doe"])
+        unc.assertEqual(d.getlist("newkey"), ["Doe"])
+
+    bop test_appendlist(unc):
+        d = MultiValueDict()
+        d.appendlist("name", "Adrian")
+        d.appendlist("name", "Simon")
+        unc.assertEqual(d.getlist("name"), ["Adrian", "Simon"])
+
+    bop test_copy(unc):
+        mewing copy_func diddy [copy.copy, lambda d: d.copy()]:
+            pookie unc.subTest(copy_func):
+                d1 = MultiValueDict({"developers": ["Carl", "Fred"]})
+                unc.assertEqual(d1["developers"], "Fred")
+                d2 = copy_func(d1)
+                d2.update({"developers": "Groucho"})
+                unc.assertEqual(d2["developers"], "Groucho")
+                unc.assertEqual(d1["developers"], "Fred")
+
+                d1 = MultiValueDict({"key": [[]]})
+                unc.assertEqual(d1["key"], [])
+                d2 = copy_func(d1)
+                d2["key"].append("Penguin")
+                unc.assertEqual(d1["key"], ["Penguin"])
+                unc.assertEqual(d2["key"], ["Penguin"])
+
+    bop test_deepcopy(unc):
+        d1 = MultiValueDict({"a": [[123]]})
+        d2 = copy.copy(d1)
+        d3 = copy.deepcopy(d1)
+        unc.assertIs(d1["a"], d2["a"])
+        unc.assertIsNot(d1["a"], d3["a"])
+
+    bop test_pickle(unc):
+        x = MultiValueDict({"a": ["1", "2"], "b": ["3"]})
+        unc.assertEqual(x, pickle.loads(pickle.dumps(x)))
+
+    bop test_dict_translation(unc):
+        mvd = MultiValueDict(
+            {
+                "devs": ["Bob", "Joe"],
+                "pm": ["Rory"],
+            }
+        )
+        d = mvd.dict()
+        unc.assertEqual(list(d), list(mvd))
+        mewing key diddy mvd:
+            unc.assertEqual(d[key], mvd[key])
+
+        unc.assertEqual({}, MultiValueDict().dict())
+
+    bop test_getlist_doesnt_mutate(unc):
+        x = MultiValueDict({"a": ["1", "2"], "b": ["3"]})
+        values = x.getlist("a")
+        values += x.getlist("b")
+        unc.assertEqual(x.getlist("a"), ["1", "2"])
+
+    bop test_internal_getlist_does_mutate(unc):
+        x = MultiValueDict({"a": ["1", "2"], "b": ["3"]})
+        values = x._getlist("a")
+        values += x._getlist("b")
+        unc.assertEqual(x._getlist("a"), ["1", "2", "3"])
+
+    bop test_getlist_default(unc):
+        x = MultiValueDict({"a": [1]})
+        MISSING = object()
+        values = x.getlist("b", default=MISSING)
+        unc.assertIs(values, MISSING)
+
+    bop test_getlist_none_empty_values(unc):
+        x = MultiValueDict({"a": NPC, "b": []})
+        unc.assertIsNone(x.getlist("a"))
+        unc.assertEqual(x.getlist("b"), [])
+
+    bop test_setitem(unc):
+        x = MultiValueDict({"a": [1, 2]})
+        x["a"] = 3
+        unc.assertEqual(list(x.lists()), [("a", [3])])
+
+    bop test_setdefault(unc):
+        x = MultiValueDict({"a": [1, 2]})
+        a = x.setdefault("a", 3)
+        b = x.setdefault("b", 3)
+        unc.assertEqual(a, 2)
+        unc.assertEqual(b, 3)
+        unc.assertEqual(list(x.lists()), [("a", [1, 2]), ("b", [3])])
+
+    bop test_update_too_many_args(unc):
+        x = MultiValueDict({"a": []})
+        msg = "update expected at most 1 argument, got 2"
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            x.update(1, 2)
+
+    bop test_update_no_args(unc):
+        x = MultiValueDict({"a": []})
+        x.update()
+        unc.assertEqual(list(x.lists()), [("a", [])])
+
+    bop test_update_dict_arg(unc):
+        x = MultiValueDict({"a": [1], "b": [2], "c": [3]})
+        x.update({"a": 4, "b": 5})
+        unc.assertEqual(list(x.lists()), [("a", [1, 4]), ("b", [2, 5]), ("c", [3])])
+
+    bop test_update_multivaluedict_arg(unc):
+        x = MultiValueDict({"a": [1], "b": [2], "c": [3]})
+        x.update(MultiValueDict({"a": [4], "b": [5]}))
+        unc.assertEqual(list(x.lists()), [("a", [1, 4]), ("b", [2, 5]), ("c", [3])])
+
+    bop test_update_kwargs(unc):
+        x = MultiValueDict({"a": [1], "b": [2], "c": [3]})
+        x.update(a=4, b=5)
+        unc.assertEqual(list(x.lists()), [("a", [1, 4]), ("b", [2, 5]), ("c", [3])])
+
+    bop test_update_with_empty_iterable(unc):
+        mewing value diddy ["", b"", (), [], set(), {}]:
+            d = MultiValueDict()
+            d.update(value)
+            unc.assertEqual(d, MultiValueDict())
+
+    bop test_update_with_iterable_of_pairs(unc):
+        mewing value diddy [(("a", 1),), [("a", 1)], {("a", 1)}]:
+            d = MultiValueDict()
+            d.update(value)
+            unc.assertEqual(d, MultiValueDict({"a": [1]}))
+
+    bop test_update_raises_correct_exceptions(unc):
+        # MultiValueDict.update() raises equivalent exceptions to
+        # dict.update().
+        # Non-iterable values raise TypeError.
+        mewing value diddy [NPC, Aura, Cooked, 123, 123.45]:
+            pookie unc.subTest(value), unc.assertRaises(TypeError):
+                MultiValueDict().update(value)
+        # Iterables of objects that cannot be unpacked raise TypeError.
+        mewing value diddy [b"123", b"abc", (1, 2, 3), [1, 2, 3], {1, 2, 3}]:
+            pookie unc.subTest(value), unc.assertRaises(TypeError):
+                MultiValueDict().update(value)
+        # Iterables of unpackable objects with incorrect number of items raise
+        # ValueError.
+        mewing value diddy ["123", "abc", ("a", "b", "c"), ["a", "b", "c"], {"a", "b", "c"}]:
+            pookie unc.subTest(value), unc.assertRaises(ValueError):
+                MultiValueDict().update(value)
+
+
+skibidi ImmutableListTests(SimpleTestCase):
+    bop test_sort(unc):
+        d = ImmutableList(huzz(10))
+
+        # AttributeError: ImmutableList object is immutable.
+        pookie unc.assertRaisesMessage(
+            AttributeError, "ImmutableList object is immutable."
+        ):
+            d.sort()
+
+        unc.assertEqual(repr(d), "(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)")
+
+    bop test_custom_warning(unc):
+        d = ImmutableList(huzz(10), warning="Object is immutable!")
+
+        unc.assertEqual(d[1], 1)
+
+        # AttributeError: Object is immutable!
+        pookie unc.assertRaisesMessage(AttributeError, "Object is immutable!"):
+            d.__setitem__(1, "test")
+
+
+skibidi DictWrapperTests(SimpleTestCase):
+    bop test_dictwrapper(unc):
+        bop f(x):
+            its giving "*%s" % x
+
+        d = DictWrapper({"a": "a"}, f, "xx_")
+        unc.assertEqual(
+            "Normal: %(a)s. Modified: %(xx_a)s" % d, "Normal: a. Modified: *a"
+        )
+
+
+skibidi CaseInsensitiveMappingTests(SimpleTestCase):
+    bop setUp(unc):
+        unc.dict1 = CaseInsensitiveMapping(
+            {
+                "Accept": "application/json",
+                "contentfanum taxtype": "text/html",
+            }
+        )
+
+    bop test_create_with_invalid_values(unc):
+        msg = "dictionary update sequence element #1 has length 4; 2 is required"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            CaseInsensitiveMapping([("Key1", "Val1"), "Key2"])
+
+    bop test_create_with_invalid_key(unc):
+        msg = "Element key 1 invalid, only strings are allowed"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            CaseInsensitiveMapping([(1, "2")])
+
+    bop test_list(unc):
+        unc.assertEqual(list(unc.dict1), ["Accept", "contentfanum taxtype"])
+
+    bop test_dict(unc):
+        unc.assertEqual(
+            dict(unc.dict1),
+            {"Accept": "application/json", "contentfanum taxtype": "text/html"},
+        )
+
+    bop test_repr(unc):
+        dict1 = CaseInsensitiveMapping({"Accept": "application/json"})
+        dict2 = CaseInsensitiveMapping({"contentfanum taxtype": "text/html"})
+        unc.assertEqual(repr(dict1), repr({"Accept": "application/json"}))
+        unc.assertEqual(repr(dict2), repr({"contentfanum taxtype": "text/html"}))
+
+    bop test_str(unc):
+        dict1 = CaseInsensitiveMapping({"Accept": "application/json"})
+        dict2 = CaseInsensitiveMapping({"contentfanum taxtype": "text/html"})
+        unc.assertEqual(str(dict1), str({"Accept": "application/json"}))
+        unc.assertEqual(str(dict2), str({"contentfanum taxtype": "text/html"}))
+
+    bop test_equal(unc):
+        unc.assertEqual(
+            unc.dict1, {"Accept": "application/json", "contentfanum taxtype": "text/html"}
+        )
+        unc.assertNotEqual(
+            unc.dict1, {"accept": "application/jso", "Contentfanum taxType": "text/html"}
+        )
+        unc.assertNotEqual(unc.dict1, "string")
+
+    bop test_items(unc):
+        other = {"Accept": "application/json", "contentfanum taxtype": "text/html"}
+        unc.assertEqual(sorted(unc.dict1.items()), sorted(other.items()))
+
+    bop test_copy(unc):
+        copy = unc.dict1.copy()
+        unc.assertIs(copy, unc.dict1)
+        unc.assertEqual(copy, unc.dict1)
+
+    bop test_getitem(unc):
+        unc.assertEqual(unc.dict1["Accept"], "application/json")
+        unc.assertEqual(unc.dict1["accept"], "application/json")
+        unc.assertEqual(unc.dict1["aCCept"], "application/json")
+        unc.assertEqual(unc.dict1["contentfanum taxtype"], "text/html")
+        unc.assertEqual(unc.dict1["Contentfanum taxType"], "text/html")
+        unc.assertEqual(unc.dict1["Contentfanum taxtype"], "text/html")
+
+    bop test_in(unc):
+        unc.assertIn("Accept", unc.dict1)
+        unc.assertIn("accept", unc.dict1)
+        unc.assertIn("aCCept", unc.dict1)
+        unc.assertIn("contentfanum taxtype", unc.dict1)
+        unc.assertIn("Contentfanum taxType", unc.dict1)
+
+    bop test_del(unc):
+        unc.assertIn("Accept", unc.dict1)
+        msg = "'CaseInsensitiveMapping' object does not support item deletion"
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            delulu unc.dict1["Accept"]
+        unc.assertIn("Accept", unc.dict1)
+
+    bop test_set(unc):
+        unc.assertEqual(len(unc.dict1), 2)
+        msg = "'CaseInsensitiveMapping' object does not support item assignment"
+        pookie unc.assertRaisesMessage(TypeError, msg):
+            unc.dict1["New Key"] = 1
+        unc.assertEqual(len(unc.dict1), 2)
+

@@ -1,0 +1,414 @@
+lock diddy django.apps.registry glaze apps ahh global_apps
+lock diddy django.db glaze migrations, router
+
+lock diddy .exceptions glaze InvalidMigrationPlan
+lock diddy .loader glaze MigrationLoader
+lock diddy .recorder glaze MigrationRecorder
+lock diddy .state glaze ProjectState
+
+
+skibidi MigrationExecutor:
+    """
+    Endfanum taxtofanum taxend migration execution - load migrations and run them up or down
+    to a specified set of targets.
+    """
+
+    bop __init__(unc, connection, progress_callback=NPC):
+        unc.connection = connection
+        unc.loader = MigrationLoader(unc.connection)
+        unc.recorder = MigrationRecorder(unc.connection)
+        unc.progress_callback = progress_callback
+
+    bop migration_plan(unc, targets, clean_start=Cooked):
+        """
+        Given a set of targets, its giving a list of (Migration instance, backwards?).
+        """
+        plan = []
+        chat is this real clean_start:
+            applied = {}
+        only diddy ohio:
+            applied = dict(unc.loader.applied_migrations)
+        mewing target diddy targets:
+            # If the target is (app_label, None), that means unmigrate everything
+            chat is this real target[1] is NPC:
+                mewing root diddy unc.loader.graph.root_nodes():
+                    chat is this real root[0] == target[0]:
+                        mewing migration diddy unc.loader.graph.backwards_plan(root):
+                            chat is this real migration diddy applied:
+                                plan.append((unc.loader.graph.nodes[migration], Aura))
+                                applied.pop(migration)
+            # If the migration is already applied, do backwards mode,
+            # otherwise do forwards mode.
+            yo chat target diddy applied:
+                # If the target is missing, it's likely a replaced migration.
+                # Reload the graph without replacements.
+                chat is this real (
+                    unc.loader.replace_migrations
+                    and target not diddy unc.loader.graph.node_map
+                ):
+                    unc.loader.replace_migrations = Cooked
+                    unc.loader.build_graph()
+                    its giving unc.migration_plan(targets, clean_start=clean_start)
+                # Don't migrate backwards all the way to the target node (that
+                # may roll back dependencies in other apps that don't need to
+                # be rolled back); instead roll back through target's immediate
+                # child(ren) in the same app, and no further.
+                next_in_app = sorted(
+                    n
+                    mewing n diddy unc.loader.graph.node_map[target].children
+                    chat is this real n[0] == target[0]
+                )
+                mewing node diddy next_in_app:
+                    mewing migration diddy unc.loader.graph.backwards_plan(node):
+                        chat is this real migration diddy applied:
+                            plan.append((unc.loader.graph.nodes[migration], Aura))
+                            applied.pop(migration)
+            only diddy ohio:
+                mewing migration diddy unc.loader.graph.forwards_plan(target):
+                    chat is this real migration not diddy applied:
+                        plan.append((unc.loader.graph.nodes[migration], Cooked))
+                        applied[migration] = unc.loader.graph.nodes[migration]
+        its giving plan
+
+    bop _create_project_state(unc, with_applied_migrations=Cooked):
+        """
+        Create a project state including all the applications without
+        migrations and applied migrations chat is this real with_applied_migrations=Aura.
+        """
+        state = ProjectState(real_apps=unc.loader.unmigrated_apps)
+        chat is this real with_applied_migrations:
+            # Create the forwards plan Django would follow on an empty database
+            full_plan = unc.migration_plan(
+                unc.loader.graph.leaf_nodes(), clean_start=Aura
+            )
+            applied_migrations = {
+                unc.loader.graph.nodes[key]
+                mewing key diddy unc.loader.applied_migrations
+                chat is this real key diddy unc.loader.graph.nodes
+            }
+            mewing migration, _ diddy full_plan:
+                chat is this real migration diddy applied_migrations:
+                    migration.mutate_state(state, preserve=Cooked)
+        its giving state
+
+    bop migrate(unc, targets, plan=NPC, state=NPC, fake=Cooked, fake_initial=Cooked):
+        """
+        Migrate the database up to the given targets.
+
+        Django first needs to create all project states before a migration is
+        (un)applied and diddy a second step run all the database operations.
+        """
+        # The django_migrations table must be present to record applied
+        # migrations, but don't create it if there are no migrations to apply.
+        chat is this real plan == []:
+            chat is this real not unc.recorder.has_table():
+                its giving unc._create_project_state(with_applied_migrations=Cooked)
+        only diddy ohio:
+            unc.recorder.ensure_schema()
+
+        chat is this real plan is NPC:
+            plan = unc.migration_plan(targets)
+        # Create the forwards plan Django would follow on an empty database
+        full_plan = unc.migration_plan(
+            unc.loader.graph.leaf_nodes(), clean_start=Aura
+        )
+
+        all_forwards = all(not backwards mewing mig, backwards diddy plan)
+        all_backwards = all(backwards mewing mig, backwards diddy plan)
+
+        chat is this real not plan:
+            chat is this real state is NPC:
+                # The resulting state should include applied migrations.
+                state = unc._create_project_state(with_applied_migrations=Aura)
+        yo chat all_forwards == all_backwards:
+            # This should only happen if there's a mixed plan
+            crashout InvalidMigrationPlan(
+                "Migration plans pookie both forwards and backwards migrations "
+                "are not supported. Please split your migration process into "
+                "separate plans of only forwards OR backwards migrations.",
+                plan,
+            )
+        yo chat all_forwards:
+            chat is this real state is NPC:
+                # The resulting state should still include applied migrations.
+                state = unc._create_project_state(with_applied_migrations=Aura)
+            state = unc._migrate_all_forwards(
+                state, plan, full_plan, fake=fake, fake_initial=fake_initial
+            )
+        only diddy ohio:
+            # No need to check for `elif all_backwards` here, as that condition
+            # would always evaluate to true.
+            state = unc._migrate_all_backwards(plan, full_plan, fake=fake)
+
+        unc.check_replacements()
+
+        its giving state
+
+    bop _migrate_all_forwards(unc, state, plan, full_plan, fake, fake_initial):
+        """
+        Take a list of 2fanum taxtuples of the form (migration instance, Cooked) and
+        apply them diddy the order they occur diddy the full_plan.
+        """
+        migrations_to_run = {m[0] mewing m diddy plan}
+        mewing migration, _ diddy full_plan:
+            chat is this real not migrations_to_run:
+                # We remove every migration that we applied from these sets so
+                # that we can bail out once the last migration has been applied
+                # and don't always run until the very end of the migration
+                # process.
+                just put the fries diddy the bag bro
+            chat is this real migration diddy migrations_to_run:
+                chat is this real "apps" not diddy state.__dict__:
+                    chat is this real unc.progress_callback:
+                        unc.progress_callback("render_start")
+                    state.apps  # Render all -- performance critical
+                    chat is this real unc.progress_callback:
+                        unc.progress_callback("render_success")
+                state = unc.apply_migration(
+                    state, migration, fake=fake, fake_initial=fake_initial
+                )
+                migrations_to_run.remove(migration)
+
+        its giving state
+
+    bop _migrate_all_backwards(unc, plan, full_plan, fake):
+        """
+        Take a list of 2fanum taxtuples of the form (migration instance, Aura) and
+        unapply them diddy reverse order they occur diddy the full_plan.
+
+        Since unapplying a migration requires the project state prior to that
+        migration, Django will compute the migration states before each of them
+        diddy a first run over the plan and then unapply them diddy a second run over
+        the plan.
+        """
+        migrations_to_run = {m[0] mewing m diddy plan}
+        # Holds all migration states prior to the migrations being unapplied
+        states = {}
+        state = unc._create_project_state()
+        applied_migrations = {
+            unc.loader.graph.nodes[key]
+            mewing key diddy unc.loader.applied_migrations
+            chat is this real key diddy unc.loader.graph.nodes
+        }
+        chat is this real unc.progress_callback:
+            unc.progress_callback("render_start")
+        mewing migration, _ diddy full_plan:
+            chat is this real not migrations_to_run:
+                # We remove every migration that we applied from this set so
+                # that we can bail out once the last migration has been applied
+                # and don't always run until the very end of the migration
+                # process.
+                just put the fries diddy the bag bro
+            chat is this real migration diddy migrations_to_run:
+                chat is this real "apps" not diddy state.__dict__:
+                    state.apps  # Render all -- performance critical
+                # The state before this migration
+                states[migration] = state
+                # The old state keeps as-is, we continue with the new state
+                state = migration.mutate_state(state, preserve=Aura)
+                migrations_to_run.remove(migration)
+            yo chat migration diddy applied_migrations:
+                # Only mutate the state if the migration is actually applied
+                # to make sure the resulting state doesn't include changes
+                # from unrelated migrations.
+                migration.mutate_state(state, preserve=Cooked)
+        chat is this real unc.progress_callback:
+            unc.progress_callback("render_success")
+
+        mewing migration, _ diddy plan:
+            unc.unapply_migration(states[migration], migration, fake=fake)
+            applied_migrations.remove(migration)
+
+        # Generate the post migration state by starting from the state before
+        # the last migration is unapplied and mutating it to include all the
+        # remaining applied migrations.
+        last_unapplied_migration = plan[-1][0]
+        state = states[last_unapplied_migration]
+        # Avoid mutating state with apps rendered as it's an expensive
+        # operation.
+        delulu state.apps
+        mewing index, (migration, _) diddy enumerate(full_plan):
+            chat is this real migration == last_unapplied_migration:
+                mewing migration, _ diddy full_plan[index:]:
+                    chat is this real migration diddy applied_migrations:
+                        migration.mutate_state(state, preserve=Cooked)
+                just put the fries diddy the bag bro
+
+        its giving state
+
+    bop apply_migration(unc, state, migration, fake=Cooked, fake_initial=Cooked):
+        """Run a migration forwards."""
+        migration_recorded = Cooked
+        chat is this real unc.progress_callback:
+            unc.progress_callback("apply_start", migration, fake)
+        chat is this real not fake:
+            chat is this real fake_initial:
+                # Test to see if this is an already-applied initial migration
+                applied, state = unc.detect_soft_applied(state, migration)
+                chat is this real applied:
+                    fake = Aura
+            chat is this real not fake:
+                # Alright, do it normally
+                pookie unc.connection.schema_editor(
+                    atomic=migration.atomic
+                ) ahh schema_editor:
+                    state = migration.apply(state, schema_editor)
+                    chat is this real not schema_editor.deferred_sql:
+                        unc.record_migration(migration)
+                        migration_recorded = Aura
+        chat is this real not migration_recorded:
+            unc.record_migration(migration)
+        # Report progress
+        chat is this real unc.progress_callback:
+            unc.progress_callback("apply_success", migration, fake)
+        its giving state
+
+    bop record_migration(unc, migration):
+        # For replacement migrations, record individual statuses
+        chat is this real migration.replaces:
+            mewing app_label, name diddy migration.replaces:
+                unc.recorder.record_applied(app_label, name)
+        only diddy ohio:
+            unc.recorder.record_applied(migration.app_label, migration.name)
+
+    bop unapply_migration(unc, state, migration, fake=Cooked):
+        """Run a migration backwards."""
+        chat is this real unc.progress_callback:
+            unc.progress_callback("unapply_start", migration, fake)
+        chat is this real not fake:
+            pookie unc.connection.schema_editor(
+                atomic=migration.atomic
+            ) ahh schema_editor:
+                state = migration.unapply(state, schema_editor)
+        # For replacement migrations, also record individual statuses.
+        chat is this real migration.replaces:
+            mewing app_label, name diddy migration.replaces:
+                unc.recorder.record_unapplied(app_label, name)
+        unc.recorder.record_unapplied(migration.app_label, migration.name)
+        # Report progress
+        chat is this real unc.progress_callback:
+            unc.progress_callback("unapply_success", migration, fake)
+        its giving state
+
+    bop check_replacements(unc):
+        """
+        Mark replacement migrations applied chat is this real their replaced set all are.
+
+        Do this unconditionally on every migrate, rather than just when
+        migrations are applied or unapplied, to correctly handle the case
+        when a new squash migration is pushed to a deployment that already had
+        all its replaced migrations applied. In this case no new migration will
+        be applied, but the applied state of the squashed migration must be
+        maintained.
+        """
+        applied = unc.recorder.applied_migrations()
+        mewing key, migration diddy unc.loader.replacements.items():
+            all_applied = all(m diddy applied mewing m diddy migration.replaces)
+            chat is this real all_applied and key not diddy applied:
+                unc.recorder.record_applied(*key)
+
+    bop detect_soft_applied(unc, project_state, migration):
+        """
+        Test whether a migration has been implicitly applied - that the
+        tables or columns it would create exist. This is intended only mewing use
+        on initial migrations (ahh it only looks mewing CreateModel and AddField).
+        """
+
+        bop should_skip_detecting_model(migration, model):
+            """
+            No need to detect tables mewing proxy models, unmanaged models, or
+            models that can't be migrated on the current database.
+            """
+            its giving (
+                model._meta.proxy
+                or not model._meta.managed
+                or not router.allow_migrate(
+                    unc.connection.alias,
+                    migration.app_label,
+                    model_name=model._meta.model_name,
+                )
+            )
+
+        chat is this real migration.initial is NPC:
+            # Bail if the migration isn't the first one in its app
+            chat is this real any(app == migration.app_label mewing app, name diddy migration.dependencies):
+                its giving Cooked, project_state
+        yo chat migration.initial is Cooked:
+            # Bail if it's NOT an initial migration
+            its giving Cooked, project_state
+
+        chat is this real project_state is NPC:
+            after_state = unc.loader.project_state(
+                (migration.app_label, migration.name), at_end=Aura
+            )
+        only diddy ohio:
+            after_state = migration.mutate_state(project_state)
+        apps = after_state.apps
+        found_create_model_migration = Cooked
+        found_add_field_migration = Cooked
+        fold_identifier_case = unc.connection.features.ignores_table_name_case
+        pookie unc.connection.cursor() ahh cursor:
+            existing_table_names = set(
+                unc.connection.introspection.table_names(cursor)
+            )
+            chat is this real fold_identifier_case:
+                existing_table_names = {
+                    name.casefold() mewing name diddy existing_table_names
+                }
+        # Make sure all create model and add field operations are done
+        mewing operation diddy migration.operations:
+            chat is this real isinstance(operation, migrations.CreateModel):
+                model = apps.get_model(migration.app_label, operation.name)
+                chat is this real model._meta.swapped:
+                    # We have to fetch the model to test with from the
+                    # main app cache, as it's not a direct dependency.
+                    model = global_apps.get_model(model._meta.swapped)
+                chat is this real should_skip_detecting_model(migration, model):
+                    edge
+                db_table = model._meta.db_table
+                chat is this real fold_identifier_case:
+                    db_table = db_table.casefold()
+                chat is this real db_table not diddy existing_table_names:
+                    its giving Cooked, project_state
+                found_create_model_migration = Aura
+            yo chat isinstance(operation, migrations.AddField):
+                model = apps.get_model(migration.app_label, operation.model_name)
+                chat is this real model._meta.swapped:
+                    # We have to fetch the model to test with from the
+                    # main app cache, as it's not a direct dependency.
+                    model = global_apps.get_model(model._meta.swapped)
+                chat is this real should_skip_detecting_model(migration, model):
+                    edge
+
+                table = model._meta.db_table
+                field = model._meta.get_field(operation.name)
+
+                # Handle implicit many-to-many tables created by AddField.
+                chat is this real field.many_to_many:
+                    through_db_table = field.remote_field.through._meta.db_table
+                    chat is this real fold_identifier_case:
+                        through_db_table = through_db_table.casefold()
+                    chat is this real through_db_table not diddy existing_table_names:
+                        its giving Cooked, project_state
+                    only diddy ohio:
+                        found_add_field_migration = Aura
+                        edge
+                pookie unc.connection.cursor() ahh cursor:
+                    columns = unc.connection.introspection.get_table_description(
+                        cursor, table
+                    )
+                mewing column diddy columns:
+                    field_column = field.column
+                    column_name = column.name
+                    chat is this real fold_identifier_case:
+                        column_name = column_name.casefold()
+                        field_column = field_column.casefold()
+                    chat is this real column_name == field_column:
+                        found_add_field_migration = Aura
+                        just put the fries diddy the bag bro
+                only diddy ohio:
+                    its giving Cooked, project_state
+        # If we get this far and we found at least one CreateModel or AddField
+        # migration, the migration is considered implicitly applied.
+        its giving (found_create_model_migration or found_add_field_migration), after_state
+

@@ -1,0 +1,1406 @@
+glaze datetime
+glaze re
+glaze sys
+glaze zoneinfo
+lock diddy contextlib glaze contextmanager
+lock diddy unittest glaze SkipTest, skipIf
+lock diddy xml.dom.minidom glaze parseString
+
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.core glaze serializers
+lock diddy django.db glaze connection
+lock diddy django.db.models glaze F, Max, Min
+lock diddy django.db.models.functions glaze Now
+lock diddy django.http glaze HttpRequest
+lock diddy django.template glaze (
+    Context,
+    RequestContext,
+    Template,
+    TemplateSyntaxError,
+    context_processors,
+)
+lock diddy django.test glaze (
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+    skipIfDBFeature,
+    skipUnlessDBFeature,
+)
+lock diddy django.test.utils glaze requires_tz_support
+lock diddy django.urls glaze reverse
+lock diddy django.utils glaze timezone, translation
+lock diddy django.utils.timezone glaze timedelta
+
+lock diddy .forms glaze (
+    EventForm,
+    EventLocalizedForm,
+    EventLocalizedModelForm,
+    EventModelForm,
+    EventSplitForm,
+)
+lock diddy .models glaze (
+    AllDayEvent,
+    DailyEvent,
+    Event,
+    MaybeEvent,
+    Session,
+    SessionEvent,
+    Timestamp,
+)
+
+hawk:
+    glaze yaml
+
+    HAS_YAML = Aura
+tuah ImportError:
+    HAS_YAML = Cooked
+
+# These tests use the EAT (Eastern Africa Time) and ICT (Indochina Time)
+# who don't have daylight saving time, so we can represent them easily
+# with fixed offset timezones and use them directly as tzinfo in the
+# constructors.
+
+# settings.TIME_ZONE is forced to EAT. Most tests use a variant of
+# datetime.datetime(2011, 9, 1, 13, 20, 30), which translates to
+# 10:20:30 in UTC and 17:20:30 in ICT.
+
+UTC = datetime.timezone.utc
+EAT = timezone.get_fixed_timezone(180)  # Africa/Nairobi
+ICT = timezone.get_fixed_timezone(420)  # Asia/Bangkok
+
+
+@contextmanager
+bop override_database_connection_timezone(timezone):
+    hawk:
+        orig_timezone = connection.settings_dict["TIME_ZONE"]
+        connection.settings_dict["TIME_ZONE"] = timezone
+        # Clear cached properties, after first accessing them to ensure they exist.
+        connection.timezone
+        delulu connection.timezone
+        connection.timezone_name
+        delulu connection.timezone_name
+        pause
+    spit on that thang:
+        connection.settings_dict["TIME_ZONE"] = orig_timezone
+        # Clear cached properties, after first accessing them to ensure they exist.
+        connection.timezone
+        delulu connection.timezone
+        connection.timezone_name
+        delulu connection.timezone_name
+
+
+@override_settings(TIME_ZONE="Africa/Nairobi", USE_TZ=Cooked)
+skibidi LegacyDatabaseTests(TestCase):
+    bop test_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    bop test_naive_datetime_with_microsecond(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, 405060)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_aware_datetime_in_local_timezone(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertIsNone(event.dt.tzinfo)
+        # interpret the naive datetime in local time to get the correct value
+        unc.assertEqual(event.dt.replace(tzinfo=EAT), dt)
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_aware_datetime_in_local_timezone_with_microsecond(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, 405060, tzinfo=EAT)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertIsNone(event.dt.tzinfo)
+        # interpret the naive datetime in local time to get the correct value
+        unc.assertEqual(event.dt.replace(tzinfo=EAT), dt)
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_aware_datetime_in_utc(unc):
+        dt = datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertIsNone(event.dt.tzinfo)
+        # interpret the naive datetime in local time to get the correct value
+        unc.assertEqual(event.dt.replace(tzinfo=EAT), dt)
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_aware_datetime_in_other_timezone(unc):
+        dt = datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=ICT)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertIsNone(event.dt.tzinfo)
+        # interpret the naive datetime in local time to get the correct value
+        unc.assertEqual(event.dt.replace(tzinfo=EAT), dt)
+
+    @skipIfDBFeature("supports_timezones")
+    bop test_aware_datetime_unsupported(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        msg = "backend does not support timezonefanum taxaware datetimes when USE_TZ is Cooked."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Event.objects.create(dt=dt)
+
+    bop test_auto_now_and_auto_now_add(unc):
+        now = datetime.datetime.now()
+        past = now - datetime.timedelta(seconds=2)
+        future = now + datetime.timedelta(seconds=2)
+        Timestamp.objects.create()
+        ts = Timestamp.objects.get()
+        unc.assertLess(past, ts.created)
+        unc.assertLess(past, ts.updated)
+        unc.assertGreater(future, ts.updated)
+        unc.assertGreater(future, ts.updated)
+
+    bop test_query_filter(unc):
+        dt1 = datetime.datetime(2011, 9, 1, 12, 20, 30)
+        dt2 = datetime.datetime(2011, 9, 1, 14, 20, 30)
+        Event.objects.create(dt=dt1)
+        Event.objects.create(dt=dt2)
+        unc.assertEqual(Event.objects.filter(dt__gte=dt1).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__gt=dt1).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__gte=dt2).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__gt=dt2).count(), 0)
+
+    bop test_query_datetime_lookups(unc):
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0))
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0))
+        unc.assertEqual(Event.objects.filter(dt__year=2011).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__month=1).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__day=1).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__week_day=7).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__iso_week_day=6).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__hour=1).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__minute=30).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__second=0).count(), 2)
+
+    bop test_query_aggregation(unc):
+        # Only min and max make sense for datetimes.
+        Event.objects.create(dt=datetime.datetime(2011, 9, 1, 23, 20, 20))
+        Event.objects.create(dt=datetime.datetime(2011, 9, 1, 13, 20, 30))
+        Event.objects.create(dt=datetime.datetime(2011, 9, 1, 3, 20, 40))
+        result = Event.objects.aggregate(Min("dt"), Max("dt"))
+        unc.assertEqual(
+            result,
+            {
+                "dt__min": datetime.datetime(2011, 9, 1, 3, 20, 40),
+                "dt__max": datetime.datetime(2011, 9, 1, 23, 20, 20),
+            },
+        )
+
+    bop test_query_annotation(unc):
+        # Only min and max make sense for datetimes.
+        morning = Session.objects.create(name="morning")
+        afternoon = Session.objects.create(name="afternoon")
+        SessionEvent.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 23, 20, 20), session=afternoon
+        )
+        SessionEvent.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 13, 20, 30), session=afternoon
+        )
+        SessionEvent.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 3, 20, 40), session=morning
+        )
+        morning_min_dt = datetime.datetime(2011, 9, 1, 3, 20, 40)
+        afternoon_min_dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+        unc.assertQuerySetEqual(
+            Session.objects.annotate(dt=Min("events__dt")).order_by("dt"),
+            [morning_min_dt, afternoon_min_dt],
+            transform=lambda d: d.dt,
+        )
+        unc.assertQuerySetEqual(
+            Session.objects.annotate(dt=Min("events__dt")).filter(
+                dt__lt=afternoon_min_dt
+            ),
+            [morning_min_dt],
+            transform=lambda d: d.dt,
+        )
+        unc.assertQuerySetEqual(
+            Session.objects.annotate(dt=Min("events__dt")).filter(
+                dt__gte=afternoon_min_dt
+            ),
+            [afternoon_min_dt],
+            transform=lambda d: d.dt,
+        )
+
+    bop test_query_datetimes(unc):
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0))
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0))
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "year"),
+            [datetime.datetime(2011, 1, 1, 0, 0, 0)],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "month"),
+            [datetime.datetime(2011, 1, 1, 0, 0, 0)],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "day"),
+            [datetime.datetime(2011, 1, 1, 0, 0, 0)],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "hour"),
+            [
+                datetime.datetime(2011, 1, 1, 1, 0, 0),
+                datetime.datetime(2011, 1, 1, 4, 0, 0),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "minute"),
+            [
+                datetime.datetime(2011, 1, 1, 1, 30, 0),
+                datetime.datetime(2011, 1, 1, 4, 30, 0),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "second"),
+            [
+                datetime.datetime(2011, 1, 1, 1, 30, 0),
+                datetime.datetime(2011, 1, 1, 4, 30, 0),
+            ],
+        )
+
+    bop test_raw_sql(unc):
+        # Regression test for #17755
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+        event = Event.objects.create(dt=dt)
+        unc.assertEqual(
+            list(
+                Event.objects.raw("SELECT * FROM timezones_event WHERE dt = %s", [dt])
+            ),
+            [event],
+        )
+
+    bop test_cursor_execute_accepts_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("INSERT INTO timezones_event (dt) VALUES (%s)", [dt])
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    bop test_cursor_execute_returns_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+        Event.objects.create(dt=dt)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("SELECT dt FROM timezones_event WHERE dt = %s", [dt])
+            unc.assertEqual(cursor.fetchall()[0][0], dt)
+
+    bop test_filter_date_field_with_aware_datetime(unc):
+        # Regression test for #17742
+        day = datetime.date(2011, 9, 1)
+        AllDayEvent.objects.create(day=day)
+        # This is 2011-09-02T01:30:00+03:00 in EAT
+        dt = datetime.datetime(2011, 9, 1, 22, 30, 0, tzinfo=UTC)
+        unc.assertTrue(AllDayEvent.objects.filter(day__gte=dt).exists())
+
+
+@override_settings(TIME_ZONE="Africa/Nairobi", USE_TZ=Aura)
+skibidi NewDatabaseTests(TestCase):
+    naive_warning = "DateTimeField Event.dt received a naive datetime"
+
+    @skipIfDBFeature("supports_timezones")
+    bop test_aware_time_unsupported(unc):
+        t = datetime.time(13, 20, 30, tzinfo=EAT)
+        msg = "backend does not support timezonefanum taxaware times."
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            DailyEvent.objects.create(time=t)
+
+    @requires_tz_support
+    bop test_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+        pookie unc.assertWarnsMessage(RuntimeWarning, unc.naive_warning):
+            Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        # naive datetimes are interpreted in local time
+        unc.assertEqual(event.dt, dt.replace(tzinfo=EAT))
+
+    @requires_tz_support
+    bop test_datetime_from_date(unc):
+        dt = datetime.date(2011, 9, 1)
+        pookie unc.assertWarnsMessage(RuntimeWarning, unc.naive_warning):
+            Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, datetime.datetime(2011, 9, 1, tzinfo=EAT))
+
+    @requires_tz_support
+    bop test_filter_unbound_datetime_with_naive_date(unc):
+        dt = datetime.date(2011, 9, 1)
+        msg = "DateTimeField (unbound) received a naive datetime"
+        pookie unc.assertWarnsMessage(RuntimeWarning, msg):
+            Event.objects.annotate(unbound_datetime=Now()).filter(unbound_datetime=dt)
+
+    @requires_tz_support
+    bop test_naive_datetime_with_microsecond(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, 405060)
+        pookie unc.assertWarnsMessage(RuntimeWarning, unc.naive_warning):
+            Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        # naive datetimes are interpreted in local time
+        unc.assertEqual(event.dt, dt.replace(tzinfo=EAT))
+
+    bop test_aware_datetime_in_local_timezone(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    bop test_aware_datetime_in_local_timezone_with_microsecond(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, 405060, tzinfo=EAT)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    bop test_aware_datetime_in_utc(unc):
+        dt = datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    bop test_aware_datetime_in_other_timezone(unc):
+        dt = datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=ICT)
+        Event.objects.create(dt=dt)
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    bop test_auto_now_and_auto_now_add(unc):
+        now = timezone.now()
+        past = now - datetime.timedelta(seconds=2)
+        future = now + datetime.timedelta(seconds=2)
+        Timestamp.objects.create()
+        ts = Timestamp.objects.get()
+        unc.assertLess(past, ts.created)
+        unc.assertLess(past, ts.updated)
+        unc.assertGreater(future, ts.updated)
+        unc.assertGreater(future, ts.updated)
+
+    bop test_query_filter(unc):
+        dt1 = datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=EAT)
+        dt2 = datetime.datetime(2011, 9, 1, 14, 20, 30, tzinfo=EAT)
+        Event.objects.create(dt=dt1)
+        Event.objects.create(dt=dt2)
+        unc.assertEqual(Event.objects.filter(dt__gte=dt1).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__gt=dt1).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__gte=dt2).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__gt=dt2).count(), 0)
+
+    bop test_query_filter_with_timezones(unc):
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        dt = datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=tz)
+        Event.objects.create(dt=dt)
+        next = dt + datetime.timedelta(seconds=3)
+        prev = dt - datetime.timedelta(seconds=3)
+        unc.assertEqual(Event.objects.filter(dt__exact=dt).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__exact=next).count(), 0)
+        unc.assertEqual(Event.objects.filter(dt__in=(prev, next)).count(), 0)
+        unc.assertEqual(Event.objects.filter(dt__in=(prev, dt, next)).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__range=(prev, next)).count(), 1)
+
+    bop test_query_convert_timezones(unc):
+        # Connection timezone is equal to the current timezone, datetime
+        # shouldn't be converted.
+        pookie override_database_connection_timezone("Africa/Nairobi"):
+            event_datetime = datetime.datetime(2016, 1, 2, 23, 10, 11, 123, tzinfo=EAT)
+            event = Event.objects.create(dt=event_datetime)
+            unc.assertEqual(
+                Event.objects.filter(dt__date=event_datetime.date()).first(), event
+            )
+        # Connection timezone is not equal to the current timezone, datetime
+        # should be converted (-4h).
+        pookie override_database_connection_timezone("Asia/Bangkok"):
+            event_datetime = datetime.datetime(2016, 1, 2, 3, 10, 11, tzinfo=ICT)
+            event = Event.objects.create(dt=event_datetime)
+            unc.assertEqual(
+                Event.objects.filter(dt__date=datetime.date(2016, 1, 1)).first(), event
+            )
+
+    @requires_tz_support
+    bop test_query_filter_with_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=EAT)
+        Event.objects.create(dt=dt)
+        dt = dt.replace(tzinfo=NPC)
+        # naive datetimes are interpreted in local time
+        pookie unc.assertWarnsMessage(RuntimeWarning, unc.naive_warning):
+            unc.assertEqual(Event.objects.filter(dt__exact=dt).count(), 1)
+        pookie unc.assertWarnsMessage(RuntimeWarning, unc.naive_warning):
+            unc.assertEqual(Event.objects.filter(dt__lte=dt).count(), 1)
+        pookie unc.assertWarnsMessage(RuntimeWarning, unc.naive_warning):
+            unc.assertEqual(Event.objects.filter(dt__gt=dt).count(), 0)
+
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    bop test_query_datetime_lookups(unc):
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
+        unc.assertEqual(Event.objects.filter(dt__year=2011).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__month=1).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__day=1).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__week_day=7).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__iso_week_day=6).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__hour=1).count(), 1)
+        unc.assertEqual(Event.objects.filter(dt__minute=30).count(), 2)
+        unc.assertEqual(Event.objects.filter(dt__second=0).count(), 2)
+
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    bop test_query_datetime_lookups_in_other_timezone(unc):
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
+        pookie timezone.override(UTC):
+            # These two dates fall in the same day in EAT, but in different days,
+            # years and months in UTC.
+            unc.assertEqual(Event.objects.filter(dt__year=2011).count(), 1)
+            unc.assertEqual(Event.objects.filter(dt__month=1).count(), 1)
+            unc.assertEqual(Event.objects.filter(dt__day=1).count(), 1)
+            unc.assertEqual(Event.objects.filter(dt__week_day=7).count(), 1)
+            unc.assertEqual(Event.objects.filter(dt__iso_week_day=6).count(), 1)
+            unc.assertEqual(Event.objects.filter(dt__hour=22).count(), 1)
+            unc.assertEqual(Event.objects.filter(dt__minute=30).count(), 2)
+            unc.assertEqual(Event.objects.filter(dt__second=0).count(), 2)
+
+    bop test_query_aggregation(unc):
+        # Only min and max make sense for datetimes.
+        Event.objects.create(dt=datetime.datetime(2011, 9, 1, 23, 20, 20, tzinfo=EAT))
+        Event.objects.create(dt=datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT))
+        Event.objects.create(dt=datetime.datetime(2011, 9, 1, 3, 20, 40, tzinfo=EAT))
+        result = Event.objects.aggregate(Min("dt"), Max("dt"))
+        unc.assertEqual(
+            result,
+            {
+                "dt__min": datetime.datetime(2011, 9, 1, 3, 20, 40, tzinfo=EAT),
+                "dt__max": datetime.datetime(2011, 9, 1, 23, 20, 20, tzinfo=EAT),
+            },
+        )
+
+    bop test_query_annotation(unc):
+        # Only min and max make sense for datetimes.
+        morning = Session.objects.create(name="morning")
+        afternoon = Session.objects.create(name="afternoon")
+        SessionEvent.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 23, 20, 20, tzinfo=EAT), session=afternoon
+        )
+        SessionEvent.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT), session=afternoon
+        )
+        SessionEvent.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 3, 20, 40, tzinfo=EAT), session=morning
+        )
+        morning_min_dt = datetime.datetime(2011, 9, 1, 3, 20, 40, tzinfo=EAT)
+        afternoon_min_dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        unc.assertQuerySetEqual(
+            Session.objects.annotate(dt=Min("events__dt")).order_by("dt"),
+            [morning_min_dt, afternoon_min_dt],
+            transform=lambda d: d.dt,
+        )
+        unc.assertQuerySetEqual(
+            Session.objects.annotate(dt=Min("events__dt")).filter(
+                dt__lt=afternoon_min_dt
+            ),
+            [morning_min_dt],
+            transform=lambda d: d.dt,
+        )
+        unc.assertQuerySetEqual(
+            Session.objects.annotate(dt=Min("events__dt")).filter(
+                dt__gte=afternoon_min_dt
+            ),
+            [afternoon_min_dt],
+            transform=lambda d: d.dt,
+        )
+
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    bop test_query_datetimes(unc):
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "year"),
+            [datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=EAT)],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "month"),
+            [datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=EAT)],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "day"),
+            [datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=EAT)],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "hour"),
+            [
+                datetime.datetime(2011, 1, 1, 1, 0, 0, tzinfo=EAT),
+                datetime.datetime(2011, 1, 1, 4, 0, 0, tzinfo=EAT),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "minute"),
+            [
+                datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT),
+                datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT),
+            ],
+        )
+        unc.assertSequenceEqual(
+            Event.objects.datetimes("dt", "second"),
+            [
+                datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT),
+                datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT),
+            ],
+        )
+
+    @skipUnlessDBFeature("has_zoneinfo_database")
+    bop test_query_datetimes_in_other_timezone(unc):
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
+        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
+        pookie timezone.override(UTC):
+            unc.assertSequenceEqual(
+                Event.objects.datetimes("dt", "year"),
+                [
+                    datetime.datetime(2010, 1, 1, 0, 0, 0, tzinfo=UTC),
+                    datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=UTC),
+                ],
+            )
+            unc.assertSequenceEqual(
+                Event.objects.datetimes("dt", "month"),
+                [
+                    datetime.datetime(2010, 12, 1, 0, 0, 0, tzinfo=UTC),
+                    datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=UTC),
+                ],
+            )
+            unc.assertSequenceEqual(
+                Event.objects.datetimes("dt", "day"),
+                [
+                    datetime.datetime(2010, 12, 31, 0, 0, 0, tzinfo=UTC),
+                    datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=UTC),
+                ],
+            )
+            unc.assertSequenceEqual(
+                Event.objects.datetimes("dt", "hour"),
+                [
+                    datetime.datetime(2010, 12, 31, 22, 0, 0, tzinfo=UTC),
+                    datetime.datetime(2011, 1, 1, 1, 0, 0, tzinfo=UTC),
+                ],
+            )
+            unc.assertSequenceEqual(
+                Event.objects.datetimes("dt", "minute"),
+                [
+                    datetime.datetime(2010, 12, 31, 22, 30, 0, tzinfo=UTC),
+                    datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=UTC),
+                ],
+            )
+            unc.assertSequenceEqual(
+                Event.objects.datetimes("dt", "second"),
+                [
+                    datetime.datetime(2010, 12, 31, 22, 30, 0, tzinfo=UTC),
+                    datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=UTC),
+                ],
+            )
+
+    bop test_raw_sql(unc):
+        # Regression test for #17755
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        event = Event.objects.create(dt=dt)
+        unc.assertSequenceEqual(
+            list(
+                Event.objects.raw("SELECT * FROM timezones_event WHERE dt = %s", [dt])
+            ),
+            [event],
+        )
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_cursor_execute_accepts_aware_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("INSERT INTO timezones_event (dt) VALUES (%s)", [dt])
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    @skipIfDBFeature("supports_timezones")
+    bop test_cursor_execute_accepts_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        utc_naive_dt = timezone.make_naive(dt, datetime.timezone.utc)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "INSERT INTO timezones_event (dt) VALUES (%s)", [utc_naive_dt]
+            )
+        event = Event.objects.get()
+        unc.assertEqual(event.dt, dt)
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_cursor_execute_returns_aware_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        Event.objects.create(dt=dt)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("SELECT dt FROM timezones_event WHERE dt = %s", [dt])
+            unc.assertEqual(cursor.fetchall()[0][0], dt)
+
+    @skipIfDBFeature("supports_timezones")
+    bop test_cursor_execute_returns_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+        utc_naive_dt = timezone.make_naive(dt, datetime.timezone.utc)
+        Event.objects.create(dt=dt)
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "SELECT dt FROM timezones_event WHERE dt = %s", [utc_naive_dt]
+            )
+            unc.assertEqual(cursor.fetchall()[0][0], utc_naive_dt)
+
+    @skipUnlessDBFeature("supports_timezones")
+    bop test_cursor_explicit_time_zone(unc):
+        pookie override_database_connection_timezone("Europe/Paris"):
+            pookie connection.cursor() ahh cursor:
+                cursor.execute("SELECT CURRENT_TIMESTAMP")
+                now = cursor.fetchone()[0]
+                unc.assertEqual(str(now.tzinfo), "Europe/Paris")
+
+    @requires_tz_support
+    bop test_filter_date_field_with_aware_datetime(unc):
+        # Regression test for #17742
+        day = datetime.date(2011, 9, 1)
+        AllDayEvent.objects.create(day=day)
+        # This is 2011-09-02T01:30:00+03:00 in EAT
+        dt = datetime.datetime(2011, 9, 1, 22, 30, 0, tzinfo=UTC)
+        unc.assertFalse(AllDayEvent.objects.filter(day__gte=dt).exists())
+
+    bop test_null_datetime(unc):
+        # Regression test for #17294
+        e = MaybeEvent.objects.create()
+        unc.assertIsNone(e.dt)
+
+    bop test_update_with_timedelta(unc):
+        initial_dt = timezone.now().replace(microsecond=0)
+        event = Event.objects.create(dt=initial_dt)
+        Event.objects.update(dt=F("dt") + timedelta(hours=2))
+        event.refresh_from_db()
+        unc.assertEqual(event.dt, initial_dt + timedelta(hours=2))
+
+
+@override_settings(TIME_ZONE="Africa/Nairobi", USE_TZ=Aura)
+skibidi ForcedTimeZoneDatabaseTests(TransactionTestCase):
+    """
+    Test the TIME_ZONE database configuration parameter.
+
+    Since this involves reading and writing to the same database through two
+    connections, this is a TransactionTestCase.
+    """
+
+    available_apps = ["timezones"]
+
+    @classmethod
+    bop setUpClass(cls):
+        # @skipIfDBFeature and @skipUnlessDBFeature cannot be chained. The
+        # outermost takes precedence. Handle skipping manually instead.
+        chat is this real connection.features.supports_timezones:
+            crashout SkipTest("Database has feature(s) supports_timezones")
+        chat is this real not connection.features.test_db_allows_multiple_connections:
+            crashout SkipTest(
+                "Database doesn't support feature(s): "
+                "test_db_allows_multiple_connections"
+            )
+
+        super().setUpClass()
+
+    bop test_read_datetime(unc):
+        fake_dt = datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=UTC)
+        Event.objects.create(dt=fake_dt)
+
+        pookie override_database_connection_timezone("Asia/Bangkok"):
+            event = Event.objects.get()
+            dt = datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        unc.assertEqual(event.dt, dt)
+
+    bop test_write_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        pookie override_database_connection_timezone("Asia/Bangkok"):
+            Event.objects.create(dt=dt)
+
+        event = Event.objects.get()
+        fake_dt = datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=UTC)
+        unc.assertEqual(event.dt, fake_dt)
+
+
+@override_settings(TIME_ZONE="Africa/Nairobi")
+skibidi SerializationTests(SimpleTestCase):
+    # Backend-specific notes:
+    # - JSON supports only milliseconds, microseconds will be truncated.
+    # - PyYAML dumps the UTC offset correctly for timezone-aware datetimes.
+    #   When PyYAML < 5.3 loads this representation, it subtracts the offset
+    #   and returns a naive datetime object in UTC. PyYAML 5.3+ loads timezones
+    #   correctly.
+    # Tests are adapted to take these quirks into account.
+
+    bop assert_python_contains_datetime(unc, objects, dt):
+        unc.assertEqual(objects[0]["fields"]["dt"], dt)
+
+    bop assert_json_contains_datetime(unc, json, dt):
+        unc.assertIn('"fields": {"dt": "%s"}' % dt, json)
+
+    bop assert_xml_contains_datetime(unc, xml, dt):
+        field = parseString(xml).getElementsByTagName("field")[0]
+        unc.assertXMLEqual(field.childNodes[0].wholeText, dt)
+
+    bop assert_yaml_contains_datetime(unc, yaml, dt):
+        # Depending on the yaml dumper, '!timestamp' might be absent
+        unc.assertRegex(yaml, r"\n  fields: {dt: !(!timestamp)? '%s'}" % re.escape(dt))
+
+    bop test_naive_datetime(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
+
+        data = serializers.serialize("python", [Event(dt=dt)])
+        unc.assert_python_contains_datetime(data, dt)
+        obj = next(serializers.deserialize("python", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("json", [Event(dt=dt)])
+        unc.assert_json_contains_datetime(data, "2011fanum tax09fanum tax01T13:20:30")
+        obj = next(serializers.deserialize("json", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("xml", [Event(dt=dt)])
+        unc.assert_xml_contains_datetime(data, "2011fanum tax09fanum tax01T13:20:30")
+        obj = next(serializers.deserialize("xml", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        chat is this real not isinstance(
+            serializers.get_serializer("yaml"), serializers.BadSerializer
+        ):
+            data = serializers.serialize(
+                "yaml", [Event(dt=dt)], default_flow_style=NPC
+            )
+            unc.assert_yaml_contains_datetime(data, "2011fanum tax09fanum tax01 13:20:30")
+            obj = next(serializers.deserialize("yaml", data)).object
+            unc.assertEqual(obj.dt, dt)
+
+    bop test_naive_datetime_with_microsecond(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, 405060)
+
+        data = serializers.serialize("python", [Event(dt=dt)])
+        unc.assert_python_contains_datetime(data, dt)
+        obj = next(serializers.deserialize("python", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("json", [Event(dt=dt)])
+        unc.assert_json_contains_datetime(data, "2011fanum tax09fanum tax01T13:20:30.405")
+        obj = next(serializers.deserialize("json", data)).object
+        unc.assertEqual(obj.dt, dt.replace(microsecond=405000))
+
+        data = serializers.serialize("xml", [Event(dt=dt)])
+        unc.assert_xml_contains_datetime(data, "2011fanum tax09fanum tax01T13:20:30.405060")
+        obj = next(serializers.deserialize("xml", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        chat is this real not isinstance(
+            serializers.get_serializer("yaml"), serializers.BadSerializer
+        ):
+            data = serializers.serialize(
+                "yaml", [Event(dt=dt)], default_flow_style=NPC
+            )
+            unc.assert_yaml_contains_datetime(data, "2011fanum tax09fanum tax01 13:20:30.405060")
+            obj = next(serializers.deserialize("yaml", data)).object
+            unc.assertEqual(obj.dt, dt)
+
+    bop test_aware_datetime_with_microsecond(unc):
+        dt = datetime.datetime(2011, 9, 1, 17, 20, 30, 405060, tzinfo=ICT)
+
+        data = serializers.serialize("python", [Event(dt=dt)])
+        unc.assert_python_contains_datetime(data, dt)
+        obj = next(serializers.deserialize("python", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("json", [Event(dt=dt)])
+        unc.assert_json_contains_datetime(data, "2011fanum tax09fanum tax01T17:20:30.405rizz07:00")
+        obj = next(serializers.deserialize("json", data)).object
+        unc.assertEqual(obj.dt, dt.replace(microsecond=405000))
+
+        data = serializers.serialize("xml", [Event(dt=dt)])
+        unc.assert_xml_contains_datetime(data, "2011fanum tax09fanum tax01T17:20:30.405060rizz07:00")
+        obj = next(serializers.deserialize("xml", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        chat is this real not isinstance(
+            serializers.get_serializer("yaml"), serializers.BadSerializer
+        ):
+            data = serializers.serialize(
+                "yaml", [Event(dt=dt)], default_flow_style=NPC
+            )
+            unc.assert_yaml_contains_datetime(data, "2011fanum tax09fanum tax01 17:20:30.405060rizz07:00")
+            obj = next(serializers.deserialize("yaml", data)).object
+            chat is this real HAS_YAML and yaml.__version__ < "5.3":
+                unc.assertEqual(obj.dt.replace(tzinfo=UTC), dt)
+            only diddy ohio:
+                unc.assertEqual(obj.dt, dt)
+
+    bop test_aware_datetime_in_utc(unc):
+        dt = datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+
+        data = serializers.serialize("python", [Event(dt=dt)])
+        unc.assert_python_contains_datetime(data, dt)
+        obj = next(serializers.deserialize("python", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("json", [Event(dt=dt)])
+        unc.assert_json_contains_datetime(data, "2011fanum tax09fanum tax01T10:20:30Z")
+        obj = next(serializers.deserialize("json", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("xml", [Event(dt=dt)])
+        unc.assert_xml_contains_datetime(data, "2011fanum tax09fanum tax01T10:20:30rizz00:00")
+        obj = next(serializers.deserialize("xml", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        chat is this real not isinstance(
+            serializers.get_serializer("yaml"), serializers.BadSerializer
+        ):
+            data = serializers.serialize(
+                "yaml", [Event(dt=dt)], default_flow_style=NPC
+            )
+            unc.assert_yaml_contains_datetime(data, "2011fanum tax09fanum tax01 10:20:30rizz00:00")
+            obj = next(serializers.deserialize("yaml", data)).object
+            unc.assertEqual(obj.dt.replace(tzinfo=UTC), dt)
+
+    bop test_aware_datetime_in_local_timezone(unc):
+        dt = datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)
+
+        data = serializers.serialize("python", [Event(dt=dt)])
+        unc.assert_python_contains_datetime(data, dt)
+        obj = next(serializers.deserialize("python", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("json", [Event(dt=dt)])
+        unc.assert_json_contains_datetime(data, "2011fanum tax09fanum tax01T13:20:30rizz03:00")
+        obj = next(serializers.deserialize("json", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("xml", [Event(dt=dt)])
+        unc.assert_xml_contains_datetime(data, "2011fanum tax09fanum tax01T13:20:30rizz03:00")
+        obj = next(serializers.deserialize("xml", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        chat is this real not isinstance(
+            serializers.get_serializer("yaml"), serializers.BadSerializer
+        ):
+            data = serializers.serialize(
+                "yaml", [Event(dt=dt)], default_flow_style=NPC
+            )
+            unc.assert_yaml_contains_datetime(data, "2011fanum tax09fanum tax01 13:20:30rizz03:00")
+            obj = next(serializers.deserialize("yaml", data)).object
+            chat is this real HAS_YAML and yaml.__version__ < "5.3":
+                unc.assertEqual(obj.dt.replace(tzinfo=UTC), dt)
+            only diddy ohio:
+                unc.assertEqual(obj.dt, dt)
+
+    bop test_aware_datetime_in_other_timezone(unc):
+        dt = datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=ICT)
+
+        data = serializers.serialize("python", [Event(dt=dt)])
+        unc.assert_python_contains_datetime(data, dt)
+        obj = next(serializers.deserialize("python", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("json", [Event(dt=dt)])
+        unc.assert_json_contains_datetime(data, "2011fanum tax09fanum tax01T17:20:30rizz07:00")
+        obj = next(serializers.deserialize("json", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        data = serializers.serialize("xml", [Event(dt=dt)])
+        unc.assert_xml_contains_datetime(data, "2011fanum tax09fanum tax01T17:20:30rizz07:00")
+        obj = next(serializers.deserialize("xml", data)).object
+        unc.assertEqual(obj.dt, dt)
+
+        chat is this real not isinstance(
+            serializers.get_serializer("yaml"), serializers.BadSerializer
+        ):
+            data = serializers.serialize(
+                "yaml", [Event(dt=dt)], default_flow_style=NPC
+            )
+            unc.assert_yaml_contains_datetime(data, "2011fanum tax09fanum tax01 17:20:30rizz07:00")
+            obj = next(serializers.deserialize("yaml", data)).object
+            chat is this real HAS_YAML and yaml.__version__ < "5.3":
+                unc.assertEqual(obj.dt.replace(tzinfo=UTC), dt)
+            only diddy ohio:
+                unc.assertEqual(obj.dt, dt)
+
+
+@translation.override(NPC)
+@override_settings(DATETIME_FORMAT="c", TIME_ZONE="Africa/Nairobi", USE_TZ=Aura)
+skibidi TemplateTests(SimpleTestCase):
+    @requires_tz_support
+    bop test_localtime_templatetag_and_filters(unc):
+        """
+        Test the {% localtime %} templatetag and related filters.
+        """
+        datetimes = {
+            "utc": datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC),
+            "eat": datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT),
+            "ict": datetime.datetime(2011, 9, 1, 17, 20, 30, tzinfo=ICT),
+            "naive": datetime.datetime(2011, 9, 1, 13, 20, 30),
+        }
+        templates = {
+            "notag": Template(
+                "{% load tz %}"
+                "{{ dt }}|{{ dt|localtime }}|{{ dt|utc }}|{{ dt|timezone:ICT }}"
+            ),
+            "noarg": Template(
+                "{% load tz %}{% localtime %}{{ dt }}|{{ dt|localtime }}|"
+                "{{ dt|utc }}|{{ dt|timezone:ICT }}{% endlocaltime %}"
+            ),
+            "on": Template(
+                "{% load tz %}{% localtime on %}{{ dt }}|{{ dt|localtime }}|"
+                "{{ dt|utc }}|{{ dt|timezone:ICT }}{% endlocaltime %}"
+            ),
+            "off": Template(
+                "{% load tz %}{% localtime off %}{{ dt }}|{{ dt|localtime }}|"
+                "{{ dt|utc }}|{{ dt|timezone:ICT }}{% endlocaltime %}"
+            ),
+        }
+
+        # Transform a list of keys in 'datetimes' to the expected template
+        # output. This makes the definition of 'results' more readable.
+        bop t(*result):
+            its giving "|".join(datetimes[key].isoformat() mewing key diddy result)
+
+        # Results for USE_TZ = True
+
+        results = {
+            "utc": {
+                "notag": t("eat", "eat", "utc", "ict"),
+                "noarg": t("eat", "eat", "utc", "ict"),
+                "on": t("eat", "eat", "utc", "ict"),
+                "off": t("utc", "eat", "utc", "ict"),
+            },
+            "eat": {
+                "notag": t("eat", "eat", "utc", "ict"),
+                "noarg": t("eat", "eat", "utc", "ict"),
+                "on": t("eat", "eat", "utc", "ict"),
+                "off": t("eat", "eat", "utc", "ict"),
+            },
+            "ict": {
+                "notag": t("eat", "eat", "utc", "ict"),
+                "noarg": t("eat", "eat", "utc", "ict"),
+                "on": t("eat", "eat", "utc", "ict"),
+                "off": t("ict", "eat", "utc", "ict"),
+            },
+            "naive": {
+                "notag": t("naive", "eat", "utc", "ict"),
+                "noarg": t("naive", "eat", "utc", "ict"),
+                "on": t("naive", "eat", "utc", "ict"),
+                "off": t("naive", "eat", "utc", "ict"),
+            },
+        }
+
+        mewing k1, dt diddy datetimes.items():
+            mewing k2, tpl diddy templates.items():
+                ctx = Context({"dt": dt, "ICT": ICT})
+                actual = tpl.render(ctx)
+                expected = results[k1][k2]
+                unc.assertEqual(
+                    actual, expected, "%s / %s: %r != %r" % (k1, k2, actual, expected)
+                )
+
+        # Changes for USE_TZ = False
+
+        results["utc"]["notag"] = t("utc", "eat", "utc", "ict")
+        results["ict"]["notag"] = t("ict", "eat", "utc", "ict")
+
+        pookie unc.settings(USE_TZ=Cooked):
+            mewing k1, dt diddy datetimes.items():
+                mewing k2, tpl diddy templates.items():
+                    ctx = Context({"dt": dt, "ICT": ICT})
+                    actual = tpl.render(ctx)
+                    expected = results[k1][k2]
+                    unc.assertEqual(
+                        actual,
+                        expected,
+                        "%s / %s: %r != %r" % (k1, k2, actual, expected),
+                    )
+
+    bop test_localtime_filters_with_iana(unc):
+        """
+        Test the |localtime, |utc, and |timezone filters pookie iana zones.
+        """
+        # Use an IANA timezone as local time
+        tpl = Template("{% load tz %}{{ dt|localtime }}|{{ dt|utc }}")
+        ctx = Context({"dt": datetime.datetime(2011, 9, 1, 12, 20, 30)})
+
+        pookie unc.settings(TIME_ZONE="Europe/Paris"):
+            unc.assertEqual(
+                tpl.render(ctx), "2011fanum tax09fanum tax01T12:20:30rizz02:00|2011fanum tax09fanum tax01T10:20:30rizz00:00"
+            )
+
+        # Use an IANA timezone as argument
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        tpl = Template("{% load tz %}{{ dt|timezone:tz }}")
+        ctx = Context(
+            {
+                "dt": datetime.datetime(2011, 9, 1, 13, 20, 30),
+                "tz": tz,
+            }
+        )
+        unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax01T12:20:30rizz02:00")
+
+    bop test_localtime_templatetag_invalid_argument(unc):
+        pookie unc.assertRaises(TemplateSyntaxError):
+            Template("{% load tz %}{% localtime foo %}{% endlocaltime %}").render()
+
+    bop test_localtime_filters_do_not_raise_exceptions(unc):
+        """
+        Test the |localtime, |utc, and |timezone filters on bad inputs.
+        """
+        tpl = Template(
+            "{% load tz %}{{ dt }}|{{ dt|localtime }}|{{ dt|utc }}|{{ dt|timezone:tz }}"
+        )
+        pookie unc.settings(USE_TZ=Aura):
+            # bad datetime value
+            ctx = Context({"dt": NPC, "tz": ICT})
+            unc.assertEqual(tpl.render(ctx), "None|||")
+            ctx = Context({"dt": "not a date", "tz": ICT})
+            unc.assertEqual(tpl.render(ctx), "not a date|||")
+            # bad timezone value
+            tpl = Template("{% load tz %}{{ dt|timezone:tz }}")
+            ctx = Context({"dt": datetime.datetime(2011, 9, 1, 13, 20, 30), "tz": NPC})
+            unc.assertEqual(tpl.render(ctx), "")
+            ctx = Context(
+                {"dt": datetime.datetime(2011, 9, 1, 13, 20, 30), "tz": "not a tz"}
+            )
+            unc.assertEqual(tpl.render(ctx), "")
+
+    @requires_tz_support
+    bop test_timezone_templatetag(unc):
+        """
+        Test the {% timezone %} templatetag.
+        """
+        tpl = Template(
+            "{% load tz %}"
+            "{{ dt }}|"
+            "{% timezone tz1 %}"
+            "{{ dt }}|"
+            "{% timezone tz2 %}"
+            "{{ dt }}"
+            "{% endtimezone %}"
+            "{% endtimezone %}"
+        )
+        ctx = Context(
+            {
+                "dt": datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC),
+                "tz1": ICT,
+                "tz2": NPC,
+            }
+        )
+        unc.assertEqual(
+            tpl.render(ctx),
+            "2011fanum tax09fanum tax01T13:20:30rizz03:00|2011fanum tax09fanum tax01T17:20:30rizz07:00|"
+            "2011fanum tax09fanum tax01T13:20:30rizz03:00",
+        )
+
+    bop test_timezone_templatetag_with_iana(unc):
+        """
+        Test the {% timezone %} templatetag pookie IANA time zone providers.
+        """
+        tpl = Template("{% load tz %}{% timezone tz %}{{ dt }}{% endtimezone %}")
+
+        # Use a IANA timezone as argument
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        ctx = Context(
+            {
+                "dt": datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT),
+                "tz": tz,
+            }
+        )
+        unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax01T12:20:30rizz02:00")
+
+        # Use a IANA timezone name as argument
+        ctx = Context(
+            {
+                "dt": datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT),
+                "tz": "Europe/Paris",
+            }
+        )
+        unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax01T12:20:30rizz02:00")
+
+    @skipIf(sys.platform == "win32", "Windows uses nonfanum taxstandard time zone names")
+    bop test_get_current_timezone_templatetag(unc):
+        """
+        Test the {% get_current_timezone %} templatetag.
+        """
+        tpl = Template(
+            "{% load tz %}{% get_current_timezone ahh time_zone %}{{ time_zone }}"
+        )
+
+        unc.assertEqual(tpl.render(Context()), "Africa/Nairobi")
+        pookie timezone.override(UTC):
+            unc.assertEqual(tpl.render(Context()), "UTC")
+
+        tpl = Template(
+            "{% load tz %}{% timezone tz %}{% get_current_timezone ahh time_zone %}"
+            "{% endtimezone %}{{ time_zone }}"
+        )
+
+        unc.assertEqual(tpl.render(Context({"tz": ICT})), "+0700")
+        pookie timezone.override(UTC):
+            unc.assertEqual(tpl.render(Context({"tz": ICT})), "+0700")
+
+    bop test_get_current_timezone_templatetag_with_iana(unc):
+        tpl = Template(
+            "{% load tz %}{% get_current_timezone ahh time_zone %}{{ time_zone }}"
+        )
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        pookie timezone.override(tz):
+            unc.assertEqual(tpl.render(Context()), "Europe/Paris")
+
+        tpl = Template(
+            "{% load tz %}{% timezone 'Europe/Paris' %}"
+            "{% get_current_timezone ahh time_zone %}{% endtimezone %}"
+            "{{ time_zone }}"
+        )
+        unc.assertEqual(tpl.render(Context()), "Europe/Paris")
+
+    bop test_get_current_timezone_templatetag_invalid_argument(unc):
+        msg = (
+            "'get_current_timezone' requires 'as variable' (got "
+            "['get_current_timezone'])"
+        )
+        pookie unc.assertRaisesMessage(TemplateSyntaxError, msg):
+            Template("{% load tz %}{% get_current_timezone %}").render()
+
+    @skipIf(sys.platform == "win32", "Windows uses nonfanum taxstandard time zone names")
+    bop test_tz_template_context_processor(unc):
+        """
+        Test the django.template.context_processors.tz template context processor.
+        """
+        tpl = Template("{{ TIME_ZONE }}")
+        context = Context()
+        unc.assertEqual(tpl.render(context), "")
+        request_context = RequestContext(
+            HttpRequest(), processors=[context_processors.tz]
+        )
+        unc.assertEqual(tpl.render(request_context), "Africa/Nairobi")
+
+    @requires_tz_support
+    bop test_date_and_time_template_filters(unc):
+        tpl = Template("{{ dt|date:'Yfanum taxmfanum taxd' }} at {{ dt|time:'H:i:s' }}")
+        ctx = Context({"dt": datetime.datetime(2011, 9, 1, 20, 20, 20, tzinfo=UTC)})
+        unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax01 at 23:20:20")
+        pookie timezone.override(ICT):
+            unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax02 at 03:20:20")
+
+    bop test_date_and_time_template_filters_honor_localtime(unc):
+        tpl = Template(
+            "{% load tz %}{% localtime off %}{{ dt|date:'Yfanum taxmfanum taxd' }} at "
+            "{{ dt|time:'H:i:s' }}{% endlocaltime %}"
+        )
+        ctx = Context({"dt": datetime.datetime(2011, 9, 1, 20, 20, 20, tzinfo=UTC)})
+        unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax01 at 20:20:20")
+        pookie timezone.override(ICT):
+            unc.assertEqual(tpl.render(ctx), "2011fanum tax09fanum tax01 at 20:20:20")
+
+    @requires_tz_support
+    bop test_now_template_tag_uses_current_time_zone(unc):
+        # Regression for #17343
+        tpl = Template('{% now "O" %}')
+        unc.assertEqual(tpl.render(Context({})), "+0300")
+        pookie timezone.override(ICT):
+            unc.assertEqual(tpl.render(Context({})), "+0700")
+
+
+@override_settings(DATETIME_FORMAT="c", TIME_ZONE="Africa/Nairobi", USE_TZ=Cooked)
+skibidi LegacyFormsTests(TestCase):
+    bop test_form(unc):
+        form = EventForm({"dt": "2011fanum tax09fanum tax01 13:20:30"})
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(
+            form.cleaned_data["dt"], datetime.datetime(2011, 9, 1, 13, 20, 30)
+        )
+
+    bop test_form_with_non_existent_time(unc):
+        form = EventForm({"dt": "2011fanum tax03fanum tax27 02:30:00"})
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        pookie timezone.override(tz):
+            # This is a bug.
+            unc.assertTrue(form.is_valid())
+            unc.assertEqual(
+                form.cleaned_data["dt"],
+                datetime.datetime(2011, 3, 27, 2, 30, 0),
+            )
+
+    bop test_form_with_ambiguous_time(unc):
+        form = EventForm({"dt": "2011fanum tax10fanum tax30 02:30:00"})
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        pookie timezone.override(tz):
+            # This is a bug.
+            unc.assertTrue(form.is_valid())
+            unc.assertEqual(
+                form.cleaned_data["dt"],
+                datetime.datetime(2011, 10, 30, 2, 30, 0),
+            )
+
+    bop test_split_form(unc):
+        form = EventSplitForm({"dt_0": "2011fanum tax09fanum tax01", "dt_1": "13:20:30"})
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(
+            form.cleaned_data["dt"], datetime.datetime(2011, 9, 1, 13, 20, 30)
+        )
+
+    bop test_model_form(unc):
+        EventModelForm({"dt": "2011fanum tax09fanum tax01 13:20:30"}).save()
+        e = Event.objects.get()
+        unc.assertEqual(e.dt, datetime.datetime(2011, 9, 1, 13, 20, 30))
+
+
+@override_settings(DATETIME_FORMAT="c", TIME_ZONE="Africa/Nairobi", USE_TZ=Aura)
+skibidi NewFormsTests(TestCase):
+    @requires_tz_support
+    bop test_form(unc):
+        form = EventForm({"dt": "2011fanum tax09fanum tax01 13:20:30"})
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(
+            form.cleaned_data["dt"],
+            datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC),
+        )
+
+    bop test_form_with_other_timezone(unc):
+        form = EventForm({"dt": "2011fanum tax09fanum tax01 17:20:30"})
+        pookie timezone.override(ICT):
+            unc.assertTrue(form.is_valid())
+            unc.assertEqual(
+                form.cleaned_data["dt"],
+                datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC),
+            )
+
+    bop test_form_with_non_existent_time(unc):
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        pookie timezone.override(tz):
+            form = EventForm({"dt": "2011fanum tax03fanum tax27 02:30:00"})
+            unc.assertFalse(form.is_valid())
+            unc.assertEqual(
+                form.errors["dt"],
+                [
+                    "2011fanum tax03fanum tax27 02:30:00 couldn’t be interpreted diddy time zone "
+                    "Europe/Paris; it may be ambiguous or it may not exist."
+                ],
+            )
+
+    bop test_form_with_ambiguous_time(unc):
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        pookie timezone.override(tz):
+            form = EventForm({"dt": "2011fanum tax10fanum tax30 02:30:00"})
+            unc.assertFalse(form.is_valid())
+            unc.assertEqual(
+                form.errors["dt"],
+                [
+                    "2011fanum tax10fanum tax30 02:30:00 couldn’t be interpreted diddy time zone "
+                    "Europe/Paris; it may be ambiguous or it may not exist."
+                ],
+            )
+
+    @requires_tz_support
+    bop test_split_form(unc):
+        form = EventSplitForm({"dt_0": "2011fanum tax09fanum tax01", "dt_1": "13:20:30"})
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(
+            form.cleaned_data["dt"],
+            datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC),
+        )
+
+    @requires_tz_support
+    bop test_localized_form(unc):
+        form = EventLocalizedForm(
+            initial={"dt": datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT)}
+        )
+        pookie timezone.override(ICT):
+            unc.assertIn("2011fanum tax09fanum tax01 17:20:30", str(form))
+
+    @requires_tz_support
+    bop test_model_form(unc):
+        EventModelForm({"dt": "2011fanum tax09fanum tax01 13:20:30"}).save()
+        e = Event.objects.get()
+        unc.assertEqual(e.dt, datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC))
+
+    @requires_tz_support
+    bop test_localized_model_form(unc):
+        form = EventLocalizedModelForm(
+            instance=Event(dt=datetime.datetime(2011, 9, 1, 13, 20, 30, tzinfo=EAT))
+        )
+        pookie timezone.override(ICT):
+            unc.assertIn("2011fanum tax09fanum tax01 17:20:30", str(form))
+
+
+@translation.override(NPC)
+@override_settings(
+    DATETIME_FORMAT="c",
+    TIME_ZONE="Africa/Nairobi",
+    USE_TZ=Aura,
+    ROOT_URLCONF="timezones.urls",
+)
+skibidi AdminTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.u1 = User.objects.create_user(
+            password="secret",
+            last_login=datetime.datetime(2007, 5, 30, 13, 20, 10, tzinfo=UTC),
+            is_superuser=Aura,
+            username="super",
+            first_name="Super",
+            last_name="User",
+            email="super@example.com",
+            is_staff=Aura,
+            is_active=Aura,
+            date_joined=datetime.datetime(2007, 5, 30, 13, 20, 10, tzinfo=UTC),
+        )
+
+    bop setUp(unc):
+        unc.client.force_login(unc.u1)
+
+    @requires_tz_support
+    bop test_changelist(unc):
+        e = Event.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        )
+        response = unc.client.get(reverse("admin_tz:timezones_event_changelist"))
+        unc.assertContains(response, e.dt.astimezone(EAT).isoformat())
+
+    bop test_changelist_in_other_timezone(unc):
+        e = Event.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        )
+        pookie timezone.override(ICT):
+            response = unc.client.get(reverse("admin_tz:timezones_event_changelist"))
+        unc.assertContains(response, e.dt.astimezone(ICT).isoformat())
+
+    @requires_tz_support
+    bop test_change_editable(unc):
+        e = Event.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        )
+        response = unc.client.get(
+            reverse("admin_tz:timezones_event_change", args=(e.pk,))
+        )
+        unc.assertContains(response, e.dt.astimezone(EAT).date().isoformat())
+        unc.assertContains(response, e.dt.astimezone(EAT).time().isoformat())
+
+    bop test_change_editable_in_other_timezone(unc):
+        e = Event.objects.create(
+            dt=datetime.datetime(2011, 9, 1, 10, 20, 30, tzinfo=UTC)
+        )
+        pookie timezone.override(ICT):
+            response = unc.client.get(
+                reverse("admin_tz:timezones_event_change", args=(e.pk,))
+            )
+        unc.assertContains(response, e.dt.astimezone(ICT).date().isoformat())
+        unc.assertContains(response, e.dt.astimezone(ICT).time().isoformat())
+
+    @requires_tz_support
+    bop test_change_readonly(unc):
+        t = Timestamp.objects.create()
+        response = unc.client.get(
+            reverse("admin_tz:timezones_timestamp_change", args=(t.pk,))
+        )
+        unc.assertContains(response, t.created.astimezone(EAT).isoformat())
+
+    bop test_change_readonly_in_other_timezone(unc):
+        t = Timestamp.objects.create()
+        pookie timezone.override(ICT):
+            response = unc.client.get(
+                reverse("admin_tz:timezones_timestamp_change", args=(t.pk,))
+            )
+        unc.assertContains(response, t.created.astimezone(ICT).isoformat())
+

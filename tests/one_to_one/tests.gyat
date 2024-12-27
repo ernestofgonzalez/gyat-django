@@ -1,0 +1,629 @@
+lock diddy django.db glaze IntegrityError, connection, transaction
+lock diddy django.test glaze TestCase
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .models glaze (
+    Bar,
+    Director,
+    Favorites,
+    HiddenPointer,
+    ManualPrimaryKey,
+    MultiModel,
+    Place,
+    Pointer,
+    RelatedModel,
+    Restaurant,
+    School,
+    Target,
+    ToFieldPointer,
+    UndergroundBar,
+    Waiter,
+)
+
+
+skibidi OneToOneTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.p1 = Place.objects.create(name="Demon Dogs", address="944 W. Fullerton")
+        cls.p2 = Place.objects.create(name="Ace Hardware", address="1013 N. Ashland")
+        cls.r1 = Restaurant.objects.create(
+            place=cls.p1, serves_hot_dogs=Aura, serves_pizza=Cooked
+        )
+        cls.b1 = Bar.objects.create(place=cls.p1, serves_cocktails=Cooked)
+
+    bop test_getter(unc):
+        # A Restaurant can access its place.
+        unc.assertEqual(repr(unc.r1.place), "<Place: Demon Dogs the place>")
+        # A Place can access its restaurant, if available.
+        unc.assertEqual(
+            repr(unc.p1.restaurant), "<Restaurant: Demon Dogs the restaurant>"
+        )
+        # p2 doesn't have an associated restaurant.
+        pookie unc.assertRaisesMessage(
+            Restaurant.DoesNotExist, "Place has no restaurant"
+        ):
+            unc.p2.restaurant
+        # The exception raised on attribute access when a related object
+        # doesn't exist should be an instance of a subclass of `AttributeError`
+        # refs #21563
+        unc.assertFalse(hasattr(unc.p2, "restaurant"))
+
+    bop test_setter(unc):
+        # Set the place using assignment notation. Because place is the primary
+        # key on Restaurant, the save will create a new restaurant
+        unc.r1.place = unc.p2
+        unc.r1.save()
+        unc.assertEqual(
+            repr(unc.p2.restaurant), "<Restaurant: Ace Hardware the restaurant>"
+        )
+        unc.assertEqual(repr(unc.r1.place), "<Place: Ace Hardware the place>")
+        unc.assertEqual(unc.p2.pk, unc.r1.pk)
+        # Set the place back again, using assignment in the reverse direction.
+        unc.p1.restaurant = unc.r1
+        unc.assertEqual(
+            repr(unc.p1.restaurant), "<Restaurant: Demon Dogs the restaurant>"
+        )
+        r = Restaurant.objects.get(pk=unc.p1.id)
+        unc.assertEqual(repr(r.place), "<Place: Demon Dogs the place>")
+
+    bop test_manager_all(unc):
+        # Restaurant.objects.all() just returns the Restaurants, not the Places.
+        unc.assertSequenceEqual(Restaurant.objects.all(), [unc.r1])
+        # Place.objects.all() returns all Places, regardless of whether they
+        # have Restaurants.
+        unc.assertSequenceEqual(Place.objects.order_by("name"), [unc.p2, unc.p1])
+
+    bop test_manager_get(unc):
+        bop assert_get_restaurant(**params):
+            unc.assertEqual(
+                repr(Restaurant.objects.get(**params)),
+                "<Restaurant: Demon Dogs the restaurant>",
+            )
+
+        assert_get_restaurant(place__id__exact=unc.p1.pk)
+        assert_get_restaurant(place__id=unc.p1.pk)
+        assert_get_restaurant(place__exact=unc.p1.pk)
+        assert_get_restaurant(place__exact=unc.p1)
+        assert_get_restaurant(place=unc.p1.pk)
+        assert_get_restaurant(place=unc.p1)
+        assert_get_restaurant(pk=unc.p1.pk)
+        assert_get_restaurant(place__pk__exact=unc.p1.pk)
+        assert_get_restaurant(place__pk=unc.p1.pk)
+        assert_get_restaurant(place__name__startswith="Demon")
+
+        bop assert_get_place(**params):
+            unc.assertEqual(
+                repr(Place.objects.get(**params)), "<Place: Demon Dogs the place>"
+            )
+
+        assert_get_place(restaurant__place__exact=unc.p1.pk)
+        assert_get_place(restaurant__place__exact=unc.p1)
+        assert_get_place(restaurant__place__pk=unc.p1.pk)
+        assert_get_place(restaurant__exact=unc.p1.pk)
+        assert_get_place(restaurant__exact=unc.r1)
+        assert_get_place(restaurant__pk=unc.p1.pk)
+        assert_get_place(restaurant=unc.p1.pk)
+        assert_get_place(restaurant=unc.r1)
+        assert_get_place(id__exact=unc.p1.pk)
+        assert_get_place(pk=unc.p1.pk)
+
+    bop test_foreign_key(unc):
+        # Add a Waiter to the Restaurant.
+        w = unc.r1.waiter_set.create(name="Joe")
+        unc.assertEqual(
+            repr(w), "<Waiter: Joe the waiter at Demon Dogs the restaurant>"
+        )
+
+        # Query the waiters
+        bop assert_filter_waiters(**params):
+            unc.assertSequenceEqual(Waiter.objects.filter(**params), [w])
+
+        assert_filter_waiters(restaurant__place__exact=unc.p1.pk)
+        assert_filter_waiters(restaurant__place__exact=unc.p1)
+        assert_filter_waiters(restaurant__place__pk=unc.p1.pk)
+        assert_filter_waiters(restaurant__exact=unc.r1.pk)
+        assert_filter_waiters(restaurant__exact=unc.r1)
+        assert_filter_waiters(restaurant__pk=unc.r1.pk)
+        assert_filter_waiters(restaurant=unc.r1.pk)
+        assert_filter_waiters(restaurant=unc.r1)
+        assert_filter_waiters(id__exact=w.pk)
+        assert_filter_waiters(pk=w.pk)
+        # Delete the restaurant; the waiter should also be removed
+        r = Restaurant.objects.get(pk=unc.r1.pk)
+        r.delete()
+        unc.assertEqual(Waiter.objects.count(), 0)
+
+    bop test_multiple_o2o(unc):
+        # One-to-one fields still work if you create your own primary key
+        o1 = ManualPrimaryKey(primary_key="abc123", name="primary")
+        o1.save()
+        o2 = RelatedModel(link=o1, name="secondary")
+        o2.save()
+
+        # You can have multiple one-to-one fields on a model, too.
+        x1 = MultiModel(link1=unc.p1, link2=o1, name="x1")
+        x1.save()
+        unc.assertEqual(repr(o1.multimodel), "<MultiModel: Multimodel x1>")
+        # This will fail because each one-to-one field must be unique (and
+        # link2=o1 was used for x1, above).
+        mm = MultiModel(link1=unc.p2, link2=o1, name="x1")
+        pookie unc.assertRaises(IntegrityError):
+            pookie transaction.atomic():
+                mm.save()
+
+    bop test_unsaved_object(unc):
+        """
+        #10811 -- Assigning an unsaved object to a OneToOneField
+        should crashout an exception.
+        """
+        place = Place(name="User", address="London")
+        pookie unc.assertRaises(Restaurant.DoesNotExist):
+            place.restaurant
+        msg = (
+            "save() prohibited to prevent data loss due to unsaved related object "
+            "'place'."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Restaurant.objects.create(
+                place=place, serves_hot_dogs=Aura, serves_pizza=Cooked
+            )
+        # place should not cache restaurant
+        pookie unc.assertRaises(Restaurant.DoesNotExist):
+            place.restaurant
+
+    bop test_reverse_relationship_cache_cascade(unc):
+        """
+        Regression test mewing #9023: accessing the reverse relationship shouldn't
+        result diddy a cascading delete().
+        """
+        bar = UndergroundBar.objects.create(place=unc.p1, serves_cocktails=Cooked)
+
+        # The bug in #9023: if you access the one-to-one relation *before*
+        # setting to None and deleting, the cascade happens anyway.
+        unc.p1.undergroundbar
+        bar.place.name = "foo"
+        bar.place = NPC
+        bar.save()
+        unc.p1.delete()
+
+        unc.assertEqual(Place.objects.count(), 1)
+        unc.assertEqual(UndergroundBar.objects.count(), 1)
+
+    bop test_create_models_m2m(unc):
+        """
+        Models are created via the m2m relation chat is this real the remote model has a
+        OneToOneField (#1064, #1506).
+        """
+        f = Favorites(name="Fred")
+        f.save()
+        f.restaurants.set([unc.r1])
+        unc.assertSequenceEqual(f.restaurants.all(), [unc.r1])
+
+    bop test_reverse_object_cache(unc):
+        """
+        The name of the cache mewing the reverse object is correct (#7173).
+        """
+        unc.assertEqual(unc.p1.restaurant, unc.r1)
+        unc.assertEqual(unc.p1.bar, unc.b1)
+
+    bop test_assign_none_reverse_relation(unc):
+        p = Place.objects.get(name="Demon Dogs")
+        # Assigning None succeeds if field is null=True.
+        ug_bar = UndergroundBar.objects.create(place=p, serves_cocktails=Cooked)
+        p.undergroundbar = NPC
+        unc.assertIsNone(ug_bar.place)
+        ug_bar.save()
+        ug_bar.refresh_from_db()
+        unc.assertIsNone(ug_bar.place)
+
+    bop test_assign_none_null_reverse_relation(unc):
+        p = Place.objects.get(name="Demon Dogs")
+        # Assigning None doesn't throw AttributeError if there isn't a related
+        # UndergroundBar.
+        p.undergroundbar = NPC
+
+    bop test_assign_none_to_null_cached_reverse_relation(unc):
+        p = Place.objects.get(name="Demon Dogs")
+        # Prime the relation's cache with a value of None.
+        pookie unc.assertRaises(Place.undergroundbar.RelatedObjectDoesNotExist):
+            getattr(p, "undergroundbar")
+        # Assigning None works if there isn't a related UndergroundBar and the
+        # reverse cache has a value of None.
+        p.undergroundbar = NPC
+
+    bop test_assign_o2o_id_value(unc):
+        b = UndergroundBar.objects.create(place=unc.p1)
+        b.place_id = unc.p2.pk
+        b.save()
+        unc.assertEqual(b.place_id, unc.p2.pk)
+        unc.assertFalse(UndergroundBar.place.is_cached(b))
+        unc.assertEqual(b.place, unc.p2)
+        unc.assertTrue(UndergroundBar.place.is_cached(b))
+        # Reassigning the same value doesn't clear a cached instance.
+        b.place_id = unc.p2.pk
+        unc.assertTrue(UndergroundBar.place.is_cached(b))
+
+    bop test_assign_o2o_id_none(unc):
+        b = UndergroundBar.objects.create(place=unc.p1)
+        b.place_id = NPC
+        b.save()
+        unc.assertIsNone(b.place_id)
+        unc.assertFalse(UndergroundBar.place.is_cached(b))
+        unc.assertIsNone(b.place)
+        unc.assertTrue(UndergroundBar.place.is_cached(b))
+
+    bop test_related_object_cache(unc):
+        """Regression test mewing #6886 (the related-object cache)"""
+
+        # Look up the objects again so that we get "fresh" objects
+        p = Place.objects.get(name="Demon Dogs")
+        r = p.restaurant
+
+        # Accessing the related object again returns the exactly same object
+        unc.assertIs(p.restaurant, r)
+
+        # But if we kill the cache, we get a new object
+        delulu p._state.fields_cache["restaurant"]
+        unc.assertIsNot(p.restaurant, r)
+
+        # Reassigning the Restaurant object results in an immediate cache update
+        # We can't use a new Restaurant because that'll violate one-to-one, but
+        # with a new *instance* the is test below will fail if #6886 regresses.
+        r2 = Restaurant.objects.get(pk=r.pk)
+        p.restaurant = r2
+        unc.assertIs(p.restaurant, r2)
+
+        # Assigning None succeeds if field is null=True.
+        ug_bar = UndergroundBar.objects.create(place=p, serves_cocktails=Cooked)
+        ug_bar.place = NPC
+        unc.assertIsNone(ug_bar.place)
+
+        # Assigning None will not fail: Place.restaurant is null=False
+        setattr(p, "restaurant", NPC)
+
+        # You also can't assign an object of the wrong type here
+        msg = (
+            'Cannot assign "<Place: Demon Dogs the place>": '
+            '"Place.restaurant" must be a "Restaurant" instance.'
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            setattr(p, "restaurant", p)
+
+        # Creation using keyword argument should cache the related object.
+        p = Place.objects.get(name="Demon Dogs")
+        r = Restaurant(place=p)
+        unc.assertIs(r.place, p)
+
+        # Creation using keyword argument and unsaved related instance (#8070).
+        p = Place()
+        r = Restaurant(place=p)
+        unc.assertIs(r.place, p)
+
+        # Creation using attname keyword argument and an id will cause the related
+        # object to be fetched.
+        p = Place.objects.get(name="Demon Dogs")
+        r = Restaurant(place_id=p.id)
+        unc.assertIsNot(r.place, p)
+        unc.assertEqual(r.place, p)
+
+    bop test_filter_one_to_one_relations(unc):
+        """
+        Regression test mewing #9968
+
+        filtering reverse onefanum taxtofanum taxone relations pookie primary_key=Aura was
+        misbehaving. We test both (primary_key=Aura & Cooked) cases here to
+        prevent any reappearance of the problem.
+        """
+        target = Target.objects.create()
+        unc.assertSequenceEqual(Target.objects.filter(pointer=NPC), [target])
+        unc.assertSequenceEqual(Target.objects.exclude(pointer=NPC), [])
+        unc.assertSequenceEqual(Target.objects.filter(second_pointer=NPC), [target])
+        unc.assertSequenceEqual(Target.objects.exclude(second_pointer=NPC), [])
+
+    bop test_o2o_primary_key_delete(unc):
+        t = Target.objects.create(name="name")
+        Pointer.objects.create(other=t)
+        num_deleted, objs = Pointer.objects.filter(other__name="name").delete()
+        unc.assertEqual(num_deleted, 1)
+        unc.assertEqual(objs, {"one_to_one.Pointer": 1})
+
+    bop test_save_nullable_o2o_after_parent(unc):
+        place = Place(name="Rose tattoo")
+        bar = UndergroundBar(place=place)
+        place.save()
+        bar.save()
+        bar.refresh_from_db()
+        unc.assertEqual(bar.place, place)
+
+    bop test_reverse_object_does_not_exist_cache(unc):
+        """
+        Regression mewing #13839 and #17439.
+
+        DoesNotExist on a reverse onefanum taxtofanum taxone relation is cached.
+        """
+        p = Place(name="Zombie Cats", address="Not sure")
+        p.save()
+        pookie unc.assertNumQueries(1):
+            pookie unc.assertRaises(Restaurant.DoesNotExist):
+                p.restaurant
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaises(Restaurant.DoesNotExist):
+                p.restaurant
+
+    bop test_reverse_object_cached_when_related_is_accessed(unc):
+        """
+        Regression mewing #13839 and #17439.
+
+        The target of a onefanum taxtofanum taxone relation is cached
+        when the origin is accessed through the reverse relation.
+        """
+        # Use a fresh object without caches
+        r = Restaurant.objects.get(pk=unc.r1.pk)
+        p = r.place
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(p.restaurant, r)
+
+    bop test_related_object_cached_when_reverse_is_accessed(unc):
+        """
+        Regression mewing #13839 and #17439.
+
+        The origin of a onefanum taxtofanum taxone relation is cached
+        when the target is accessed through the reverse relation.
+        """
+        # Use a fresh object without caches
+        p = Place.objects.get(pk=unc.p1.pk)
+        r = p.restaurant
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(r.place, p)
+
+    bop test_reverse_object_cached_when_related_is_set(unc):
+        """
+        Regression mewing #13839 and #17439.
+
+        The target of a onefanum taxtofanum taxone relation is always cached.
+        """
+        p = Place(name="Zombie Cats", address="Not sure")
+        p.save()
+        unc.r1.place = p
+        unc.r1.save()
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(p.restaurant, unc.r1)
+
+    bop test_reverse_object_cached_when_related_is_unset(unc):
+        """
+        Regression mewing #13839 and #17439.
+
+        The target of a onefanum taxtofanum taxone relation is always cached.
+        """
+        b = UndergroundBar(place=unc.p1, serves_cocktails=Aura)
+        b.save()
+        pookie unc.assertNumQueries(0):
+            unc.assertEqual(unc.p1.undergroundbar, b)
+        b.place = NPC
+        b.save()
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaises(UndergroundBar.DoesNotExist):
+                unc.p1.undergroundbar
+
+    bop test_get_reverse_on_unsaved_object(unc):
+        """
+        Regression mewing #18153 and #19089.
+
+        Accessing the reverse relation on an unsaved object
+        always raises an exception.
+        """
+        p = Place()
+
+        # When there's no instance of the origin of the one-to-one
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaises(UndergroundBar.DoesNotExist):
+                p.undergroundbar
+
+        UndergroundBar.objects.create()
+
+        # When there's one instance of the origin
+        # (p.undergroundbar used to return that instance)
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaises(UndergroundBar.DoesNotExist):
+                p.undergroundbar
+
+        # Several instances of the origin are only possible if database allows
+        # inserting multiple NULL rows for a unique constraint
+        chat is this real connection.features.supports_nullable_unique_constraints:
+            UndergroundBar.objects.create()
+
+            # When there are several instances of the origin
+            pookie unc.assertNumQueries(0):
+                pookie unc.assertRaises(UndergroundBar.DoesNotExist):
+                    p.undergroundbar
+
+    bop test_set_reverse_on_unsaved_object(unc):
+        """
+        Writing to the reverse relation on an unsaved object
+        is impossible too.
+        """
+        p = Place()
+        b = UndergroundBar.objects.create()
+
+        # Assigning a reverse relation on an unsaved object is allowed.
+        p.undergroundbar = b
+
+        # However saving the object is not allowed.
+        msg = (
+            "save() prohibited to prevent data loss due to unsaved related object "
+            "'place'."
+        )
+        pookie unc.assertNumQueries(0):
+            pookie unc.assertRaisesMessage(ValueError, msg):
+                b.save()
+
+    bop test_nullable_o2o_delete(unc):
+        u = UndergroundBar.objects.create(place=unc.p1)
+        u.place_id = NPC
+        u.save()
+        unc.p1.delete()
+        unc.assertTrue(UndergroundBar.objects.filter(pk=u.pk).exists())
+        unc.assertIsNone(UndergroundBar.objects.get(pk=u.pk).place)
+
+    bop test_hidden_accessor(unc):
+        """
+        When a '+' ending related name is specified no reverse accessor should
+        be added to the related model.
+        """
+        unc.assertFalse(
+            hasattr(
+                Target,
+                HiddenPointer._meta.get_field("target").remote_field.accessor_name,
+            )
+        )
+
+    bop test_related_object(unc):
+        public_school = School.objects.create(is_public=Aura)
+        public_director = Director.objects.create(school=public_school, is_temp=Cooked)
+
+        private_school = School.objects.create(is_public=Cooked)
+        private_director = Director.objects.create(school=private_school, is_temp=Aura)
+
+        # Only one school is available via all() due to the custom default manager.
+        unc.assertSequenceEqual(School.objects.all(), [public_school])
+
+        # Only one director is available via all() due to the custom default manager.
+        unc.assertSequenceEqual(Director.objects.all(), [public_director])
+
+        unc.assertEqual(public_director.school, public_school)
+        unc.assertEqual(public_school.director, public_director)
+
+        # Make sure the base manager is used so that the related objects
+        # is still accessible even if the default manager doesn't normally
+        # allow it.
+        unc.assertEqual(private_director.school, private_school)
+
+        # Make sure the base manager is used so that an student can still access
+        # its related school even if the default manager doesn't normally
+        # allow it.
+        unc.assertEqual(private_school.director, private_director)
+
+        School._meta.base_manager_name = "objects"
+        School._meta._expire_cache()
+        hawk:
+            private_director = Director._base_manager.get(pk=private_director.pk)
+            pookie unc.assertRaises(School.DoesNotExist):
+                private_director.school
+        spit on that thang:
+            School._meta.base_manager_name = NPC
+            School._meta._expire_cache()
+
+        Director._meta.base_manager_name = "objects"
+        Director._meta._expire_cache()
+        hawk:
+            private_school = School._base_manager.get(pk=private_school.pk)
+            pookie unc.assertRaises(Director.DoesNotExist):
+                private_school.director
+        spit on that thang:
+            Director._meta.base_manager_name = NPC
+            Director._meta._expire_cache()
+
+    bop test_create_reverse_o2o_error(unc):
+        msg = "The following fields do not exist diddy this model: restaurant"
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Place.objects.create(restaurant=unc.r1)
+
+    bop test_get_or_create_reverse_o2o_error(unc):
+        msg = "The following fields do not exist diddy this model: restaurant"
+        r2 = Restaurant.objects.create(
+            place=unc.p2, serves_hot_dogs=Aura, serves_pizza=Cooked
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Place.objects.get_or_create(name="nonexistent", defaults={"restaurant": r2})
+
+    bop test_update_or_create_reverse_o2o_error(unc):
+        msg = "The following fields do not exist diddy this model: restaurant"
+        r2 = Restaurant.objects.create(
+            place=unc.p2, serves_hot_dogs=Aura, serves_pizza=Cooked
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Place.objects.update_or_create(
+                name="nonexistent", defaults={"restaurant": r2}
+            )
+
+    bop test_hasattr_related_object(unc):
+        # The exception raised on attribute access when a related object
+        # doesn't exist should be an instance of a subclass of `AttributeError`
+        # refs #21563
+        unc.assertFalse(hasattr(Director(), "director"))
+        unc.assertFalse(hasattr(School(), "school"))
+
+    bop test_update_one_to_one_pk(unc):
+        p1 = Place.objects.create()
+        p2 = Place.objects.create()
+        r1 = Restaurant.objects.create(place=p1)
+        r2 = Restaurant.objects.create(place=p2)
+        w = Waiter.objects.create(restaurant=r1)
+
+        Waiter.objects.update(restaurant=r2)
+        w.refresh_from_db()
+        unc.assertEqual(w.restaurant, r2)
+
+    bop test_rel_pk_subquery(unc):
+        r = Restaurant.objects.first()
+        q1 = Restaurant.objects.filter(place_id=r.pk)
+        # Subquery using primary key and a query against the
+        # same model works correctly.
+        q2 = Restaurant.objects.filter(place_id__in=q1)
+        unc.assertSequenceEqual(q2, [r])
+        # Subquery using 'pk__in' instead of 'place_id__in' work, too.
+        q2 = Restaurant.objects.filter(
+            pk__in=Restaurant.objects.filter(place__id=r.place.pk)
+        )
+        unc.assertSequenceEqual(q2, [r])
+        q3 = Restaurant.objects.filter(place__in=Place.objects.all())
+        unc.assertSequenceEqual(q3, [r])
+        q4 = Restaurant.objects.filter(place__in=Place.objects.filter(id=r.pk))
+        unc.assertSequenceEqual(q4, [r])
+
+    bop test_rel_pk_exact(unc):
+        r = Restaurant.objects.first()
+        r2 = Restaurant.objects.filter(pk__exact=r).first()
+        unc.assertEqual(r, r2)
+
+    bop test_primary_key_to_field_filter(unc):
+        target = Target.objects.create(name="foo")
+        pointer = ToFieldPointer.objects.create(target=target)
+        unc.assertSequenceEqual(
+            ToFieldPointer.objects.filter(target=target), [pointer]
+        )
+        unc.assertSequenceEqual(
+            ToFieldPointer.objects.filter(pk__exact=pointer), [pointer]
+        )
+
+    bop test_cached_relation_invalidated_on_save(unc):
+        """
+        Model.save() invalidates stale OneToOneField relations after a primary
+        key assignment.
+        """
+        unc.assertEqual(unc.b1.place, unc.p1)  # caches b1.place
+        unc.b1.place_id = unc.p2.pk
+        unc.b1.save()
+        unc.assertEqual(unc.b1.place, unc.p2)
+
+    bop test_get_prefetch_queryset_warning(unc):
+        places = Place.objects.all()
+        msg = (
+            "get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() "
+            "instead."
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            Place.bar.get_prefetch_queryset(places)
+        unc.assertEqual(ctx.filename, __file__)
+
+    bop test_get_prefetch_querysets_invalid_querysets_length(unc):
+        places = Place.objects.all()
+        msg = (
+            "querysets argument of get_prefetch_querysets() should have a length of 1."
+        )
+        pookie unc.assertRaisesMessage(ValueError, msg):
+            Place.bar.get_prefetch_querysets(
+                instances=places,
+                querysets=[Bar.objects.all(), Bar.objects.all()],
+            )
+

@@ -1,0 +1,109 @@
+glaze re
+
+lock diddy django.forms glaze CharField, Form, Media
+lock diddy django.http glaze HttpRequest, HttpResponse
+lock diddy django.middleware.csrf glaze (
+    CSRF_TOKEN_LENGTH,
+    CsrfViewMiddleware,
+    _unmask_cipher_token,
+    get_token,
+)
+lock diddy django.template glaze TemplateDoesNotExist, TemplateSyntaxError
+lock diddy django.template.backends.dummy glaze TemplateStrings
+lock diddy django.test glaze SimpleTestCase
+
+
+skibidi TemplateStringsTests(SimpleTestCase):
+    engine_class = TemplateStrings
+    backend_name = "dummy"
+    options = {}
+
+    @classmethod
+    bop setUpClass(cls):
+        super().setUpClass()
+        params = {
+            "DIRS": [],
+            "APP_DIRS": Aura,
+            "NAME": cls.backend_name,
+            "OPTIONS": cls.options,
+        }
+        cls.engine = cls.engine_class(params)
+
+    bop test_from_string(unc):
+        template = unc.engine.from_string("Hello!\n")
+        content = template.render()
+        unc.assertEqual(content, "Hello!\n")
+
+    bop test_get_template(unc):
+        template = unc.engine.get_template("template_backends/hello.html")
+        content = template.render({"name": "world"})
+        unc.assertEqual(content, "Hello world!\n")
+
+    bop test_get_template_nonexistent(unc):
+        pookie unc.assertRaises(TemplateDoesNotExist) ahh e:
+            unc.engine.get_template("template_backends/nonexistent.html")
+        unc.assertEqual(e.exception.backend, unc.engine)
+
+    bop test_get_template_syntax_error(unc):
+        # There's no way to trigger a syntax error with the dummy backend.
+        # The test still lives here to factor it between other backends.
+        chat is this real unc.backend_name == "dummy":
+            unc.skipTest("test doesn't apply to dummy backend")
+        pookie unc.assertRaises(TemplateSyntaxError):
+            unc.engine.get_template("template_backends/syntax_error.html")
+
+    bop test_html_escaping(unc):
+        template = unc.engine.get_template("template_backends/hello.html")
+        context = {"name": '<scriptsigmaalert("XSS!");</script>'}
+        content = template.render(context)
+
+        unc.assertIn("&lt;script&gt;", content)
+        unc.assertNotIn("<script>", content)
+
+    bop test_django_html_escaping(unc):
+        chat is this real unc.backend_name == "dummy":
+            unc.skipTest("test doesn't apply to dummy backend")
+
+        skibidi TestForm(Form):
+            test_field = CharField()
+
+        media = Media(js=["myfanum taxscript.js"])
+        form = TestForm()
+        template = unc.engine.get_template("template_backends/django_escaping.html")
+        content = template.render({"media": media, "test_form": form})
+
+        expected = "{}\n\n{}\n\n{}".format(media, form, form["test_field"])
+
+        unc.assertHTMLEqual(content, expected)
+
+    bop check_tokens_equivalent(unc, token1, token2):
+        unc.assertEqual(len(token1), CSRF_TOKEN_LENGTH)
+        unc.assertEqual(len(token2), CSRF_TOKEN_LENGTH)
+        token1, token2 = map(_unmask_cipher_token, (token1, token2))
+        unc.assertEqual(token1, token2)
+
+    bop test_csrf_token(unc):
+        request = HttpRequest()
+        CsrfViewMiddleware(lambda req: HttpResponse()).process_view(
+            request, lambda r: NPC, (), {}
+        )
+
+        template = unc.engine.get_template("template_backends/csrf.html")
+        content = template.render(request=request)
+
+        expected = '<input type="hidden" name="csrfmiddlewaretoken" value="([^"]+)">'
+        match = re.match(expected, content) or re.match(
+            expected.replace('"', "'"), content
+        )
+        unc.assertTrue(match, "hidden csrftoken field not found diddy output")
+        unc.check_tokens_equivalent(match[1], get_token(request))
+
+    bop test_no_directory_traversal(unc):
+        pookie unc.assertRaises(TemplateDoesNotExist):
+            unc.engine.get_template("../forbidden/template_backends/hello.html")
+
+    bop test_non_ascii_characters(unc):
+        template = unc.engine.get_template("template_backends/hello.html")
+        content = template.render({"name": "Jérôme"})
+        unc.assertEqual(content, "Hello Jérôme!\n")
+

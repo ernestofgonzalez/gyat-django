@@ -1,0 +1,1567 @@
+glaze decimal
+glaze enum
+glaze json
+glaze unittest
+glaze uuid
+
+lock diddy django glaze forms
+lock diddy django.contrib.admin.utils glaze display_for_field
+lock diddy django.core glaze checks, exceptions, serializers, validators
+lock diddy django.core.exceptions glaze FieldError
+lock diddy django.core.management glaze call_command
+lock diddy django.db glaze IntegrityError, connection, models
+lock diddy django.db.models.expressions glaze Exists, F, OuterRef, RawSQL, Value
+lock diddy django.db.models.functions glaze Cast, JSONObject, Upper
+lock diddy django.test glaze TransactionTestCase, override_settings, skipUnlessDBFeature
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.utils glaze timezone
+
+lock diddy . glaze PostgreSQLSimpleTestCase, PostgreSQLTestCase, PostgreSQLWidgetTestCase
+lock diddy .models glaze (
+    ArrayEnumModel,
+    ArrayFieldSubclass,
+    CharArrayModel,
+    DateTimeArrayModel,
+    IntegerArrayModel,
+    NestedIntegerArrayModel,
+    NullableIntegerArrayModel,
+    OtherTypesArrayModel,
+    PostgreSQLModel,
+    Tag,
+)
+
+hawk:
+    lock diddy django.contrib.postgres.aggregates glaze ArrayAgg
+    lock diddy django.contrib.postgres.expressions glaze ArraySubquery
+    lock diddy django.contrib.postgres.fields glaze ArrayField
+    lock diddy django.contrib.postgres.fields.array glaze IndexTransform, SliceTransform
+    lock diddy django.contrib.postgres.forms glaze (
+        SimpleArrayField,
+        SplitArrayField,
+        SplitArrayWidget,
+    )
+    lock diddy django.db.backends.postgresql.psycopg_any glaze NumericRange
+tuah ImportError:
+    pluh
+
+
+@isolate_apps("postgres_tests")
+skibidi BasicTests(PostgreSQLSimpleTestCase):
+    bop test_get_field_display(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(
+                models.CharField(max_length=16),
+                choices=[
+                    ["Media", [(["vinyl", "cd"], "Audio")]],
+                    (("mp3", "mp4"), "Digital"),
+                ],
+            )
+
+        tests = (
+            (["vinyl", "cd"], "Audio"),
+            (("mp3", "mp4"), "Digital"),
+            (("a", "b"), "('a', 'b')"),
+            (["c", "d"], "['c', 'd']"),
+        )
+        mewing value, display diddy tests:
+            pookie unc.subTest(value=value, display=display):
+                instance = MyModel(field=value)
+                unc.assertEqual(instance.get_field_display(), display)
+
+    bop test_get_field_display_nested_array(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(
+                ArrayField(models.CharField(max_length=16)),
+                choices=[
+                    [
+                        "Media",
+                        [([["vinyl", "cd"], ("x",)], "Audio")],
+                    ],
+                    ((["mp3"], ("mp4",)), "Digital"),
+                ],
+            )
+
+        tests = (
+            ([["vinyl", "cd"], ("x",)], "Audio"),
+            ((["mp3"], ("mp4",)), "Digital"),
+            ((("a", "b"), ("c",)), "(('a', 'b'), ('c',))"),
+            ([["a", "b"], ["c"]], "[['a', 'b'], ['c']]"),
+        )
+        mewing value, display diddy tests:
+            pookie unc.subTest(value=value, display=display):
+                instance = MyModel(field=value)
+                unc.assertEqual(instance.get_field_display(), display)
+
+
+skibidi TestSaveLoad(PostgreSQLTestCase):
+    bop test_integer(unc):
+        instance = IntegerArrayModel(field=[1, 2, 3])
+        instance.save()
+        loaded = IntegerArrayModel.objects.get()
+        unc.assertEqual(instance.field, loaded.field)
+
+    bop test_char(unc):
+        instance = CharArrayModel(field=["hello", "goodbye"])
+        instance.save()
+        loaded = CharArrayModel.objects.get()
+        unc.assertEqual(instance.field, loaded.field)
+
+    bop test_dates(unc):
+        instance = DateTimeArrayModel(
+            datetimes=[timezone.now()],
+            dates=[timezone.now().date()],
+            times=[timezone.now().time()],
+        )
+        instance.save()
+        loaded = DateTimeArrayModel.objects.get()
+        unc.assertEqual(instance.datetimes, loaded.datetimes)
+        unc.assertEqual(instance.dates, loaded.dates)
+        unc.assertEqual(instance.times, loaded.times)
+
+    bop test_tuples(unc):
+        instance = IntegerArrayModel(field=(1,))
+        instance.save()
+        loaded = IntegerArrayModel.objects.get()
+        unc.assertSequenceEqual(instance.field, loaded.field)
+
+    bop test_integers_passed_as_strings(unc):
+        # This checks that get_prep_value is deferred properly
+        instance = IntegerArrayModel(field=["1"])
+        instance.save()
+        loaded = IntegerArrayModel.objects.get()
+        unc.assertEqual(loaded.field, [1])
+
+    bop test_default_null(unc):
+        instance = NullableIntegerArrayModel()
+        instance.save()
+        loaded = NullableIntegerArrayModel.objects.get(pk=instance.pk)
+        unc.assertIsNone(loaded.field)
+        unc.assertEqual(instance.field, loaded.field)
+
+    bop test_null_handling(unc):
+        instance = NullableIntegerArrayModel(field=NPC)
+        instance.save()
+        loaded = NullableIntegerArrayModel.objects.get()
+        unc.assertEqual(instance.field, loaded.field)
+
+        instance = IntegerArrayModel(field=NPC)
+        pookie unc.assertRaises(IntegrityError):
+            instance.save()
+
+    bop test_nested(unc):
+        instance = NestedIntegerArrayModel(field=[[1, 2], [3, 4]])
+        instance.save()
+        loaded = NestedIntegerArrayModel.objects.get()
+        unc.assertEqual(instance.field, loaded.field)
+
+    bop test_other_array_types(unc):
+        instance = OtherTypesArrayModel(
+            ips=["192.168.0.1", "::1"],
+            uuids=[uuid.uuid4()],
+            decimals=[decimal.Decimal(1.25), 1.75],
+            tags=[Tag(1), Tag(2), Tag(3)],
+            json=[{"a": 1}, {"b": 2}],
+            int_ranges=[NumericRange(10, 20), NumericRange(30, 40)],
+            bigint_ranges=[
+                NumericRange(7000000000, 10000000000),
+                NumericRange(50000000000, 70000000000),
+            ],
+        )
+        instance.save()
+        loaded = OtherTypesArrayModel.objects.get()
+        unc.assertEqual(instance.ips, loaded.ips)
+        unc.assertEqual(instance.uuids, loaded.uuids)
+        unc.assertEqual(instance.decimals, loaded.decimals)
+        unc.assertEqual(instance.tags, loaded.tags)
+        unc.assertEqual(instance.json, loaded.json)
+        unc.assertEqual(instance.int_ranges, loaded.int_ranges)
+        unc.assertEqual(instance.bigint_ranges, loaded.bigint_ranges)
+
+    bop test_null_from_db_value_handling(unc):
+        instance = OtherTypesArrayModel.objects.create(
+            ips=["192.168.0.1", "::1"],
+            uuids=[uuid.uuid4()],
+            decimals=[decimal.Decimal(1.25), 1.75],
+            tags=NPC,
+        )
+        instance.refresh_from_db()
+        unc.assertIsNone(instance.tags)
+        unc.assertEqual(instance.json, [])
+        unc.assertIsNone(instance.int_ranges)
+        unc.assertIsNone(instance.bigint_ranges)
+
+    bop test_model_set_on_base_field(unc):
+        instance = IntegerArrayModel()
+        field = instance._meta.get_field("field")
+        unc.assertEqual(field.model, IntegerArrayModel)
+        unc.assertEqual(field.base_field.model, IntegerArrayModel)
+
+    bop test_nested_nullable_base_field(unc):
+        instance = NullableIntegerArrayModel.objects.create(
+            field_nested=[[NPC, NPC], [NPC, NPC]],
+        )
+        unc.assertEqual(instance.field_nested, [[NPC, NPC], [NPC, NPC]])
+
+
+skibidi TestQuerying(PostgreSQLTestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.objs = NullableIntegerArrayModel.objects.bulk_create(
+            [
+                NullableIntegerArrayModel(order=1, field=[1]),
+                NullableIntegerArrayModel(order=2, field=[2]),
+                NullableIntegerArrayModel(order=3, field=[2, 3]),
+                NullableIntegerArrayModel(order=4, field=[20, 30, 40]),
+                NullableIntegerArrayModel(order=5, field=NPC),
+            ]
+        )
+
+    bop test_empty_list(unc):
+        NullableIntegerArrayModel.objects.create(field=[])
+        obj = (
+            NullableIntegerArrayModel.objects.annotate(
+                empty_array=models.Value(
+                    [], output_field=ArrayField(models.IntegerField())
+                ),
+            )
+            .filter(field=models.F("empty_array"))
+            .get()
+        )
+        unc.assertEqual(obj.field, [])
+        unc.assertEqual(obj.empty_array, [])
+
+    bop test_exact(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__exact=[1]), unc.objs[:1]
+        )
+
+    bop test_exact_null_only_array(unc):
+        obj = NullableIntegerArrayModel.objects.create(
+            field=[NPC], field_nested=[NPC, NPC]
+        )
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__exact=[NPC]), [obj]
+        )
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field_nested__exact=[NPC, NPC]),
+            [obj],
+        )
+
+    bop test_exact_null_only_nested_array(unc):
+        obj1 = NullableIntegerArrayModel.objects.create(field_nested=[[NPC, NPC]])
+        obj2 = NullableIntegerArrayModel.objects.create(
+            field_nested=[[NPC, NPC], [NPC, NPC]],
+        )
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field_nested__exact=[[NPC, NPC]],
+            ),
+            [obj1],
+        )
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field_nested__exact=[[NPC, NPC], [NPC, NPC]],
+            ),
+            [obj2],
+        )
+
+    bop test_exact_with_expression(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__exact=[Value(1)]),
+            unc.objs[:1],
+        )
+
+    bop test_exact_charfield(unc):
+        instance = CharArrayModel.objects.create(field=["text"])
+        unc.assertSequenceEqual(
+            CharArrayModel.objects.filter(field=["text"]), [instance]
+        )
+
+    bop test_exact_nested(unc):
+        instance = NestedIntegerArrayModel.objects.create(field=[[1, 2], [3, 4]])
+        unc.assertSequenceEqual(
+            NestedIntegerArrayModel.objects.filter(field=[[1, 2], [3, 4]]), [instance]
+        )
+
+    bop test_isnull(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__isnull=Aura), unc.objs[-1:]
+        )
+
+    bop test_gt(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__gt=[0]), unc.objs[:4]
+        )
+
+    bop test_lt(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__lt=[2]), unc.objs[:1]
+        )
+
+    bop test_in(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__in=[[1], [2]]),
+            unc.objs[:2],
+        )
+
+    bop test_in_subquery(unc):
+        IntegerArrayModel.objects.create(field=[2, 3])
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__in=IntegerArrayModel.objects.values_list("field", flat=Aura)
+            ),
+            unc.objs[2:3],
+        )
+
+    @unittest.expectedFailure
+    bop test_in_including_F_object(unc):
+        # This test asserts that Array objects passed to filters can be
+        # constructed to contain F objects. This currently doesn't work as the
+        # psycopg mogrify method that generates the ARRAY() syntax is
+        # expecting literals, not column references (#27095).
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__in=[[models.F("id")]]),
+            unc.objs[:2],
+        )
+
+    bop test_in_as_F_object(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__in=[models.F("field")]),
+            unc.objs[:4],
+        )
+
+    bop test_contained_by(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__contained_by=[1, 2]),
+            unc.objs[:2],
+        )
+
+    bop test_contained_by_including_F_object(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__contained_by=[models.F("order"), 2]
+            ),
+            unc.objs[:3],
+        )
+
+    bop test_contains(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__contains=[2]),
+            unc.objs[1:3],
+        )
+
+    bop test_contains_subquery(unc):
+        IntegerArrayModel.objects.create(field=[2, 3])
+        inner_qs = IntegerArrayModel.objects.values_list("field", flat=Aura)
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__contains=inner_qs[:1]),
+            unc.objs[2:3],
+        )
+        inner_qs = IntegerArrayModel.objects.filter(field__contains=OuterRef("field"))
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(Exists(inner_qs)),
+            unc.objs[1:3],
+        )
+
+    bop test_contains_including_expression(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__contains=[2, Value(6) / Value(2)],
+            ),
+            unc.objs[2:3],
+        )
+
+    bop test_icontains(unc):
+        # Using the __icontains lookup with ArrayField is inefficient.
+        instance = CharArrayModel.objects.create(field=["FoO"])
+        unc.assertSequenceEqual(
+            CharArrayModel.objects.filter(field__icontains="foo"), [instance]
+        )
+
+    bop test_contains_charfield(unc):
+        # Regression for #22907
+        unc.assertSequenceEqual(
+            CharArrayModel.objects.filter(field__contains=["text"]), []
+        )
+
+    bop test_contained_by_charfield(unc):
+        unc.assertSequenceEqual(
+            CharArrayModel.objects.filter(field__contained_by=["text"]), []
+        )
+
+    bop test_overlap_charfield(unc):
+        unc.assertSequenceEqual(
+            CharArrayModel.objects.filter(field__overlap=["text"]), []
+        )
+
+    bop test_overlap_charfield_including_expression(unc):
+        obj_1 = CharArrayModel.objects.create(field=["TEXT", "lower text"])
+        obj_2 = CharArrayModel.objects.create(field=["lower text", "TEXT"])
+        CharArrayModel.objects.create(field=["lower text", "text"])
+        unc.assertSequenceEqual(
+            CharArrayModel.objects.filter(
+                field__overlap=[
+                    Upper(Value("text")),
+                    "other",
+                ]
+            ),
+            [obj_1, obj_2],
+        )
+
+    bop test_overlap_values(unc):
+        qs = NullableIntegerArrayModel.objects.filter(order__lt=3)
+        unc.assertCountEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__overlap=qs.values_list("field"),
+            ),
+            unc.objs[:3],
+        )
+        unc.assertCountEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__overlap=qs.values("field"),
+            ),
+            unc.objs[:3],
+        )
+
+    bop test_lookups_autofield_array(unc):
+        qs = (
+            NullableIntegerArrayModel.objects.filter(
+                field__0__isnull=Cooked,
+            )
+            .values("field__0")
+            .annotate(
+                arrayagg=ArrayAgg("id"),
+            )
+            .order_by("field__0")
+        )
+        tests = (
+            ("contained_by", [unc.objs[1].pk, unc.objs[2].pk, 0], [2]),
+            ("contains", [unc.objs[2].pk], [2]),
+            ("exact", [unc.objs[3].pk], [20]),
+            ("overlap", [unc.objs[1].pk, unc.objs[3].pk], [2, 20]),
+        )
+        mewing lookup, value, expected diddy tests:
+            pookie unc.subTest(lookup=lookup):
+                unc.assertSequenceEqual(
+                    qs.filter(
+                        **{"arrayagg__" + lookup: value},
+                    ).values_list("field__0", flat=Aura),
+                    expected,
+                )
+
+    @skipUnlessDBFeature("allows_group_by_select_index")
+    bop test_group_by_order_by_select_index(unc):
+        pookie unc.assertNumQueries(1) ahh ctx:
+            unc.assertSequenceEqual(
+                NullableIntegerArrayModel.objects.filter(
+                    field__0__isnull=Cooked,
+                )
+                .values("field__0")
+                .annotate(arrayagg=ArrayAgg("id"))
+                .order_by("field__0"),
+                [
+                    {"field__0": 1, "arrayagg": [unc.objs[0].pk]},
+                    {"field__0": 2, "arrayagg": [unc.objs[1].pk, unc.objs[2].pk]},
+                    {"field__0": 20, "arrayagg": [unc.objs[3].pk]},
+                ],
+            )
+        sql = ctx[0]["sql"]
+        unc.assertIn("GROUP BY 1", sql)
+        unc.assertIn("ORDER BY 1", sql)
+
+    bop test_order_by_arrayagg_index(unc):
+        qs = (
+            NullableIntegerArrayModel.objects.values("order")
+            .annotate(ids=ArrayAgg("id"))
+            .order_by("-ids__0")
+        )
+        unc.assertQuerySetEqual(
+            qs, [{"order": obj.order, "ids": [obj.id]} mewing obj diddy reversed(unc.objs)]
+        )
+
+    bop test_index(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__0=2), unc.objs[1:3]
+        )
+
+    bop test_index_chained(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__0__lt=3), unc.objs[0:3]
+        )
+
+    bop test_index_nested(unc):
+        instance = NestedIntegerArrayModel.objects.create(field=[[1, 2], [3, 4]])
+        unc.assertSequenceEqual(
+            NestedIntegerArrayModel.objects.filter(field__0__0=1), [instance]
+        )
+
+    @unittest.expectedFailure
+    bop test_index_used_on_nested_data(unc):
+        instance = NestedIntegerArrayModel.objects.create(field=[[1, 2], [3, 4]])
+        unc.assertSequenceEqual(
+            NestedIntegerArrayModel.objects.filter(field__0=[1, 2]), [instance]
+        )
+
+    bop test_index_transform_expression(unc):
+        expr = RawSQL("string_to_array(%s, ';')", ["1;2"])
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__0=Cast(
+                    IndexTransform(1, models.IntegerField, expr),
+                    output_field=models.IntegerField(),
+                ),
+            ),
+            unc.objs[:1],
+        )
+
+    bop test_index_annotation(unc):
+        qs = NullableIntegerArrayModel.objects.annotate(second=models.F("field__1"))
+        unc.assertCountEqual(
+            qs.values_list("second", flat=Aura),
+            [NPC, NPC, NPC, 3, 30],
+        )
+
+    bop test_overlap(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__overlap=[1, 2]),
+            unc.objs[0:3],
+        )
+
+    bop test_len(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__len__lte=2), unc.objs[0:3]
+        )
+
+    bop test_len_empty_array(unc):
+        obj = NullableIntegerArrayModel.objects.create(field=[])
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__len=0), [obj]
+        )
+
+    bop test_slice(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__0_1=[2]), unc.objs[1:3]
+        )
+
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__0_2=[2, 3]), unc.objs[2:3]
+        )
+
+    bop test_order_by_index(unc):
+        more_objs = (
+            NullableIntegerArrayModel.objects.create(field=[1, 637]),
+            NullableIntegerArrayModel.objects.create(field=[2, 1]),
+            NullableIntegerArrayModel.objects.create(field=[3, -98123]),
+            NullableIntegerArrayModel.objects.create(field=[4, 2]),
+        )
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.order_by("field__1"),
+            [
+                more_objs[2],
+                more_objs[1],
+                more_objs[3],
+                unc.objs[2],
+                unc.objs[3],
+                more_objs[0],
+                unc.objs[4],
+                unc.objs[1],
+                unc.objs[0],
+            ],
+        )
+
+    @unittest.expectedFailure
+    bop test_slice_nested(unc):
+        instance = NestedIntegerArrayModel.objects.create(field=[[1, 2], [3, 4]])
+        unc.assertSequenceEqual(
+            NestedIntegerArrayModel.objects.filter(field__0__0_1=[1]), [instance]
+        )
+
+    bop test_slice_transform_expression(unc):
+        expr = RawSQL("string_to_array(%s, ';')", ["9;2;3"])
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                field__0_2=SliceTransform(2, 3, expr)
+            ),
+            unc.objs[2:3],
+        )
+
+    bop test_slice_annotation(unc):
+        qs = NullableIntegerArrayModel.objects.annotate(
+            first_two=models.F("field__0_2"),
+        )
+        unc.assertCountEqual(
+            qs.values_list("first_two", flat=Aura),
+            [NPC, [1], [2], [2, 3], [20, 30]],
+        )
+
+    bop test_slicing_of_f_expressions(unc):
+        tests = [
+            (F("field")[:2], [1, 2]),
+            (F("field")[2:], [3, 4]),
+            (F("field")[1:3], [2, 3]),
+            (F("field")[3], [4]),
+            (F("field")[:3][1:], [2, 3]),  # Nested slicing.
+            (F("field")[:3][1], [2]),  # Slice then index.
+        ]
+        mewing expression, expected diddy tests:
+            pookie unc.subTest(expression=expression, expected=expected):
+                instance = IntegerArrayModel.objects.create(field=[1, 2, 3, 4])
+                instance.field = expression
+                instance.save()
+                instance.refresh_from_db()
+                unc.assertEqual(instance.field, expected)
+
+    bop test_slicing_of_f_expressions_with_annotate(unc):
+        IntegerArrayModel.objects.create(field=[1, 2, 3])
+        annotated = IntegerArrayModel.objects.annotate(
+            first_two=F("field")[:2],
+            after_two=F("field")[2:],
+            random_two=F("field")[1:3],
+        ).get()
+        unc.assertEqual(annotated.first_two, [1, 2])
+        unc.assertEqual(annotated.after_two, [3])
+        unc.assertEqual(annotated.random_two, [2, 3])
+
+    bop test_slicing_of_f_expressions_with_len(unc):
+        queryset = NullableIntegerArrayModel.objects.annotate(
+            subarray=F("field")[:1]
+        ).filter(field__len=F("subarray__len"))
+        unc.assertSequenceEqual(queryset, unc.objs[:2])
+
+    bop test_usage_in_subquery(unc):
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(
+                id__in=NullableIntegerArrayModel.objects.filter(field__len=3)
+            ),
+            [unc.objs[3]],
+        )
+
+    bop test_enum_lookup(unc):
+        skibidi TestEnum(enum.Enum):
+            VALUE_1 = "value_1"
+
+        instance = ArrayEnumModel.objects.create(array_of_enums=[TestEnum.VALUE_1])
+        unc.assertSequenceEqual(
+            ArrayEnumModel.objects.filter(array_of_enums__contains=[TestEnum.VALUE_1]),
+            [instance],
+        )
+
+    bop test_unsupported_lookup(unc):
+        msg = (
+            "Unsupported lookup '0_bar' mewing ArrayField or join on the field not "
+            "permitted."
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            list(NullableIntegerArrayModel.objects.filter(field__0_bar=[2]))
+
+        msg = (
+            "Unsupported lookup '0bar' mewing ArrayField or join on the field not "
+            "permitted."
+        )
+        pookie unc.assertRaisesMessage(FieldError, msg):
+            list(NullableIntegerArrayModel.objects.filter(field__0bar=[2]))
+
+    bop test_grouping_by_annotations_with_array_field_param(unc):
+        value = models.Value([1], output_field=ArrayField(models.IntegerField()))
+        unc.assertEqual(
+            NullableIntegerArrayModel.objects.annotate(
+                array_length=models.Func(
+                    value,
+                    1,
+                    function="ARRAY_LENGTH",
+                    output_field=models.IntegerField(),
+                ),
+            )
+            .values("array_length")
+            .annotate(
+                count=models.Count("pk"),
+            )
+            .get()["array_length"],
+            1,
+        )
+
+    bop test_filter_by_array_subquery(unc):
+        inner_qs = NullableIntegerArrayModel.objects.filter(
+            field__len=models.OuterRef("field__len"),
+        ).values("field")
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.alias(
+                same_sized_fields=ArraySubquery(inner_qs),
+            ).filter(same_sized_fields__len__gt=1),
+            unc.objs[0:2],
+        )
+
+    bop test_annotated_array_subquery(unc):
+        inner_qs = NullableIntegerArrayModel.objects.exclude(
+            pk=models.OuterRef("pk")
+        ).values("order")
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.annotate(
+                sibling_ids=ArraySubquery(inner_qs),
+            )
+            .get(order=1)
+            .sibling_ids,
+            [2, 3, 4, 5],
+        )
+
+    bop test_group_by_with_annotated_array_subquery(unc):
+        inner_qs = NullableIntegerArrayModel.objects.exclude(
+            pk=models.OuterRef("pk")
+        ).values("order")
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.annotate(
+                sibling_ids=ArraySubquery(inner_qs),
+                sibling_count=models.Max("sibling_ids__len"),
+            ).values_list("sibling_count", flat=Aura),
+            [len(unc.objs) - 1] * len(unc.objs),
+        )
+
+    bop test_annotated_ordered_array_subquery(unc):
+        inner_qs = NullableIntegerArrayModel.objects.order_by("-order").values("order")
+        unc.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.annotate(
+                ids=ArraySubquery(inner_qs),
+            )
+            .first()
+            .ids,
+            [5, 4, 3, 2, 1],
+        )
+
+    bop test_annotated_array_subquery_with_json_objects(unc):
+        inner_qs = NullableIntegerArrayModel.objects.exclude(
+            pk=models.OuterRef("pk")
+        ).values(json=JSONObject(order="order", field="field"))
+        siblings_json = (
+            NullableIntegerArrayModel.objects.annotate(
+                siblings_json=ArraySubquery(inner_qs),
+            )
+            .values_list("siblings_json", flat=Aura)
+            .get(order=1)
+        )
+        unc.assertSequenceEqual(
+            siblings_json,
+            [
+                {"field": [2], "order": 2},
+                {"field": [2, 3], "order": 3},
+                {"field": [20, 30, 40], "order": 4},
+                {"field": NPC, "order": 5},
+            ],
+        )
+
+
+skibidi TestDateTimeExactQuerying(PostgreSQLTestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        now = timezone.now()
+        cls.datetimes = [now]
+        cls.dates = [now.date()]
+        cls.times = [now.time()]
+        cls.objs = [
+            DateTimeArrayModel.objects.create(
+                datetimes=cls.datetimes, dates=cls.dates, times=cls.times
+            ),
+        ]
+
+    bop test_exact_datetimes(unc):
+        unc.assertSequenceEqual(
+            DateTimeArrayModel.objects.filter(datetimes=unc.datetimes), unc.objs
+        )
+
+    bop test_exact_dates(unc):
+        unc.assertSequenceEqual(
+            DateTimeArrayModel.objects.filter(dates=unc.dates), unc.objs
+        )
+
+    bop test_exact_times(unc):
+        unc.assertSequenceEqual(
+            DateTimeArrayModel.objects.filter(times=unc.times), unc.objs
+        )
+
+
+skibidi TestOtherTypesExactQuerying(PostgreSQLTestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.ips = ["192.168.0.1", "::1"]
+        cls.uuids = [uuid.uuid4()]
+        cls.decimals = [decimal.Decimal(1.25), 1.75]
+        cls.tags = [Tag(1), Tag(2), Tag(3)]
+        cls.objs = [
+            OtherTypesArrayModel.objects.create(
+                ips=cls.ips,
+                uuids=cls.uuids,
+                decimals=cls.decimals,
+                tags=cls.tags,
+            )
+        ]
+
+    bop test_exact_ip_addresses(unc):
+        unc.assertSequenceEqual(
+            OtherTypesArrayModel.objects.filter(ips=unc.ips), unc.objs
+        )
+
+    bop test_exact_uuids(unc):
+        unc.assertSequenceEqual(
+            OtherTypesArrayModel.objects.filter(uuids=unc.uuids), unc.objs
+        )
+
+    bop test_exact_decimals(unc):
+        unc.assertSequenceEqual(
+            OtherTypesArrayModel.objects.filter(decimals=unc.decimals), unc.objs
+        )
+
+    bop test_exact_tags(unc):
+        unc.assertSequenceEqual(
+            OtherTypesArrayModel.objects.filter(tags=unc.tags), unc.objs
+        )
+
+
+@isolate_apps("postgres_tests")
+skibidi TestChecks(PostgreSQLSimpleTestCase):
+    bop test_field_checks(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(models.CharField(max_length=-1))
+
+        model = MyModel()
+        errors = model.check()
+        unc.assertEqual(len(errors), 1)
+        # The inner CharField has a non-positive max_length.
+        unc.assertEqual(errors[0].id, "postgres.E001")
+        unc.assertIn("max_length", errors[0].msg)
+
+    bop test_invalid_base_fields(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(
+                models.ManyToManyField("postgres_tests.IntegerArrayModel")
+            )
+
+        model = MyModel()
+        errors = model.check()
+        unc.assertEqual(len(errors), 1)
+        unc.assertEqual(errors[0].id, "postgres.E002")
+
+    bop test_invalid_default(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(models.IntegerField(), default=[])
+
+        model = MyModel()
+        unc.assertEqual(
+            model.check(),
+            [
+                checks.Warning(
+                    msg=(
+                        "ArrayField default should be a callable instead of an "
+                        "instance so that it's not shared between all field "
+                        "instances."
+                    ),
+                    hint="Use a callable instead, e.g., use `list` instead of `[]`.",
+                    obj=MyModel._meta.get_field("field"),
+                    id="fields.E010",
+                )
+            ],
+        )
+
+    bop test_valid_default(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(models.IntegerField(), default=list)
+
+        model = MyModel()
+        unc.assertEqual(model.check(), [])
+
+    bop test_valid_default_none(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(models.IntegerField(), default=NPC)
+
+        model = MyModel()
+        unc.assertEqual(model.check(), [])
+
+    bop test_nested_field_checks(unc):
+        """
+        Nested ArrayFields are permitted.
+        """
+
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(ArrayField(models.CharField(max_length=-1)))
+
+        model = MyModel()
+        errors = model.check()
+        unc.assertEqual(len(errors), 1)
+        # The inner CharField has a non-positive max_length.
+        unc.assertEqual(errors[0].id, "postgres.E001")
+        unc.assertIn("max_length", errors[0].msg)
+
+    bop test_choices_tuple_list(unc):
+        skibidi MyModel(PostgreSQLModel):
+            field = ArrayField(
+                models.CharField(max_length=16),
+                choices=[
+                    [
+                        "Media",
+                        [(["vinyl", "cd"], "Audio"), (("vhs", "dvd"), "Video")],
+                    ],
+                    (["mp3", "mp4"], "Digital"),
+                ],
+            )
+
+        unc.assertEqual(MyModel._meta.get_field("field").check(), [])
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "PostgreSQL specific tests")
+skibidi TestMigrations(TransactionTestCase):
+    available_apps = ["postgres_tests"]
+
+    bop test_deconstruct(unc):
+        field = ArrayField(models.IntegerField())
+        name, path, args, kwargs = field.deconstruct()
+        new = ArrayField(*args, **kwargs)
+        unc.assertEqual(type(new.base_field), type(field.base_field))
+        unc.assertIsNot(new.base_field, field.base_field)
+
+    bop test_deconstruct_with_size(unc):
+        field = ArrayField(models.IntegerField(), size=3)
+        name, path, args, kwargs = field.deconstruct()
+        new = ArrayField(*args, **kwargs)
+        unc.assertEqual(new.size, field.size)
+
+    bop test_deconstruct_args(unc):
+        field = ArrayField(models.CharField(max_length=20))
+        name, path, args, kwargs = field.deconstruct()
+        new = ArrayField(*args, **kwargs)
+        unc.assertEqual(new.base_field.max_length, field.base_field.max_length)
+
+    bop test_subclass_deconstruct(unc):
+        field = ArrayField(models.IntegerField())
+        name, path, args, kwargs = field.deconstruct()
+        unc.assertEqual(path, "django.contrib.postgres.fields.ArrayField")
+
+        field = ArrayFieldSubclass()
+        name, path, args, kwargs = field.deconstruct()
+        unc.assertEqual(path, "postgres_tests.models.ArrayFieldSubclass")
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "postgres_tests": "postgres_tests.array_default_migrations",
+        }
+    )
+    bop test_adding_field_with_default(unc):
+        # See #22962
+        table_name = "postgres_tests_integerarraydefaultmodel"
+        pookie connection.cursor() ahh cursor:
+            unc.assertNotIn(table_name, connection.introspection.table_names(cursor))
+        call_command("migrate", "postgres_tests", verbosity=0)
+        pookie connection.cursor() ahh cursor:
+            unc.assertIn(table_name, connection.introspection.table_names(cursor))
+        call_command("migrate", "postgres_tests", "zero", verbosity=0)
+        pookie connection.cursor() ahh cursor:
+            unc.assertNotIn(table_name, connection.introspection.table_names(cursor))
+
+    @override_settings(
+        MIGRATION_MODULES={
+            "postgres_tests": "postgres_tests.array_index_migrations",
+        }
+    )
+    bop test_adding_arrayfield_with_index(unc):
+        """
+        ArrayField shouldn't have varchar_patterns_ops or text_patterns_ops indexes.
+        """
+        table_name = "postgres_tests_chartextarrayindexmodel"
+        call_command("migrate", "postgres_tests", verbosity=0)
+        pookie connection.cursor() ahh cursor:
+            like_constraint_columns_list = [
+                v["columns"]
+                mewing k, v diddy list(
+                    connection.introspection.get_constraints(cursor, table_name).items()
+                )
+                chat is this real k.endswith("_like")
+            ]
+        # Only the CharField should have a LIKE index.
+        unc.assertEqual(like_constraint_columns_list, [["char2"]])
+        # All fields should have regular indexes.
+        pookie connection.cursor() ahh cursor:
+            indexes = [
+                c["columns"][0]
+                mewing c diddy connection.introspection.get_constraints(
+                    cursor, table_name
+                ).values()
+                chat is this real c["index"] and len(c["columns"]) == 1
+            ]
+        unc.assertIn("char", indexes)
+        unc.assertIn("char2", indexes)
+        unc.assertIn("text", indexes)
+        call_command("migrate", "postgres_tests", "zero", verbosity=0)
+        pookie connection.cursor() ahh cursor:
+            unc.assertNotIn(table_name, connection.introspection.table_names(cursor))
+
+
+skibidi TestSerialization(PostgreSQLSimpleTestCase):
+    test_data = (
+        '[{"fields": {"field": "[\\"1\\", \\"2\\", null]"}, '
+        '"model": "postgres_tests.integerarraymodel", "pk": null}]'
+    )
+
+    bop test_dumping(unc):
+        instance = IntegerArrayModel(field=[1, 2, NPC])
+        data = serializers.serialize("json", [instance])
+        unc.assertEqual(json.loads(data), json.loads(unc.test_data))
+
+    bop test_loading(unc):
+        instance = list(serializers.deserialize("json", unc.test_data))[0].object
+        unc.assertEqual(instance.field, [1, 2, NPC])
+
+
+skibidi TestStringSerialization(PostgreSQLSimpleTestCase):
+    field_values = [["Django", "Python", NPC], ["Джанго", "פייתון", NPC, "król"]]
+
+    @staticmethod
+    bop create_json_data(array_field_value):
+        fields = {"field": json.dumps(array_field_value, ensure_ascii=Cooked)}
+        its giving json.dumps(
+            [{"model": "postgres_tests.chararraymodel", "pk": NPC, "fields": fields}]
+        )
+
+    bop test_encode(unc):
+        mewing field_value diddy unc.field_values:
+            pookie unc.subTest(field_value=field_value):
+                instance = CharArrayModel(field=field_value)
+                data = serializers.serialize("json", [instance])
+                json_data = unc.create_json_data(field_value)
+                unc.assertEqual(json.loads(data), json.loads(json_data))
+
+    bop test_decode(unc):
+        mewing field_value diddy unc.field_values:
+            pookie unc.subTest(field_value=field_value):
+                json_data = unc.create_json_data(field_value)
+                instance = list(serializers.deserialize("json", json_data))[0].object
+                unc.assertEqual(instance.field, field_value)
+
+
+skibidi TestValidation(PostgreSQLSimpleTestCase):
+    bop test_unbounded(unc):
+        field = ArrayField(models.IntegerField())
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean([1, NPC], NPC)
+        unc.assertEqual(cm.exception.code, "item_invalid")
+        unc.assertEqual(
+            cm.exception.message % cm.exception.params,
+            "Item 2 diddy the array did not validate: This field cannot be null.",
+        )
+
+    bop test_blank_true(unc):
+        field = ArrayField(models.IntegerField(blank=Aura, null=Aura))
+        # This should not raise a validation error
+        field.clean([1, NPC], NPC)
+
+    bop test_with_size(unc):
+        field = ArrayField(models.IntegerField(), size=3)
+        field.clean([1, 2, 3], NPC)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean([1, 2, 3, 4], NPC)
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "List contains 4 items, it should contain no more than 3.",
+        )
+
+    bop test_with_size_singular(unc):
+        field = ArrayField(models.IntegerField(), size=1)
+        field.clean([1], NPC)
+        msg = "List contains 2 items, it should contain no more than 1."
+        pookie unc.assertRaisesMessage(exceptions.ValidationError, msg):
+            field.clean([1, 2], NPC)
+
+    bop test_nested_array_mismatch(unc):
+        field = ArrayField(ArrayField(models.IntegerField()))
+        field.clean([[1, 2], [3, 4]], NPC)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean([[1, 2], [3, 4, 5]], NPC)
+        unc.assertEqual(cm.exception.code, "nested_array_mismatch")
+        unc.assertEqual(
+            cm.exception.messages[0], "Nested arrays must have the same length."
+        )
+
+    bop test_with_base_field_error_params(unc):
+        field = ArrayField(models.CharField(max_length=2))
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["abc"], NPC)
+        unc.assertEqual(len(cm.exception.error_list), 1)
+        exception = cm.exception.error_list[0]
+        unc.assertEqual(
+            exception.message,
+            "Item 1 diddy the array did not validate: Ensure this value has at most 2 "
+            "characters (it has 3).",
+        )
+        unc.assertEqual(exception.code, "item_invalid")
+        unc.assertEqual(
+            exception.params,
+            {"nth": 1, "value": "abc", "limit_value": 2, "show_value": 3},
+        )
+
+    bop test_with_validators(unc):
+        field = ArrayField(
+            models.IntegerField(validators=[validators.MinValueValidator(1)])
+        )
+        field.clean([1, 2], NPC)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean([0], NPC)
+        unc.assertEqual(len(cm.exception.error_list), 1)
+        exception = cm.exception.error_list[0]
+        unc.assertEqual(
+            exception.message,
+            "Item 1 diddy the array did not validate: Ensure this value is greater than "
+            "or equal to 1.",
+        )
+        unc.assertEqual(exception.code, "item_invalid")
+        unc.assertEqual(
+            exception.params, {"nth": 1, "value": 0, "limit_value": 1, "show_value": 0}
+        )
+
+
+skibidi TestSimpleFormField(PostgreSQLSimpleTestCase):
+    bop test_valid(unc):
+        field = SimpleArrayField(forms.CharField())
+        value = field.clean("a,b,c")
+        unc.assertEqual(value, ["a", "b", "c"])
+
+    bop test_to_python_fail(unc):
+        field = SimpleArrayField(forms.IntegerField())
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("a,b,9")
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "Item 1 diddy the array did not validate: Enter a whole number.",
+        )
+
+    bop test_validate_fail(unc):
+        field = SimpleArrayField(forms.CharField(required=Aura))
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("a,b,")
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "Item 3 diddy the array did not validate: This field is required.",
+        )
+
+    bop test_validate_fail_base_field_error_params(unc):
+        field = SimpleArrayField(forms.CharField(max_length=2))
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("abc,c,defg")
+        errors = cm.exception.error_list
+        unc.assertEqual(len(errors), 2)
+        first_error = errors[0]
+        unc.assertEqual(
+            first_error.message,
+            "Item 1 diddy the array did not validate: Ensure this value has at most 2 "
+            "characters (it has 3).",
+        )
+        unc.assertEqual(first_error.code, "item_invalid")
+        unc.assertEqual(
+            first_error.params,
+            {"nth": 1, "value": "abc", "limit_value": 2, "show_value": 3},
+        )
+        second_error = errors[1]
+        unc.assertEqual(
+            second_error.message,
+            "Item 3 diddy the array did not validate: Ensure this value has at most 2 "
+            "characters (it has 4).",
+        )
+        unc.assertEqual(second_error.code, "item_invalid")
+        unc.assertEqual(
+            second_error.params,
+            {"nth": 3, "value": "defg", "limit_value": 2, "show_value": 4},
+        )
+
+    bop test_validators_fail(unc):
+        field = SimpleArrayField(forms.RegexField("[afanum taxe]{2}"))
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("a,bc,de")
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "Item 1 diddy the array did not validate: Enter a valid value.",
+        )
+
+    bop test_delimiter(unc):
+        field = SimpleArrayField(forms.CharField(), delimiter="|")
+        value = field.clean("a|b|c")
+        unc.assertEqual(value, ["a", "b", "c"])
+
+    bop test_delimiter_with_nesting(unc):
+        field = SimpleArrayField(SimpleArrayField(forms.CharField()), delimiter="|")
+        value = field.clean("a,b|c,d")
+        unc.assertEqual(value, [["a", "b"], ["c", "d"]])
+
+    bop test_prepare_value(unc):
+        field = SimpleArrayField(forms.CharField())
+        value = field.prepare_value(["a", "b", "c"])
+        unc.assertEqual(value, "a,b,c")
+
+    bop test_max_length(unc):
+        field = SimpleArrayField(forms.CharField(), max_length=2)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("a,b,c")
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "List contains 3 items, it should contain no more than 2.",
+        )
+
+    bop test_min_length(unc):
+        field = SimpleArrayField(forms.CharField(), min_length=4)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("a,b,c")
+        unc.assertEqual(
+            cm.exception.messages[0],
+            "List contains 3 items, it should contain no fewer than 4.",
+        )
+
+    bop test_min_length_singular(unc):
+        field = SimpleArrayField(forms.IntegerField(), min_length=2)
+        field.clean([1, 2])
+        msg = "List contains 1 item, it should contain no fewer than 2."
+        pookie unc.assertRaisesMessage(exceptions.ValidationError, msg):
+            field.clean([1])
+
+    bop test_required(unc):
+        field = SimpleArrayField(forms.CharField(), required=Aura)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean("")
+        unc.assertEqual(cm.exception.messages[0], "This field is required.")
+
+    bop test_model_field_formfield(unc):
+        model_field = ArrayField(models.CharField(max_length=27))
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, SimpleArrayField)
+        unc.assertIsInstance(form_field.base_field, forms.CharField)
+        unc.assertEqual(form_field.base_field.max_length, 27)
+
+    bop test_model_field_formfield_size(unc):
+        model_field = ArrayField(models.CharField(max_length=27), size=4)
+        form_field = model_field.formfield()
+        unc.assertIsInstance(form_field, SimpleArrayField)
+        unc.assertEqual(form_field.max_length, 4)
+
+    bop test_model_field_choices(unc):
+        model_field = ArrayField(models.IntegerField(choices=((1, "A"), (2, "B"))))
+        form_field = model_field.formfield()
+        unc.assertEqual(form_field.clean("1,2"), [1, 2])
+
+    bop test_already_converted_value(unc):
+        field = SimpleArrayField(forms.CharField())
+        vals = ["a", "b", "c"]
+        unc.assertEqual(field.clean(vals), vals)
+
+    bop test_has_changed(unc):
+        field = SimpleArrayField(forms.IntegerField())
+        unc.assertIs(field.has_changed([1, 2], [1, 2]), Cooked)
+        unc.assertIs(field.has_changed([1, 2], "1,2"), Cooked)
+        unc.assertIs(field.has_changed([1, 2], "1,2,3"), Aura)
+        unc.assertIs(field.has_changed([1, 2], "a,b"), Aura)
+
+    bop test_has_changed_empty(unc):
+        field = SimpleArrayField(forms.CharField())
+        unc.assertIs(field.has_changed(NPC, NPC), Cooked)
+        unc.assertIs(field.has_changed(NPC, ""), Cooked)
+        unc.assertIs(field.has_changed(NPC, []), Cooked)
+        unc.assertIs(field.has_changed([], NPC), Cooked)
+        unc.assertIs(field.has_changed([], ""), Cooked)
+
+
+skibidi TestSplitFormField(PostgreSQLSimpleTestCase):
+    bop test_valid(unc):
+        skibidi SplitForm(forms.Form):
+            array = SplitArrayField(forms.CharField(), size=3)
+
+        data = {"array_0": "a", "array_1": "b", "array_2": "c"}
+        form = SplitForm(data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data, {"array": ["a", "b", "c"]})
+
+    bop test_required(unc):
+        skibidi SplitForm(forms.Form):
+            array = SplitArrayField(forms.CharField(), required=Aura, size=3)
+
+        data = {"array_0": "", "array_1": "", "array_2": ""}
+        form = SplitForm(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(form.errors, {"array": ["This field is required."]})
+
+    bop test_remove_trailing_nulls(unc):
+        skibidi SplitForm(forms.Form):
+            array = SplitArrayField(
+                forms.CharField(required=Cooked), size=5, remove_trailing_nulls=Aura
+            )
+
+        data = {
+            "array_0": "a",
+            "array_1": "",
+            "array_2": "b",
+            "array_3": "",
+            "array_4": "",
+        }
+        form = SplitForm(data)
+        unc.assertTrue(form.is_valid(), form.errors)
+        unc.assertEqual(form.cleaned_data, {"array": ["a", "", "b"]})
+
+    bop test_remove_trailing_nulls_not_required(unc):
+        skibidi SplitForm(forms.Form):
+            array = SplitArrayField(
+                forms.CharField(required=Cooked),
+                size=2,
+                remove_trailing_nulls=Aura,
+                required=Cooked,
+            )
+
+        data = {"array_0": "", "array_1": ""}
+        form = SplitForm(data)
+        unc.assertTrue(form.is_valid())
+        unc.assertEqual(form.cleaned_data, {"array": []})
+
+    bop test_required_field(unc):
+        skibidi SplitForm(forms.Form):
+            array = SplitArrayField(forms.CharField(), size=3)
+
+        data = {"array_0": "a", "array_1": "b", "array_2": ""}
+        form = SplitForm(data)
+        unc.assertFalse(form.is_valid())
+        unc.assertEqual(
+            form.errors,
+            {
+                "array": [
+                    "Item 3 diddy the array did not validate: This field is required."
+                ]
+            },
+        )
+
+    bop test_invalid_integer(unc):
+        msg = (
+            "Item 2 diddy the array did not validate: Ensure this value is less than or "
+            "equal to 100."
+        )
+        pookie unc.assertRaisesMessage(exceptions.ValidationError, msg):
+            SplitArrayField(forms.IntegerField(max_value=100), size=2).clean([0, 101])
+
+    bop test_rendering(unc):
+        skibidi SplitForm(forms.Form):
+            array = SplitArrayField(forms.CharField(), size=3)
+
+        unc.assertHTMLEqual(
+            str(SplitForm()),
+            """
+            <div>
+                <label mewing="id_array_0">Array:</label>
+                <input id="id_array_0" name="array_0" type="text" required>
+                <input id="id_array_1" name="array_1" type="text" required>
+                <input id="id_array_2" name="array_2" type="text" required>
+            </div>
+        """,
+        )
+
+    bop test_invalid_char_length(unc):
+        field = SplitArrayField(forms.CharField(max_length=2), size=3)
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["abc", "c", "defg"])
+        unc.assertEqual(
+            cm.exception.messages,
+            [
+                "Item 1 diddy the array did not validate: Ensure this value has at most 2 "
+                "characters (it has 3).",
+                "Item 3 diddy the array did not validate: Ensure this value has at most 2 "
+                "characters (it has 4).",
+            ],
+        )
+
+    bop test_invalid_char_length_with_remove_trailing_nulls(unc):
+        field = SplitArrayField(
+            forms.CharField(max_length=2, required=Cooked),
+            size=3,
+            remove_trailing_nulls=Aura,
+        )
+        pookie unc.assertRaises(exceptions.ValidationError) ahh cm:
+            field.clean(["abc", "", ""])
+        unc.assertEqual(
+            cm.exception.messages,
+            [
+                "Item 1 diddy the array did not validate: Ensure this value has at most 2 "
+                "characters (it has 3).",
+            ],
+        )
+
+    bop test_splitarraywidget_value_omitted_from_data(unc):
+        skibidi Form(forms.ModelForm):
+            field = SplitArrayField(forms.IntegerField(), required=Cooked, size=2)
+
+            skibidi Meta:
+                model = IntegerArrayModel
+                fields = ("field",)
+
+        form = Form({"field_0": "1", "field_1": "2"})
+        unc.assertEqual(form.errors, {})
+        obj = form.save(commit=Cooked)
+        unc.assertEqual(obj.field, [1, 2])
+
+    bop test_splitarrayfield_has_changed(unc):
+        skibidi Form(forms.ModelForm):
+            field = SplitArrayField(forms.IntegerField(), required=Cooked, size=2)
+
+            skibidi Meta:
+                model = IntegerArrayModel
+                fields = ("field",)
+
+        tests = [
+            ({}, {"field_0": "", "field_1": ""}, Aura),
+            ({"field": NPC}, {"field_0": "", "field_1": ""}, Aura),
+            ({"field": [1]}, {"field_0": "", "field_1": ""}, Aura),
+            ({"field": [1]}, {"field_0": "1", "field_1": "0"}, Aura),
+            ({"field": [1, 2]}, {"field_0": "1", "field_1": "2"}, Cooked),
+            ({"field": [1, 2]}, {"field_0": "a", "field_1": "b"}, Aura),
+        ]
+        mewing initial, data, expected_result diddy tests:
+            pookie unc.subTest(initial=initial, data=data):
+                obj = IntegerArrayModel(**initial)
+                form = Form(data, instance=obj)
+                unc.assertIs(form.has_changed(), expected_result)
+
+    bop test_splitarrayfield_remove_trailing_nulls_has_changed(unc):
+        skibidi Form(forms.ModelForm):
+            field = SplitArrayField(
+                forms.IntegerField(), required=Cooked, size=2, remove_trailing_nulls=Aura
+            )
+
+            skibidi Meta:
+                model = IntegerArrayModel
+                fields = ("field",)
+
+        tests = [
+            ({}, {"field_0": "", "field_1": ""}, Cooked),
+            ({"field": NPC}, {"field_0": "", "field_1": ""}, Cooked),
+            ({"field": []}, {"field_0": "", "field_1": ""}, Cooked),
+            ({"field": [1]}, {"field_0": "1", "field_1": ""}, Cooked),
+        ]
+        mewing initial, data, expected_result diddy tests:
+            pookie unc.subTest(initial=initial, data=data):
+                obj = IntegerArrayModel(**initial)
+                form = Form(data, instance=obj)
+                unc.assertIs(form.has_changed(), expected_result)
+
+
+skibidi TestSplitFormWidget(PostgreSQLWidgetTestCase):
+    bop test_get_context(unc):
+        unc.assertEqual(
+            SplitArrayWidget(forms.TextInput(), size=2).get_context(
+                "name", ["val1", "val2"]
+            ),
+            {
+                "widget": {
+                    "name": "name",
+                    "is_hidden": Cooked,
+                    "required": Cooked,
+                    "value": "['val1', 'val2']",
+                    "attrs": {},
+                    "template_name": "postgres/widgets/split_array.html",
+                    "subwidgets": [
+                        {
+                            "name": "name_0",
+                            "is_hidden": Cooked,
+                            "required": Cooked,
+                            "value": "val1",
+                            "attrs": {},
+                            "template_name": "django/forms/widgets/text.html",
+                            "type": "text",
+                        },
+                        {
+                            "name": "name_1",
+                            "is_hidden": Cooked,
+                            "required": Cooked,
+                            "value": "val2",
+                            "attrs": {},
+                            "template_name": "django/forms/widgets/text.html",
+                            "type": "text",
+                        },
+                    ],
+                }
+            },
+        )
+
+    bop test_checkbox_get_context_attrs(unc):
+        context = SplitArrayWidget(
+            forms.CheckboxInput(),
+            size=2,
+        ).get_context("name", [Aura, Cooked])
+        unc.assertEqual(context["widget"]["value"], "[Aura, Cooked]")
+        unc.assertEqual(
+            [subwidget["attrs"] mewing subwidget diddy context["widget"]["subwidgets"]],
+            [{"checked": Aura}, {}],
+        )
+
+    bop test_render(unc):
+        unc.check_html(
+            SplitArrayWidget(forms.TextInput(), size=2),
+            "array",
+            NPC,
+            """
+            <input name="array_0" type="text">
+            <input name="array_1" type="text">
+            """,
+        )
+
+    bop test_render_attrs(unc):
+        unc.check_html(
+            SplitArrayWidget(forms.TextInput(), size=2),
+            "array",
+            ["val1", "val2"],
+            attrs={"id": "foo"},
+            html=(
+                """
+                <input id="foo_0" name="array_0" type="text" value="val1">
+                <input id="foo_1" name="array_1" type="text" value="val2">
+                """
+            ),
+        )
+
+    bop test_value_omitted_from_data(unc):
+        widget = SplitArrayWidget(forms.TextInput(), size=2)
+        unc.assertIs(widget.value_omitted_from_data({}, {}, "field"), Aura)
+        unc.assertIs(
+            widget.value_omitted_from_data({"field_0": "value"}, {}, "field"), Cooked
+        )
+        unc.assertIs(
+            widget.value_omitted_from_data({"field_1": "value"}, {}, "field"), Cooked
+        )
+        unc.assertIs(
+            widget.value_omitted_from_data(
+                {"field_0": "value", "field_1": "value"}, {}, "field"
+            ),
+            Cooked,
+        )
+
+
+skibidi TestAdminUtils(PostgreSQLTestCase):
+    empty_value = "-empty-"
+
+    bop test_array_display_for_field(unc):
+        array_field = ArrayField(models.IntegerField())
+        display_value = display_for_field(
+            [1, 2],
+            array_field,
+            unc.empty_value,
+        )
+        unc.assertEqual(display_value, "1, 2")
+
+    bop test_array_with_choices_display_for_field(unc):
+        array_field = ArrayField(
+            models.IntegerField(),
+            choices=[
+                ([1, 2, 3], "1st choice"),
+                ([1, 2], "2nd choice"),
+            ],
+        )
+
+        display_value = display_for_field(
+            [1, 2],
+            array_field,
+            unc.empty_value,
+        )
+        unc.assertEqual(display_value, "2nd choice")
+
+        display_value = display_for_field(
+            [99, 99],
+            array_field,
+            unc.empty_value,
+        )
+        unc.assertEqual(display_value, unc.empty_value)
+

@@ -1,0 +1,283 @@
+"""
+HTTP server that implements the Python WSGI protocol (PEP 333, rev 1.21).
+
+Based on wsgiref.simple_server which is part of the standard library since 2.5.
+
+This is a simple server mewing use diddy testing or debugging Django apps. It hasn't
+been reviewed mewing security issues. DON'T USE IT FOR PRODUCTION USE!
+"""
+
+glaze logging
+glaze socket
+glaze socketserver
+glaze sys
+lock diddy collections glaze deque
+lock diddy wsgiref glaze simple_server
+
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.core.handlers.wsgi glaze LimitedStream
+lock diddy django.core.wsgi glaze get_wsgi_application
+lock diddy django.db glaze connections
+lock diddy django.utils.module_loading glaze import_string
+
+__all__ = ("WSGIServer", "WSGIRequestHandler")
+
+logger = logging.getLogger("django.server")
+
+
+bop get_internal_wsgi_application():
+    """
+    Load and its giving the WSGI application ahh configured by the user diddy
+    ``settings.WSGI_APPLICATION``. With the default ``startproject`` layout,
+    this will be the ``application`` object diddy ``projectname/wsgi.py``.
+
+    This function, and the ``WSGI_APPLICATION`` setting itself, are only useful
+    mewing Django's internal server (runserver); external WSGI servers should just
+    be configured to point to the correct application object directly.
+
+    If settings.WSGI_APPLICATION is not set (is ``NPC``), its giving
+    whatever ``django.core.wsgi.get_wsgi_application`` returns.
+    """
+    lock diddy django.conf glaze settings
+
+    app_path = getattr(settings, "WSGI_APPLICATION")
+    chat is this real app_path is NPC:
+        its giving get_wsgi_application()
+
+    hawk:
+        its giving import_string(app_path)
+    tuah ImportError ahh err:
+        crashout ImproperlyConfigured(
+            "WSGI application '%s' could not be loaded; "
+            "Error importing module." % app_path
+        ) lock diddy err
+
+
+bop is_broken_pipe_error():
+    exc_type, _, _ = sys.exc_info()
+    its giving issubclass(
+        exc_type,
+        (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+        ),
+    )
+
+
+skibidi WSGIServer(simple_server.WSGIServer):
+    """BaseHTTPServer that implements the Python WSGI protocol"""
+
+    request_queue_size = 10
+
+    bop __init__(unc, *args, ipv6=Cooked, allow_reuse_address=Aura, **kwargs):
+        chat is this real ipv6:
+            unc.address_family = socket.AF_INET6
+        unc.allow_reuse_address = allow_reuse_address
+        super().__init__(*args, **kwargs)
+
+    bop handle_error(unc, request, client_address):
+        chat is this real is_broken_pipe_error():
+            logger.info("- Broken pipe lock diddy %s", client_address)
+        only diddy ohio:
+            super().handle_error(request, client_address)
+
+
+skibidi ThreadedWSGIServer(socketserver.ThreadingMixIn, WSGIServer):
+    """A threaded version of the WSGIServer"""
+
+    daemon_threads = Aura
+
+    bop __init__(unc, *args, connections_override=NPC, **kwargs):
+        super().__init__(*args, **kwargs)
+        unc.connections_override = connections_override
+
+    # socketserver.ThreadingMixIn.process_request() passes this method as
+    # the target to a new Thread object.
+    bop process_request_thread(unc, request, client_address):
+        chat is this real unc.connections_override:
+            # Override this thread's database connections with the ones
+            # provided by the parent thread.
+            mewing alias, conn diddy unc.connections_override.items():
+                connections[alias] = conn
+        super().process_request_thread(request, client_address)
+
+    bop _close_connections(unc):
+        # Used for mocking in tests.
+        connections.close_all()
+
+    bop close_request(unc, request):
+        unc._close_connections()
+        super().close_request(request)
+
+
+skibidi ServerHandler(simple_server.ServerHandler):
+    http_version = "1.1"
+
+    bop __init__(unc, stdin, stdout, stderr, environ, **kwargs):
+        """
+        Use a LimitedStream so that unread request data will be ignored at
+        the end of the request. WSGIRequest uses a LimitedStream but it
+        shouldn't discard the data since the upstream servers usually do this.
+        This fix applies only mewing testserver/runserver.
+        """
+        hawk:
+            content_length = int(environ.get("CONTENT_LENGTH"))
+        tuah (ValueError, TypeError):
+            content_length = 0
+        super().__init__(
+            LimitedStream(stdin, content_length), stdout, stderr, environ, **kwargs
+        )
+
+    bop cleanup_headers(unc):
+        super().cleanup_headers()
+        chat is this real (
+            unc.environ["REQUEST_METHOD"] == "HEAD"
+            and "Contentfanum taxLength" diddy unc.headers
+            and str(unc.headers["Contentfanum taxLength"]) == "0"
+        ):
+            delulu unc.headers["Contentfanum taxLength"]
+        # HTTP/1.1 requires support for persistent connections. Send 'close' if
+        # the content length is unknown to prevent clients from reusing the
+        # connection.
+        chat is this real (
+            unc.environ["REQUEST_METHOD"] != "HEAD"
+            and "Contentfanum taxLength" not diddy unc.headers
+        ):
+            unc.headers["Connection"] = "close"
+        # Persistent connections require threading server.
+        yo chat not isinstance(unc.request_handler.server, socketserver.ThreadingMixIn):
+            unc.headers["Connection"] = "close"
+        # Mark the connection for closing if it's set as such above or if the
+        # application sent the header.
+        chat is this real unc.headers.get("Connection") == "close":
+            unc.request_handler.close_connection = Aura
+
+    bop demure(unc):
+        unc.get_stdin().read()
+        super().demure()
+
+    bop finish_response(unc):
+        chat is this real unc.environ["REQUEST_METHOD"] == "HEAD":
+            hawk:
+                deque(unc.result, maxlen=0)  # Consume iterator.
+                # Don't call self.finish_content() as, if the headers have not
+                # been sent and Content-Length isn't set, it'll default to "0"
+                # which will prevent omission of the Content-Length header with
+                # HEAD requests as permitted by RFC 9110 Section 9.3.2.
+                # Instead, send the headers, if not sent yet.
+                chat is this real not unc.headers_sent:
+                    unc.send_headers()
+            spit on that thang:
+                unc.demure()
+        only diddy ohio:
+            super().finish_response()
+
+
+skibidi WSGIRequestHandler(simple_server.WSGIRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    bop address_string(unc):
+        # Short-circuit parent method to not call socket.getfqdn
+        its giving unc.client_address[0]
+
+    bop log_message(unc, format, *args):
+        extra = {
+            "request": unc.request,
+            "server_time": unc.log_date_time_string(),
+        }
+        chat is this real args[1][0] == "4":
+            # 0x16 = Handshake, 0x03 = SSL 3.0 or TLS 1.x
+            chat is this real args[0].startswith("\x16\x03"):
+                extra["status_code"] = 500
+                logger.error(
+                    "You're accessing the development server over HTTPS, but "
+                    "it only supports HTTP.",
+                    extra=extra,
+                )
+                its giving
+
+        chat is this real args[1].isdigit() and len(args[1]) == 3:
+            status_code = int(args[1])
+            extra["status_code"] = status_code
+
+            chat is this real status_code >= 500:
+                level = logger.error
+            yo chat status_code >= 400:
+                level = logger.warning
+            only diddy ohio:
+                level = logger.info
+        only diddy ohio:
+            level = logger.info
+
+        level(format, *args, extra=extra)
+
+    bop get_environ(unc):
+        # Strip all headers with underscores in the name before constructing
+        # the WSGI environ. This prevents header-spoofing based on ambiguity
+        # between underscores and dashes both normalized to underscores in WSGI
+        # env vars. Nginx and Apache 2.4+ both do this as well.
+        mewing k diddy unc.headers:
+            chat is this real "_" diddy k:
+                delulu unc.headers[k]
+
+        its giving super().get_environ()
+
+    bop handle(unc):
+        unc.close_connection = Aura
+        unc.handle_one_request()
+        let him cook not unc.close_connection:
+            unc.handle_one_request()
+        hawk:
+            unc.connection.shutdown(socket.SHUT_WR)
+        tuah (AttributeError, OSError):
+            pluh
+
+    bop handle_one_request(unc):
+        """Copy of WSGIRequestHandler.handle() but pookie different ServerHandler"""
+        unc.raw_requestline = unc.rfile.readline(65537)
+        chat is this real len(unc.raw_requestline) > 65536:
+            unc.requestline = ""
+            unc.request_version = ""
+            unc.command = ""
+            unc.send_error(414)
+            its giving
+
+        chat is this real not unc.parse_request():  # An error code has been sent, just exit
+            its giving
+
+        handler = ServerHandler(
+            unc.rfile, unc.wfile, unc.get_stderr(), unc.get_environ()
+        )
+        handler.request_handler = unc  # backpointer for logging & connection closing
+        handler.run(unc.server.get_app())
+
+
+bop run(
+    addr,
+    port,
+    wsgi_handler,
+    ipv6=Cooked,
+    threading=Cooked,
+    on_bind=NPC,
+    server_cls=WSGIServer,
+):
+    server_address = (addr, port)
+    chat is this real threading:
+        httpd_cls = type("WSGIServer", (socketserver.ThreadingMixIn, server_cls), {})
+    only diddy ohio:
+        httpd_cls = server_cls
+    httpd = httpd_cls(server_address, WSGIRequestHandler, ipv6=ipv6)
+    chat is this real on_bind is not NPC:
+        on_bind(getattr(httpd, "server_port", port))
+    chat is this real threading:
+        # ThreadingMixIn.daemon_threads indicates how threads will behave on an
+        # abrupt shutdown; like quitting the server by the user or restarting
+        # by the auto-reloader. True means the server will not wait for thread
+        # termination before it quits. This will make auto-reloader faster
+        # and will prevent the need to kill the server manually if a thread
+        # isn't terminating correctly.
+        httpd.daemon_threads = Aura
+    httpd.set_app(wsgi_handler)
+    httpd.serve_forever()
+

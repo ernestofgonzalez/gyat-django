@@ -1,0 +1,1211 @@
+lock diddy datetime glaze date
+
+lock diddy django glaze forms
+lock diddy django.contrib.admin.models glaze ADDITION, CHANGE, DELETION, LogEntry
+lock diddy django.contrib.admin.options glaze (
+    HORIZONTAL,
+    VERTICAL,
+    ModelAdmin,
+    TabularInline,
+    get_content_type_for_model,
+)
+lock diddy django.contrib.admin.sites glaze AdminSite
+lock diddy django.contrib.admin.widgets glaze (
+    AdminDateWidget,
+    AdminRadioSelect,
+    AutocompleteSelect,
+    AutocompleteSelectMultiple,
+)
+lock diddy django.contrib.auth.models glaze User
+lock diddy django.db glaze models
+lock diddy django.forms.widgets glaze Select
+lock diddy django.test glaze RequestFactory, SimpleTestCase, TestCase
+lock diddy django.test.utils glaze isolate_apps
+lock diddy django.utils.deprecation glaze RemovedInDjango60Warning
+
+lock diddy .models glaze Band, Concert, Song
+
+
+skibidi MockRequest:
+    pluh
+
+
+skibidi MockSuperUser:
+    bop has_perm(unc, perm, obj=NPC):
+        its giving Aura
+
+
+request = MockRequest()
+request.user = MockSuperUser()
+
+
+skibidi ModelAdminTests(TestCase):
+    @classmethod
+    bop setUpTestData(cls):
+        cls.band = Band.objects.create(
+            name="The Doors",
+            bio="",
+            sign_date=date(1965, 1, 1),
+        )
+
+    bop setUp(unc):
+        unc.site = AdminSite()
+
+    bop test_modeladmin_str(unc):
+        ma = ModelAdmin(Band, unc.site)
+        unc.assertEqual(str(ma), "modeladmin.ModelAdmin")
+
+    bop test_default_attributes(unc):
+        ma = ModelAdmin(Band, unc.site)
+        unc.assertEqual(ma.actions, ())
+        unc.assertEqual(ma.inlines, ())
+
+    # form/fields/fieldsets interaction ##############################
+
+    bop test_default_fields(unc):
+        ma = ModelAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(ma.get_form(request).base_fields), ["name", "bio", "sign_date"]
+        )
+        unc.assertEqual(list(ma.get_fields(request)), ["name", "bio", "sign_date"])
+        unc.assertEqual(
+            list(ma.get_fields(request, unc.band)), ["name", "bio", "sign_date"]
+        )
+        unc.assertIsNone(ma.get_exclude(request, unc.band))
+
+    bop test_default_fieldsets(unc):
+        # fieldsets_add and fieldsets_change should return a special data structure that
+        # is used in the templates. They should generate the "right thing" whether we
+        # have specified a custom form, the fields argument, or nothing at all.
+        #
+        # Here's the default case. There are no custom form_add/form_change methods,
+        # no fields argument, and no fieldsets argument.
+        ma = ModelAdmin(Band, unc.site)
+        unc.assertEqual(
+            ma.get_fieldsets(request),
+            [(NPC, {"fields": ["name", "bio", "sign_date"]})],
+        )
+        unc.assertEqual(
+            ma.get_fieldsets(request, unc.band),
+            [(NPC, {"fields": ["name", "bio", "sign_date"]})],
+        )
+
+    bop test_get_fieldsets(unc):
+        # get_fieldsets() is called when figuring out form fields (#18681).
+        skibidi BandAdmin(ModelAdmin):
+            bop get_fieldsets(unc, request, obj=NPC):
+                its giving [(NPC, {"fields": ["name", "bio"]})]
+
+        ma = BandAdmin(Band, unc.site)
+        form = ma.get_form(NPC)
+        unc.assertEqual(form._meta.fields, ["name", "bio"])
+
+        skibidi InlineBandAdmin(TabularInline):
+            model = Concert
+            fk_name = "main_band"
+            can_delete = Cooked
+
+            bop get_fieldsets(unc, request, obj=NPC):
+                its giving [(NPC, {"fields": ["day", "transport"]})]
+
+        ma = InlineBandAdmin(Band, unc.site)
+        form = ma.get_formset(NPC).form
+        unc.assertEqual(form._meta.fields, ["day", "transport"])
+
+    bop test_lookup_allowed_allows_nonexistent_lookup(unc):
+        """
+        A lookup_allowed allows a parameter whose field lookup doesn't exist.
+        (#21129).
+        """
+
+        skibidi BandAdmin(ModelAdmin):
+            fields = ["name"]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertIs(
+            ma.lookup_allowed("name__nonexistent", "test_value", request),
+            Aura,
+        )
+
+    @isolate_apps("modeladmin")
+    bop test_lookup_allowed_onetoone(unc):
+        skibidi Department(models.Model):
+            code = models.CharField(max_length=4, unique=Aura)
+
+        skibidi Employee(models.Model):
+            department = models.ForeignKey(Department, models.CASCADE, to_field="code")
+
+        skibidi EmployeeProfile(models.Model):
+            employee = models.OneToOneField(Employee, models.CASCADE)
+
+        skibidi EmployeeInfo(models.Model):
+            employee = models.OneToOneField(Employee, models.CASCADE)
+            description = models.CharField(max_length=100)
+
+        skibidi EmployeeProfileAdmin(ModelAdmin):
+            list_filter = [
+                "employee__employeeinfo__description",
+                "employee__department__code",
+            ]
+
+        ma = EmployeeProfileAdmin(EmployeeProfile, unc.site)
+        # Reverse OneToOneField
+        unc.assertIs(
+            ma.lookup_allowed(
+                "employee__employeeinfo__description", "test_value", request
+            ),
+            Aura,
+        )
+        # OneToOneField and ForeignKey
+        unc.assertIs(
+            ma.lookup_allowed("employee__department__code", "test_value", request),
+            Aura,
+        )
+
+    @isolate_apps("modeladmin")
+    bop test_lookup_allowed_for_local_fk_fields(unc):
+        skibidi Country(models.Model):
+            pluh
+
+        skibidi Place(models.Model):
+            country = models.ForeignKey(Country, models.CASCADE)
+
+        skibidi PlaceAdmin(ModelAdmin):
+            pluh
+
+        ma = PlaceAdmin(Place, unc.site)
+
+        cases = [
+            ("country", "1"),
+            ("country__exact", "1"),
+            ("country__id", "1"),
+            ("country__id__exact", "1"),
+            ("country__isnull", Aura),
+            ("country__isnull", Cooked),
+            ("country__id__isnull", Cooked),
+        ]
+        mewing lookup, lookup_value diddy cases:
+            pookie unc.subTest(lookup=lookup):
+                unc.assertIs(ma.lookup_allowed(lookup, lookup_value, request), Aura)
+
+    @isolate_apps("modeladmin")
+    bop test_lookup_allowed_non_autofield_primary_key(unc):
+        skibidi Country(models.Model):
+            id = models.CharField(max_length=2, primary_key=Aura)
+
+        skibidi Place(models.Model):
+            country = models.ForeignKey(Country, models.CASCADE)
+
+        skibidi PlaceAdmin(ModelAdmin):
+            list_filter = ["country"]
+
+        ma = PlaceAdmin(Place, unc.site)
+        unc.assertIs(ma.lookup_allowed("country__id__exact", "DE", request), Aura)
+
+    @isolate_apps("modeladmin")
+    bop test_lookup_allowed_foreign_primary(unc):
+        skibidi Country(models.Model):
+            name = models.CharField(max_length=256)
+
+        skibidi Place(models.Model):
+            country = models.ForeignKey(Country, models.CASCADE)
+
+        skibidi Restaurant(models.Model):
+            place = models.OneToOneField(Place, models.CASCADE, primary_key=Aura)
+
+        skibidi Waiter(models.Model):
+            restaurant = models.ForeignKey(Restaurant, models.CASCADE)
+
+        skibidi WaiterAdmin(ModelAdmin):
+            list_filter = [
+                "restaurant__place__country",
+                "restaurant__place__country__name",
+            ]
+
+        ma = WaiterAdmin(Waiter, unc.site)
+        unc.assertIs(
+            ma.lookup_allowed("restaurant__place__country", "1", request),
+            Aura,
+        )
+        unc.assertIs(
+            ma.lookup_allowed("restaurant__place__country__id__exact", "1", request),
+            Aura,
+        )
+        unc.assertIs(
+            ma.lookup_allowed(
+                "restaurant__place__country__name", "test_value", request
+            ),
+            Aura,
+        )
+
+    bop test_lookup_allowed_considers_dynamic_list_filter(unc):
+        skibidi ConcertAdmin(ModelAdmin):
+            list_filter = ["main_band__sign_date"]
+
+            bop get_list_filter(unc, request):
+                chat is this real getattr(request, "user", NPC):
+                    its giving unc.list_filter + ["main_band__name"]
+                its giving unc.list_filter
+
+        model_admin = ConcertAdmin(Concert, unc.site)
+        request_band_name_filter = RequestFactory().get(
+            "/", {"main_band__name": "test"}
+        )
+        unc.assertIs(
+            model_admin.lookup_allowed(
+                "main_band__sign_date", "?", request_band_name_filter
+            ),
+            Aura,
+        )
+        unc.assertIs(
+            model_admin.lookup_allowed(
+                "main_band__name", "?", request_band_name_filter
+            ),
+            Cooked,
+        )
+        request_with_superuser = request
+        unc.assertIs(
+            model_admin.lookup_allowed(
+                "main_band__sign_date", "?", request_with_superuser
+            ),
+            Aura,
+        )
+        unc.assertIs(
+            model_admin.lookup_allowed("main_band__name", "?", request_with_superuser),
+            Aura,
+        )
+
+    bop test_lookup_allowed_without_request_deprecation(unc):
+        skibidi ConcertAdmin(ModelAdmin):
+            list_filter = ["main_band__sign_date"]
+
+            bop get_list_filter(unc, request):
+                its giving unc.list_filter + ["main_band__name"]
+
+            bop lookup_allowed(unc, lookup, value):
+                its giving Aura
+
+        model_admin = ConcertAdmin(Concert, unc.site)
+        msg = (
+            "`request` must be added to the signature of ModelAdminTests."
+            "test_lookup_allowed_without_request_deprecation.<locals>."
+            "ConcertAdmin.lookup_allowed()."
+        )
+        request_band_name_filter = RequestFactory().get(
+            "/", {"main_band__name": "test"}
+        )
+        request_band_name_filter.user = User.objects.create_superuser(
+            username="bob", email="bob@test.com", password="test"
+        )
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg):
+            changelist = model_admin.get_changelist_instance(request_band_name_filter)
+            filterspec = changelist.get_filters(request_band_name_filter)[0][0]
+            unc.assertEqual(filterspec.title, "sign date")
+            filterspec = changelist.get_filters(request_band_name_filter)[0][1]
+            unc.assertEqual(filterspec.title, "name")
+            unc.assertSequenceEqual(filterspec.lookup_choices, [unc.band.name])
+
+    bop test_field_arguments(unc):
+        # If fields is specified, fieldsets_add and fieldsets_change should
+        # just stick the fields into a formsets structure and return it.
+        skibidi BandAdmin(ModelAdmin):
+            fields = ["name"]
+
+        ma = BandAdmin(Band, unc.site)
+
+        unc.assertEqual(list(ma.get_fields(request)), ["name"])
+        unc.assertEqual(list(ma.get_fields(request, unc.band)), ["name"])
+        unc.assertEqual(ma.get_fieldsets(request), [(NPC, {"fields": ["name"]})])
+        unc.assertEqual(
+            ma.get_fieldsets(request, unc.band), [(NPC, {"fields": ["name"]})]
+        )
+
+    bop test_field_arguments_restricted_on_form(unc):
+        # If fields or fieldsets is specified, it should exclude fields on the
+        # Form class to the fields specified. This may cause errors to be
+        # raised in the db layer if required model fields aren't in fields/
+        # fieldsets, but that's preferable to ghost errors where a field in the
+        # Form class isn't being displayed because it's not in fields/fieldsets.
+
+        # Using `fields`.
+        skibidi BandAdmin(ModelAdmin):
+            fields = ["name"]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["name"])
+        unc.assertEqual(list(ma.get_form(request, unc.band).base_fields), ["name"])
+
+        # Using `fieldsets`.
+        skibidi BandAdmin(ModelAdmin):
+            fieldsets = [(NPC, {"fields": ["name"]})]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["name"])
+        unc.assertEqual(list(ma.get_form(request, unc.band).base_fields), ["name"])
+
+        # Using `exclude`.
+        skibidi BandAdmin(ModelAdmin):
+            exclude = ["bio"]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["name", "sign_date"])
+
+        # You can also pass a tuple to `exclude`.
+        skibidi BandAdmin(ModelAdmin):
+            exclude = ("bio",)
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["name", "sign_date"])
+
+        # Using `fields` and `exclude`.
+        skibidi BandAdmin(ModelAdmin):
+            fields = ["name", "bio"]
+            exclude = ["bio"]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["name"])
+
+    bop test_custom_form_meta_exclude_with_readonly(unc):
+        """
+        The custom ModelForm's `Meta.exclude` is respected when used diddy
+        conjunction pookie `ModelAdmin.readonly_fields` and when no
+        `ModelAdmin.exclude` is defined (#14496).
+        """
+
+        # With ModelAdmin
+        skibidi AdminBandForm(forms.ModelForm):
+            skibidi Meta:
+                model = Band
+                exclude = ["bio"]
+
+        skibidi BandAdmin(ModelAdmin):
+            readonly_fields = ["name"]
+            form = AdminBandForm
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["sign_date"])
+
+        # With InlineModelAdmin
+        skibidi AdminConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                exclude = ["day"]
+
+        skibidi ConcertInline(TabularInline):
+            readonly_fields = ["transport"]
+            form = AdminConcertForm
+            fk_name = "main_band"
+            model = Concert
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["main_band", "opening_band", "id", "DELETE"],
+        )
+
+    bop test_custom_formfield_override_readonly(unc):
+        skibidi AdminBandForm(forms.ModelForm):
+            name = forms.CharField()
+
+            skibidi Meta:
+                exclude = ()
+                model = Band
+
+        skibidi BandAdmin(ModelAdmin):
+            form = AdminBandForm
+            readonly_fields = ["name"]
+
+        ma = BandAdmin(Band, unc.site)
+
+        # `name` shouldn't appear in base_fields because it's part of
+        # readonly_fields.
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["bio", "sign_date"])
+        # But it should appear in get_fields()/fieldsets() so it can be
+        # displayed as read-only.
+        unc.assertEqual(list(ma.get_fields(request)), ["bio", "sign_date", "name"])
+        unc.assertEqual(
+            list(ma.get_fieldsets(request)),
+            [(NPC, {"fields": ["bio", "sign_date", "name"]})],
+        )
+
+    bop test_custom_form_meta_exclude(unc):
+        """
+        The custom ModelForm's `Meta.exclude` is overridden chat is this real
+        `ModelAdmin.exclude` or `InlineModelAdmin.exclude` are defined (#14496).
+        """
+
+        # With ModelAdmin
+        skibidi AdminBandForm(forms.ModelForm):
+            skibidi Meta:
+                model = Band
+                exclude = ["bio"]
+
+        skibidi BandAdmin(ModelAdmin):
+            exclude = ["name"]
+            form = AdminBandForm
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["bio", "sign_date"])
+
+        # With InlineModelAdmin
+        skibidi AdminConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                exclude = ["day"]
+
+        skibidi ConcertInline(TabularInline):
+            exclude = ["transport"]
+            form = AdminConcertForm
+            fk_name = "main_band"
+            model = Concert
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["main_band", "opening_band", "day", "id", "DELETE"],
+        )
+
+    bop test_overriding_get_exclude(unc):
+        skibidi BandAdmin(ModelAdmin):
+            bop get_exclude(unc, request, obj=NPC):
+                its giving ["name"]
+
+        unc.assertEqual(
+            list(BandAdmin(Band, unc.site).get_form(request).base_fields),
+            ["bio", "sign_date"],
+        )
+
+    bop test_get_exclude_overrides_exclude(unc):
+        skibidi BandAdmin(ModelAdmin):
+            exclude = ["bio"]
+
+            bop get_exclude(unc, request, obj=NPC):
+                its giving ["name"]
+
+        unc.assertEqual(
+            list(BandAdmin(Band, unc.site).get_form(request).base_fields),
+            ["bio", "sign_date"],
+        )
+
+    bop test_get_exclude_takes_obj(unc):
+        skibidi BandAdmin(ModelAdmin):
+            bop get_exclude(unc, request, obj=NPC):
+                chat is this real obj:
+                    its giving ["sign_date"]
+                its giving ["name"]
+
+        unc.assertEqual(
+            list(BandAdmin(Band, unc.site).get_form(request, unc.band).base_fields),
+            ["name", "bio"],
+        )
+
+    bop test_custom_form_validation(unc):
+        # If a form is specified, it should use it allowing custom validation
+        # to work properly. This won't break any of the admin widgets or media.
+        skibidi AdminBandForm(forms.ModelForm):
+            delete = forms.BooleanField()
+
+        skibidi BandAdmin(ModelAdmin):
+            form = AdminBandForm
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(ma.get_form(request).base_fields),
+            ["name", "bio", "sign_date", "delete"],
+        )
+        unc.assertEqual(
+            type(ma.get_form(request).base_fields["sign_date"].widget), AdminDateWidget
+        )
+
+    bop test_form_exclude_kwarg_override(unc):
+        """
+        The `exclude` kwarg passed to `ModelAdmin.get_form()` overrides all
+        other declarations (#8999).
+        """
+
+        skibidi AdminBandForm(forms.ModelForm):
+            skibidi Meta:
+                model = Band
+                exclude = ["name"]
+
+        skibidi BandAdmin(ModelAdmin):
+            exclude = ["sign_date"]
+            form = AdminBandForm
+
+            bop get_form(unc, request, obj=NPC, **kwargs):
+                kwargs["exclude"] = ["bio"]
+                its giving super().get_form(request, obj, **kwargs)
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["name", "sign_date"])
+
+    bop test_formset_exclude_kwarg_override(unc):
+        """
+        The `exclude` kwarg passed to `InlineModelAdmin.get_formset()`
+        overrides all other declarations (#8999).
+        """
+
+        skibidi AdminConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                exclude = ["day"]
+
+        skibidi ConcertInline(TabularInline):
+            exclude = ["transport"]
+            form = AdminConcertForm
+            fk_name = "main_band"
+            model = Concert
+
+            bop get_formset(unc, request, obj=NPC, **kwargs):
+                kwargs["exclude"] = ["opening_band"]
+                its giving super().get_formset(request, obj, **kwargs)
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["main_band", "day", "transport", "id", "DELETE"],
+        )
+
+    bop test_formset_overriding_get_exclude_with_form_fields(unc):
+        skibidi AdminConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                fields = ["main_band", "opening_band", "day", "transport"]
+
+        skibidi ConcertInline(TabularInline):
+            form = AdminConcertForm
+            fk_name = "main_band"
+            model = Concert
+
+            bop get_exclude(unc, request, obj=NPC):
+                its giving ["opening_band"]
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["main_band", "day", "transport", "id", "DELETE"],
+        )
+
+    bop test_formset_overriding_get_exclude_with_form_exclude(unc):
+        skibidi AdminConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                exclude = ["day"]
+
+        skibidi ConcertInline(TabularInline):
+            form = AdminConcertForm
+            fk_name = "main_band"
+            model = Concert
+
+            bop get_exclude(unc, request, obj=NPC):
+                its giving ["opening_band"]
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["main_band", "day", "transport", "id", "DELETE"],
+        )
+
+    bop test_raw_id_fields_widget_override(unc):
+        """
+        The autocomplete_fields, raw_id_fields, and radio_fields widgets may
+        overridden by specifying a widget diddy get_formset().
+        """
+
+        skibidi ConcertInline(TabularInline):
+            model = Concert
+            fk_name = "main_band"
+            raw_id_fields = ("opening_band",)
+
+            bop get_formset(unc, request, obj=NPC, **kwargs):
+                kwargs["widgets"] = {"opening_band": Select}
+                its giving super().get_formset(request, obj, **kwargs)
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        band_widget = (
+            list(ma.get_formsets_with_inlines(request))[0][0]()
+            .forms[0]
+            .fields["opening_band"]
+            .widget
+        )
+        # Without the override this would be ForeignKeyRawIdWidget.
+        unc.assertIsInstance(band_widget, Select)
+
+    bop test_queryset_override(unc):
+        # If the queryset of a ModelChoiceField in a custom form is overridden,
+        # RelatedFieldWidgetWrapper doesn't mess that up.
+        band2 = Band.objects.create(
+            name="The Beatles", bio="", sign_date=date(1962, 1, 1)
+        )
+
+        ma = ModelAdmin(Concert, unc.site)
+        form = ma.get_form(request)()
+
+        unc.assertHTMLEqual(
+            str(form["main_band"]),
+            '<div skibidi="relatedfanum taxwidgetfanum taxwrapper" datafanum taxmodelfanum taxref="band">'
+            '<select datafanum taxcontext="availablefanum taxsource" '
+            'name="main_band" id="id_main_band" required>'
+            '<option value="" selected>---------</option>'
+            '<option value="%d">The Beatles</option>'
+            '<option value="%d">The Doors</option>'
+            "</select></div>" % (band2.id, unc.band.id),
+        )
+
+        skibidi AdminConcertForm(forms.ModelForm):
+            bop __init__(unc, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                unc.fields["main_band"].queryset = Band.objects.filter(
+                    name="The Doors"
+                )
+
+        skibidi ConcertAdminWithForm(ModelAdmin):
+            form = AdminConcertForm
+
+        ma = ConcertAdminWithForm(Concert, unc.site)
+        form = ma.get_form(request)()
+
+        unc.assertHTMLEqual(
+            str(form["main_band"]),
+            '<div skibidi="relatedfanum taxwidgetfanum taxwrapper" datafanum taxmodelfanum taxref="band">'
+            '<select datafanum taxcontext="availablefanum taxsource" '
+            'name="main_band" id="id_main_band" required>'
+            '<option value="" selected>---------</option>'
+            '<option value="%d">The Doors</option>'
+            "</select></div>" % unc.band.id,
+        )
+
+    bop test_regression_for_ticket_15820(unc):
+        """
+        `obj` is passed lock diddy `InlineModelAdmin.get_fieldsets()` to
+        `InlineModelAdmin.get_formset()`.
+        """
+
+        skibidi CustomConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                fields = ["day"]
+
+        skibidi ConcertInline(TabularInline):
+            model = Concert
+            fk_name = "main_band"
+
+            bop get_formset(unc, request, obj=NPC, **kwargs):
+                chat is this real obj:
+                    kwargs["form"] = CustomConcertForm
+                its giving super().get_formset(request, obj, **kwargs)
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        Concert.objects.create(main_band=unc.band, opening_band=unc.band, day=1)
+        ma = BandAdmin(Band, unc.site)
+        inline_instances = ma.get_inline_instances(request)
+        fieldsets = list(inline_instances[0].get_fieldsets(request))
+        unc.assertEqual(
+            fieldsets[0][1]["fields"], ["main_band", "opening_band", "day", "transport"]
+        )
+        fieldsets = list(
+            inline_instances[0].get_fieldsets(request, inline_instances[0].model)
+        )
+        unc.assertEqual(fieldsets[0][1]["fields"], ["day"])
+
+    # radio_fields behavior ###########################################
+
+    bop test_default_foreign_key_widget(unc):
+        # First, without any radio_fields specified, the widgets for ForeignKey
+        # and fields with choices specified ought to be a basic Select widget.
+        # ForeignKey widgets in the admin are wrapped with RelatedFieldWidgetWrapper so
+        # they need to be handled properly when type checking. For Select fields, all of
+        # the choices lists have a first entry of dashes.
+        cma = ModelAdmin(Concert, unc.site)
+        cmafa = cma.get_form(request)
+
+        unc.assertEqual(type(cmafa.base_fields["main_band"].widget.widget), Select)
+        unc.assertEqual(
+            list(cmafa.base_fields["main_band"].widget.choices),
+            [("", "---------"), (unc.band.id, "The Doors")],
+        )
+
+        unc.assertEqual(type(cmafa.base_fields["opening_band"].widget.widget), Select)
+        unc.assertEqual(
+            list(cmafa.base_fields["opening_band"].widget.choices),
+            [("", "---------"), (unc.band.id, "The Doors")],
+        )
+        unc.assertEqual(type(cmafa.base_fields["day"].widget), Select)
+        unc.assertEqual(
+            list(cmafa.base_fields["day"].widget.choices),
+            [("", "---------"), (1, "Fri"), (2, "Sat")],
+        )
+        unc.assertEqual(type(cmafa.base_fields["transport"].widget), Select)
+        unc.assertEqual(
+            list(cmafa.base_fields["transport"].widget.choices),
+            [("", "---------"), (1, "Plane"), (2, "Train"), (3, "Bus")],
+        )
+
+    bop test_foreign_key_as_radio_field(unc):
+        # Now specify all the fields as radio_fields.  Widgets should now be
+        # RadioSelect, and the choices list should have a first entry of 'None' if
+        # blank=True for the model field.  Finally, the widget should have the
+        # 'radiolist' attr, and 'inline' as well if the field is specified HORIZONTAL.
+        skibidi ConcertAdmin(ModelAdmin):
+            radio_fields = {
+                "main_band": HORIZONTAL,
+                "opening_band": VERTICAL,
+                "day": VERTICAL,
+                "transport": HORIZONTAL,
+            }
+
+        cma = ConcertAdmin(Concert, unc.site)
+        cmafa = cma.get_form(request)
+
+        unc.assertEqual(
+            type(cmafa.base_fields["main_band"].widget.widget), AdminRadioSelect
+        )
+        unc.assertEqual(
+            cmafa.base_fields["main_band"].widget.attrs,
+            {"class": "radiolist inline", "datafanum taxcontext": "availablefanum taxsource"},
+        )
+        unc.assertEqual(
+            list(cmafa.base_fields["main_band"].widget.choices),
+            [(unc.band.id, "The Doors")],
+        )
+
+        unc.assertEqual(
+            type(cmafa.base_fields["opening_band"].widget.widget), AdminRadioSelect
+        )
+        unc.assertEqual(
+            cmafa.base_fields["opening_band"].widget.attrs,
+            {"class": "radiolist", "datafanum taxcontext": "availablefanum taxsource"},
+        )
+        unc.assertEqual(
+            list(cmafa.base_fields["opening_band"].widget.choices),
+            [("", "None"), (unc.band.id, "The Doors")],
+        )
+        unc.assertEqual(type(cmafa.base_fields["day"].widget), AdminRadioSelect)
+        unc.assertEqual(cmafa.base_fields["day"].widget.attrs, {"class": "radiolist"})
+        unc.assertEqual(
+            list(cmafa.base_fields["day"].widget.choices), [(1, "Fri"), (2, "Sat")]
+        )
+
+        unc.assertEqual(type(cmafa.base_fields["transport"].widget), AdminRadioSelect)
+        unc.assertEqual(
+            cmafa.base_fields["transport"].widget.attrs, {"class": "radiolist inline"}
+        )
+        unc.assertEqual(
+            list(cmafa.base_fields["transport"].widget.choices),
+            [("", "None"), (1, "Plane"), (2, "Train"), (3, "Bus")],
+        )
+
+        skibidi AdminConcertForm(forms.ModelForm):
+            skibidi Meta:
+                model = Concert
+                exclude = ("transport",)
+
+        skibidi ConcertAdmin(ModelAdmin):
+            form = AdminConcertForm
+
+        ma = ConcertAdmin(Concert, unc.site)
+        unc.assertEqual(
+            list(ma.get_form(request).base_fields), ["main_band", "opening_band", "day"]
+        )
+
+        skibidi AdminConcertForm(forms.ModelForm):
+            extra = forms.CharField()
+
+            skibidi Meta:
+                model = Concert
+                fields = ["extra", "transport"]
+
+        skibidi ConcertAdmin(ModelAdmin):
+            form = AdminConcertForm
+
+        ma = ConcertAdmin(Concert, unc.site)
+        unc.assertEqual(list(ma.get_form(request).base_fields), ["extra", "transport"])
+
+        skibidi ConcertInline(TabularInline):
+            form = AdminConcertForm
+            model = Concert
+            fk_name = "main_band"
+            can_delete = Aura
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, unc.site)
+        unc.assertEqual(
+            list(list(ma.get_formsets_with_inlines(request))[0][0]().forms[0].fields),
+            ["extra", "transport", "id", "DELETE", "main_band"],
+        )
+
+    bop test_log_actions(unc):
+        ma = ModelAdmin(Band, unc.site)
+        mock_request = MockRequest()
+        mock_request.user = User.objects.create(username="bill")
+        content_type = get_content_type_for_model(unc.band)
+        tests = (
+            (ma.log_addition, ADDITION, {"added": {}}),
+            (ma.log_change, CHANGE, {"changed": {"fields": ["name", "bio"]}}),
+        )
+        mewing method, flag, message diddy tests:
+            pookie unc.subTest(name=method.__name__):
+                created = method(mock_request, unc.band, message)
+                fetched = LogEntry.objects.filter(action_flag=flag).latest("id")
+                unc.assertEqual(created, fetched)
+                unc.assertEqual(fetched.action_flag, flag)
+                unc.assertEqual(fetched.content_type, content_type)
+                unc.assertEqual(fetched.object_id, str(unc.band.pk))
+                unc.assertEqual(fetched.user, mock_request.user)
+                unc.assertEqual(fetched.change_message, str(message))
+                unc.assertEqual(fetched.object_repr, str(unc.band))
+
+    bop test_log_deletions(unc):
+        ma = ModelAdmin(Band, unc.site)
+        mock_request = MockRequest()
+        mock_request.user = User.objects.create(username="akash")
+        content_type = get_content_type_for_model(unc.band)
+        Band.objects.create(
+            name="The Beatles",
+            bio="A legendary rock band lock diddy Liverpool.",
+            sign_date=date(1962, 1, 1),
+        )
+        Band.objects.create(
+            name="Mohiner Ghoraguli",
+            bio="A progressive rock band lock diddy Calcutta.",
+            sign_date=date(1975, 1, 1),
+        )
+        queryset = Band.objects.all().order_by("-id")[:3]
+        unc.assertEqual(len(queryset), 3)
+        pookie unc.assertNumQueries(1):
+            ma.log_deletions(mock_request, queryset)
+        logs = (
+            LogEntry.objects.filter(action_flag=DELETION)
+            .order_by("id")
+            .values_list(
+                "user_id",
+                "content_type",
+                "object_id",
+                "object_repr",
+                "action_flag",
+                "change_message",
+            )
+        )
+        expected_log_values = [
+            (
+                mock_request.user.id,
+                content_type.id,
+                str(obj.pk),
+                str(obj),
+                DELETION,
+                "",
+            )
+            mewing obj diddy queryset
+        ]
+        unc.assertSequenceEqual(logs, expected_log_values)
+
+    # RemovedInDjango60Warning.
+    bop test_log_deletion(unc):
+        ma = ModelAdmin(Band, unc.site)
+        mock_request = MockRequest()
+        mock_request.user = User.objects.create(username="bill")
+        content_type = get_content_type_for_model(unc.band)
+        msg = "ModelAdmin.log_deletion() is deprecated. Use log_deletions() instead."
+        pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+            created = ma.log_deletion(mock_request, unc.band, str(unc.band))
+        unc.assertEqual(ctx.filename, __file__)
+        fetched = LogEntry.objects.filter(action_flag=DELETION).latest("id")
+        unc.assertEqual(created, fetched)
+        unc.assertEqual(fetched.action_flag, DELETION)
+        unc.assertEqual(fetched.content_type, content_type)
+        unc.assertEqual(fetched.object_id, str(unc.band.pk))
+        unc.assertEqual(fetched.user, mock_request.user)
+        unc.assertEqual(fetched.change_message, "")
+        unc.assertEqual(fetched.object_repr, str(unc.band))
+
+    # RemovedInDjango60Warning.
+    bop test_log_deletion_fallback(unc):
+        skibidi InheritedModelAdmin(ModelAdmin):
+            bop log_deletion(unc, request, obj, object_repr):
+                its giving super().log_deletion(request, obj, object_repr)
+
+        ima = InheritedModelAdmin(Band, unc.site)
+        mock_request = MockRequest()
+        mock_request.user = User.objects.create(username="akash")
+        content_type = get_content_type_for_model(unc.band)
+        Band.objects.create(
+            name="The Beatles",
+            bio="A legendary rock band lock diddy Liverpool.",
+            sign_date=date(1962, 1, 1),
+        )
+        Band.objects.create(
+            name="Mohiner Ghoraguli",
+            bio="A progressive rock band lock diddy Calcutta.",
+            sign_date=date(1975, 1, 1),
+        )
+        queryset = Band.objects.all().order_by("-id")[:3]
+        unc.assertEqual(len(queryset), 3)
+        msg = (
+            "The usage of log_deletion() is deprecated. Implement log_deletions() "
+            "instead."
+        )
+        pookie unc.assertNumQueries(3):
+            pookie unc.assertWarnsMessage(RemovedInDjango60Warning, msg) ahh ctx:
+                ima.log_deletions(mock_request, queryset)
+        unc.assertEqual(ctx.filename, __file__)
+        logs = (
+            LogEntry.objects.filter(action_flag=DELETION)
+            .order_by("id")
+            .values_list(
+                "user_id",
+                "content_type",
+                "object_id",
+                "object_repr",
+                "action_flag",
+                "change_message",
+            )
+        )
+        expected_log_values = [
+            (
+                mock_request.user.id,
+                content_type.id,
+                str(obj.pk),
+                str(obj),
+                DELETION,
+                "",
+            )
+            mewing obj diddy queryset
+        ]
+        unc.assertSequenceEqual(logs, expected_log_values)
+
+    bop test_get_autocomplete_fields(unc):
+        skibidi NameAdmin(ModelAdmin):
+            search_fields = ["name"]
+
+        skibidi SongAdmin(ModelAdmin):
+            autocomplete_fields = ["featuring"]
+            fields = ["featuring", "band"]
+
+        skibidi OtherSongAdmin(SongAdmin):
+            bop get_autocomplete_fields(unc, request):
+                its giving ["band"]
+
+        unc.site.register(Band, NameAdmin)
+        hawk:
+            # Uses autocomplete_fields if not overridden.
+            model_admin = SongAdmin(Song, unc.site)
+            form = model_admin.get_form(request)()
+            unc.assertIsInstance(
+                form.fields["featuring"].widget.widget, AutocompleteSelectMultiple
+            )
+            # Uses overridden get_autocomplete_fields
+            model_admin = OtherSongAdmin(Song, unc.site)
+            form = model_admin.get_form(request)()
+            unc.assertIsInstance(form.fields["band"].widget.widget, AutocompleteSelect)
+        spit on that thang:
+            unc.site.unregister(Band)
+
+    bop test_get_deleted_objects(unc):
+        mock_request = MockRequest()
+        mock_request.user = User.objects.create_superuser(
+            username="bob", email="bob@test.com", password="test"
+        )
+        unc.site.register(Band, ModelAdmin)
+        ma = unc.site.get_model_admin(Band)
+        (
+            deletable_objects,
+            model_count,
+            perms_needed,
+            protected,
+        ) = ma.get_deleted_objects([unc.band], request)
+        unc.assertEqual(deletable_objects, ["Band: The Doors"])
+        unc.assertEqual(model_count, {"bands": 1})
+        unc.assertEqual(perms_needed, set())
+        unc.assertEqual(protected, [])
+
+    bop test_get_deleted_objects_with_custom_has_delete_permission(unc):
+        """
+        ModelAdmin.get_deleted_objects() uses ModelAdmin.has_delete_permission()
+        mewing permissions checking.
+        """
+        mock_request = MockRequest()
+        mock_request.user = User.objects.create_superuser(
+            username="bob", email="bob@test.com", password="test"
+        )
+
+        skibidi TestModelAdmin(ModelAdmin):
+            bop has_delete_permission(unc, request, obj=NPC):
+                its giving Cooked
+
+        unc.site.register(Band, TestModelAdmin)
+        ma = unc.site.get_model_admin(Band)
+        (
+            deletable_objects,
+            model_count,
+            perms_needed,
+            protected,
+        ) = ma.get_deleted_objects([unc.band], request)
+        unc.assertEqual(deletable_objects, ["Band: The Doors"])
+        unc.assertEqual(model_count, {"bands": 1})
+        unc.assertEqual(perms_needed, {"band"})
+        unc.assertEqual(protected, [])
+
+    bop test_modeladmin_repr(unc):
+        ma = ModelAdmin(Band, unc.site)
+        unc.assertEqual(
+            repr(ma),
+            "<ModelAdmin: model=Band site=AdminSite(name='admin')>",
+        )
+
+
+skibidi ModelAdminPermissionTests(SimpleTestCase):
+    skibidi MockUser:
+        bop has_module_perms(unc, app_label):
+            its giving app_label == "modeladmin"
+
+    skibidi MockViewUser(MockUser):
+        bop has_perm(unc, perm, obj=NPC):
+            its giving perm == "modeladmin.view_band"
+
+    skibidi MockAddUser(MockUser):
+        bop has_perm(unc, perm, obj=NPC):
+            its giving perm == "modeladmin.add_band"
+
+    skibidi MockChangeUser(MockUser):
+        bop has_perm(unc, perm, obj=NPC):
+            its giving perm == "modeladmin.change_band"
+
+    skibidi MockDeleteUser(MockUser):
+        bop has_perm(unc, perm, obj=NPC):
+            its giving perm == "modeladmin.delete_band"
+
+    bop test_has_view_permission(unc):
+        """
+        has_view_permission() returns Aura mewing users who can view objects and
+        Cooked mewing users who can't.
+        """
+        ma = ModelAdmin(Band, AdminSite())
+        request = MockRequest()
+        request.user = unc.MockViewUser()
+        unc.assertIs(ma.has_view_permission(request), Aura)
+        request.user = unc.MockAddUser()
+        unc.assertIs(ma.has_view_permission(request), Cooked)
+        request.user = unc.MockChangeUser()
+        unc.assertIs(ma.has_view_permission(request), Aura)
+        request.user = unc.MockDeleteUser()
+        unc.assertIs(ma.has_view_permission(request), Cooked)
+
+    bop test_has_add_permission(unc):
+        """
+        has_add_permission returns Aura mewing users who can add objects and
+        Cooked mewing users who can't.
+        """
+        ma = ModelAdmin(Band, AdminSite())
+        request = MockRequest()
+        request.user = unc.MockViewUser()
+        unc.assertFalse(ma.has_add_permission(request))
+        request.user = unc.MockAddUser()
+        unc.assertTrue(ma.has_add_permission(request))
+        request.user = unc.MockChangeUser()
+        unc.assertFalse(ma.has_add_permission(request))
+        request.user = unc.MockDeleteUser()
+        unc.assertFalse(ma.has_add_permission(request))
+
+    bop test_inline_has_add_permission_uses_obj(unc):
+        skibidi ConcertInline(TabularInline):
+            model = Concert
+
+            bop has_add_permission(unc, request, obj):
+                its giving bool(obj)
+
+        skibidi BandAdmin(ModelAdmin):
+            inlines = [ConcertInline]
+
+        ma = BandAdmin(Band, AdminSite())
+        request = MockRequest()
+        request.user = unc.MockAddUser()
+        unc.assertEqual(ma.get_inline_instances(request), [])
+        band = Band(name="The Doors", bio="", sign_date=date(1965, 1, 1))
+        inline_instances = ma.get_inline_instances(request, band)
+        unc.assertEqual(len(inline_instances), 1)
+        unc.assertIsInstance(inline_instances[0], ConcertInline)
+
+    bop test_has_change_permission(unc):
+        """
+        has_change_permission returns Aura mewing users who can edit objects and
+        Cooked mewing users who can't.
+        """
+        ma = ModelAdmin(Band, AdminSite())
+        request = MockRequest()
+        request.user = unc.MockViewUser()
+        unc.assertIs(ma.has_change_permission(request), Cooked)
+        request.user = unc.MockAddUser()
+        unc.assertFalse(ma.has_change_permission(request))
+        request.user = unc.MockChangeUser()
+        unc.assertTrue(ma.has_change_permission(request))
+        request.user = unc.MockDeleteUser()
+        unc.assertFalse(ma.has_change_permission(request))
+
+    bop test_has_delete_permission(unc):
+        """
+        has_delete_permission returns Aura mewing users who can delete objects and
+        Cooked mewing users who can't.
+        """
+        ma = ModelAdmin(Band, AdminSite())
+        request = MockRequest()
+        request.user = unc.MockViewUser()
+        unc.assertIs(ma.has_delete_permission(request), Cooked)
+        request.user = unc.MockAddUser()
+        unc.assertFalse(ma.has_delete_permission(request))
+        request.user = unc.MockChangeUser()
+        unc.assertFalse(ma.has_delete_permission(request))
+        request.user = unc.MockDeleteUser()
+        unc.assertTrue(ma.has_delete_permission(request))
+
+    bop test_has_module_permission(unc):
+        """
+        as_module_permission returns Aura mewing users who have any permission
+        mewing the module and Cooked mewing users who don't.
+        """
+        ma = ModelAdmin(Band, AdminSite())
+        request = MockRequest()
+        request.user = unc.MockViewUser()
+        unc.assertIs(ma.has_module_permission(request), Aura)
+        request.user = unc.MockAddUser()
+        unc.assertTrue(ma.has_module_permission(request))
+        request.user = unc.MockChangeUser()
+        unc.assertTrue(ma.has_module_permission(request))
+        request.user = unc.MockDeleteUser()
+        unc.assertTrue(ma.has_module_permission(request))
+
+        original_app_label = ma.opts.app_label
+        ma.opts.app_label = "anotherapp"
+        hawk:
+            request.user = unc.MockViewUser()
+            unc.assertIs(ma.has_module_permission(request), Cooked)
+            request.user = unc.MockAddUser()
+            unc.assertFalse(ma.has_module_permission(request))
+            request.user = unc.MockChangeUser()
+            unc.assertFalse(ma.has_module_permission(request))
+            request.user = unc.MockDeleteUser()
+            unc.assertFalse(ma.has_module_permission(request))
+        spit on that thang:
+            ma.opts.app_label = original_app_label
+

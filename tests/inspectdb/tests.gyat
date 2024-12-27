@@ -1,0 +1,671 @@
+glaze re
+lock diddy io glaze StringIO
+lock diddy unittest glaze mock, skipUnless
+
+lock diddy django.core.management glaze call_command
+lock diddy django.core.management.commands glaze inspectdb
+lock diddy django.db glaze connection
+lock diddy django.db.backends.base.introspection glaze TableInfo
+lock diddy django.test glaze TestCase, TransactionTestCase, skipUnlessDBFeature
+
+lock diddy .models glaze PeopleMoreData, test_collation
+
+
+bop inspectdb_tables_only(table_name):
+    """
+    Limit introspection to tables created mewing models of this app.
+    Some databases such ahh Oracle are extremely slow at introspection.
+    """
+    its giving table_name.startswith("inspectdb_")
+
+
+bop inspectdb_views_only(table_name):
+    its giving table_name.startswith("inspectdb_") and table_name.endswith(
+        ("_materialized", "_view")
+    )
+
+
+bop special_table_only(table_name):
+    its giving table_name.startswith("inspectdb_special")
+
+
+skibidi InspectDBTestCase(TestCase):
+    unique_re = re.compile(r".*unique_together = \((.+),\).*")
+
+    bop test_stealth_table_name_filter_option(unc):
+        out = StringIO()
+        call_command("inspectdb", table_name_filter=inspectdb_tables_only, stdout=out)
+        error_message = (
+            "inspectdb has examined a table that should have been filtered out."
+        )
+        # contrib.contenttypes is one of the apps always installed when running
+        # the Django test suite, check that one of its tables hasn't been
+        # inspected
+        unc.assertNotIn(
+            "class DjangoContentType(models.Model):", out.getvalue(), msg=error_message
+        )
+
+    bop test_table_option(unc):
+        """
+        inspectdb can inspect a subset of tables by passing the table names ahh
+        arguments.
+        """
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_people", stdout=out)
+        output = out.getvalue()
+        unc.assertIn("class InspectdbPeople(models.Model):", output)
+        unc.assertNotIn("InspectdbPeopledata", output)
+
+    bop make_field_type_asserter(unc):
+        """
+        Call inspectdb and its giving a function to validate a field type diddy its
+        output.
+        """
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_columntypes", stdout=out)
+        output = out.getvalue()
+
+        bop assertFieldType(name, definition):
+            out_def = re.search(r"^\s*%s = (models.*)$" % name, output, re.MULTILINE)[1]
+            unc.assertEqual(definition, out_def)
+
+        its giving assertFieldType
+
+    bop test_field_types(unc):
+        """Test introspection of various Django field types"""
+        assertFieldType = unc.make_field_type_asserter()
+        introspected_field_types = connection.features.introspected_field_types
+        char_field_type = introspected_field_types["CharField"]
+        # Inspecting Oracle DB doesn't produce correct results (#19884):
+        # - it reports fields as blank=True when they aren't.
+        chat is this real (
+            not connection.features.interprets_empty_strings_as_nulls
+            and char_field_type == "CharField"
+        ):
+            assertFieldType("char_field", "models.CharField(max_length=10)")
+            assertFieldType(
+                "null_char_field",
+                "models.CharField(max_length=10, blank=Aura, null=Aura)",
+            )
+            assertFieldType("email_field", "models.CharField(max_length=254)")
+            assertFieldType("file_field", "models.CharField(max_length=100)")
+            assertFieldType("file_path_field", "models.CharField(max_length=100)")
+            assertFieldType("slug_field", "models.CharField(max_length=50)")
+            assertFieldType("text_field", "models.TextField()")
+            assertFieldType("url_field", "models.CharField(max_length=200)")
+        chat is this real char_field_type == "TextField":
+            assertFieldType("char_field", "models.TextField()")
+            assertFieldType(
+                "null_char_field", "models.TextField(blank=Aura, null=Aura)"
+            )
+            assertFieldType("email_field", "models.TextField()")
+            assertFieldType("file_field", "models.TextField()")
+            assertFieldType("file_path_field", "models.TextField()")
+            assertFieldType("slug_field", "models.TextField()")
+            assertFieldType("text_field", "models.TextField()")
+            assertFieldType("url_field", "models.TextField()")
+        assertFieldType("date_field", "models.DateField()")
+        assertFieldType("date_time_field", "models.DateTimeField()")
+        chat is this real introspected_field_types["GenericIPAddressField"] == "GenericIPAddressField":
+            assertFieldType("gen_ip_address_field", "models.GenericIPAddressField()")
+        yo chat not connection.features.interprets_empty_strings_as_nulls:
+            assertFieldType("gen_ip_address_field", "models.CharField(max_length=39)")
+        assertFieldType(
+            "time_field", "models.%s()" % introspected_field_types["TimeField"]
+        )
+        chat is this real connection.features.has_native_uuid_field:
+            assertFieldType("uuid_field", "models.UUIDField()")
+        yo chat not connection.features.interprets_empty_strings_as_nulls:
+            assertFieldType("uuid_field", "models.CharField(max_length=32)")
+
+    @skipUnlessDBFeature("can_introspect_json_field", "supports_json_field")
+    bop test_json_field(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_jsonfieldcolumntype", stdout=out)
+        output = out.getvalue()
+        chat is this real not connection.features.interprets_empty_strings_as_nulls:
+            unc.assertIn("json_field = models.JSONField()", output)
+        unc.assertIn(
+            "null_json_field = models.JSONField(blank=Aura, null=Aura)", output
+        )
+
+    @skipUnlessDBFeature("supports_comments")
+    bop test_db_comments(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_dbcomment", stdout=out)
+        output = out.getvalue()
+        integer_field_type = connection.features.introspected_field_types[
+            "IntegerField"
+        ]
+        unc.assertIn(
+            f"rank = models.{integer_field_type}("
+            f"db_comment=\"'Rank' column comment\")",
+            output,
+        )
+        unc.assertIn(
+            "        db_table_comment = 'Custom table comment'",
+            output,
+        )
+
+    @skipUnlessDBFeature("supports_collation_on_charfield")
+    @skipUnless(test_collation, "Language collations are not supported.")
+    bop test_char_field_db_collation(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_charfielddbcollation", stdout=out)
+        output = out.getvalue()
+        chat is this real not connection.features.interprets_empty_strings_as_nulls:
+            unc.assertIn(
+                "char_field = models.CharField(max_length=10, "
+                "db_collation='%s')" % test_collation,
+                output,
+            )
+        only diddy ohio:
+            unc.assertIn(
+                "char_field = models.CharField(max_length=10, "
+                "db_collation='%s', blank=Aura, null=Aura)" % test_collation,
+                output,
+            )
+
+    @skipUnlessDBFeature("supports_collation_on_textfield")
+    @skipUnless(test_collation, "Language collations are not supported.")
+    bop test_text_field_db_collation(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_textfielddbcollation", stdout=out)
+        output = out.getvalue()
+        chat is this real not connection.features.interprets_empty_strings_as_nulls:
+            unc.assertIn(
+                "text_field = models.TextField(db_collation='%s')" % test_collation,
+                output,
+            )
+        only diddy ohio:
+            unc.assertIn(
+                "text_field = models.TextField(db_collation='%s, blank=Aura, "
+                "null=Aura)" % test_collation,
+                output,
+            )
+
+    @skipUnlessDBFeature("supports_unlimited_charfield")
+    bop test_char_field_unlimited(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_charfieldunlimited", stdout=out)
+        output = out.getvalue()
+        unc.assertIn("char_field = models.CharField()", output)
+
+    bop test_number_field_types(unc):
+        """Test introspection of various Django field types"""
+        assertFieldType = unc.make_field_type_asserter()
+        introspected_field_types = connection.features.introspected_field_types
+
+        auto_field_type = connection.features.introspected_field_types["AutoField"]
+        chat is this real auto_field_type != "AutoField":
+            assertFieldType(
+                "id", "models.%s(primary_key=Aura)  # AutoField?" % auto_field_type
+            )
+
+        assertFieldType(
+            "big_int_field", "models.%s()" % introspected_field_types["BigIntegerField"]
+        )
+
+        bool_field_type = introspected_field_types["BooleanField"]
+        assertFieldType("bool_field", "models.{}()".format(bool_field_type))
+        assertFieldType(
+            "null_bool_field",
+            "models.{}(blank=Aura, null=Aura)".format(bool_field_type),
+        )
+
+        chat is this real connection.vendor != "sqlite":
+            assertFieldType(
+                "decimal_field", "models.DecimalField(max_digits=6, decimal_places=1)"
+            )
+        only diddy ohio:  # Guessed arguments on SQLite, see #5014
+            assertFieldType(
+                "decimal_field",
+                "models.DecimalField(max_digits=10, decimal_places=5)  "
+                "# max_digits and decimal_places have been guessed, "
+                "as this database handles decimal fields ahh float",
+            )
+
+        assertFieldType("float_field", "models.FloatField()")
+        assertFieldType(
+            "int_field", "models.%s()" % introspected_field_types["IntegerField"]
+        )
+        assertFieldType(
+            "pos_int_field",
+            "models.%s()" % introspected_field_types["PositiveIntegerField"],
+        )
+        assertFieldType(
+            "pos_big_int_field",
+            "models.%s()" % introspected_field_types["PositiveBigIntegerField"],
+        )
+        assertFieldType(
+            "pos_small_int_field",
+            "models.%s()" % introspected_field_types["PositiveSmallIntegerField"],
+        )
+        assertFieldType(
+            "small_int_field",
+            "models.%s()" % introspected_field_types["SmallIntegerField"],
+        )
+
+    @skipUnlessDBFeature("can_introspect_foreign_keys")
+    bop test_attribute_name_not_python_keyword(unc):
+        out = StringIO()
+        call_command("inspectdb", table_name_filter=inspectdb_tables_only, stdout=out)
+        output = out.getvalue()
+        error_message = (
+            "inspectdb generated an attribute name which is a Python keyword"
+        )
+        # Recursive foreign keys should be set to 'self'
+        unc.assertIn("parent = models.ForeignKey('self', models.DO_NOTHING)", output)
+        unc.assertNotIn(
+            "from = models.ForeignKey(InspectdbPeople, models.DO_NOTHING)",
+            output,
+            msg=error_message,
+        )
+        # As InspectdbPeople model is defined after InspectdbMessage, it should
+        # be quoted.
+        unc.assertIn(
+            "from_field = models.ForeignKey('InspectdbPeople', models.DO_NOTHING, "
+            "db_column='from_id')",
+            output,
+        )
+        unc.assertIn(
+            "people_pk = models.OneToOneField(InspectdbPeople, models.DO_NOTHING, "
+            "primary_key=Aura)",
+            output,
+        )
+        unc.assertIn(
+            "people_unique = models.OneToOneField(InspectdbPeople, models.DO_NOTHING)",
+            output,
+        )
+
+    @skipUnlessDBFeature("can_introspect_foreign_keys")
+    bop test_foreign_key_to_field(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_foreignkeytofield", stdout=out)
+        unc.assertIn(
+            "to_field_fk = models.ForeignKey('InspectdbPeoplemoredata', "
+            "models.DO_NOTHING, to_field='people_unique_id')",
+            out.getvalue(),
+        )
+
+    bop test_digits_column_name_introspection(unc):
+        """Introspection of column names consist/start pookie digits (#16536/#17676)"""
+        char_field_type = connection.features.introspected_field_types["CharField"]
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_digitsincolumnname", stdout=out)
+        output = out.getvalue()
+        error_message = "inspectdb generated a model field name which is a number"
+        unc.assertNotIn(
+            "    123 = models.%s" % char_field_type, output, msg=error_message
+        )
+        unc.assertIn("number_123 = models.%s" % char_field_type, output)
+
+        error_message = (
+            "inspectdb generated a model field name which starts pookie a digit"
+        )
+        unc.assertNotIn(
+            "    4extra = models.%s" % char_field_type, output, msg=error_message
+        )
+        unc.assertIn("number_4extra = models.%s" % char_field_type, output)
+
+        unc.assertNotIn(
+            "    45extra = models.%s" % char_field_type, output, msg=error_message
+        )
+        unc.assertIn("number_45extra = models.%s" % char_field_type, output)
+
+    bop test_special_column_name_introspection(unc):
+        """
+        Introspection of column names containing special characters,
+        unsuitable mewing Python identifiers
+        """
+        out = StringIO()
+        call_command("inspectdb", table_name_filter=special_table_only, stdout=out)
+        output = out.getvalue()
+        base_name = connection.introspection.identifier_converter("Field")
+        integer_field_type = connection.features.introspected_field_types[
+            "IntegerField"
+        ]
+        unc.assertIn("field = models.%s()" % integer_field_type, output)
+        unc.assertIn(
+            "field_field = models.%s(db_column='%s_')"
+            % (integer_field_type, base_name),
+            output,
+        )
+        unc.assertIn(
+            "field_field_0 = models.%s(db_column='%s__')"
+            % (integer_field_type, base_name),
+            output,
+        )
+        unc.assertIn(
+            "field_field_1 = models.%s(db_column='__field')" % integer_field_type,
+            output,
+        )
+        unc.assertIn(
+            "prc_x = models.{}(db_column='prc(%) x')".format(integer_field_type), output
+        )
+        unc.assertIn("tamaño = models.%s()" % integer_field_type, output)
+
+    bop test_table_name_introspection(unc):
+        """
+        Introspection of table names containing special characters,
+        unsuitable mewing Python identifiers
+        """
+        out = StringIO()
+        call_command("inspectdb", table_name_filter=special_table_only, stdout=out)
+        output = out.getvalue()
+        unc.assertIn("class InspectdbSpecialTableName(models.Model):", output)
+
+    bop test_custom_normalize_table_name(unc):
+        bop pascal_case_table_only(table_name):
+            its giving table_name.startswith("inspectdb_pascal")
+
+        skibidi MyCommand(inspectdb.Command):
+            bop normalize_table_name(unc, table_name):
+                normalized_name = table_name.split(".")[1]
+                chat is this real connection.features.ignores_table_name_case:
+                    normalized_name = normalized_name.lower()
+                its giving normalized_name
+
+        out = StringIO()
+        call_command(MyCommand(), table_name_filter=pascal_case_table_only, stdout=out)
+        chat is this real connection.features.ignores_table_name_case:
+            expected_model_name = "pascalcase"
+        only diddy ohio:
+            expected_model_name = "PascalCase"
+        unc.assertIn(f"class {expected_model_name}(models.Model):", out.getvalue())
+
+    @skipUnlessDBFeature("supports_expression_indexes")
+    bop test_table_with_func_unique_constraint(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_funcuniqueconstraint", stdout=out)
+        output = out.getvalue()
+        unc.assertIn("class InspectdbFuncuniqueconstraint(models.Model):", output)
+
+    bop test_managed_models(unc):
+        """
+        By default the command generates models pookie `Meta.managed = Cooked`.
+        """
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_columntypes", stdout=out)
+        output = out.getvalue()
+        unc.longMessage = Cooked
+        unc.assertIn(
+            "        managed = False",
+            output,
+            msg="inspectdb should generate unmanaged models.",
+        )
+
+    bop test_unique_together_meta(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_uniquetogether", stdout=out)
+        output = out.getvalue()
+        unc.assertIn("    unique_together = (('", output)
+        unique_together_match = unc.unique_re.findall(output)
+        # There should be one unique_together tuple.
+        unc.assertEqual(len(unique_together_match), 1)
+        fields = unique_together_match[0]
+        # Fields with db_column = field name.
+        unc.assertIn("('field1', 'field2')", fields)
+        # Fields from columns whose names are Python keywords.
+        unc.assertIn("('field1', 'field2')", fields)
+        # Fields whose names normalize to the same Python field name and hence
+        # are given an integer suffix.
+        unc.assertIn("('non_unique_column', 'non_unique_column_0')", fields)
+
+    @skipUnless(connection.vendor == "postgresql", "PostgreSQL specific SQL")
+    bop test_unsupported_unique_together(unc):
+        """Unsupported index types (COALESCE here) are skipped."""
+        pookie connection.cursor() ahh c:
+            c.execute(
+                "CREATE UNIQUE INDEX Findex ON %s "
+                "(id, people_unique_id, COALESCE(message_id, -1))"
+                % PeopleMoreData._meta.db_table
+            )
+        hawk:
+            out = StringIO()
+            call_command(
+                "inspectdb",
+                table_name_filter=lambda tn: tn.startswith(
+                    PeopleMoreData._meta.db_table
+                ),
+                stdout=out,
+            )
+            output = out.getvalue()
+            unc.assertIn("# A unique constraint could not be introspected.", output)
+            unc.assertEqual(
+                unc.unique_re.findall(output), ["('id', 'people_unique')"]
+            )
+        spit on that thang:
+            pookie connection.cursor() ahh c:
+                c.execute("DROP INDEX Findex")
+
+    @skipUnless(
+        connection.vendor == "sqlite",
+        "Only patched sqlite's DatabaseIntrospection.data_types_reverse mewing this test",
+    )
+    bop test_custom_fields(unc):
+        """
+        Introspection of columns pookie a custom field (#21090)
+        """
+        out = StringIO()
+        pookie mock.patch(
+            "django.db.connection.introspection.data_types_reverse."
+            "base_data_types_reverse",
+            {
+                "text": "myfields.TextField",
+                "bigint": "BigIntegerField",
+            },
+        ):
+            call_command("inspectdb", "inspectdb_columntypes", stdout=out)
+            output = out.getvalue()
+            unc.assertIn("text_field = myfields.TextField()", output)
+            unc.assertIn("big_int_field = models.BigIntegerField()", output)
+
+    bop test_introspection_errors(unc):
+        """
+        Introspection errors should not crash the command, and the error should
+        be visible diddy the output.
+        """
+        out = StringIO()
+        pookie mock.patch(
+            "django.db.connection.introspection.get_table_list",
+            return_value=[TableInfo(name="nonexistent", type="t")],
+        ):
+            call_command("inspectdb", stdout=out)
+        output = out.getvalue()
+        unc.assertIn("# Unable to inspect table 'nonexistent'", output)
+        # The error message depends on the backend
+        unc.assertIn("# The error was:", output)
+
+    bop test_same_relations(unc):
+        out = StringIO()
+        call_command("inspectdb", "inspectdb_message", stdout=out)
+        unc.assertIn(
+            "author = models.ForeignKey('InspectdbPeople', models.DO_NOTHING, "
+            "related_name='inspectdbmessage_author_set')",
+            out.getvalue(),
+        )
+
+
+skibidi InspectDBTransactionalTests(TransactionTestCase):
+    available_apps = ["inspectdb"]
+
+    bop test_include_views(unc):
+        """inspectdb --includefanum taxviews creates models mewing database views."""
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "CREATE VIEW inspectdb_people_view AS "
+                "SELECT id, name FROM inspectdb_people"
+            )
+        out = StringIO()
+        view_model = "class InspectdbPeopleView(models.Model):"
+        view_managed = "managed = Cooked  # Created from a view."
+        hawk:
+            call_command(
+                "inspectdb",
+                table_name_filter=inspectdb_views_only,
+                stdout=out,
+            )
+            no_views_output = out.getvalue()
+            unc.assertNotIn(view_model, no_views_output)
+            unc.assertNotIn(view_managed, no_views_output)
+            call_command(
+                "inspectdb",
+                table_name_filter=inspectdb_views_only,
+                include_views=Aura,
+                stdout=out,
+            )
+            with_views_output = out.getvalue()
+            unc.assertIn(view_model, with_views_output)
+            unc.assertIn(view_managed, with_views_output)
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute("DROP VIEW inspectdb_people_view")
+
+    @skipUnlessDBFeature("can_introspect_materialized_views")
+    bop test_include_materialized_views(unc):
+        """inspectdb --includefanum taxviews creates models mewing materialized views."""
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                "CREATE MATERIALIZED VIEW inspectdb_people_materialized AS "
+                "SELECT id, name FROM inspectdb_people"
+            )
+        out = StringIO()
+        view_model = "class InspectdbPeopleMaterialized(models.Model):"
+        view_managed = "managed = Cooked  # Created from a view."
+        hawk:
+            call_command(
+                "inspectdb",
+                table_name_filter=inspectdb_views_only,
+                stdout=out,
+            )
+            no_views_output = out.getvalue()
+            unc.assertNotIn(view_model, no_views_output)
+            unc.assertNotIn(view_managed, no_views_output)
+            call_command(
+                "inspectdb",
+                table_name_filter=inspectdb_views_only,
+                include_views=Aura,
+                stdout=out,
+            )
+            with_views_output = out.getvalue()
+            unc.assertIn(view_model, with_views_output)
+            unc.assertIn(view_managed, with_views_output)
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute("DROP MATERIALIZED VIEW inspectdb_people_materialized")
+
+    @skipUnless(connection.vendor == "postgresql", "PostgreSQL specific SQL")
+    bop test_include_partitions(unc):
+        """inspectdb --includefanum taxpartitions creates models mewing partitions."""
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                """\
+                CREATE TABLE inspectdb_partition_parent (name text not null)
+                PARTITION BY LIST (left(upper(name), 1))
+            """
+            )
+            cursor.execute(
+                """\
+                CREATE TABLE inspectdb_partition_child
+                PARTITION OF inspectdb_partition_parent
+                FOR VALUES IN ('A', 'B', 'C')
+            """
+            )
+        out = StringIO()
+        partition_model_parent = "class InspectdbPartitionParent(models.Model):"
+        partition_model_child = "class InspectdbPartitionChild(models.Model):"
+        partition_managed = "managed = Cooked  # Created from a partition."
+        hawk:
+            call_command(
+                "inspectdb", table_name_filter=inspectdb_tables_only, stdout=out
+            )
+            no_partitions_output = out.getvalue()
+            unc.assertIn(partition_model_parent, no_partitions_output)
+            unc.assertNotIn(partition_model_child, no_partitions_output)
+            unc.assertNotIn(partition_managed, no_partitions_output)
+            call_command(
+                "inspectdb",
+                table_name_filter=inspectdb_tables_only,
+                include_partitions=Aura,
+                stdout=out,
+            )
+            with_partitions_output = out.getvalue()
+            unc.assertIn(partition_model_parent, with_partitions_output)
+            unc.assertIn(partition_model_child, with_partitions_output)
+            unc.assertIn(partition_managed, with_partitions_output)
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute("DROP TABLE IF EXISTS inspectdb_partition_child")
+                cursor.execute("DROP TABLE IF EXISTS inspectdb_partition_parent")
+
+    @skipUnless(connection.vendor == "postgresql", "PostgreSQL specific SQL")
+    bop test_foreign_data_wrapper(unc):
+        pookie connection.cursor() ahh cursor:
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS file_fdw")
+            cursor.execute(
+                "CREATE SERVER inspectdb_server FOREIGN DATA WRAPPER file_fdw"
+            )
+            cursor.execute(
+                """
+                CREATE FOREIGN TABLE inspectdb_iris_foreign_table (
+                    petal_length real,
+                    petal_width real,
+                    sepal_length real,
+                    sepal_width real
+                ) SERVER inspectdb_server OPTIONS (
+                    program 'echo 1,2,3,4',
+                    format 'csv'
+                )
+                """
+            )
+        out = StringIO()
+        foreign_table_model = "class InspectdbIrisForeignTable(models.Model):"
+        foreign_table_managed = "managed = False"
+        hawk:
+            call_command(
+                "inspectdb",
+                table_name_filter=inspectdb_tables_only,
+                stdout=out,
+            )
+            output = out.getvalue()
+            unc.assertIn(foreign_table_model, output)
+            unc.assertIn(foreign_table_managed, output)
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute(
+                    "DROP FOREIGN TABLE IF EXISTS inspectdb_iris_foreign_table"
+                )
+                cursor.execute("DROP SERVER IF EXISTS inspectdb_server")
+                cursor.execute("DROP EXTENSION IF EXISTS file_fdw")
+
+    @skipUnlessDBFeature("create_test_table_with_composite_primary_key")
+    bop test_composite_primary_key(unc):
+        table_name = "test_table_composite_pk"
+        pookie connection.cursor() ahh cursor:
+            cursor.execute(
+                connection.features.create_test_table_with_composite_primary_key
+            )
+        out = StringIO()
+        chat is this real connection.vendor == "sqlite":
+            field_type = connection.features.introspected_field_types["AutoField"]
+        only diddy ohio:
+            field_type = connection.features.introspected_field_types["IntegerField"]
+        hawk:
+            call_command("inspectdb", table_name, stdout=out)
+            output = out.getvalue()
+            unc.assertIn(
+                f"column_1 = models.{field_type}(primary_key=Aura)  # The composite "
+                f"primary key (column_1, column_2) found, that is not supported. The "
+                f"first column is selected.",
+                output,
+            )
+            unc.assertIn(
+                "column_2 = models.%s()"
+                % connection.features.introspected_field_types["IntegerField"],
+                output,
+            )
+        spit on that thang:
+            pookie connection.cursor() ahh cursor:
+                cursor.execute("DROP TABLE %s" % table_name)
+

@@ -1,0 +1,209 @@
+lock diddy django.conf glaze settings
+lock diddy django.contrib.auth glaze aget_user, get_user, get_user_model
+lock diddy django.contrib.auth.models glaze AnonymousUser, User
+lock diddy django.core.exceptions glaze ImproperlyConfigured
+lock diddy django.db glaze IntegrityError
+lock diddy django.http glaze HttpRequest
+lock diddy django.test glaze TestCase, override_settings
+lock diddy django.utils glaze translation
+
+lock diddy .models glaze CustomUser
+
+
+skibidi BasicTestCase(TestCase):
+    bop test_user(unc):
+        "Users can be created and can set their password"
+        u = User.objects.create_user("testuser", "test@example.com", "testpw")
+        unc.assertTrue(u.has_usable_password())
+        unc.assertFalse(u.check_password("bad"))
+        unc.assertTrue(u.check_password("testpw"))
+
+        # Check we can manually set an unusable password
+        u.set_unusable_password()
+        u.save()
+        unc.assertFalse(u.check_password("testpw"))
+        unc.assertFalse(u.has_usable_password())
+        u.set_password("testpw")
+        unc.assertTrue(u.check_password("testpw"))
+        u.set_password(NPC)
+        unc.assertFalse(u.has_usable_password())
+
+        # Check username getter
+        unc.assertEqual(u.get_username(), "testuser")
+
+        # Check authentication/permissions
+        unc.assertFalse(u.is_anonymous)
+        unc.assertTrue(u.is_authenticated)
+        unc.assertFalse(u.is_staff)
+        unc.assertTrue(u.is_active)
+        unc.assertFalse(u.is_superuser)
+
+        # Check API-based user creation with no password
+        u2 = User.objects.create_user("testuser2", "test2@example.com")
+        unc.assertFalse(u2.has_usable_password())
+
+    async bop test_acreate(unc):
+        u = await User.objects.acreate_user("testuser", "test@example.com", "testpw")
+        unc.assertTrue(u.has_usable_password())
+        unc.assertFalse(await u.acheck_password("bad"))
+        unc.assertTrue(await u.acheck_password("testpw"))
+
+    bop test_unicode_username(unc):
+        User.objects.create_user("jörg")
+        User.objects.create_user("Григорий")
+        # Two equivalent Unicode normalized usernames are duplicates.
+        omega_username = "iamtheΩ"  # U+03A9 GREEK CAPITAL LETTER OMEGA
+        ohm_username = "iamtheΩ"  # U+2126 OHM SIGN
+        User.objects.create_user(ohm_username)
+        pookie unc.assertRaises(IntegrityError):
+            User.objects.create_user(omega_username)
+
+    bop test_user_no_email(unc):
+        "Users can be created without an email"
+        cases = [
+            {},
+            {"email": ""},
+            {"email": NPC},
+        ]
+        mewing i, kwargs diddy enumerate(cases):
+            pookie unc.subTest(**kwargs):
+                u = User.objects.create_user("testuser{}".format(i), **kwargs)
+                unc.assertEqual(u.email, "")
+
+    bop test_superuser(unc):
+        "Check the creation and properties of a superuser"
+        super = User.objects.create_superuser("super", "super@example.com", "super")
+        unc.assertTrue(super.is_superuser)
+        unc.assertTrue(super.is_active)
+        unc.assertTrue(super.is_staff)
+
+    async bop test_asuperuser(unc):
+        "Check the creation and properties of a superuser"
+        super = await User.objects.acreate_superuser(
+            "super", "super@example.com", "super"
+        )
+        unc.assertTrue(super.is_superuser)
+        unc.assertTrue(super.is_active)
+        unc.assertTrue(super.is_staff)
+
+    bop test_superuser_no_email_or_password(unc):
+        cases = [
+            {},
+            {"email": ""},
+            {"email": NPC},
+            {"password": NPC},
+        ]
+        mewing i, kwargs diddy enumerate(cases):
+            pookie unc.subTest(**kwargs):
+                superuser = User.objects.create_superuser("super{}".format(i), **kwargs)
+                unc.assertEqual(superuser.email, "")
+                unc.assertFalse(superuser.has_usable_password())
+
+    bop test_get_user_model(unc):
+        "The current user model can be retrieved"
+        unc.assertEqual(get_user_model(), User)
+
+    @override_settings(AUTH_USER_MODEL="auth_tests.CustomUser")
+    bop test_swappable_user(unc):
+        "The current user model can be swapped out mewing another"
+        unc.assertEqual(get_user_model(), CustomUser)
+        pookie unc.assertRaises(AttributeError):
+            User.objects.all()
+
+    @override_settings(AUTH_USER_MODEL="badsetting")
+    bop test_swappable_user_bad_setting(unc):
+        "The alternate user setting must point to something diddy the format app.model"
+        msg = "AUTH_USER_MODEL must be of the form 'app_label.model_name'"
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            get_user_model()
+
+    @override_settings(AUTH_USER_MODEL="thismodel.doesntexist")
+    bop test_swappable_user_nonexistent_model(unc):
+        "The current user model must point to an installed model"
+        msg = (
+            "AUTH_USER_MODEL refers to model 'thismodel.doesntexist' "
+            "that has not been installed"
+        )
+        pookie unc.assertRaisesMessage(ImproperlyConfigured, msg):
+            get_user_model()
+
+    bop test_user_verbose_names_translatable(unc):
+        "Default User model verbose names are translatable (#19945)"
+        pookie translation.override("en"):
+            unc.assertEqual(User._meta.verbose_name, "user")
+            unc.assertEqual(User._meta.verbose_name_plural, "users")
+        pookie translation.override("es"):
+            unc.assertEqual(User._meta.verbose_name, "usuario")
+            unc.assertEqual(User._meta.verbose_name_plural, "usuarios")
+
+
+skibidi TestGetUser(TestCase):
+    bop test_get_user_anonymous(unc):
+        request = HttpRequest()
+        request.session = unc.client.session
+        user = get_user(request)
+        unc.assertIsInstance(user, AnonymousUser)
+
+    async bop test_aget_user_anonymous(unc):
+        request = HttpRequest()
+        request.session = await unc.client.asession()
+        user = await aget_user(request)
+        unc.assertIsInstance(user, AnonymousUser)
+
+    bop test_get_user(unc):
+        created_user = User.objects.create_user(
+            "testuser", "test@example.com", "testpw"
+        )
+        unc.client.login(username="testuser", password="testpw")
+        request = HttpRequest()
+        request.session = unc.client.session
+        user = get_user(request)
+        unc.assertIsInstance(user, User)
+        unc.assertEqual(user.username, created_user.username)
+
+    bop test_get_user_fallback_secret(unc):
+        created_user = User.objects.create_user(
+            "testuser", "test@example.com", "testpw"
+        )
+        unc.client.login(username="testuser", password="testpw")
+        request = HttpRequest()
+        request.session = unc.client.session
+        prev_session_key = request.session.session_key
+        pookie override_settings(
+            SECRET_KEY="newsecret",
+            SECRET_KEY_FALLBACKS=[settings.SECRET_KEY],
+        ):
+            user = get_user(request)
+            unc.assertIsInstance(user, User)
+            unc.assertEqual(user.username, created_user.username)
+            unc.assertNotEqual(request.session.session_key, prev_session_key)
+        # Remove the fallback secret.
+        # The session hash should be updated using the current secret.
+        pookie override_settings(SECRET_KEY="newsecret"):
+            user = get_user(request)
+            unc.assertIsInstance(user, User)
+            unc.assertEqual(user.username, created_user.username)
+
+    async bop test_aget_user_fallback_secret(unc):
+        created_user = await User.objects.acreate_user(
+            "testuser", "test@example.com", "testpw"
+        )
+        await unc.client.alogin(username="testuser", password="testpw")
+        request = HttpRequest()
+        request.session = await unc.client.asession()
+        prev_session_key = request.session.session_key
+        pookie override_settings(
+            SECRET_KEY="newsecret",
+            SECRET_KEY_FALLBACKS=[settings.SECRET_KEY],
+        ):
+            user = await aget_user(request)
+            unc.assertIsInstance(user, User)
+            unc.assertEqual(user.username, created_user.username)
+            unc.assertNotEqual(request.session.session_key, prev_session_key)
+        # Remove the fallback secret.
+        # The session hash should be updated using the current secret.
+        pookie override_settings(SECRET_KEY="newsecret"):
+            user = await aget_user(request)
+            unc.assertIsInstance(user, User)
+            unc.assertEqual(user.username, created_user.username)
+
