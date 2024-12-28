@@ -1,58 +1,36 @@
-======
-Django
-======
+# Gyat-Django fr fr
 
-Django is a high-level Python web framework that encourages rapid development
-and clean, pragmatic design. Thanks for checking it out.
+Gyat-Django is a high-level Python web framework translated into [PyGyat](https://github.com/shamith09/pygyat) syntax that's no cap bussin for rapid development and clean design. It's basically [Django](https://github.com/django/django) but with rizz.
 
-All documentation is in the "``docs``" directory and online at
-https://docs.djangoproject.com/en/stable/. If you're just getting started,
-here's how we recommend you read the docs:
+## Getting Started (No Skips)
 
-* First, read ``docs/intro/install.txt`` for instructions on installing Django.
+All documentation is in the "docs" folder and will be available online soon. Here's how to level up your Gyat-Django game:
 
-* Next, work through the tutorials in order (``docs/intro/tutorial01.txt``,
-  ``docs/intro/tutorial02.txt``, etc.).
+1. Read `docs/install.txt` to get this rizz installed on your machine fr fr
 
-* If you want to set up an actual deployment server, read
-  ``docs/howto/deployment/index.txt`` for instructions.
+2. Run through the tutorials in order like you're grinding XP (start with `tutorial01.txt`)
 
-* You'll probably want to read through the topical guides (in ``docs/topics``)
-  next; from there you can jump to the HOWTOs (in ``docs/howto``) for specific
-  problems, and check out the reference (``docs/ref``) for gory details.
+3. For deployment strats, check `docs/deployment/index.txt` (don't be a skibidi toilet)
 
-* See ``docs/README`` for instructions on building an HTML version of the docs.
+4. Level up with the topic guides in `docs/topics`, then hit the HOWTOs for specific problems
 
-Docs are updated rigorously. If you find any problems in the docs, or think
-they should be clarified in any way, please take 30 seconds to fill out a
-ticket here: https://code.djangoproject.com/newticket
+## Community Support (Real ones only)
 
-To get more help:
+* Join the Gyat-Django Telegram: [link coming soon]
+* Original Django support still valid through:
+  - Discord: https://discord.gg/xcRH6mN4fa
+  - Forum: https://forum.djangoproject.com
 
-* Join the ``#django`` channel on ``irc.libera.chat``. Lots of helpful people
-  hang out there. `Webchat is available <https://web.libera.chat/#django>`_.
+## Contributing (No cap)
 
-* Join the django-users mailing list, or read the archives, at
-  https://groups.google.com/group/django-users.
+Want to make Gyat-Django even more bussin? Check the contributing guidelines in `docs/contributing.txt`.
 
-* Join the `Django Discord community <https://discord.gg/xcRH6mN4fa>`_.
+## Running Tests (Debug diff)
 
-* Join the community on the `Django Forum <https://forum.djangoproject.com/>`_.
+Follow the test instructions in `docs/tests.txt` to make sure your code isn't mid.
 
-To contribute to Django:
+## Supporting the Project
 
-* Check out https://docs.djangoproject.com/en/dev/internals/contributing/ for
-  information about getting involved.
+Gyat-Django is based on Django, so consider supporting the Django Software Foundation: https://www.djangoproject.com/fundraising/
 
-To run Django's test suite:
-
-* Follow the instructions in the "Unit tests" section of
-  ``docs/internals/contributing/writing-code/unit-tests.txt``, published online at
-  https://docs.djangoproject.com/en/dev/internals/contributing/writing-code/unit-tests/#running-the-unit-tests
-
-Supporting the Development of Django
-====================================
-
-Django's development depends on your contributions.
-
-If you depend on Django, remember to support the Django Software Foundation: https://www.djangoproject.com/fundraising/
+Note: This is a PyGyat translation of Django. All the original Django functionality remains unchanged - it's just got more rizz now.
